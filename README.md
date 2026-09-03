@@ -1,5 +1,8 @@
 # Mini Vulkan Engine
 
+项目的开发讨论与上下文记录见
+[当前 ChatGPT 对话](https://chatgpt.com/s/cx_6a99ab8d9ef88191be32e9d4a4c3baf2)。
+
 新电脑的依赖安装、克隆后构建和 VS Code F5 调试流程见
 [`docs/GettingStarted.md`](docs/GettingStarted.md)。
 
