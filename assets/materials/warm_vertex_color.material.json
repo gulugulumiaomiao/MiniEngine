@@ -1,0 +1,12 @@
+{
+  "$schemaVersion": 1,
+  "name": "Warm Vertex Color",
+  "shader": "shaders/vertex_color.shader.json",
+  "properties": {
+    "BaseColor": [1.0, 0.55, 0.35, 1.0],
+    "UvScale": [1.0, 1.0],
+    "EmissiveColor": [0.05, 0.01, 0.0],
+    "DebugParams": [0.0, 0.0, 0.0, 0.0]
+  },
+  "keywords": []
+}

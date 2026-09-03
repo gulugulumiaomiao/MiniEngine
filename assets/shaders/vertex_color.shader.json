@@ -1,0 +1,68 @@
+{
+  "$schemaVersion": 1,
+  "name": "MiniEngine/VertexColor",
+  "properties": [
+    {
+      "name": "BaseColor",
+      "displayName": "Base Color",
+      "type": "Color",
+      "default": [1.0, 1.0, 1.0, 1.0]
+    },
+    {
+      "name": "UvScale",
+      "displayName": "UV Scale",
+      "type": "Vec2",
+      "default": [1.0, 1.0]
+    },
+    {
+      "name": "EmissiveColor",
+      "displayName": "Emissive Color",
+      "type": "Vec3",
+      "default": [0.0, 0.0, 0.0]
+    },
+    {
+      "name": "DebugParams",
+      "displayName": "Debug Parameters",
+      "type": "Vec4",
+      "default": [0.0, 0.0, 0.0, 0.0]
+    }
+  ],
+  "subShaders": [{
+    "tags": {
+      "renderPipeline": "MiniForward",
+      "renderType": "Opaque",
+      "queue": "Opaque"
+    },
+    "passes": [
+      {
+        "name": "Forward",
+        "lightMode": "Forward",
+        "state": {
+          "cull": "Off",
+          "frontFace": "CW",
+          "fill": "Solid",
+          "topology": "TriangleList",
+          "depthWrite": false,
+          "depthTest": "Always",
+          "blend": "Off",
+          "colorMask": "RGBA"
+        },
+        "program": {
+          "vertex": "vertex_color.Forward.vert",
+          "frag": "vertex_color.Forward.frag"
+        },
+        "vertexInput": [
+          { "name": "position", "semantic": "POSITION", "type": "Vec2", "location": 0 },
+          { "name": "color", "semantic": "COLOR0", "type": "Vec3", "location": 1 }
+        ],
+        "varyings": [
+          { "name": "color", "type": "Vec3", "location": 0 }
+        ],
+        "fragmentOutputs": [
+          { "name": "color", "type": "Vec4", "location": 0 }
+        ],
+        "features": []
+      }
+    ]
+  }]
+}

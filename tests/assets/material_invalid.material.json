@@ -1,0 +1,9 @@
+{
+  "$schemaVersion": 1,
+  "name": "Invalid Material",
+  "shader": "material_values.shader.json",
+  "properties": {
+    "UnknownProperty": 1.0
+  },
+  "keywords": ["UNKNOWN_KEYWORD"]
+}

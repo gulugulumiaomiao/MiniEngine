@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug MiniVulkanEngine (CodeLLDB)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/clang-debug/MiniVulkanEngine.exe",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "CMake: Build Debug",
+      "stopOnEntry": false,
+      "terminal": "integrated",
+      "sourceLanguages": [
+        "cpp"
+      ]
+    },
+    {
+      "name": "Run MiniVulkanEngine Release",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/clang-release/MiniVulkanEngine.exe",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "CMake: Build Release",
+      "stopOnEntry": false,
+      "terminal": "integrated",
+      "sourceLanguages": [
+        "cpp"
+      ]
+    }
+  ]
+}

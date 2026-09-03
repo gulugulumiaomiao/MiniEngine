@@ -1,0 +1,9 @@
+{
+  "$schemaVersion": 1,
+  "name": "Cool Vertex Color",
+  "shader": "shaders/vertex_color.shader.json",
+  "properties": {
+    "BaseColor": [0.35, 0.65, 1.0, 1.0]
+  },
+  "keywords": []
+}

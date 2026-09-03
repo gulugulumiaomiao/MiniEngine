@@ -1,0 +1,20 @@
+{
+  "$schemaVersion": 1,
+  "name": "Tests/DuplicateLocation",
+  "subShader": {
+    "passes": [
+      {
+        "name": "Forward",
+        "lightMode": "Forward",
+        "program": {
+          "vertex": "invalid.vert",
+          "frag": "invalid.frag"
+        },
+        "vertexInput": [
+          { "name": "position", "semantic": "POSITION", "type": "Vec3", "location": 0 },
+          { "name": "normal", "semantic": "NORMAL", "type": "Vec3", "location": 0 }
+        ]
+      }
+    ]
+  }
+}

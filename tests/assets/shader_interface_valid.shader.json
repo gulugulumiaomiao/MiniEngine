@@ -1,0 +1,27 @@
+{
+  "$schemaVersion": 1,
+  "name": "Tests/GeneratedInterface",
+  "subShaders": [{
+    "passes": [
+      {
+        "name": "Forward",
+        "lightMode": "Forward",
+        "program": {
+          "vertex": "generated_interface.vert",
+          "frag": "generated_interface.frag"
+        },
+        "vertexInput": [
+          { "name": "position", "semantic": "POSITION", "type": "Vec3", "location": 0 },
+          { "name": "uv", "semantic": "TEXCOORD0", "type": "Vec2", "location": 1 }
+        ],
+        "varyings": [
+          { "name": "uv", "type": "Vec2", "location": 0 },
+          { "name": "objectId", "type": "Float", "location": 1, "interpolation": "Flat" }
+        ],
+        "fragmentOutputs": [
+          { "name": "color", "type": "Vec4", "location": 0 }
+        ]
+      }
+    ]
+  }]
+}

@@ -1,0 +1,10 @@
+/build*/
+/work-shaders/
+/library/
+/.vs/
+/CMakeUserPresets.json
+/.cache/
+/compile_commands.json
+*.user
+*.suo
+*.log

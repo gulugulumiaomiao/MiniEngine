@@ -1,0 +1,15 @@
+{
+  "$schemaVersion": 1,
+  "name": "Tests/MissingEntry",
+  "subShader": {
+    "passes": [
+      {
+        "name": "Forward",
+        "lightMode": "Forward",
+        "program": {
+          "vertex": "invalid.vert"
+        }
+      }
+    ]
+  }
+}

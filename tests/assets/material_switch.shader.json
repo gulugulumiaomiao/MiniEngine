@@ -1,0 +1,22 @@
+{
+  "$schemaVersion": 1,
+  "name": "Tests/MaterialSwitch",
+  "properties": [
+    { "name": "RangeValue", "type": "Float", "default": 0.0 },
+    { "name": "Direction", "type": "Vec3", "default": [0.0, 1.0, 0.0] },
+    { "name": "NewUv", "type": "Vec2", "default": [0.5, 0.5] },
+    { "name": "MainTexture", "type": "Texture2D", "default": "white" }
+  ],
+  "subShader": {
+    "passes": [
+      {
+        "name": "Forward",
+        "lightMode": "Forward",
+        "program": {
+          "vertex": "unused.vert",
+          "frag": "unused.frag"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "cmake.useCMakePresets": "always",
+  "cmake.configureOnOpen": false,
+  "cmake.configurePreset": "clang-debug",
+  "cmake.buildPreset": "clang-debug",
+  "clangd.arguments": [
+    "--compile-commands-dir=${workspaceFolder}/build/clang-debug",
+    "--background-index",
+    "--clang-tidy",
+    "--completion-style=detailed",
+    "--header-insertion=iwyu"
+  ],
+  "editor.formatOnSave": false,
+  "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd",
+  "files.associations": {
+    "*.h": "cpp"
+  }
+}

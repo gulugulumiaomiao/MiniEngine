@@ -1,0 +1,26 @@
+{
+  "$schemaVersion": 1,
+  "name": "Tests/MaterialValues",
+  "properties": [
+    { "name": "FloatValue", "type": "Float", "default": 1.0 },
+    { "name": "RangeValue", "type": "Range", "default": 0.25, "range": [0.0, 1.0] },
+    { "name": "Enabled", "type": "Bool", "default": false },
+    { "name": "Uv", "type": "Vec2", "default": [1.0, 2.0] },
+    { "name": "Direction", "type": "Vec3", "default": [1.0, 2.0, 3.0] },
+    { "name": "Params", "type": "Vec4", "default": [1.0, 2.0, 3.0, 4.0] },
+    { "name": "Tint", "type": "Color", "default": [1.0, 1.0, 1.0, 1.0] },
+    { "name": "MainTexture", "type": "Texture2D", "default": "white" }
+  ],
+  "subShader": {
+    "passes": [
+      {
+        "name": "Forward",
+        "lightMode": "Forward",
+        "program": {
+          "vertex": "unused.vert",
+          "frag": "unused.frag"
+        }
+      }
+    ]
+  }
+}
