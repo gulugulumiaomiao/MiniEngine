@@ -1,5 +1,10 @@
 # Mini Vulkan Engine
 
+资产导入、运行时实例化、FileWatcher、Debug/Release Artifact 与热重载流程见
+[`docs/AssetPipeline.md`](docs/AssetPipeline.md)。
+全局服务共用的 CRTP 单例基类约定见 [`docs/Singleton.md`](docs/Singleton.md)。
+Shader/Material 实例池的公共抽象见 [`docs/InstanceManager.md`](docs/InstanceManager.md)。
+
 项目的开发讨论与上下文记录见
 [当前 ChatGPT 对话](https://chatgpt.com/s/cx_6a99ab8d9ef88191be32e9d4a4c3baf2)。
 
@@ -55,7 +60,8 @@ Shader、材质、编译缓存、RHI Shader、Pipeline、GPU 数据与热重载�
 - RAII `ShaderModule`、`GraphicsPipeline`、`Buffer`、`Image` 与 `Sampler`
 - Vulkan Memory Allocator（VMA 3.3.0）统一管理 GPU 内存
 - 使用真实 vertex buffer 的三色三角形
-- Vulkan 无关的 `RenderScene`、`MeshHandle`、`MaterialHandle` 场景提交
+- Scene/Root Node/Component 场景树，并提取为 Vulkan 无关的 `RenderScene`
+- Transform、Mesh、Material、Camera 和 Light 组件
 - 带 generation 的资源句柄，可检测已销毁或复用后的 stale handle
 - 静态 Mesh 经 host-visible staging buffer 上传到 device-local vertex buffer
 - 每个 `FrameContext` 独立持有对象 transform storage buffer 与 descriptor set
@@ -64,7 +70,7 @@ Shader、材质、编译缓存、RHI Shader、Pipeline、GPU 数据与热重载�
 - descriptor pool 耗尽或碎片化时自动扩容，帧 fence 完成后统一 reset 复用
 - JSON ShaderLab v1：Properties、Tags、多 Pass、Render State 与 Feature 声明
 - JSON Material：Shader 引用、类型安全的属性覆盖、Keyword 与 RenderQueue
-- `Material` 持有运行时 `Shader`，可按路径实时切换并保留兼容属性；`Shader` 与 `ShaderAsset` 明确分层
+- `Material` 持有 `ShaderHandle` 并通过 ShaderManager 共享运行时 Shader，可按路径实时切换并保留兼容属性；`Shader` 与 `ShaderAsset` 明确分层
 - 当前 Forward Pipeline 的源码和 Vulkan 状态由 JSON Shader 驱动，SPIR-V 在 Pass 首次参与绘制时按需生成
 - 虚拟路径与目录挂载文件系统；AssetManager 的 JSON 资产读取统一经过 `asset://`
 - GLM 1.0.3 数学层：`Vec2/3/4`、`Mat33/44`、`Quat` 和游戏引擎常用运算
@@ -111,7 +117,7 @@ CMake 保证每个翻译单元只会定义一个工程宏：
 - Debug：`MINI_DEBUG=1`
 - Release、RelWithDebInfo、MinSizeRel：`MINI_RELEASE=1`
 
-`src/core/BuildConfig.h` 会在两个宏同时存在或同时缺失时产生编译错误，避免不同模块使用不一致的类布局。
+`src/core/base/BuildConfig.h` 会在两个宏同时存在或同时缺失时产生编译错误，避免不同模块使用不一致的类布局。
 
 Debug 版本包含 Vulkan validation layer、`VK_EXT_debug_utils`、debug callback 和 debug messenger，窗口标题为 `Mini Vulkan Engine [Debug]`。Release 版本不会编译这些调试代码，启用 CMake Release 优化，窗口标题为 `Mini Vulkan Engine [Release]`。
 
@@ -131,7 +137,7 @@ Debug 版本包含 Vulkan validation layer、`VK_EXT_debug_utils`、debug callba
 使用方法：
 
 1. 用 VS Code 打开本工程根目录。
-2. 在 `src/main.cpp` 或其他 `.cpp` 文件行号左侧单击设置断点。
+2. 在 `src/runtime/main.cpp` 或其他 `.cpp` 文件行号左侧单击设置断点。
 3. 按 `F5`，选择 `Debug MiniVulkanEngine (CodeLLDB)`。
 4. VS Code 会依次执行 CMake configure、build，再启动渲染器。
 
@@ -152,17 +158,23 @@ MinGW/WinLibs 的 C++、GCC 和线程运行库会静态链接进可执行文件�
 ├── docs/Mesh.md                   网格布局、数据、SubMesh 与 Bounds
 └── src/
     ├── main.cpp                   程序入口和启动/停止日志
+    ├── app/
+    │   └── GameApplication.*      项目配置、启动内容和项目级逻辑
     ├── core/
     │   ├── BuildConfig.h          Debug/Release 宏契约与构建信息
+    │   ├── HandlePool.h           generation Handle、Slot 与 O(1) free list
+    │   ├── InstanceManager.h      实例池、虚拟路径索引与公共 Manager 操作
     │   ├── Log.*                  五级彩色日志与 fatal 退出策略
     │   ├── io/                    虚拟路径、挂载点与同步文件读写
-    │   └── Application.*          生命周期、主循环；未来放 Engine/World
-    ├── math/Math.h                引擎数学类型与常用运算
+    │   ├── Application.h          可复用的 App 生命周期接口和 AppConfig
+    │   └── Engine.*               系统初始化、主循环、场景提取、渲染和关闭顺序
+    ├── core/math/Math.h                引擎数学类型与常用运算
+    ├── scene/                     Scene、Node、Transform 与渲染组件
     ├── platform/Window.*          Win32 封装；不泄露 Vulkan 对象
     ├── renderer/                  高层渲染入口和后端稳定边界
     │   ├── Mesh.*                 CPU Mesh 数据模型与严格校验
     │   ├── RenderResources.h      Mesh/Material 句柄与资源描述
-    │   ├── RenderScene.h          每帧可提交的渲染对象列表
+    │   ├── RenderScene.h          每帧提取的对象、相机和灯光快照
     │   ├── Shader.*               ShaderAsset、ShaderLayout 与运行时 Shader
     │   └── Vertex.h               当前最小 Mesh 顶点格式
     └── rhi/vulkan/
@@ -179,19 +191,21 @@ MinGW/WinLibs 的 C++、GCC 和线程运行库会静态链接进可执行文件�
 依赖方向只有一条：
 
 ```text
-Application → RenderScene → Renderer → IRenderBackend ← VulkanBackend
-      ↓                                         ↓
-    Window ────────────────────────────────── Surface
+main → GameApplication ────────┐
+             │                 ▼
+             └────────────→ Engine → Scene → RenderScene → Renderer
+                               │                       │
+                               └→ Window          IRenderBackend ← VulkanBackend
 ```
 
-上层不持有 `VkDevice`、`VkImage` 等原生句柄。这一点比一开始抽象几十个 Vulkan 类型更重要：它保留更换后端或做无窗口测试的可能，又没有引入空洞的“大引擎接口”。
+`Engine` 控制 Application 生命周期，Application 只响应 `onStart/onUpdate/onStop`，不拥有 Window、Renderer 或主循环。上层不持有 `VkDevice`、`VkImage` 等原生句柄。这保留了复用同一 Engine Runtime 来承载 Game、Editor 或 Server Application 的空间。
 
 ## 一帧如何运行
 
 1. 等待当前 `FrameContext` 的 fence。
 2. 从 Swapchain 获取一张图像。
-3. 等 fence 后，reset 当前帧的 descriptor allocator，重新分配场景 descriptor，并把对象矩阵写入独立 storage buffer。
-4. 遍历 `RenderScene`，校验 Mesh/Material 句柄的 index 与 generation，解析后端资源。
+3. 从 Root 更新 Scene，并把 Node 上的 Transform、Mesh、Material、Camera 和 Light 提取成 RenderScene。
+4. 等 fence 后，reset 当前帧的 descriptor allocator；上传相机/方向光 UBO 和对象矩阵 SSBO。
 5. 绑定当前帧 descriptor set；逐对象绑定 device-local vertex/index buffer，遍历 SubMesh，以 `firstInstance` 选择对象矩阵并执行 `vkCmdDrawIndexed`。
 6. 提交 graphics queue，使用 semaphore 串联 acquire/render/present。
 7. 呈现；遇到 resize、out-of-date 或 suboptimal 时重建 Swapchain。

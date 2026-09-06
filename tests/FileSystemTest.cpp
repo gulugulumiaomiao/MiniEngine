@@ -1,6 +1,6 @@
-#include "core/io/FileSystem.h"
-#include "core/io/DirectoryMount.h"
-#include "core/io/VirtualPath.h"
+#include "core/filesystem/FileSystem.h"
+#include "core/filesystem/DirectoryMount.h"
+#include "core/filesystem/VirtualPath.h"
 
 #include <algorithm>
 #include <array>

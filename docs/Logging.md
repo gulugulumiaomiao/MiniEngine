@@ -1,6 +1,6 @@
 # 日志系统
 
-引擎统一通过 `core/Log.h` 输出日志，不再由引擎代码主动抛出 C++ 异常。
+引擎统一通过 `core/logging/Log.h` 输出日志，不再由引擎代码主动抛出 C++ 异常。
 
 ## 日志级别
 
@@ -21,7 +21,7 @@
 例如：
 
 ```cpp
-#include "core/Log.h"
+#include "core/logging/Log.h"
 
 engine::Log::info("Renderer", "renderer initialized");
 engine::Log::debug("Material", "uniform data uploaded");

@@ -1,7 +1,8 @@
-#include "renderer/AssetManager.h"
-#include "renderer/Shader.h"
-#include "renderer/ShaderCompiler.h"
-#include "core/io/FileSystem.h"
+#include "asset/manager/AssetManager.h"
+#include "render/shader/Shader.h"
+#include "render/shader/ShaderCompiler.h"
+#include "core/filesystem/FileSystem.h"
+#include "TestAssetEnvironment.h"
 
 #include <filesystem>
 
@@ -9,9 +10,10 @@ int main() {
     using namespace engine;
 
     const std::filesystem::path fixtures{MINI_TEST_SHADER_FIXTURE_DIR};
+    if (!FILE_SYSTEM.mountDirectory("fixture", fixtures, true)) return 12;
     ShaderPreprocessor preprocessor;
     ShaderCompileRequest request;
-    request.source = VirtualPath::fromNative(fixtures / "preprocess_root.glsl");
+    request.source = VirtualPath{"fixture://preprocess_root.glsl"};
     request.stage = ShaderStage::Fragment;
     request.defines.push_back({"TEST_VALUE", "0.5"});
     const auto processed = preprocessor.process(request);
@@ -37,9 +39,12 @@ int main() {
                                     false)) {
         return 8;
     }
-    const ShaderAsset& asset = *ASSET_MANAGER.loadShaderAsset(
-        std::filesystem::path{MINI_TEST_ASSET_DIR} /
-        "shaders/vertex_color.shader.json");
+    if (!test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR)) return 11;
+    const std::shared_ptr<ShaderAsset> assetOwner =
+        ASSET_MANAGER.loadAsset<ShaderAsset>(
+        VirtualPath{"asset://shaders/vertex_color.shader.json"});
+    if (!assetOwner) return 10;
+    const ShaderAsset& asset = *assetOwner;
     const Shader runtimeShader{asset};
     const ShaderPass& pass = runtimeShader.defaultSubShader().requirePass(
         ShaderPassType::Forward);
@@ -88,4 +93,6 @@ int main() {
         return 6;
     }
     programs.invalidate(invalidated);
+    test::shutdownAssetEnvironment();
+    (void)FILE_SYSTEM.unmount("fixture");
 }

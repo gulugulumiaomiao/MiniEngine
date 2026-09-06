@@ -1,15 +1,14 @@
 #include "asset/importer/ShaderAssetImporter.h"
 
-#include "asset/AssetArtifact.h"
-#include "core/Log.h"
-#include "core/io/FileSystem.h"
-#include "renderer/Shader.h"
+#include "asset/derived_data/AssetArtifact.h"
+#include "core/logging/Log.h"
+#include "core/serialization/BinaryTransfer.h"
+#include "core/filesystem/FileSystem.h"
+#include "render/shader/Shader.h"
+#include "render/shader/ShaderIncludeResolver.h"
 
 #include <algorithm>
-#include <nlohmann/json.hpp>
 #include <optional>
-#include <span>
-#include <sstream>
 #include <unordered_set>
 #include <utility>
 
@@ -17,29 +16,10 @@ namespace engine {
 namespace {
 
 struct DependencyCollector {
-    explicit DependencyCollector(std::span<const VirtualPath> paths)
-        : includePaths(paths) {}
-
-    std::span<const VirtualPath> includePaths;
     std::unordered_set<std::string> visited;
     std::unordered_set<std::string> visiting;
     std::vector<VirtualPath> dependencies;
     std::string error;
-
-    [[nodiscard]] std::optional<VirtualPath> resolveInclude(
-        const VirtualPath& includingFile, std::string_view include) const {
-        VirtualPath candidate = includingFile.parent().joined(include);
-        if (FILE_SYSTEM.isFile(candidate)) {
-            return candidate;
-        }
-        for (const VirtualPath& root : includePaths) {
-            candidate = root.joined(include);
-            if (FILE_SYSTEM.isFile(candidate)) {
-                return candidate;
-            }
-        }
-        return std::nullopt;
-    }
 
     [[nodiscard]] bool collect(const VirtualPath& path) {
         const std::string key = path.string();
@@ -58,9 +38,13 @@ struct DependencyCollector {
         }
 
         dependencies.push_back(path);
-        std::istringstream lines{*source};
-        std::string line;
-        while (std::getline(lines, line)) {
+        std::string_view remaining{*source};
+        while (!remaining.empty()) {
+            const std::size_t lineEnd = remaining.find('\n');
+            const std::string_view line = remaining.substr(0, lineEnd);
+            remaining = lineEnd == std::string_view::npos
+                            ? std::string_view{}
+                            : remaining.substr(lineEnd + 1);
             const std::size_t first = line.find_first_not_of(" \t");
             if (first == std::string::npos ||
                 line.compare(first, 8, "#include") != 0) {
@@ -75,9 +59,9 @@ struct DependencyCollector {
                 error = "Malformed include in: " + key;
                 return false;
             }
-            const std::string include =
-                line.substr(quote + 1, endQuote - quote - 1);
-            const auto resolved = resolveInclude(path, include);
+            const std::string include{
+                line.substr(quote + 1, endQuote - quote - 1)};
+            const auto resolved = ShaderIncludeResolver::resolve(path, include);
             if (!resolved) {
                 visiting.erase(key);
                 error = "Cannot resolve include " + include + " from " + key;
@@ -120,7 +104,7 @@ AssetImportResult ShaderAssetImporter::import(
                           context.sourcePath.string());
     }
 
-    DependencyCollector collector{context.includePaths};
+    DependencyCollector collector;
     for (const SubShaderDesc& subShader : shader->subShaders) {
         for (const ShaderPassAsset& pass : subShader.passes) {
             if (!collector.collect(pass.pass.program.vertexSource) ||
@@ -130,17 +114,17 @@ AssetImportResult ShaderAssetImporter::import(
         }
     }
 
-    const nlohmann::json root = nlohmann::json::parse(*source, nullptr, false);
-    if (root.is_discarded()) {
-        return failImport("Cannot canonicalize ShaderAsset JSON: " +
-                          context.sourcePath.string());
-    }
     if (!FILE_SYSTEM.createDirectories(context.artifactPath.parent())) {
         return failImport("Cannot create Shader Artifact directory: " +
                           context.artifactPath.parent().string());
     }
+    BinaryWriter writer;
+    if (!shader->transfer(writer)) {
+        return failImport("Cannot serialize Shader Artifact: " +
+                          context.sourcePath.string());
+    }
     const AssetArtifact artifact{1, context.meta.assetId, AssetType::Shader,
-                                 context.sourcePath, root.dump()};
+                                 context.sourcePath, writer.takeBytes()};
     if (!saveAssetArtifact(context.artifactPath, artifact)) {
         return failImport("Cannot save Shader Artifact: " +
                           context.artifactPath.string());

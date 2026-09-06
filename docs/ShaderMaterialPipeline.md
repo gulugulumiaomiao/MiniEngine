@@ -29,7 +29,7 @@ Scene/Object buffer → set 0 ────────────────�
 
 - `ShaderAsset`、`MaterialAsset` 只表示磁盘资产和导入结果，由 `AssetManager` 按路径加载与缓存。
 - `Shader`、`SubShader`、`ShaderPass` 是运行时对象。最终参与绘制的是 `ShaderPass`。
-- `Material` 持有 `shared_ptr<Shader>`，不持有 `ShaderAsset`，可以在运行时调用 `setShader` 切换 Shader 并迁移同名兼容属性。
+- `Material` 只持有 `ShaderHandle`，不持有 `ShaderAsset` 或 Shader 智能指针；它通过 ShaderManager 解析运行时 Shader，并可在切换时迁移同名兼容属性。
 - `SubShader` 和 `ShaderPass` 不保留对应的 Desc。
 
 ### 2. 明确编译输入、预处理结果和编译产物
@@ -108,7 +108,7 @@ ShadowCaster → DepthOnly → Forward
 
 | 缓存 | 键 | 值 |
 |---|---|---|
-| AssetManager | 规范化资产路径 + 资产类型 | ShaderAsset / MaterialAsset / MeshAsset |
+| AssetManager | 规范化 `asset://` 路径 | `weak_ptr<Asset>`（当前为 ShaderAsset / MaterialAsset） |
 | CompiledShaderCache | SPIR-V 内容 + stage + entry + Variant | CompiledShader |
 | ShaderProgramCache | vertex CompileID + fragment CompileID + Variant | ShaderProgram |
 | RhiShaderCache | CompileID | VkShaderModule |
@@ -117,18 +117,18 @@ ShadowCaster → DepthOnly → Forward
 
 ## 生命周期和修改规则
 
-1. 编辑 JSON/GLSL 后先由 CMake 的 ShaderLab target 重新生成和编译 SPIR-V。
-2. Debug 运行时检测 SPIR-V 时间戳变化，并在下一次 Pipeline 请求时切换到新对象。
+1. Debug 下编辑 JSON/GLSL 后，FileWatcher 将事件交给主线程的 AssetImportPipeline，并按反向依赖重新导入。
+2. ShaderManager 在原 Handle 上替换成功导入的 Shader；SPIR-V 仍在下一次 Pipeline 请求时按需生成。
 3. 材质属性变化只使材质 GPU 数据变脏，不重新创建 Pipeline。
 4. Keyword、VertexLayout、RenderState 或 RenderTarget 格式变化会选择或创建另一条 Pipeline。
-5. Shader 切换时材质保留名称和类型兼容的属性，布局变化由新的 Material GPU buffer 承接。
+5. Shader 切换时材质保留名称和类型兼容的属性，布局变化由新的 Material GPU buffer 承接；导入或编译失败时继续保留上一条有效 Shader/Pipeline。
 
 ## 主要源码位置
 
-- `src/renderer/Shader.h/.cpp`：资产描述、运行时 Shader/SubShader/Pass、Reflection。
-- `src/renderer/ShaderCompiler.h/.cpp`：预处理、CompiledShader、Program、依赖图和 Cooked 模型。
-- `src/rhi/vulkan/RhiShaderCache.h/.cpp`：CompileID 到 Vulkan Shader module。
-- `src/rhi/vulkan/PipelineCache.h/.cpp`：结构化 Pipeline 缓存。
-- `src/rhi/vulkan/MaterialGpuCache.h/.cpp`：每帧材质 GPU 数据与 descriptor。
-- `src/renderer/Renderer.cpp`：Variant 选择与多 Pass 场景提交。
-- `src/rhi/vulkan/VulkanBackend.cpp`：缓存组装、绑定和热重载边界。
+- `src/render/shader/Shader.h/.cpp`：资产描述、运行时 Shader/SubShader/Pass、Reflection。
+- `src/render/shader/ShaderCompiler.h/.cpp`：预处理、CompiledShader、Program、依赖图和 Cooked 模型。
+- `src/render/backend/vulkan/RhiShaderCache.h/.cpp`：CompileID 到 Vulkan Shader module。
+- `src/render/backend/vulkan/PipelineCache.h/.cpp`：结构化 Pipeline 缓存。
+- `src/render/backend/vulkan/MaterialGpuCache.h/.cpp`：每帧材质 GPU 数据与 descriptor。
+- `src/render/renderer/Renderer.cpp`：Variant 选择与多 Pass 场景提交。
+- `src/render/backend/vulkan/VulkanBackend.cpp`：缓存组装、绑定和热重载边界。

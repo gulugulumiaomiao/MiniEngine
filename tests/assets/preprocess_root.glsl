@@ -1,5 +1,5 @@
 #version 450
-#include "preprocess_common.glsl"
+#include "fixture://preprocess_common.glsl"
 
 void main()
 {

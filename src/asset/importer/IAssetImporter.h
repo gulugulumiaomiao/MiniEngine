@@ -1,6 +1,6 @@
 #pragma once
 
-#include "asset/AssetMeta.h"
+#include "asset/base/AssetMeta.h"
 
 #include <cstdint>
 #include <string>
@@ -13,7 +13,6 @@ struct AssetImportContext {
     VirtualPath sourcePath;
     VirtualPath metaPath;
     VirtualPath artifactPath;
-    std::vector<VirtualPath> includePaths;
 };
 
 struct AssetImportResult {

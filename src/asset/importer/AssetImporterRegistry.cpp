@@ -1,6 +1,6 @@
 #include "asset/importer/AssetImporterRegistry.h"
 
-#include "core/Log.h"
+#include "core/logging/Log.h"
 
 namespace engine {
 

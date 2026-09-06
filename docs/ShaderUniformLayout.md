@@ -7,8 +7,8 @@
 相关代码：
 
 ```text
-src/renderer/Shader.h
-src/renderer/Shader.cpp
+src/render/shader/Shader.h
+src/render/shader/Shader.cpp
 ```
 
 ## 第一版布局规则

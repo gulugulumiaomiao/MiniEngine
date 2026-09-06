@@ -9,7 +9,7 @@ public:
     [[nodiscard]] AssetType assetType() const override {
         return AssetType::Shader;
     }
-    [[nodiscard]] std::uint32_t version() const override { return 1; }
+    [[nodiscard]] std::uint32_t version() const override { return 3; }
     [[nodiscard]] AssetImportResult import(
         const AssetImportContext& context) const override;
 };

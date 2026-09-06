@@ -1,5 +1,7 @@
 # 资产基础设施
 
+> 本文保留第 1–19 步的基础设计记录；当前完整实现已经接入 Importer、FileWatcher 和 Artifact 加载，最新流程见 [AssetPipeline.md](AssetPipeline.md)。
+
 这一阶段建立资产系统的前 19 步基础能力，不包含 Importer、FileWatcher、
 AssetImportPipeline，也暂时不改变 AssetManager 从源 JSON 加载 Shader 和 Material
 的现有行为。
@@ -90,23 +92,20 @@ library://AssetDatabase.json
 目录约定为：
 
 ```text
-library://artifacts/<AssetId>/asset.json
+library://artifacts/<AssetId>/asset.bin
 ```
 
-第一版 Artifact 是 JSON 信封：
+Artifact 是二进制信封，固定使用小端编码：
 
-```json
-{
-  "version": 1,
-  "asset_id": "3d246ca4-c46f-4d6b-81e7-94e923731c65",
-  "asset_type": "Shader",
-  "source_path": "asset://shaders/vertex_color.shader.json",
-  "payload": {}
-}
+```text
+MART magic | container version | asset type | asset version
+AssetId high/low | source virtual path | payload byte count | payload
 ```
 
-`payload` 留给后续 `ShaderAssetImporter` 和 `MaterialAssetImporter`。格式稳定后可以
-把 payload 改为二进制，而不改变 AssetDatabase 的索引关系和目录布局。
+通用信封只负责身份、类型、版本和边界校验。Payload 的格式由资源类型负责：
+Shader 使用 `SHDR` 格式序列化 Properties、SubShader、Pass、接口和 RenderState；
+Material 使用 `MATL` 格式序列化 Shader 虚拟路径、属性值、Keywords 和 RenderQueue。
+两种 Payload 都有独立版本，可以互不影响地升级。
 
 `library/` 已加入 `.gitignore`，可以由源资产和 Meta 完整重建。
 

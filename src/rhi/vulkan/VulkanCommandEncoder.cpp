@@ -1,8 +1,8 @@
 #include "rhi/vulkan/VulkanCommandEncoder.h"
 
-#include "core/Log.h"
+#include "core/logging/Log.h"
 
-#include "core/BuildConfig.h"
+#include "core/base/BuildConfig.h"
 
 #include <array>
 #include <stdexcept>

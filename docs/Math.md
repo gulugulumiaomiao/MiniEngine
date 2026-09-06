@@ -1,6 +1,6 @@
 # 数学库
 
-引擎数学层位于 `src/math/Math.h`，底层使用固定版本的 GLM 1.0.3。业务代码应使用 `engine::math` 中的名称，避免直接依赖 GLM 类型名。
+引擎数学层位于 `src/core/math/Math.h`，底层使用固定版本的 GLM 1.0.3。业务代码应使用 `engine::math` 中的名称，避免直接依赖 GLM 类型名。
 
 ## 坐标与角度约定
 

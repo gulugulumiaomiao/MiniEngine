@@ -1,5 +1,6 @@
-#include "renderer/AssetManager.h"
-#include "renderer/Shader.h"
+#include "asset/manager/AssetManager.h"
+#include "render/shader/Shader.h"
+#include "TestAssetEnvironment.h"
 
 #include <filesystem>
 #include <stdexcept>
@@ -47,9 +48,12 @@ int main() {
         return 1;
     }
 
-    const ShaderAsset& shader = *ASSET_MANAGER.loadShaderAsset(
-        std::filesystem::path{MINI_TEST_ASSET_DIR} /
-        "shaders/vertex_color.shader.json");
+    if (!test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR)) return 5;
+    const std::shared_ptr<ShaderAsset> shaderOwner =
+        ASSET_MANAGER.loadAsset<ShaderAsset>(
+        VirtualPath{"asset://shaders/vertex_color.shader.json"});
+    if (!shaderOwner) return 4;
+    const ShaderAsset& shader = *shaderOwner;
     const UniformBlockLayout realLayout =
         buildUniformBlockLayout(shader.properties);
     if (realLayout.byteSize != 64 || realLayout.members.size() != 4 ||
@@ -69,5 +73,6 @@ int main() {
         !isUniformProperty(ShaderPropertyType::Color)) {
         return 3;
     }
+    test::shutdownAssetEnvironment();
 
 }

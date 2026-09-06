@@ -1,85 +1,44 @@
 # Asset Importer
 
-本阶段实现资产计划的第 20～25 步：Importer 公共接口、按 `AssetType` 注册、
-Shader/Material 内置 Importer，以及 Shader 源码依赖收集。导入管线和文件监听尚未
-接入。
+Importer 负责把源资产验证并写成 Artifact，不负责更新 AssetDatabase，也不创建运行时对象。数据库更新、依赖顺序和失败状态由 `AssetImportPipeline` 统一处理。
 
 ## 接口
 
-`IAssetImporter` 输入 `AssetImportContext`，返回 `AssetImportResult`：
-
 ```text
 AssetImportContext
-  ├─ Meta与AssetId
-  ├─ 源文件VirtualPath
+  ├─ AssetMeta
+  ├─ 源文件 VirtualPath
   ├─ Meta VirtualPath
   ├─ Artifact VirtualPath
-  └─ include搜索目录
 
 AssetImportResult
-  ├─ 是否成功
-  ├─ AssetType
+  ├─ success / AssetType
   ├─ Artifact VirtualPath
-  ├─ VirtualPath依赖列表
+  ├─ VirtualPath 依赖列表
   └─ 错误信息
 ```
 
-Importer 不更新 AssetDatabase。后续 `AssetImportPipeline` 负责根据 Result 原子地
-更新 AssetRecord，避免数据库进入只完成一半的状态。
+`AssetImportContext` 不携带数据库引用。Importer 必须查询已导入资产时，通过全局 `ASSET_DATABASE` 访问。
 
-`AssetDatabase` 已经是全局单例，因此不放进 `AssetImportContext`。Importer 后续
-确实需要查询资产记录时直接使用 `ASSET_DATABASE`；上下文只携带每次导入特有的
-输入数据。
+## 注册规则
 
-## 注册表
-
-`AssetImporterRegistry` 以 `AssetType` 为唯一键，不读取 Meta 中的 Importer 名称：
-
-```cpp
-AssetImporterRegistry registry;
-registerBuiltinAssetImporters(registry);
-
-const IAssetImporter* importer = registry.find(AssetType::Shader);
-```
-
-同一种 AssetType 重复注册会记录错误并拒绝覆盖。当前内置注册项只有：
+`AssetImporterRegistry` 以 `AssetType` 为唯一键。Meta 不记录 Importer 名称；管线按照 `asset_type` 选取 Importer。当前内置：
 
 - `ShaderAssetImporter`
 - `MaterialAssetImporter`
 
-Material Importer 在这一阶段只完成 JSON 解析验证和 Artifact 输出；Shader 引用依赖
-及属性验证在后续 Material 导入步骤完善。
+重复注册同一种类型会记录 error 并拒绝覆盖。
 
 ## Shader 导入
 
-Shader Importer 执行：
+Shader Importer 解析并验证 ShaderLab JSON，遍历 SubShader/Pass，收集 vertex、fragment 文件和递归 `#include`。`ShaderIncludeResolver` 被 Importer 和 ShaderPreprocessor 共同使用：普通 Include 相对于当前文件解析，带有 `scheme://` 的 Include 按完整虚拟路径解析。
 
-```text
-读取.shader.json
-  → 使用现有ShaderLab解析器验证
-  → 遍历SubShader和Pass
-  → 收集vertex/fragment源码
-  → 递归解析源码中的#include
-  → 写入JSON Artifact
-  → 返回依赖VirtualPath列表
-```
+依赖收集器分别维护 `visiting` 和 `visited`：前者检测当前递归栈中的循环，后者用于去重。格式错误、文件缺失、循环 include 或写 Artifact 失败都会记录 `Log::error` 并返回失败，不会调用 fatal。
 
-Shader Artifact 的 payload 是经过解析验证并规范化排版的 ShaderLab JSON。导入过程
-不会运行 glslc，不生成 SPIR-V，不创建 `VkShaderModule` 或 Pipeline。Shader 真正
-参与绘制时仍由 `ShaderProcessor` 完成这些工作。
+Shader 导入输出类型专用的二进制 Artifact，不运行 glslc。SPIR-V、Reflection、ShaderProgram 和 Pipeline 在 Shader 真正参与绘制时按需生成。Material 同样使用独立的二进制序列化格式；运行时不再从 Artifact 二次解析 JSON。
 
-## 依赖规则
+## Material 导入
 
-每个 Pass 的顶点和片元源码本身都是依赖，源码中的双引号 include 会被递归收集：
+管线先解析 Material 的 Shader 虚拟路径并保证 Shader 已成功导入。Material Importer 随后从 Shader Artifact 读取属性声明，校验 Material 的 Properties 和 Keywords，并输出 Material Artifact。Material 依赖列表包含其 Shader 的 `asset://` 路径，因此 Shader 变化会通过 AssetDatabase 的反向依赖触发 Material 重导入。
 
-```glsl
-#include "include/common.glsl"
-```
-
-解析顺序为：
-
-1. 相对当前源码所在目录查找。
-2. 按 `AssetImportContext::includePaths` 顺序查找。
-
-依赖会去重；循环 include、格式错误、文件缺失或读取失败都会使本次导入失败，记录
-`Log::error` 并返回 `success == false`。所有依赖始终保存为 `VirtualPath`。
+完整导入与热重载流程见 [AssetPipeline.md](AssetPipeline.md)。

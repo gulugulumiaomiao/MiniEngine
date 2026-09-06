@@ -9,6 +9,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Vulkan REQUIRED)
 
+if(MINGW)
+    # Clang otherwise appends a dynamic libstdc++ after our explicit archive
+    # group, which makes F5 depend on the compiler's bin directory being in PATH.
+    add_link_options(-static-libstdc++ -static-libgcc)
+endif()
+
 add_library(MiniSpirvCrossCore STATIC
     third_party/spirv-cross/spirv_cross.cpp
     third_party/spirv-cross/spirv_parser.cpp
@@ -26,12 +32,17 @@ find_program(GLSLC_EXECUTABLE
 )
 
 add_library(MiniCore STATIC
-    src/core/Log.cpp
-    src/core/io/VirtualPath.cpp
-    src/core/io/DirectoryMount.cpp
-    src/core/io/FileSystem.cpp
+    src/core/logging/Log.cpp
+    src/core/serialization/BinaryTransfer.cpp
+    src/core/filesystem/VirtualPath.cpp
+    src/core/filesystem/DirectoryMount.cpp
+    src/core/filesystem/FileSystem.cpp
+    src/core/serialization/JsonTransfer.cpp
+    src/core/serialization/Transfer.cpp
 )
 target_include_directories(MiniCore PUBLIC src)
+target_include_directories(MiniCore SYSTEM PUBLIC third_party/glm/include)
+target_include_directories(MiniCore SYSTEM PRIVATE third_party/nlohmann/include)
 if(MSVC)
     target_compile_options(MiniCore PRIVATE /W4 /permissive- /utf-8)
 else()
@@ -39,11 +50,11 @@ else()
 endif()
 
 add_library(MiniAsset STATIC
-    src/asset/Asset.cpp
-    src/asset/AssetId.cpp
-    src/asset/AssetMeta.cpp
-    src/asset/AssetArtifact.cpp
-    src/asset/AssetDatabase.cpp
+    src/asset/base/Asset.cpp
+    src/asset/base/AssetId.cpp
+    src/asset/base/AssetMeta.cpp
+    src/asset/derived_data/AssetArtifact.cpp
+    src/asset/database/AssetDatabase.cpp
     src/asset/importer/IAssetImporter.cpp
     src/asset/importer/AssetImporterRegistry.cpp
 )
@@ -57,9 +68,14 @@ else()
 endif()
 
 add_library(MiniAssetImporters STATIC
+    src/asset/importer/AssetImportPipeline.cpp
+    src/asset/importer/FileWatcher.cpp
     src/asset/importer/ShaderAssetImporter.cpp
     src/asset/importer/MaterialAssetImporter.cpp
+    src/asset/importer/MeshAssetImporter.cpp
+    src/asset/importer/SceneAssetImporter.cpp
     src/asset/importer/BuiltinAssetImporters.cpp
+    src/render/mesh/Mesh.cpp
 )
 target_include_directories(MiniAssetImporters PUBLIC src)
 target_include_directories(MiniAssetImporters SYSTEM PRIVATE
@@ -73,12 +89,36 @@ else()
     target_compile_options(MiniAssetImporters PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+add_library(MiniScene STATIC
+    src/scene/components/CameraComponent.cpp
+    src/scene/components/Component.cpp
+    src/scene/components/LightComponent.cpp
+    src/scene/components/MaterialComponent.cpp
+    src/scene/components/MeshComponent.cpp
+    src/scene/node/Node.cpp
+    src/scene/scene/Scene.cpp
+    src/scene/scene/SceneAsset.cpp
+    src/scene/components/TransformComponent.cpp
+)
+target_include_directories(MiniScene PUBLIC src)
+target_include_directories(MiniScene SYSTEM PUBLIC third_party/glm/include)
+target_include_directories(MiniScene SYSTEM PRIVATE third_party/nlohmann/include)
+target_link_libraries(MiniScene PUBLIC MiniAsset)
+target_link_libraries(MiniAssetImporters PUBLIC MiniScene)
+if(MSVC)
+    target_compile_options(MiniScene PRIVATE /W4 /permissive- /utf-8)
+else()
+    target_compile_options(MiniScene PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 add_executable(MiniShaderCompiler
     tools/shader_compiler/main.cpp
-    src/renderer/ShaderGenerator.cpp
-    src/renderer/AssetManager.cpp
-    src/renderer/Shader.cpp
-    src/renderer/ShaderCompiler.cpp
+    src/render/shader/ShaderGenerator.cpp
+    src/asset/manager/AssetManager.cpp
+    src/render/material/Material.cpp
+    src/render/shader/Shader.cpp
+    src/render/shader/ShaderManager.cpp
+    src/render/shader/ShaderCompiler.cpp
 )
 target_link_libraries(MiniShaderCompiler PRIVATE
     MiniAssetImporters
@@ -99,6 +139,34 @@ else()
 endif()
 if(MINGW)
     target_link_libraries(MiniShaderCompiler PRIVATE
+        "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
+        "-Wl,--end-group,-Bdynamic"
+    )
+endif()
+
+add_executable(MiniAssetCooker
+    tools/asset_cooker/main.cpp
+    src/asset/manager/AssetManager.cpp
+    src/render/material/Material.cpp
+    src/render/shader/Shader.cpp
+    src/render/shader/ShaderManager.cpp
+)
+target_include_directories(MiniAssetCooker PRIVATE src)
+target_include_directories(MiniAssetCooker SYSTEM PRIVATE
+    third_party/glm/include
+    third_party/nlohmann/include
+)
+target_link_libraries(MiniAssetCooker PRIVATE
+    MiniAssetImporters
+    MiniSpirvCrossCore
+)
+if(MSVC)
+    target_compile_options(MiniAssetCooker PRIVATE /W4 /permissive- /utf-8)
+else()
+    target_compile_options(MiniAssetCooker PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+if(MINGW)
+    target_link_libraries(MiniAssetCooker PRIVATE
         "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
         "-Wl,--end-group,-Bdynamic"
     )
@@ -139,6 +207,7 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/vertex_color.shader.json"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/vertex_color.Forward.vert"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/vertex_color.Forward.frag"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/include/scene.glsl"
     COMMENT "Generating ShaderLab material and pass GLSL"
     VERBATIM
 )
@@ -251,29 +320,31 @@ add_custom_target(MiniShaderLabReflection
 )
 
 add_executable(MiniVulkanEngine
-    src/main.cpp
-    src/core/Application.cpp
-    src/platform/Window.cpp
-    src/renderer/AssetManager.cpp
-    src/renderer/Material.cpp
-    src/renderer/Mesh.cpp
-    src/renderer/RenderGraph.cpp
-    src/renderer/Renderer.cpp
-    src/renderer/Shader.cpp
-    src/renderer/ShaderCompiler.cpp
-    src/renderer/ShaderGenerator.cpp
+    src/runtime/main.cpp
+    src/runtime/application/GameApplication.cpp
+    src/runtime/engine/Engine.cpp
+    src/runtime/window/Window.cpp
+    src/asset/manager/AssetManager.cpp
+    src/render/material/Material.cpp
+    src/render/render_graph/RenderGraph.cpp
+    src/render/renderer/Renderer.cpp
+    src/render/shader/Shader.cpp
+    src/render/shader/ShaderManager.cpp
+    src/render/shader/ShaderCompiler.cpp
+    src/render/shader/ShaderGenerator.cpp
     src/rhi/vulkan/Buffer.cpp
     src/rhi/vulkan/DescriptorAllocator.cpp
     src/rhi/vulkan/GpuAllocator.cpp
-    src/rhi/vulkan/GraphicsPipeline.cpp
+    src/render/backend/vulkan/GraphicsPipeline.cpp
     src/rhi/vulkan/Image.cpp
-    src/rhi/vulkan/MaterialGpuCache.cpp
-    src/rhi/vulkan/PipelineCache.cpp
-    src/rhi/vulkan/RhiShaderCache.cpp
+    src/render/backend/vulkan/MaterialGpuCache.cpp
+    src/render/backend/vulkan/MeshGpuCache.cpp
+    src/render/backend/vulkan/PipelineCache.cpp
+    src/render/backend/vulkan/RhiShaderCache.cpp
     src/rhi/vulkan/Sampler.cpp
     src/rhi/vulkan/ShaderModule.cpp
     src/rhi/vulkan/VmaImplementation.cpp
-    src/rhi/vulkan/VulkanBackend.cpp
+    src/render/backend/vulkan/VulkanBackend.cpp
     src/rhi/vulkan/VulkanCommandEncoder.cpp
 )
 target_include_directories(MiniVulkanEngine PRIVATE
@@ -297,10 +368,15 @@ add_custom_command(TARGET MiniVulkanEngine POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_directory
             "${CMAKE_CURRENT_SOURCE_DIR}/assets"
             "${CMAKE_CURRENT_BINARY_DIR}/assets"
+    COMMAND "$<TARGET_FILE:MiniAssetCooker>"
+            "${CMAKE_CURRENT_BINARY_DIR}/assets"
+            "${CMAKE_CURRENT_BINARY_DIR}/library"
     COMMENT "Copying JSON shader and material assets"
 )
+add_dependencies(MiniVulkanEngine MiniAssetCooker)
 target_link_libraries(MiniVulkanEngine PRIVATE
     MiniAssetImporters
+    MiniScene
     MiniSpirvCrossCore
     Vulkan::Vulkan
     user32
@@ -337,10 +413,12 @@ set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT MiniVulkanEngine)
 if(BUILD_TESTING)
     add_executable(ShaderCompilerTest
         tests/ShaderCompilerTest.cpp
-        src/renderer/AssetManager.cpp
-        src/renderer/Shader.cpp
-        src/renderer/ShaderCompiler.cpp
-        src/renderer/ShaderGenerator.cpp
+        src/asset/manager/AssetManager.cpp
+        src/render/material/Material.cpp
+        src/render/shader/Shader.cpp
+        src/render/shader/ShaderManager.cpp
+        src/render/shader/ShaderCompiler.cpp
+        src/render/shader/ShaderGenerator.cpp
     )
     target_include_directories(ShaderCompilerTest PRIVATE src)
     target_include_directories(ShaderCompilerTest SYSTEM PRIVATE
@@ -359,13 +437,13 @@ if(BUILD_TESTING)
     else()
         target_compile_options(ShaderCompilerTest PRIVATE -Wall -Wextra -Wpedantic)
     endif()
+    target_link_libraries(ShaderCompilerTest PRIVATE MiniAssetImporters MiniSpirvCrossCore)
     if(MINGW)
         target_link_libraries(ShaderCompilerTest PRIVATE
             "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
             "-Wl,--end-group,-Bdynamic"
         )
     endif()
-    target_link_libraries(ShaderCompilerTest PRIVATE MiniAsset MiniSpirvCrossCore)
     add_test(NAME ShaderCompilerTest COMMAND ShaderCompilerTest)
 
     add_executable(FileSystemTest tests/FileSystemTest.cpp)
@@ -401,7 +479,10 @@ if(BUILD_TESTING)
 
     add_executable(AssetImporterTest
         tests/AssetImporterTest.cpp
-        src/renderer/Shader.cpp
+        src/asset/manager/AssetManager.cpp
+        src/render/material/Material.cpp
+        src/render/shader/Shader.cpp
+        src/render/shader/ShaderManager.cpp
     )
     target_include_directories(AssetImporterTest PRIVATE src)
     target_include_directories(AssetImporterTest SYSTEM PRIVATE
@@ -442,9 +523,96 @@ if(BUILD_TESTING)
     add_test(NAME LogFatalTest COMMAND LogTest fatal)
     set_tests_properties(LogFatalTest PROPERTIES WILL_FAIL TRUE)
 
+    add_executable(HandlePoolTest tests/HandlePoolTest.cpp)
+    target_link_libraries(HandlePoolTest PRIVATE MiniCore)
+    if(MSVC)
+        target_compile_options(HandlePoolTest PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(HandlePoolTest PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    if(MINGW)
+        target_link_libraries(HandlePoolTest PRIVATE
+            "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
+            "-Wl,--end-group,-Bdynamic"
+        )
+    endif()
+    add_test(NAME HandlePoolTest COMMAND HandlePoolTest)
+
+    add_executable(TransferTest tests/TransferTest.cpp)
+    target_link_libraries(TransferTest PRIVATE MiniCore)
+    if(MSVC)
+        target_compile_options(TransferTest PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(TransferTest PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    if(MINGW)
+        target_link_libraries(TransferTest PRIVATE
+            "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
+            "-Wl,--end-group,-Bdynamic"
+        )
+    endif()
+    add_test(NAME TransferTest COMMAND TransferTest)
+
+    add_executable(MeshTest
+        tests/MeshTest.cpp
+        src/asset/manager/AssetManager.cpp
+        src/render/material/Material.cpp
+        src/render/shader/Shader.cpp
+        src/render/shader/ShaderManager.cpp
+    )
+    target_link_libraries(MeshTest PRIVATE MiniAssetImporters MiniSpirvCrossCore)
+    target_include_directories(MeshTest SYSTEM PRIVATE
+        third_party/glm/include
+        third_party/nlohmann/include
+    )
+    if(MSVC)
+        target_compile_options(MeshTest PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(MeshTest PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    if(MINGW)
+        target_link_libraries(MeshTest PRIVATE
+            "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
+            "-Wl,--end-group,-Bdynamic"
+        )
+    endif()
+    add_test(NAME MeshTest COMMAND MeshTest)
+
+    add_executable(SceneTest tests/SceneTest.cpp)
+    target_link_libraries(SceneTest PRIVATE MiniScene)
+    target_include_directories(SceneTest SYSTEM PRIVATE third_party/glm/include)
+    if(MSVC)
+        target_compile_options(SceneTest PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(SceneTest PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    if(MINGW)
+        target_link_libraries(SceneTest PRIVATE
+            "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
+            "-Wl,--end-group,-Bdynamic"
+        )
+    endif()
+    add_test(NAME SceneTest COMMAND SceneTest)
+
+    add_executable(SceneAssetTest tests/SceneAssetTest.cpp)
+    target_link_libraries(SceneAssetTest PRIVATE MiniScene MiniAsset)
+    target_include_directories(SceneAssetTest SYSTEM PRIVATE third_party/glm/include)
+    if(MSVC)
+        target_compile_options(SceneAssetTest PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(SceneAssetTest PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    if(MINGW)
+        target_link_libraries(SceneAssetTest PRIVATE
+            "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
+            "-Wl,--end-group,-Bdynamic"
+        )
+    endif()
+    add_test(NAME SceneAssetTest COMMAND SceneAssetTest)
+
     add_executable(RenderGraphTest
         tests/RenderGraphTest.cpp
-        src/renderer/RenderGraph.cpp
+        src/render/render_graph/RenderGraph.cpp
     )
     target_include_directories(RenderGraphTest PRIVATE src)
     target_include_directories(RenderGraphTest SYSTEM PRIVATE third_party/glm/include)
@@ -464,10 +632,10 @@ if(BUILD_TESTING)
 
     add_executable(MaterialTest
         tests/MaterialTest.cpp
-        src/renderer/AssetManager.cpp
-        src/renderer/Material.cpp
-        src/renderer/Mesh.cpp
-        src/renderer/Shader.cpp
+        src/asset/manager/AssetManager.cpp
+        src/render/material/Material.cpp
+        src/render/shader/Shader.cpp
+        src/render/shader/ShaderManager.cpp
     )
     target_include_directories(MaterialTest PRIVATE src)
     target_include_directories(MaterialTest SYSTEM PRIVATE
@@ -483,6 +651,7 @@ if(BUILD_TESTING)
     else()
         target_compile_options(MaterialTest PRIVATE -Wall -Wextra -Wpedantic)
     endif()
+    target_link_libraries(MaterialTest PRIVATE MiniAssetImporters MiniSpirvCrossCore)
     if(MINGW)
         target_link_libraries(MaterialTest PRIVATE
             "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
@@ -490,12 +659,13 @@ if(BUILD_TESTING)
         )
     endif()
     add_test(NAME MaterialTest COMMAND MaterialTest)
-    target_link_libraries(MaterialTest PRIVATE MiniAsset MiniSpirvCrossCore)
 
     add_executable(ShaderAssetTest
         tests/ShaderAssetTest.cpp
-        src/renderer/AssetManager.cpp
-        src/renderer/Shader.cpp
+        src/asset/manager/AssetManager.cpp
+        src/render/material/Material.cpp
+        src/render/shader/Shader.cpp
+        src/render/shader/ShaderManager.cpp
     )
     target_include_directories(ShaderAssetTest PRIVATE src)
     target_include_directories(ShaderAssetTest SYSTEM PRIVATE
@@ -513,6 +683,7 @@ if(BUILD_TESTING)
     else()
         target_compile_options(ShaderAssetTest PRIVATE -Wall -Wextra -Wpedantic)
     endif()
+    target_link_libraries(ShaderAssetTest PRIVATE MiniAssetImporters MiniSpirvCrossCore)
     if(MINGW)
         target_link_libraries(ShaderAssetTest PRIVATE
             "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
@@ -520,12 +691,13 @@ if(BUILD_TESTING)
         )
     endif()
     add_test(NAME ShaderAssetTest COMMAND ShaderAssetTest)
-    target_link_libraries(ShaderAssetTest PRIVATE MiniAsset MiniSpirvCrossCore)
 
     add_executable(ShaderLayoutTest
         tests/ShaderLayoutTest.cpp
-        src/renderer/AssetManager.cpp
-        src/renderer/Shader.cpp
+        src/asset/manager/AssetManager.cpp
+        src/render/material/Material.cpp
+        src/render/shader/Shader.cpp
+        src/render/shader/ShaderManager.cpp
     )
     target_include_directories(ShaderLayoutTest PRIVATE src)
     target_include_directories(ShaderLayoutTest SYSTEM PRIVATE
@@ -540,6 +712,7 @@ if(BUILD_TESTING)
     else()
         target_compile_options(ShaderLayoutTest PRIVATE -Wall -Wextra -Wpedantic)
     endif()
+    target_link_libraries(ShaderLayoutTest PRIVATE MiniAssetImporters MiniSpirvCrossCore)
     if(MINGW)
         target_link_libraries(ShaderLayoutTest PRIVATE
             "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
@@ -547,13 +720,14 @@ if(BUILD_TESTING)
         )
     endif()
     add_test(NAME ShaderLayoutTest COMMAND ShaderLayoutTest)
-    target_link_libraries(ShaderLayoutTest PRIVATE MiniAsset MiniSpirvCrossCore)
 
     add_executable(ShaderGeneratorTest
         tests/ShaderGeneratorTest.cpp
-        src/renderer/ShaderGenerator.cpp
-        src/renderer/AssetManager.cpp
-        src/renderer/Shader.cpp
+        src/render/shader/ShaderGenerator.cpp
+        src/asset/manager/AssetManager.cpp
+        src/render/material/Material.cpp
+        src/render/shader/Shader.cpp
+        src/render/shader/ShaderManager.cpp
     )
     target_include_directories(ShaderGeneratorTest PRIVATE
         src
@@ -571,6 +745,7 @@ if(BUILD_TESTING)
     else()
         target_compile_options(ShaderGeneratorTest PRIVATE -Wall -Wextra -Wpedantic)
     endif()
+    target_link_libraries(ShaderGeneratorTest PRIVATE MiniAssetImporters MiniSpirvCrossCore)
     if(MINGW)
         target_link_libraries(ShaderGeneratorTest PRIVATE
             "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
@@ -578,5 +753,67 @@ if(BUILD_TESTING)
         )
     endif()
     add_test(NAME ShaderGeneratorTest COMMAND ShaderGeneratorTest)
-    target_link_libraries(ShaderGeneratorTest PRIVATE MiniAsset MiniSpirvCrossCore)
+
+    add_executable(AssetPipelineTest
+        tests/AssetPipelineTest.cpp
+        src/asset/manager/AssetManager.cpp
+        src/render/material/Material.cpp
+        src/render/shader/Shader.cpp
+        src/render/shader/ShaderManager.cpp
+    )
+    target_include_directories(AssetPipelineTest PRIVATE src)
+    target_include_directories(AssetPipelineTest SYSTEM PRIVATE
+        third_party/glm/include
+        third_party/nlohmann/include
+    )
+    if(MSVC)
+        target_compile_options(AssetPipelineTest PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(AssetPipelineTest PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    target_link_libraries(AssetPipelineTest PRIVATE
+        MiniAssetImporters
+        MiniSpirvCrossCore
+    )
+    if(MINGW)
+        target_link_libraries(AssetPipelineTest PRIVATE
+            "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
+            "-Wl,--end-group,-Bdynamic"
+        )
+    endif()
+    add_test(NAME AssetPipelineTest COMMAND AssetPipelineTest)
+
+    add_executable(AssetReleaseTest
+        tests/AssetReleaseTest.cpp
+        src/asset/manager/AssetManager.cpp
+        src/render/material/Material.cpp
+        src/render/shader/Shader.cpp
+        src/render/shader/ShaderManager.cpp
+    )
+    target_include_directories(AssetReleaseTest PRIVATE src)
+    target_include_directories(AssetReleaseTest SYSTEM PRIVATE
+        third_party/glm/include
+        third_party/nlohmann/include
+    )
+    target_compile_definitions(AssetReleaseTest PRIVATE
+        MINI_RELEASE=1
+        MINI_TEST_COOKED_ASSET_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets"
+    )
+    if(MSVC)
+        target_compile_options(AssetReleaseTest PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(AssetReleaseTest PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    target_link_libraries(AssetReleaseTest PRIVATE
+        MiniAssetImporters
+        MiniSpirvCrossCore
+    )
+    if(MINGW)
+        target_link_libraries(AssetReleaseTest PRIVATE
+            "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
+            "-Wl,--end-group,-Bdynamic"
+        )
+    endif()
+    add_dependencies(AssetReleaseTest MiniVulkanEngine)
+    add_test(NAME AssetReleaseTest COMMAND AssetReleaseTest)
 endif()

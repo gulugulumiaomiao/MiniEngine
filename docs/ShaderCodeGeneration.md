@@ -19,8 +19,8 @@ ShaderAsset + UniformBlockLayout
 相关代码：
 
 ```text
-src/renderer/ShaderGenerator.h
-src/renderer/ShaderGenerator.cpp
+src/render/shader/ShaderGenerator.h
+src/render/shader/ShaderGenerator.cpp
 tools/shader_compiler/main.cpp
 ```
 

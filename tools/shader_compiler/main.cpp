@@ -1,8 +1,9 @@
-#include "renderer/AssetManager.h"
-#include "renderer/Shader.h"
-#include "renderer/ShaderCompiler.h"
-#include "renderer/ShaderGenerator.h"
-#include "core/Log.h"
+#include "asset/manager/AssetManager.h"
+#include "render/shader/Shader.h"
+#include "render/shader/ShaderCompiler.h"
+#include "render/shader/ShaderGenerator.h"
+#include "core/logging/Log.h"
+#include "core/filesystem/FileSystem.h"
 
 #include <filesystem>
 #include <fstream>
@@ -12,6 +13,15 @@
 #include <string>
 
 namespace {
+
+class AssetRuntimeScope final {
+public:
+    ~AssetRuntimeScope() {
+        ASSET_MANAGER.shutdown();
+        (void)FILE_SYSTEM.unmount("asset");
+        (void)FILE_SYSTEM.unmount("library");
+    }
+};
 
 bool writeTextFile(const std::filesystem::path& path, const std::string& contents) {
     if (path.has_parent_path()) {
@@ -73,9 +83,33 @@ int main(int argc, char** argv) {
                      "<vertex.spv> <fragment.spv>\n";
         return 2;
     }
-    const std::filesystem::path shaderPath{argv[2]};
+    const std::filesystem::path shaderPath =
+        std::filesystem::absolute(argv[2]).lexically_normal();
+    const std::filesystem::path shaderDirectory = shaderPath.parent_path();
+    const std::filesystem::path assetRoot =
+        shaderDirectory.filename() == "shaders"
+            ? shaderDirectory.parent_path()
+            : shaderDirectory;
+    if (!FILE_SYSTEM.mountDirectory("asset", assetRoot, false) ||
+        !FILE_SYSTEM.mountDirectory("library", assetRoot.parent_path() / "library",
+                                    false) ||
+        !ASSET_MANAGER.initialize()) {
+        engine::Log::error("MiniShaderCompiler",
+                           "Cannot initialize asset system: %s",
+                           assetRoot.string().c_str());
+        return 1;
+    }
+    AssetRuntimeScope assetRuntime;
+    const auto shaderVirtualPath = FILE_SYSTEM.toVirtualPath(shaderPath);
+    if (!shaderVirtualPath || shaderVirtualPath->scheme() != "asset") {
+        engine::Log::error(
+            "MiniShaderCompiler",
+            "Shader is outside the mounted asset root: %s",
+            shaderPath.string().c_str());
+        return 1;
+    }
     const std::shared_ptr<engine::ShaderAsset> shaderAsset =
-        ASSET_MANAGER.loadShaderAsset(shaderPath);
+        ASSET_MANAGER.loadAsset<engine::ShaderAsset>(*shaderVirtualPath);
     if (!shaderAsset) return 1;
     const engine::ShaderAsset& shader = *shaderAsset;
     const engine::UniformBlockLayout layout =

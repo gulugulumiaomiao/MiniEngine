@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rhi/CommandEncoder.h"
+#include "rhi/api/CommandEncoder.h"
 
 #include <vulkan/vulkan.h>
 

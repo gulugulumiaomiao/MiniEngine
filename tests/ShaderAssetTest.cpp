@@ -1,5 +1,7 @@
-#include "renderer/AssetManager.h"
-#include "renderer/Shader.h"
+#include "asset/manager/AssetManager.h"
+#include "render/shader/Shader.h"
+#include "asset/importer/FileWatcher.h"
+#include "TestAssetEnvironment.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -7,10 +9,23 @@
 int main() {
     using namespace engine;
     const std::filesystem::path assetRoot{MINI_TEST_ASSET_DIR};
-    const std::filesystem::path fixtureRoot{MINI_TEST_SHADER_FIXTURE_DIR};
+    const std::filesystem::path fixtureRoot =
+        std::filesystem::temp_directory_path() /
+        "MiniEngineShaderAssetFixtures" / "assets";
+    std::error_code fixtureError;
+    std::filesystem::remove_all(fixtureRoot.parent_path(), fixtureError);
+    std::filesystem::create_directories(fixtureRoot.parent_path(), fixtureError);
+    std::filesystem::copy(MINI_TEST_SHADER_FIXTURE_DIR, fixtureRoot,
+                          std::filesystem::copy_options::recursive,
+                          fixtureError);
+    if (fixtureError) return 10;
 
-    const ShaderAsset& vertexColor = *ASSET_MANAGER
-        .loadShaderAsset(assetRoot / "shaders/vertex_color.shader.json");
+    if (!test::initializeAssetEnvironment(assetRoot)) return 11;
+    const std::shared_ptr<ShaderAsset> vertexColorOwner = ASSET_MANAGER
+        .loadAsset<ShaderAsset>(
+            VirtualPath{"asset://shaders/vertex_color.shader.json"});
+    if (!vertexColorOwner) return 8;
+    const ShaderAsset& vertexColor = *vertexColorOwner;
     const ShaderPassDesc& vertexColorPass =
         vertexColor.subShaders.front().requirePass(ShaderPassType::Forward);
     if (vertexColorPass.program.vertexSource.filename() !=
@@ -23,8 +38,13 @@ int main() {
         return 1;
     }
 
-    const ShaderAsset& generated = *ASSET_MANAGER
-        .loadShaderAsset(fixtureRoot / "shader_interface_valid.shader.json");
+    FILE_WATCHER.stop();
+    if (!test::initializeAssetEnvironment(fixtureRoot)) return 12;
+    const std::shared_ptr<ShaderAsset> generatedOwner = ASSET_MANAGER
+        .loadAsset<ShaderAsset>(
+            VirtualPath{"asset://shader_interface_valid.shader.json"});
+    if (!generatedOwner) return 9;
+    const ShaderAsset& generated = *generatedOwner;
     const ShaderPassDesc& pass =
         generated.subShaders.front().requirePass(ShaderPassType::Forward);
     if (pass.program.vertexSource.filename() != "generated_interface.vert" ||
@@ -89,12 +109,12 @@ int main() {
         return 5;
     }
 
-    if (ASSET_MANAGER.loadShaderAsset(
-            fixtureRoot / "shader_interface_missing_entry.shader.json")) {
+    if (ASSET_MANAGER.loadAsset<ShaderAsset>(
+            VirtualPath{"asset://shader_interface_missing_entry.shader.json"})) {
         return 6;
     }
     if (reflectSpirv(VirtualPath::fromNative(fixtureRoot / "missing.spv"))) {
         return 7;
     }
-
+    test::shutdownAssetEnvironment();
 }

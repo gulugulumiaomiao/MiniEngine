@@ -1,13 +1,21 @@
-#include "asset/AssetArtifact.h"
-#include "asset/AssetDatabase.h"
-#include "asset/AssetMeta.h"
-#include "core/io/FileSystem.h"
+#include "asset/derived_data/AssetArtifact.h"
+#include "asset/base/Asset.h"
+#include "asset/database/AssetDatabase.h"
+#include "asset/base/AssetMeta.h"
+#include "core/serialization/Transferable.h"
+#include "core/filesystem/FileSystem.h"
 
 #include <chrono>
+#include <cstring>
 #include <filesystem>
+#include <type_traits>
 
 int main() {
     using namespace engine;
+
+    static_assert(std::is_abstract_v<Transferable>);
+    static_assert(std::is_base_of_v<Transferable, Asset>);
+    static_assert(std::is_abstract_v<Asset>);
 
     const AssetId id = AssetId::generate();
     const auto parsedId = AssetId::parse(id.toString());
@@ -91,8 +99,11 @@ int main() {
     if (!database.prepareArtifactDirectory(shaderMeta->assetId)) {
         return 9;
     }
+    const std::string testPayload{"shader payload"};
+    std::vector<std::byte> payload(testPayload.size());
+    std::memcpy(payload.data(), testPayload.data(), testPayload.size());
     const AssetArtifact artifact{1, shaderMeta->assetId, AssetType::Shader,
-                                 shaderPath, R"({"name":"Test"})"};
+                                 shaderPath, std::move(payload)};
     const VirtualPath artifactPath = database.artifactPath(shaderMeta->assetId);
     if (!saveAssetArtifact(artifactPath, artifact)) {
         return 10;
@@ -100,7 +111,13 @@ int main() {
     const auto loadedArtifact = loadAssetArtifact(artifactPath);
     if (!loadedArtifact || loadedArtifact->assetId != shaderMeta->assetId ||
         loadedArtifact->assetType != AssetType::Shader ||
-        loadedArtifact->sourcePath.string() != shaderPath.string()) {
+        loadedArtifact->sourcePath.string() != shaderPath.string() ||
+        loadedArtifact->payload.size() != testPayload.size()) {
+        return 11;
+    }
+    std::vector<std::byte> corrupted = serializeAssetArtifact(artifact);
+    corrupted.front() = std::byte{0};
+    if (parseAssetArtifact(artifactPath, corrupted)) {
         return 11;
     }
 

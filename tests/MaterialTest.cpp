@@ -1,70 +1,64 @@
-#include "renderer/Material.h"
-#include "renderer/AssetManager.h"
+#include "render/material/Material.h"
+#include "asset/manager/AssetManager.h"
+#include "asset/importer/FileWatcher.h"
+#include "TestAssetEnvironment.h"
 
-#include <cstddef>
 #include <cstring>
 #include <filesystem>
 
 int main() {
     using namespace engine;
+    const std::filesystem::path fixtureCopy =
+        std::filesystem::temp_directory_path() /
+        "MiniEngineMaterialFixtures" / "assets";
+    std::error_code fixtureError;
+    std::filesystem::remove_all(fixtureCopy.parent_path(), fixtureError);
+    std::filesystem::create_directories(fixtureCopy.parent_path(), fixtureError);
+    std::filesystem::copy(MINI_TEST_MATERIAL_FIXTURE_DIR, fixtureCopy,
+                          std::filesystem::copy_options::recursive,
+                          fixtureError);
+    if (fixtureError) return 21;
     AssetManager& assets = ASSET_MANAGER;
     MaterialManager& materials = MATERIAL_MANAGER;
     materials.clear();
-    assets.setAssetRoot(std::filesystem::path{MINI_TEST_ASSET_DIR});
+    if (!test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR)) return 22;
     const auto cachedShaderA =
-        assets.loadShaderAsset("shaders/vertex_color.shader.json");
+        assets.loadAsset<ShaderAsset>(
+            VirtualPath{"asset://shaders/vertex_color.shader.json"});
     const auto cachedShaderB =
-        assets.loadShaderAsset("shaders/../shaders/vertex_color.shader.json");
+        assets.loadAsset<ShaderAsset>(
+            VirtualPath{"asset://shaders/../shaders/vertex_color.shader.json"});
     const auto cachedMaterialA =
-        assets.loadMaterialAsset("materials/warm_vertex_color.material.json");
+        assets.loadAsset<MaterialAsset>(
+            VirtualPath{"asset://materials/warm_vertex_color.material.json"});
     const auto cachedMaterialB =
-        assets.loadMaterialAsset("materials/./warm_vertex_color.material.json");
+        assets.loadAsset<MaterialAsset>(
+            VirtualPath{"asset://materials/./warm_vertex_color.material.json"});
     if (cachedShaderA != cachedShaderB || cachedMaterialA != cachedMaterialB ||
-        cachedMaterialA->shaderAsset != cachedShaderA) {
+        cachedMaterialA->shader.string() !=
+            "asset://shaders/vertex_color.shader.json") {
         return 17;
     }
-
-    int meshLoadCount = 0;
-    const auto importTriangle = [&meshLoadCount](const std::filesystem::path&) {
-        ++meshLoadCount;
-        const math::Vec3 positions[] = {
-            {-0.5F, -0.5F, 0.0F}, {0.5F, -0.5F, 0.0F}, {0.0F, 0.5F, 0.0F}};
-        const std::uint32_t indices[] = {0, 1, 2};
-        std::vector<std::byte> vertexBytes{sizeof(positions)};
-        std::vector<std::byte> indexBytes{sizeof(indices)};
-        std::memcpy(vertexBytes.data(), positions, sizeof(positions));
-        std::memcpy(indexBytes.data(), indices, sizeof(indices));
-
-        MeshDesc desc;
-        desc.debugName = "AssetManagerTriangle";
-        desc.vertexLayout = {
-            sizeof(math::Vec3),
-            {{VertexSemantic::Position, VertexFormat::Vec3Float32, 0, 0}}};
-        desc.subMeshes = {{0, 3, 0, 0, {}}};
-        return std::make_shared<MeshAsset>(
-            std::move(desc), std::move(vertexBytes), std::move(indexBytes));
-    };
-    const auto cachedMeshA =
-        assets.loadMeshAsset("meshes/generated.mesh", importTriangle);
-    const auto cachedMeshB =
-        assets.loadMeshAsset("meshes/./generated.mesh", importTriangle);
-    if (cachedMeshA != cachedMeshB || meshLoadCount != 1) {
-        return 18;
-    }
     const MaterialHandle warm =
-        materials.createInstance(cachedMaterialA);
+        materials.load(cachedMaterialA->assetPath());
     const MaterialHandle coolShared =
-        materials.createInstance("materials/cool_vertex_color.material.json");
-    Material& warmData = materials.resolve(warm);
+        materials.load(
+            VirtualPath{"asset://materials/cool_vertex_color.material.json"});
+    Material& warmData = *materials.find(warm);
+    if (materials.load(cachedMaterialA->assetPath()) != warm ||
+        materials.find(cachedMaterialA->assetPath()) != &warmData ||
+        materials.size() != 2) {
+        return 24;
+    }
     const SubShader* runtimeSubShader =
         warmData.shader().selectSubShader("MiniForward");
     if (!runtimeSubShader ||
         !runtimeSubShader->findPass(ShaderPassType::Forward)) {
         return 16;
     }
-    if (warmData.shaderReference() == materials.resolve(coolShared).shaderReference() ||
+    if (warmData.shaderHandle() != materials.find(coolShared)->shaderHandle() ||
         warmData.shader().assetPath() !=
-            materials.resolve(coolShared).shader().assetPath()) {
+            materials.find(coolShared)->shader().assetPath()) {
         return 13;
     }
     const math::Vec4 color = warmData.getVec4("BaseColor");
@@ -86,25 +80,34 @@ int main() {
     if (materials.find(warm) != nullptr) {
         return 19;
     }
+    materials.destroy(coolShared);
     const MaterialHandle reused =
-        materials.createInstance("materials/cool_vertex_color.material.json");
-    if (reused.index != warm.index || reused.generation == warm.generation) {
+        materials.load(
+            VirtualPath{"asset://materials/cool_vertex_color.material.json"});
+    if (reused.index != coolShared.index ||
+        reused.generation == coolShared.generation) {
         return 10;
     }
     if (materials.find(reused) == nullptr) {
         return 20;
     }
     materials.clear();
-    assets.setAssetRoot(std::filesystem::path{MINI_TEST_MATERIAL_FIXTURE_DIR});
+    if (materials.find(cachedMaterialA->assetPath()) || materials.size() != 0) {
+        return 25;
+    }
+    FILE_WATCHER.stop();
+    if (!test::initializeAssetEnvironment(fixtureCopy)) return 23;
     MaterialManager& valueMaterials = MATERIAL_MANAGER;
     const MaterialHandle invalid =
-        valueMaterials.createInstance("material_invalid.material.json");
+        valueMaterials.load(
+            VirtualPath{"asset://material_invalid.material.json"});
     if (invalid) {
         return 14;
     }
     const MaterialHandle values =
-        valueMaterials.createInstance("material_values.material.json");
-    Material& valueData = valueMaterials.resolve(values);
+        valueMaterials.load(
+            VirtualPath{"asset://material_values.material.json"});
+    Material& valueData = *valueMaterials.find(values);
     if (valueData.getFloat("FloatValue") != 2.5F ||
         valueData.getFloat("RangeValue") != 0.25F || !valueData.getBool("Enabled") ||
         valueData.getVec2("Uv") != math::Vec2{1.0F, 2.0F} ||
@@ -153,7 +156,8 @@ int main() {
     }
 
     const std::uint64_t versionBeforeShaderSwitch = valueData.version();
-    valueMaterials.setShader(values, "material_switch.shader.json");
+    valueMaterials.setShader(
+        values, VirtualPath{"asset://material_switch.shader.json"});
     if (valueData.shader().name() != "Tests/MaterialSwitch" ||
         valueData.getFloat("RangeValue") != 0.75F ||
         valueData.getVec3("Direction") != math::Vec3{7.0F, 8.0F, 9.0F} ||
@@ -162,4 +166,7 @@ int main() {
         valueData.version() != versionBeforeShaderSwitch + 1 || !valueData.dirty()) {
         return 9;
     }
+    MATERIAL_MANAGER.clear();
+    SHADER_MANAGER.clear();
+    test::shutdownAssetEnvironment();
 }

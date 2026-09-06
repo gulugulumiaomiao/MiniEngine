@@ -5,8 +5,11 @@
 ## 最终分层
 
 ```text
+Scene / Node / Component
+    │ Scene 从 Root 提取
+    ▼
 RenderScene
-    │ Renderer 提取、排序
+    │ Renderer 解析、排序
     ▼
 DrawList（后端无关的绘制包）
     │
@@ -26,7 +29,7 @@ VkCommandBuffer / Vulkan 资源
 
 ### 1. 定义 RHI 基础类型
 
-`src/rhi/RhiTypes.h` 定义：
+`src/rhi/api/RhiTypes.h` 定义：
 
 - 带 `index + generation` 的 Buffer、Texture、TextureView、GraphicsPipeline 和 BindGroup 句柄；
 - `Viewport`、`Rect`、`RenderingInfo` 和颜色/深度附件；
@@ -37,7 +40,7 @@ VkCommandBuffer / Vulkan 资源
 
 ### 2. 定义命令编码接口
 
-`src/rhi/CommandEncoder.h` 将接口拆为两类：
+`src/rhi/api/CommandEncoder.h` 将接口拆为两类：
 
 - `IGraphicsCommandEncoder`：屏障、动态渲染、viewport、scissor、pipeline、VB/IB、bind group、draw 和 debug label；
 - `ITransferCommandEncoder`：第一版只提供 `copyBuffer`。
@@ -74,9 +77,9 @@ vkCmdPipelineBarrier
 
 ### 5. Renderer 构建 DrawList
 
-`src/renderer/DrawList.h` 定义 `DrawItem`。每项包含 pipeline、VB、IB、索引格式、indexed draw 参数和 render queue。
+`src/render/renderer/DrawList.h` 定义 `DrawItem`。每项包含 pipeline、VB、IB、索引格式、indexed draw 参数和 render queue。
 
-`Renderer::renderFrame` 遍历 `RenderScene`，通过 `IRenderBackend::meshDrawInfo` 获取 Mesh 绘制信息，并通过引擎层 `MaterialManager` 获取材质属性和 render queue。Renderer 为每个 SubMesh 生成 DrawItem，并按 render queue 稳定排序。`firstInstance` 保留原 RenderObject 下标，因此排序后 shader 仍会读取正确的对象数据。
+`Renderer::renderFrame` 遍历 `RenderScene`，通过 `IRenderBackend::meshDrawInfo` 获取 Mesh 绘制信息，并按照 SubMesh 的 material slot 从 RenderObject 材质列表选择材质。Renderer 为每个 SubMesh 生成 DrawItem，并按 render queue 稳定排序。`firstInstance` 保留原 RenderObject 下标，因此排序后 shader 仍会读取正确的对象数据。Scene UBO 保存相机和方向光，Object SSBO 保存模型矩阵。
 
 当前只按 render queue 排序。下一版可增加 pipeline、material 和 mesh 排序键，以减少状态切换，同时必须保持透明物体的深度排序规则。
 
@@ -88,7 +91,7 @@ Mesh 上传的 staging buffer 和 device-local buffer 都进入带 generation �
 
 ### 7. 接入最小 RenderGraph
 
-`src/renderer/RenderGraph.*` 当前负责：
+`src/render/render_graph/RenderGraph.*` 当前负责：
 
 - 导入外部 Texture，并声明 initial/final state；
 - 声明 Graphics Pass 的 RenderingInfo 和资源用途；

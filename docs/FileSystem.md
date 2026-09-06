@@ -36,6 +36,6 @@ FILE_SYSTEM.mountDirectory("cache", cacheRoot, false);
 
 ## AssetManager 集成
 
-`AssetManager::setAssetRoot()` 将根目录挂载为只读的 `asset://`。相对资产路径先转换为虚拟路径，再由 FileSystem 读取 JSON；解析函数只接收已经读取的文本。绝对路径转换成 `file://`，保留 Shader 编译工具和测试夹具的兼容性。
+物理目录挂载由 Renderer、工具或测试等启动层负责；启动层挂载 `asset://` 和 `library://` 后调用 `AssetManager::initialize()`。AssetManager 的公开加载接口只接收完整的 `VirtualPath`，不再接受相对路径、绝对路径或执行物理路径转换。
 
-缓存键仍使用解析后的规范化物理路径，因此 `shaders/../shaders/a.json` 和 `shaders/a.json` 会命中同一个 Asset。
+缓存键使用规范化后的虚拟路径，因此 `asset://shaders/../shaders/a.json` 和 `asset://shaders/a.json` 会命中同一个 Asset。

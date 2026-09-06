@@ -1,11 +1,12 @@
 #include "asset/importer/MaterialAssetImporter.h"
 
-#include "asset/AssetArtifact.h"
-#include "core/Log.h"
-#include "core/io/FileSystem.h"
-#include "renderer/Shader.h"
+#include "asset/derived_data/AssetArtifact.h"
+#include "asset/database/AssetDatabase.h"
+#include "core/logging/Log.h"
+#include "core/serialization/BinaryTransfer.h"
+#include "core/filesystem/FileSystem.h"
+#include "render/material/Material.h"
 
-#include <nlohmann/json.hpp>
 #include <utility>
 
 namespace engine {
@@ -27,24 +28,53 @@ AssetImportResult MaterialAssetImporter::import(
         return fail("Cannot read MaterialAsset: " +
                     context.sourcePath.string());
     }
-    if (!detail::parseMaterialAsset(context.sourcePath, *source)) {
+    const std::shared_ptr<MaterialAsset> material =
+        detail::parseMaterialAsset(context.sourcePath, *source);
+    if (!material) {
         return fail("Cannot parse MaterialAsset: " +
                     context.sourcePath.string());
     }
-    const nlohmann::json root = nlohmann::json::parse(*source, nullptr, false);
-    if (root.is_discarded() ||
-        !FILE_SYSTEM.createDirectories(context.artifactPath.parent())) {
+    const auto shaderRecord = ASSET_DATABASE.findByPath(material->shader);
+    if (!shaderRecord || shaderRecord->status != AssetImportStatus::Imported ||
+        shaderRecord->type != AssetType::Shader) {
+        return fail("Material Shader has not been imported: " +
+                    material->shader.string());
+    }
+    const auto shaderArtifact = loadAssetArtifact(shaderRecord->artifactPath);
+    if (!shaderArtifact || shaderArtifact->assetId != shaderRecord->id ||
+        shaderArtifact->assetType != AssetType::Shader) {
+        return fail("Cannot load Material Shader Artifact: " +
+                    material->shader.string());
+    }
+    auto shader = std::make_shared<ShaderAsset>();
+    shader->setAssetIdentity(shaderRecord->id, shaderRecord->sourcePath);
+    BinaryReader shaderReader{shaderArtifact->payload};
+    if (!shader->transfer(shaderReader) || !shaderReader.finished()) {
+        return fail("Cannot parse Material Shader Artifact: " +
+                    material->shader.string());
+    }
+    if (!validateMaterialAsset(*material, *shader, context.sourcePath)) {
+        return fail("Material properties do not match Shader: " +
+                    context.sourcePath.string());
+    }
+    if (!FILE_SYSTEM.createDirectories(context.artifactPath.parent())) {
         return fail("Cannot prepare Material Artifact: " +
                     context.artifactPath.string());
     }
+    BinaryWriter writer;
+    if (!material->transfer(writer)) {
+        return fail("Cannot serialize Material Artifact: " +
+                    context.sourcePath.string());
+    }
     const AssetArtifact artifact{1, context.meta.assetId, AssetType::Material,
-                                 context.sourcePath, root.dump()};
+                                 context.sourcePath, writer.takeBytes()};
     if (!saveAssetArtifact(context.artifactPath, artifact)) {
         return fail("Cannot save Material Artifact: " +
                     context.artifactPath.string());
     }
     return AssetImportResult::succeeded(AssetType::Material,
-                                        context.artifactPath);
+                                        context.artifactPath,
+                                        {material->shader});
 }
 
 } // namespace engine
