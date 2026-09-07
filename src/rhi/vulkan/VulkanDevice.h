@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rhi/RhiFactory.h"
 #include "rhi/api/Device.h"
 #include "rhi/vulkan/VulkanCommandEncoder.h"
 
@@ -24,7 +25,7 @@ class VulkanGraphicsPipeline;
 
 class VulkanDevice final : public IDevice, public IVulkanResourceResolver {
 public:
-    VulkanDevice(void* nativeInstance, void* nativeWindow);
+    explicit VulkanDevice(const SurfaceSource& surface);
     ~VulkanDevice() override;
 
     VulkanDevice(const VulkanDevice&) = delete;
@@ -109,7 +110,7 @@ private:
     [[nodiscard]] const ::engine::Buffer& requireBuffer(BufferHandle handle) const;
     void createInstance();
     void createDebugMessenger();
-    void createSurface(void* nativeInstance, void* nativeWindow);
+    void createSurface(const SurfaceSource& surface);
     [[nodiscard]] QueueFamilies findQueueFamilies(VkPhysicalDevice device) const;
     [[nodiscard]] bool isDeviceSuitable(VkPhysicalDevice device) const;
     void selectPhysicalDevice();

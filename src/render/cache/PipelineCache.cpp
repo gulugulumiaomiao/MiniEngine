@@ -1,7 +1,7 @@
-#include "render/backend/PipelineCache.h"
+#include "render/cache/PipelineCache.h"
 
 #include "core/logging/Log.h"
-#include "render/backend/RhiShaderCache.h"
+#include "render/cache/RhiShaderCache.h"
 #include "render/mesh/Mesh.h"
 #include "render/shader/Shader.h"
 #include "rhi/api/Device.h"

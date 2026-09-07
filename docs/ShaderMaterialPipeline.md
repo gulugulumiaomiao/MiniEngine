@@ -130,10 +130,9 @@ ShadowCaster → DepthOnly → Forward
 
 - `src/render/shader/Shader.h/.cpp`：资产描述、运行时 Shader/SubShader/Pass、Reflection。
 - `src/render/shader/ShaderCompiler.h/.cpp`：预处理、CompiledShader、Program、依赖图和 Cooked 模型。
-- `src/render/backend/RhiShaderCache.h/.cpp`：CompileID 到 RHI Shader handle，不依赖 Vulkan 类型。
-- `src/render/backend/PipelineCache.h/.cpp`：将 ShaderPass、RenderState 与 VertexLayout 转换为 RHI Pipeline 描述并缓存 handle。
+- `src/render/cache/RhiShaderCache.h/.cpp`：CompileID 到 RHI Shader handle，不依赖 Vulkan 类型。
+- `src/render/cache/PipelineCache.h/.cpp`：将 ShaderPass、RenderState 与 VertexLayout 转换为 RHI Pipeline 描述并缓存 handle。
 - `src/rhi/vulkan/VulkanGraphicsPipeline.h/.cpp`：将 RHI Pipeline 描述转换为 Vulkan graphics pipeline。
-- `src/render/backend/MaterialGpuCache.h/.cpp`：每帧材质 GPU 数据与 RHI BindGroup。
-- `src/render/renderer/Renderer.cpp`：Variant 选择与多 Pass 场景提交。
-- `src/render/backend/RhiRenderBackend.cpp`：缓存组装、DrawList 录制和热重载边界。
+- `src/render/cache/MaterialGpuCache.h/.cpp`：每帧材质 GPU 数据与 RHI BindGroup。
+- `src/render/renderer/Renderer.cpp`：Variant 选择、多 Pass 场景提交、缓存组装、DrawList 录制和热重载边界。
 - `src/rhi/vulkan/VulkanSwapchain.cpp`：acquire、命令缓冲、提交、同步与 present。

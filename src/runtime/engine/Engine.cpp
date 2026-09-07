@@ -4,10 +4,12 @@
 #include "core/filesystem/FileSystem.h"
 #include "runtime/window/Window.h"
 #include "asset/manager/AssetManager.h"
+#include "asset/importer/AssetImportPipeline.h"
 #include "render/material/Material.h"
 #include "render/mesh/Mesh.h"
 #include "render/renderer/Renderer.h"
 #include "render/shader/Shader.h"
+#include "rhi/RhiFactory.h"
 #include "scene/scene/SceneAsset.h"
 
 #include <algorithm>
@@ -19,13 +21,13 @@ namespace engine {
 Engine::Engine() = default;
 Engine::~Engine() = default;
 
-int Engine::run(Application& application) {
+int Engine::run(Application& application, const rhi::IContextFactory& contextFactory) {
     if (running_) {
         Log::error("Engine", "Engine is already running an Application");
         return 1;
     }
 
-    if (!initialize(application.getConfig()))
+    if (!initialize(application.getConfig(), contextFactory))
         return 1;
 
     Log::info("Engine", "Starting application: %s", config_.name.c_str());
@@ -37,7 +39,7 @@ int Engine::run(Application& application) {
     return 0;
 }
 
-bool Engine::initialize(const AppConfig& config) {
+bool Engine::initialize(const AppConfig& config, const rhi::IContextFactory& contextFactory) {
     if (config.name.empty() || config.width == 0 || config.height == 0) {
         Log::error("Engine", "Invalid application configuration");
         return false;
@@ -71,7 +73,14 @@ bool Engine::initialize(const AppConfig& config) {
     });
 
     window_ = std::make_unique<Window>(config_.width, config_.height, config_.name);
-    renderer_ = std::make_unique<Renderer>(*window_, config_.vsync);
+    const auto [width, height] = window_->framebufferSize();
+    rhi::Context context = contextFactory.createContext({
+        .surface = {.windowSystem = rhi::WindowSystem::Win32,
+                    .nativeDisplay = window_->nativeInstance(),
+                    .nativeWindow = window_->nativeHandle()},
+        .swapchain = {.width = width, .height = height, .vsync = config_.vsync},
+    });
+    renderer_ = std::make_unique<Renderer>(*window_, std::move(context));
     running_ = true;
     return true;
 }
@@ -81,6 +90,7 @@ void Engine::loop(Application& application) {
     auto previousTime = Clock::now();
     while (!shouldQuit_ && !window_->shouldClose()) {
         window_->pollEvents();
+        ASSET_IMPORT_PIPELINE.processFileEvents();
 
         if (sceneReloadPending_) {
             sceneReloadPending_ = false;

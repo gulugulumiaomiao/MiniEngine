@@ -12,12 +12,15 @@ namespace engine {
 
 class Renderer;
 class Window;
+namespace rhi {
+class IContextFactory;
+}
 
 class Engine final : public Singleton<Engine> {
 public:
     ~Engine();
 
-    [[nodiscard]] int run(Application& application);
+    [[nodiscard]] int run(Application& application, const rhi::IContextFactory& contextFactory);
     void requestQuit() { shouldQuit_ = true; }
 
     [[nodiscard]] bool running() const { return running_; }
@@ -35,7 +38,8 @@ private:
     friend class Singleton<Engine>;
     Engine();
 
-    [[nodiscard]] bool initialize(const AppConfig& config);
+    [[nodiscard]] bool initialize(const AppConfig& config,
+                                  const rhi::IContextFactory& contextFactory);
     void loop(Application& application);
     void shutdown();
 

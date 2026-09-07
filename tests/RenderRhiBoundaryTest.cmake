@@ -3,13 +3,13 @@ if(NOT DEFINED MINI_SOURCE_DIR)
 endif()
 
 set(render_dir "${MINI_SOURCE_DIR}/src/render")
-if(EXISTS "${render_dir}/backend/vulkan")
+if(EXISTS "${render_dir}/backend")
     file(GLOB_RECURSE legacy_backend_files
-        "${render_dir}/backend/vulkan/*.h"
-        "${render_dir}/backend/vulkan/*.cpp"
+        "${render_dir}/backend/*.h"
+        "${render_dir}/backend/*.cpp"
     )
     if(legacy_backend_files)
-        message(FATAL_ERROR "Legacy render/backend/vulkan sources still exist")
+        message(FATAL_ERROR "Legacy render/backend sources still exist")
     endif()
 endif()
 

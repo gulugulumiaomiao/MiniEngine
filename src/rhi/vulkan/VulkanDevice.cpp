@@ -115,10 +115,10 @@ template <typename Slots> auto reusableSlot(Slots& slots) {
 
 } // namespace
 
-VulkanDevice::VulkanDevice(void* nativeInstance, void* nativeWindow) {
+VulkanDevice::VulkanDevice(const SurfaceSource& surface) {
     createInstance();
     createDebugMessenger();
-    createSurface(nativeInstance, nativeWindow);
+    createSurface(surface);
     selectPhysicalDevice();
     createLogicalDevice();
     allocator_ = std::make_unique<::engine::GpuAllocator>(instance_, physicalDevice_, device_);
@@ -196,13 +196,16 @@ void VulkanDevice::createDebugMessenger() {
 #endif
 }
 
-void VulkanDevice::createSurface(void* nativeInstance, void* nativeWindow) {
-    if (!nativeInstance || !nativeWindow) {
+void VulkanDevice::createSurface(const SurfaceSource& surface) {
+    if (surface.windowSystem != WindowSystem::Win32) {
+        Log::fatal("VulkanDevice", "Unsupported native window system");
+    }
+    if (!surface.nativeDisplay || !surface.nativeWindow) {
         Log::fatal("VulkanDevice", "Invalid native window handles");
     }
     VkWin32SurfaceCreateInfoKHR createInfo{VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
-    createInfo.hinstance = static_cast<HINSTANCE>(nativeInstance);
-    createInfo.hwnd = static_cast<HWND>(nativeWindow);
+    createInfo.hinstance = static_cast<HINSTANCE>(surface.nativeDisplay);
+    createInfo.hwnd = static_cast<HWND>(surface.nativeWindow);
     check(vkCreateWin32SurfaceKHR(instance_, &createInfo, nullptr, &surface_),
           "vkCreateWin32SurfaceKHR");
 }

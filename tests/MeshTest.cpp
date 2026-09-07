@@ -1,7 +1,7 @@
 #include "render/mesh/Mesh.h"
 #include "core/serialization/BinaryTransfer.h"
 #include "core/serialization/JsonTransfer.h"
-#include "render/backend/MeshGpuCache.h"
+#include "render/cache/MeshGpuCache.h"
 #include "render/mesh/MeshBuilder.h"
 #include "rhi/api/Device.h"
 

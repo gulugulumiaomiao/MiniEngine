@@ -65,7 +65,7 @@ GraphicsPipeline、BindGroupLayout 与 BindGroup 句柄；`VulkanSwapchain` 管�
 
 ### 4. 迁移绘制命令
 
-`RhiRenderBackend::recordDrawCommands` 不直接调用以下操作：
+`Renderer::recordDrawCommands` 不直接调用以下操作：
 
 ```text
 vkCmdBeginRendering / vkCmdEndRendering
@@ -84,7 +84,7 @@ vkCmdPipelineBarrier
 
 `src/render/renderer/DrawList.h` 定义 `DrawItem`。每项包含 pipeline、VB、IB、索引格式、indexed draw 参数和 render queue。
 
-`Renderer::renderFrame` 遍历 `RenderScene`，通过 `IRenderBackend::meshDrawInfo` 获取 Mesh 绘制信息，并按照 SubMesh 的 material slot 从 RenderObject 材质列表选择材质。Renderer 为每个 SubMesh 生成 DrawItem，并按 render queue 稳定排序。`firstInstance` 保留原 RenderObject 下标，因此排序后 shader 仍会读取正确的对象数据。Scene UBO 保存相机和方向光，Object SSBO 保存模型矩阵。
+`Renderer::renderFrame` 遍历 `RenderScene`，通过 `MeshGpuCache` 获取 Mesh 绘制信息，并按照 SubMesh 的 material slot 从 RenderObject 材质列表选择材质。Renderer 为每个 SubMesh 生成 DrawItem，并按 render queue 稳定排序。`firstInstance` 保留原 RenderObject 下标，因此排序后 shader 仍会读取正确的对象数据。Scene UBO 保存相机和方向光，Object SSBO 保存模型矩阵。
 
 当前只按 render queue 排序。下一版可增加 pipeline、material 和 mesh 排序键，以减少状态切换，同时必须保持透明物体的深度排序规则。
 

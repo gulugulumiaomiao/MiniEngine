@@ -162,9 +162,9 @@ MeshHandle handle = renderer.createProceduralMesh(recipe);
 
 当前 `keepCpuCopy` 会被序列化并保存在描述/配方中，但 `MeshGpuCache` 上传后尚未据此释放 `MeshData`。也就是说，当前实现始终保留 CPU 字节；不能把该字段理解为已经生效的内存回收开关。
 
-### 5.4 RHI 后端实际绘制
+### 5.4 Renderer 通过 RHI 实际绘制
 
-`RhiRenderBackend::renderFrame()` 通过 `ISwapchain::beginFrame()` 获取当前 back buffer 和
+`Renderer::submitDrawList()` 通过 `ISwapchain::beginFrame()` 获取当前 back buffer 和
 命令编码器，上传场景和对象数据，然后由 RenderGraph 记录 Forward 图形 pass。Fence、
 swapchain image acquire 和命令提交由 `VulkanSwapchain` 封装。对排序后的每个 `DrawItem`：
 
@@ -216,10 +216,10 @@ Debug 模式下 `FileWatcher` 的事件由 `AssetImportPipeline` 处理。Mesh �
 - `src/render/mesh/MeshBuilder.cpp`：基础几何体构建和组合。
 - `src/scene/scene/SceneAsset.cpp`、`Scene.cpp`：Mesh handle 加载和渲染场景提取。
 - `src/render/renderer/Renderer.cpp`：材质/pass/管线选择与 DrawList 生成。
-- `src/render/backend/MeshGpuCache.cpp`：API 无关的 GPU Buffer 延迟创建、版本缓存与释放。
+- `src/render/cache/MeshGpuCache.cpp`：API 无关的 GPU Buffer 延迟创建、版本缓存与释放。
 - `src/rhi/api/Device.h`、`ResourceDesc.h`：设备接口和 API 无关的资源描述。
 - `src/rhi/vulkan/VulkanDevice.cpp`：Buffer/Shader/Pipeline 资源表和 Vulkan staging 上传。
-- `src/render/backend/RhiRenderBackend.cpp`：后端无关的上传与 DrawList/RenderGraph 编排。
+- `src/render/renderer/Renderer.cpp`：上传以及 DrawList/RenderGraph 编排。
 - `src/rhi/vulkan/VulkanSwapchain.cpp`、`VulkanCommandEncoder.cpp`：命令记录、提交与 Vulkan draw 调用。
 
 `MeshTest` 覆盖多种图元、布局和包围体、组合变换/材质槽、索引升级、非法参数、配方 round-trip、v2 数据以及运行时版本更新；`AssetImporterTest` 覆盖 raw 与 procedural `.mesh.json`；`AssetPipelineTest` 覆盖导入和 Mesh 热替换。

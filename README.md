@@ -29,7 +29,7 @@ src/
 │   ├── api/               后端无关的 GPU 句柄与命令接口
 │   └── vulkan/            Vulkan Buffer、Image、Sampler、Descriptor 等封装
 ├── render/
-│   ├── backend/           IRenderBackend 与 Vulkan 渲染后端
+│   ├── cache/             Mesh、Material、Shader 与 Pipeline 的 GPU 缓存
 │   ├── shader/            Shader、SubShader、Pass、生成、编译和反射
 │   ├── material/          MaterialAsset 与运行时 Material
 │   ├── mesh/              MeshAsset、Mesh、VertexLayout 和 Bounds
@@ -124,7 +124,7 @@ Core → RHI → Render → Asset / Scene → Runtime
   RenderTarget format 缓存 Vulkan Pipeline。
 - Renderer 按 `ShadowCaster → DepthOnly → Forward` 收集和排序存在的 Pass。
 - 窗口 resize、最小化、out-of-date 和 suboptimal 时安全重建 Swapchain。
-- `IRenderBackend` 隔离高层 Renderer 和 Vulkan 实现。
+- Renderer 只通过 RHI 接口提交绘制，不依赖 Vulkan 类型。
 
 ## 运行流程
 

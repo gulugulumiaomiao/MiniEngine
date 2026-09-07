@@ -27,6 +27,7 @@ main()
        -> Application::onStart()
        -> while 未退出
             -> Window::pollEvents()
+            -> AssetImportPipeline::processFileEvents()
             -> 计算 deltaTime
             -> Application::onUpdate(deltaTime)
             -> Scene::update(deltaTime)
