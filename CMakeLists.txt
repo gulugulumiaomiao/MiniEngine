@@ -335,7 +335,7 @@ add_executable(MiniVulkanEngine
     src/render/shader/ShaderCompiler.cpp
     src/render/shader/ShaderGenerator.cpp
     src/rhi/vulkan/VulkanBuffer.cpp
-    src/rhi/vulkan/DescriptorAllocator.cpp
+    src/rhi/vulkan/VulkanDescriptorAllocator.cpp
     src/rhi/vulkan/VulkanGraphicsPipeline.cpp
     src/rhi/vulkan/VulkanDevice.cpp
     src/rhi/vulkan/VulkanFactory.cpp

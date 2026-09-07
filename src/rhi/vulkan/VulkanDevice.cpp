@@ -1,8 +1,8 @@
 #include "rhi/vulkan/VulkanDevice.h"
 
 #include "core/logging/Log.h"
-#include "rhi/vulkan/DescriptorAllocator.h"
 #include "rhi/vulkan/VulkanBuffer.h"
+#include "rhi/vulkan/VulkanDescriptorAllocator.h"
 #include "rhi/vulkan/VulkanGraphicsPipeline.h"
 #include "rhi/vulkan/VulkanShaderModule.h"
 
@@ -111,7 +111,7 @@ VulkanDevice::VulkanDevice(const SurfaceSource& surface) {
     selectPhysicalDevice();
     createLogicalDevice();
     createAllocator();
-    descriptorAllocator_ = std::make_unique<::engine::DescriptorAllocator>(device_, 256);
+    descriptorAllocator_ = std::make_unique<VulkanDescriptorAllocator>(device_, 256);
     createCommandPool();
 }
 
@@ -422,7 +422,7 @@ BindGroupLayoutHandle VulkanDevice::createBindGroupLayout(const BindGroupLayoutD
             {entry.binding, toVulkan(entry.type), 1, toVulkan(entry.visibility), nullptr});
     }
     return bindGroupLayouts_.insert(BindGroupLayoutResource{
-        std::make_unique<::engine::DescriptorSetLayout>(device_, bindings)});
+        std::make_unique<VulkanDescriptorSetLayout>(device_, bindings)});
 }
 
 void VulkanDevice::destroyBindGroupLayout(BindGroupLayoutHandle handle) {

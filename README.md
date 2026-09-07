@@ -119,7 +119,7 @@ Core → RHI → Render → Asset / Scene → Runtime
 - 自动选择 graphics/present queue 和 Swapchain 格式。
 - 双帧并行；每个 FrameContext 独立维护命令、同步和 descriptor 资源。
 - 每帧相机/方向光 UBO 与对象 Transform SSBO。
-- DescriptorAllocator 可自动扩容，并在对应帧 fence 完成后 reset 复用。
+- VulkanDescriptorAllocator 可自动扩容，并在对应帧 fence 完成后 reset 复用。
 - PipelineCache 按 Shader Pass、Variant、VertexLayout、RenderState 和
   RenderTarget format 缓存 Vulkan Pipeline。
 - Renderer 按 `ShadowCaster → DepthOnly → Forward` 收集和排序存在的 Pass。

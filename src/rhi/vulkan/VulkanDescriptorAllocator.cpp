@@ -1,31 +1,32 @@
-#include "rhi/vulkan/DescriptorAllocator.h"
+#include "rhi/vulkan/VulkanDescriptorAllocator.h"
+
 #include "core/logging/Log.h"
 
 #include <array>
 
-namespace engine {
+namespace engine::rhi::vulkan {
 
-DescriptorSetLayout::DescriptorSetLayout(VkDevice device,
-                                         std::span<const VkDescriptorSetLayoutBinding> bindings)
+VulkanDescriptorSetLayout::VulkanDescriptorSetLayout(
+    VkDevice device, std::span<const VkDescriptorSetLayoutBinding> bindings)
     : device_(device) {
     VkDescriptorSetLayoutCreateInfo createInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     createInfo.bindingCount = static_cast<std::uint32_t>(bindings.size());
     createInfo.pBindings = bindings.data();
     if (vkCreateDescriptorSetLayout(device_, &createInfo, nullptr, &layout_) != VK_SUCCESS) {
-        Log::fatal("DescriptorSetLayout", "vkCreateDescriptorSetLayout failed");
+        Log::fatal("VulkanDescriptorSetLayout", "vkCreateDescriptorSetLayout failed");
     }
 }
 
-DescriptorSetLayout::~DescriptorSetLayout() {
+VulkanDescriptorSetLayout::~VulkanDescriptorSetLayout() {
     vkDestroyDescriptorSetLayout(device_, layout_, nullptr);
 }
 
-DescriptorAllocator::DescriptorAllocator(VkDevice device, std::uint32_t maxSets)
+VulkanDescriptorAllocator::VulkanDescriptorAllocator(VkDevice device, std::uint32_t maxSets)
     : device_(device), nextPoolSize_(maxSets * 2) {
     pools_.push_back(createPool(maxSets));
 }
 
-VkDescriptorPool DescriptorAllocator::createPool(std::uint32_t maxSets) const {
+VkDescriptorPool VulkanDescriptorAllocator::createPool(std::uint32_t maxSets) const {
     const std::array poolSizes{
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, maxSets},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, maxSets},
@@ -38,18 +39,18 @@ VkDescriptorPool DescriptorAllocator::createPool(std::uint32_t maxSets) const {
     createInfo.pPoolSizes = poolSizes.data();
     VkDescriptorPool pool = VK_NULL_HANDLE;
     if (vkCreateDescriptorPool(device_, &createInfo, nullptr, &pool) != VK_SUCCESS) {
-        Log::fatal("DescriptorAllocator", "vkCreateDescriptorPool failed");
+        Log::fatal("VulkanDescriptorAllocator", "vkCreateDescriptorPool failed");
     }
     return pool;
 }
 
-DescriptorAllocator::~DescriptorAllocator() {
+VulkanDescriptorAllocator::~VulkanDescriptorAllocator() {
     for (VkDescriptorPool pool : pools_) {
         vkDestroyDescriptorPool(device_, pool, nullptr);
     }
 }
 
-VkDescriptorSet DescriptorAllocator::allocate(VkDescriptorSetLayout layout) {
+VkDescriptorSet VulkanDescriptorAllocator::allocate(VkDescriptorSetLayout layout) {
     while (true) {
         VkDescriptorSetAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
         allocateInfo.descriptorPool = pools_[activePool_];
@@ -62,7 +63,7 @@ VkDescriptorSet DescriptorAllocator::allocate(VkDescriptorSetLayout layout) {
             return descriptor;
         }
         if (result != VK_ERROR_OUT_OF_POOL_MEMORY && result != VK_ERROR_FRAGMENTED_POOL) {
-            Log::fatal("DescriptorAllocator", "vkAllocateDescriptorSets failed");
+            Log::fatal("VulkanDescriptorAllocator", "vkAllocateDescriptorSets failed");
         }
 
         ++activePool_;
@@ -73,24 +74,24 @@ VkDescriptorSet DescriptorAllocator::allocate(VkDescriptorSetLayout layout) {
     }
 }
 
-void DescriptorAllocator::free(VkDescriptorSet descriptor) {
+void VulkanDescriptorAllocator::free(VkDescriptorSet descriptor) {
     const auto found = owners_.find(descriptor);
     if (found == owners_.end())
         return;
     if (vkFreeDescriptorSets(device_, found->second, 1, &descriptor) != VK_SUCCESS) {
-        Log::fatal("DescriptorAllocator", "vkFreeDescriptorSets failed");
+        Log::fatal("VulkanDescriptorAllocator", "vkFreeDescriptorSets failed");
     }
     owners_.erase(found);
 }
 
-void DescriptorAllocator::reset() {
+void VulkanDescriptorAllocator::reset() {
     for (VkDescriptorPool pool : pools_) {
         if (vkResetDescriptorPool(device_, pool, 0) != VK_SUCCESS) {
-            Log::fatal("DescriptorAllocator", "vkResetDescriptorPool failed");
+            Log::fatal("VulkanDescriptorAllocator", "vkResetDescriptorPool failed");
         }
     }
     owners_.clear();
     activePool_ = 0;
 }
 
-} // namespace engine
+} // namespace engine::rhi::vulkan

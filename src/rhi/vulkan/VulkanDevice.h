@@ -11,16 +11,13 @@
 #include <cstdint>
 #include <memory>
 
-namespace engine {
-
-class DescriptorAllocator;
-class DescriptorSetLayout;
-
-namespace rhi::vulkan {
+namespace engine::rhi::vulkan {
 
 class VulkanGraphicsPipeline;
 class VulkanBuffer;
 class VulkanShaderModule;
+class VulkanDescriptorAllocator;
+class VulkanDescriptorSetLayout;
 
 class VulkanDevice final : public IDevice {
 public:
@@ -98,7 +95,7 @@ private:
     };
 
     struct BindGroupLayoutResource {
-        std::unique_ptr<::engine::DescriptorSetLayout> resource;
+        std::unique_ptr<VulkanDescriptorSetLayout> resource;
     };
 
     struct BindGroupResource {
@@ -146,8 +143,7 @@ private:
     HandlePool<BindGroupResource, BindGroupHandle> bindGroups_;
     HandlePool<TextureResource, TextureHandle> textures_;
     HandlePool<TextureViewResource, TextureViewHandle> textureViews_;
-    std::unique_ptr<::engine::DescriptorAllocator> descriptorAllocator_;
+    std::unique_ptr<VulkanDescriptorAllocator> descriptorAllocator_;
 };
 
-} // namespace rhi::vulkan
-} // namespace engine
+} // namespace engine::rhi::vulkan
