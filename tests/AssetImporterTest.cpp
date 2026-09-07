@@ -1,9 +1,9 @@
-#include "asset/derived_data/AssetArtifact.h"
 #include "asset/database/AssetDatabase.h"
+#include "asset/derived_data/AssetArtifact.h"
 #include "asset/importer/AssetImporterRegistry.h"
 #include "asset/importer/BuiltinAssetImporters.h"
-#include "core/serialization/BinaryTransfer.h"
 #include "core/filesystem/FileSystem.h"
+#include "core/serialization/BinaryTransfer.h"
 #include "render/mesh/Mesh.h"
 #include "render/shader/Shader.h"
 
@@ -56,11 +56,11 @@ int main() {
   }]
 })";
     if (!FILE_SYSTEM.writeText(shaderPath, shaderSource) ||
-        !FILE_SYSTEM.writeText(vertexPath,
-                               "#include \"include/common.glsl\"\nvoid main() {}\n") ||
+        !FILE_SYSTEM.writeText(
+            vertexPath, "#include \"include/common.glsl\"\nvoid main() {}\n") ||
         !FILE_SYSTEM.writeText(fragmentPath, "void main() {}\n") ||
-        !FILE_SYSTEM.writeText(commonPath,
-                               "#include \"asset://shaders/include/nested.glsl\"\n") ||
+        !FILE_SYSTEM.writeText(
+            commonPath, "#include \"asset://shaders/include/nested.glsl\"\n") ||
         !FILE_SYSTEM.writeText(nestedPath, "const float nested = 1.0;\n")) {
         return 2;
     }
@@ -69,18 +69,15 @@ int main() {
     if (!registerBuiltinAssetImporters(registry) ||
         !registry.find(AssetType::Shader) ||
         !registry.find(AssetType::Material) ||
-        !registry.find(AssetType::Mesh) ||
-        !registry.find(AssetType::Scene) ||
+        !registry.find(AssetType::Mesh) || !registry.find(AssetType::Scene) ||
         registry.find(AssetType::Unknown)) {
         return 3;
     }
 
     const AssetMeta meta{1, AssetId::generate(), AssetType::Shader};
     const VirtualPath artifactPath = ASSET_DATABASE.artifactPath(meta.assetId);
-    const AssetImportContext context{meta,
-                                     shaderPath,
-                                     assetMetaPath(shaderPath),
-                                     artifactPath};
+    const AssetImportContext context{meta, shaderPath,
+                                     assetMetaPath(shaderPath), artifactPath};
     const AssetImportResult result =
         registry.find(AssetType::Shader)->import(context);
     if (!result.success || result.type != AssetType::Shader ||
@@ -90,11 +87,11 @@ int main() {
     }
 
     const auto contains = [&result](const VirtualPath& expected) {
-        return std::ranges::find_if(
-                   result.dependencies,
-                   [&expected](const VirtualPath& dependency) {
-                       return dependency.string() == expected.string();
-                   }) != result.dependencies.end();
+        return std::ranges::find_if(result.dependencies,
+                                    [&expected](const VirtualPath& dependency) {
+                                        return dependency.string() ==
+                                               expected.string();
+                                    }) != result.dependencies.end();
     };
     if (!contains(vertexPath) || !contains(fragmentPath) ||
         !contains(commonPath) || !contains(nestedPath)) {
@@ -117,22 +114,27 @@ int main() {
         {"name", "ImporterMesh"},
         {"index_type", "uint16"},
         {"bindings", {{{"binding", 0}, {"stride", sizeof(math::Vec3)}}}},
-        {"attributes", {{{"semantic", "position"},
-                           {"format", "vec3_float32"}, {"location", 0},
-                           {"binding", 0}, {"offset", 0}}}},
+        {"attributes",
+         {{{"semantic", "position"},
+           {"format", "vec3_float32"},
+           {"location", 0},
+           {"binding", 0},
+           {"offset", 0}}}},
         {"indices", {0, 1, 2}},
     };
     std::vector<std::uint8_t> positionBytes;
     for (const std::byte value : std::as_bytes(std::span{positions})) {
         positionBytes.push_back(std::to_integer<std::uint8_t>(value));
     }
-    meshJson["vertex_streams"] = {{{"binding", 0}, {"vertex_count", 3},
-                                    {"bytes", positionBytes}}};
-    if (!FILE_SYSTEM.writeText(meshPath, meshJson.dump())) return 7;
+    meshJson["vertex_streams"] = {
+        {{"binding", 0}, {"vertex_count", 3}, {"bytes", positionBytes}}};
+    if (!FILE_SYSTEM.writeText(meshPath, meshJson.dump()))
+        return 7;
     const AssetMeta meshMeta{1, AssetId::generate(), AssetType::Mesh};
-    const VirtualPath meshArtifactPath = ASSET_DATABASE.artifactPath(meshMeta.assetId);
-    const AssetImportContext meshContext{meshMeta, meshPath,
-        assetMetaPath(meshPath), meshArtifactPath};
+    const VirtualPath meshArtifactPath =
+        ASSET_DATABASE.artifactPath(meshMeta.assetId);
+    const AssetImportContext meshContext{
+        meshMeta, meshPath, assetMetaPath(meshPath), meshArtifactPath};
     const AssetImportResult meshResult =
         registry.find(AssetType::Mesh)->import(meshContext);
     const auto meshArtifact = loadAssetArtifact(meshArtifactPath);
@@ -147,12 +149,60 @@ int main() {
         mesh.meshData.indexCount != 3) {
         return 8;
     }
+
+    const VirtualPath proceduralPath{
+        "asset://meshes/procedural_test.mesh.json"};
+    const nlohmann::json proceduralJson{
+        {"name", "ProceduralImporterMesh"},
+        {"keep_cpu_copy", true},
+        {"source",
+         {{"type", "procedural"},
+          {"vertex_layout", "position_normal_tangent_uv"},
+          {"index_policy", "auto"},
+          {"parts",
+           {
+               {{"type", "box"},
+                {"parameters", {{"size", {2.0, 1.0, 1.0}}}},
+                {"translation", {-1.0, 0.0, 0.0}},
+                {"material_slot", 4}},
+               {{"type", "sphere"},
+                {"parameters",
+                 {{"radius", 0.5},
+                  {"longitude_segments", 8},
+                  {"latitude_segments", 4}}},
+                {"translation", {1.0, 0.0, 0.0}},
+                {"material_slot", 7}},
+           }}}}};
+    if (!FILE_SYSTEM.writeText(proceduralPath, proceduralJson.dump()))
+        return 10;
+    const AssetMeta proceduralMeta{1, AssetId::generate(), AssetType::Mesh};
+    const VirtualPath proceduralArtifactPath =
+        ASSET_DATABASE.artifactPath(proceduralMeta.assetId);
+    const AssetImportContext proceduralContext{proceduralMeta, proceduralPath,
+                                               assetMetaPath(proceduralPath),
+                                               proceduralArtifactPath};
+    const AssetImportResult proceduralResult =
+        registry.find(AssetType::Mesh)->import(proceduralContext);
+    const auto proceduralArtifact = loadAssetArtifact(proceduralArtifactPath);
+    MeshAsset proceduralMesh;
+    BinaryReader proceduralReader{proceduralArtifact
+                                      ? proceduralArtifact->payload
+                                      : std::span<const std::byte>{}};
+    if (!proceduralResult.success || !proceduralArtifact ||
+        !proceduralMesh.transfer(proceduralReader) ||
+        !proceduralReader.finished() || !proceduralMesh.buildRecipe ||
+        proceduralMesh.buildRecipe->parts.size() != 2 ||
+        proceduralMesh.desc.subMeshes.size() != 2 ||
+        proceduralMesh.desc.subMeshes[0].materialSlot != 4 ||
+        proceduralMesh.desc.subMeshes[1].materialSlot != 7 ||
+        proceduralMesh.meshData.vertexStreams.front().vertexCount != 69) {
+        return 10;
+    }
     ShaderAsset shader;
     shader.setAssetPath(shaderPath);
     BinaryReader shaderReader{artifact->payload};
     if (!shader.transfer(shaderReader) || !shaderReader.finished() ||
-        shader.name != "Importer/Test" ||
-        shader.subShaders.size() != 1 ||
+        shader.name != "Importer/Test" || shader.subShaders.size() != 1 ||
         shader.subShaders.front().passes.size() != 1) {
         return 6;
     }

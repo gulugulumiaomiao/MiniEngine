@@ -1,0 +1,16 @@
+{
+  "name": "Procedural Showcase",
+  "usage": "static",
+  "keep_cpu_copy": false,
+  "source": {
+    "type": "procedural",
+    "vertex_layout": "position_normal_tangent_uv",
+    "index_policy": "auto",
+    "parts": [
+      { "type": "plane", "parameters": { "size": [8.0, 8.0], "segments_x": 4, "segments_z": 4 }, "translation": [0.0, -1.0, 0.0], "material_slot": 0 },
+      { "type": "box", "parameters": { "size": [1.0, 1.0, 1.0] }, "translation": [-1.75, -0.5, 0.0], "material_slot": 1 },
+      { "type": "uv_sphere", "parameters": { "radius": 0.65, "longitude_segments": 32, "latitude_segments": 16 }, "translation": [0.0, -0.35, 0.0], "material_slot": 2 },
+      { "type": "cylinder", "parameters": { "bottom_radius": 0.6, "top_radius": 0.35, "height": 1.5, "radial_segments": 32, "height_segments": 2, "cap_bottom": true, "cap_top": true }, "translation": [1.75, -0.25, 0.0], "rotation": [0.0, 0.0, 0.0, 1.0], "scale": [1.0, 1.0, 1.0], "material_slot": 3 }
+    ]
+  }
+}

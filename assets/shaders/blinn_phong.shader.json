@@ -1,0 +1,47 @@
+{
+  "$schemaVersion": 1,
+  "name": "MiniEngine/BlinnPhong",
+  "properties": [
+    { "name": "BaseColor", "displayName": "Base Color", "type": "Color", "default": [0.8, 0.8, 0.8, 1.0] },
+    { "name": "SpecularColor", "displayName": "Specular Color", "type": "Color", "default": [1.0, 1.0, 1.0, 1.0] },
+    { "name": "AmbientColor", "displayName": "Ambient Color", "type": "Color", "default": [0.04, 0.04, 0.04, 1.0] },
+    { "name": "Shininess", "displayName": "Shininess", "type": "Range", "default": 48.0, "range": [1.0, 256.0] }
+  ],
+  "subShaders": [{
+    "tags": {
+      "renderPipeline": "MiniForward",
+      "renderType": "Opaque",
+      "queue": "Opaque"
+    },
+    "passes": [{
+      "name": "Forward",
+      "lightMode": "Forward",
+      "state": {
+        "cull": "Back",
+        "frontFace": "CW",
+        "fill": "Solid",
+        "topology": "TriangleList",
+        "depthWrite": true,
+        "depthTest": "LessEqual",
+        "blend": "Off",
+        "colorMask": "RGBA"
+      },
+      "program": {
+        "vertex": "blinn_phong.Forward.vert",
+        "frag": "blinn_phong.Forward.frag"
+      },
+      "vertexInput": [
+        { "name": "position", "semantic": "POSITION", "type": "Vec3", "location": 0 },
+        { "name": "normal", "semantic": "NORMAL", "type": "Vec3", "location": 1 }
+      ],
+      "varyings": [
+        { "name": "worldPosition", "type": "Vec3", "location": 0 },
+        { "name": "worldNormal", "type": "Vec3", "location": 1 }
+      ],
+      "fragmentOutputs": [
+        { "name": "color", "type": "Vec4", "location": 0 }
+      ],
+      "features": []
+    }]
+  }]
+}

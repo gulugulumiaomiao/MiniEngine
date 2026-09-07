@@ -4,11 +4,13 @@
 #include "core/base/InstanceManager.h"
 #include "core/base/Singleton.h"
 #include "core/math/Math.h"
+#include "render/mesh/MeshPrimitive.h"
 #include "render/renderer/RenderResources.h"
 
 #include <compare>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <type_traits>
@@ -49,6 +51,18 @@ enum class IndexType { UInt16, UInt32 };
 enum class MeshUsage { Static, Dynamic, Stream };
 enum class MeshTopology { TriangleList, LineList };
 
+struct MeshBuildRecipe {
+    std::string name;
+    std::vector<MeshPrimitivePart> parts;
+    PrimitiveVertexLayout vertexLayout{
+        PrimitiveVertexLayout::PositionNormalTangentUv};
+    MeshIndexPolicy indexPolicy{MeshIndexPolicy::Auto};
+    MeshUsage usage{MeshUsage::Static};
+    bool keepCpuCopy{};
+
+    [[nodiscard]] bool transfer(Transfer& archive);
+};
+
 struct VertexBinding {
     std::uint32_t binding{};
     std::uint32_t stride{};
@@ -75,10 +89,8 @@ struct VertexLayout {
 
     bool operator==(const VertexLayout&) const = default;
 
-    [[nodiscard]] const VertexBinding* findBinding(
-        std::uint32_t binding) const;
-    [[nodiscard]] const VertexAttribute* find(
-        VertexSemantic semantic) const;
+    [[nodiscard]] const VertexBinding* findBinding(std::uint32_t binding) const;
+    [[nodiscard]] const VertexAttribute* find(VertexSemantic semantic) const;
     [[nodiscard]] bool validate() const;
     [[nodiscard]] std::uint64_t hash() const;
     [[nodiscard]] bool transfer(Transfer& archive);
@@ -88,8 +100,12 @@ struct Aabb {
     math::Vec3 minimum{0.0F};
     math::Vec3 maximum{0.0F};
 
-    [[nodiscard]] math::Vec3 center() const { return (minimum + maximum) * 0.5F; }
-    [[nodiscard]] math::Vec3 extent() const { return (maximum - minimum) * 0.5F; }
+    [[nodiscard]] math::Vec3 center() const {
+        return (minimum + maximum) * 0.5F;
+    }
+    [[nodiscard]] math::Vec3 extent() const {
+        return (maximum - minimum) * 0.5F;
+    }
 
     bool operator==(const Aabb&) const = default;
     [[nodiscard]] bool transfer(Transfer& archive);
@@ -149,14 +165,13 @@ struct MeshData {
     std::vector<std::byte> indices;
     std::uint32_t indexCount{};
 
-    [[nodiscard]] const VertexStream* findVertexStream(
-        std::uint32_t binding) const;
+    [[nodiscard]] const VertexStream*
+    findVertexStream(std::uint32_t binding) const;
     [[nodiscard]] VertexStream* findVertexStream(std::uint32_t binding);
 
     bool setVertexData(std::uint32_t binding, std::uint32_t vertexCount,
                        std::span<const std::byte> source);
-    bool setIndexData(std::uint32_t count,
-                      std::span<const std::byte> source);
+    bool setIndexData(std::uint32_t count, std::span<const std::byte> source);
     [[nodiscard]] bool transfer(Transfer& archive);
 
     template <typename Vertex, std::size_t Extent>
@@ -178,24 +193,28 @@ struct MeshData {
 };
 
 class Mesh final {
-public:
+  public:
     Mesh() = default;
-    Mesh(MeshDesc desc, MeshData data);
+    Mesh(MeshDesc desc, MeshData data,
+         std::optional<MeshBuildRecipe> buildRecipe = std::nullopt);
 
     [[nodiscard]] const VirtualPath& assetPath() const { return assetPath_; }
     [[nodiscard]] const MeshDesc& desc() const { return desc_; }
     [[nodiscard]] const MeshData& data() const { return data_; }
+    [[nodiscard]] const std::optional<MeshBuildRecipe>& buildRecipe() const {
+        return buildRecipe_;
+    }
     [[nodiscard]] std::uint64_t version() const { return version_; }
     [[nodiscard]] bool dirty() const { return dirty_; }
     void markClean() { dirty_ = false; }
 
-    [[nodiscard]] bool updateVertexData(
-        std::uint32_t binding, std::uint32_t firstVertex,
-        std::span<const std::byte> source);
-    [[nodiscard]] bool updateIndexData(
-        std::uint32_t firstIndex, std::span<const std::byte> source);
+    [[nodiscard]] bool updateVertexData(std::uint32_t binding,
+                                        std::uint32_t firstVertex,
+                                        std::span<const std::byte> source);
+    [[nodiscard]] bool updateIndexData(std::uint32_t firstIndex,
+                                       std::span<const std::byte> source);
 
-private:
+  private:
     friend class MeshAsset;
     friend class MeshManager;
 
@@ -204,16 +223,18 @@ private:
     VirtualPath assetPath_;
     MeshDesc desc_;
     MeshData data_;
+    std::optional<MeshBuildRecipe> buildRecipe_;
     std::uint64_t version_{1};
     bool dirty_{true};
 };
 
 class MeshAsset final : public Asset {
-public:
+  public:
     [[nodiscard]] AssetType type() const override { return AssetType::Mesh; }
 
     MeshDesc desc;
     MeshData meshData;
+    std::optional<MeshBuildRecipe> buildRecipe;
 
     [[nodiscard]] Mesh instantiate() const;
     [[nodiscard]] bool transfer(Transfer& archive) override;
@@ -221,12 +242,12 @@ public:
 
 class MeshManager final : public Singleton<MeshManager>,
                           public InstanceManager<Mesh, MeshHandle> {
-public:
+  public:
     [[nodiscard]] MeshHandle load(const VirtualPath& meshPath) override;
     [[nodiscard]] bool replace(MeshHandle handle, Mesh mesh);
     [[nodiscard]] bool replace(const VirtualPath& meshPath);
 
-private:
+  private:
     friend class Singleton<MeshManager>;
     MeshManager() = default;
 

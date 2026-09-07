@@ -1,0 +1,12 @@
+{
+  "$schemaVersion": 1,
+  "name": "Blinn Blue",
+  "shader": "shaders/blinn_phong.shader.json",
+  "properties": {
+    "BaseColor": [0.08, 0.28, 0.78, 1.0],
+    "SpecularColor": [0.65, 0.82, 1.0, 1.0],
+    "AmbientColor": [0.04, 0.06, 0.10, 1.0],
+    "Shininess": 96.0
+  },
+  "keywords": []
+}

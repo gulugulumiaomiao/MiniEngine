@@ -1,11 +1,24 @@
 #include "render/mesh/Mesh.h"
 #include "core/serialization/BinaryTransfer.h"
 #include "core/serialization/JsonTransfer.h"
+#include "render/mesh/MeshBuilder.h"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <span>
+
+namespace {
+
+template <typename Value>
+Value readAt(const std::vector<std::byte>& bytes, std::size_t offset) {
+    Value value{};
+    std::memcpy(&value, bytes.data() + offset, sizeof(Value));
+    return value;
+}
+
+} // namespace
 
 int main() {
     using namespace engine;
@@ -30,16 +43,13 @@ int main() {
         {1, sizeof(math::Vec4), VertexInputRate::Vertex},
     };
     source.desc.vertexLayout.attributes = {
-        {{VertexSemanticType::Position, 0}, VertexFormat::Vec3Float32,
-         0, 0, 0},
-        {{VertexSemanticType::Color, 0}, VertexFormat::Vec4Float32,
-         1, 1, 0},
+        {{VertexSemanticType::Position, 0}, VertexFormat::Vec3Float32, 0, 0, 0},
+        {{VertexSemanticType::Color, 0}, VertexFormat::Vec4Float32, 1, 1, 0},
     };
     source.desc.indexType = IndexType::UInt16;
     source.desc.usage = MeshUsage::Dynamic;
     source.desc.bounds = calculateBounds(positions);
-    source.desc.subMeshes.push_back(
-        {0, 3, 0, 0, source.desc.bounds});
+    source.desc.subMeshes.push_back({0, 3, 0, 0, source.desc.bounds});
     if (!source.meshData.setVertexData(0, std::span{positions}) ||
         !source.meshData.setVertexData(1, std::span{colors}) ||
         !source.meshData.setIndexData(std::span{indices}) ||
@@ -48,9 +58,11 @@ int main() {
     }
 
     BinaryWriter writer;
-    if (!source.transfer(writer)) return 2;
+    if (!source.transfer(writer))
+        return 2;
     const std::vector<std::byte> binary = writer.takeBytes();
-    if (binary.empty()) return 2;
+    if (binary.empty())
+        return 2;
 
     MeshAsset decoded;
     decoded.setAssetPath(source.assetPath());
@@ -67,7 +79,8 @@ int main() {
     }
 
     JsonWriter jsonWriter;
-    if (!source.transfer(jsonWriter)) return 10;
+    if (!source.transfer(jsonWriter))
+        return 10;
     MeshAsset jsonDecoded;
     jsonDecoded.setAssetPath(source.assetPath());
     JsonReader jsonReader{jsonWriter.toString()};
@@ -86,8 +99,8 @@ int main() {
     }
     runtime.markClean();
     const math::Vec3 replacement{2.0F, 3.0F, 4.0F};
-    if (!runtime.updateVertexData(
-            0, 1, std::as_bytes(std::span{&replacement, 1})) ||
+    if (!runtime.updateVertexData(0, 1,
+                                  std::as_bytes(std::span{&replacement, 1})) ||
         runtime.version() != 2 || !runtime.dirty()) {
         return 5;
     }
@@ -115,6 +128,109 @@ int main() {
     if (!MESH_MANAGER.destroy(handle) || MESH_MANAGER.find(handle) != nullptr ||
         MESH_MANAGER.find(source.assetPath()) != nullptr) {
         return 9;
+    }
+
+    MeshBuildRecipe planeRecipe;
+    planeRecipe.name = "Plane";
+    planeRecipe.parts.push_back({PlaneGeometry{{2.0F, 4.0F}, 1, 1}});
+    const auto plane = MeshBuilder::build(planeRecipe);
+    if (!plane || plane->data.vertexStreams[0].vertexCount != 4 ||
+        plane->data.indexCount != 6 ||
+        plane->desc.indexType != IndexType::UInt16 ||
+        !math::nearlyEqual(plane->desc.bounds.aabb.minimum.x, -1.0F) ||
+        !math::nearlyEqual(plane->desc.bounds.aabb.maximum.z, 2.0F)) {
+        return 11;
+    }
+
+    MeshBuildRecipe primitives;
+    primitives.name = "PrimitiveAssembly";
+    MeshPrimitivePart boxPart;
+    boxPart.primitive = BoxGeometry{};
+    boxPart.translation = {-2.0F, 0.0F, 0.0F};
+    boxPart.materialSlot = 2;
+    MeshPrimitivePart spherePart;
+    spherePart.primitive = UvSphereGeometry{0.5F, 8, 4};
+    spherePart.materialSlot = 3;
+    MeshPrimitivePart cylinderPart;
+    cylinderPart.primitive =
+        CylinderGeometry{0.5F, 0.25F, 1.0F, 8, 1, true, true};
+    cylinderPart.translation = {2.0F, 0.0F, 0.0F};
+    cylinderPart.materialSlot = 4;
+    primitives.parts = {boxPart, spherePart, cylinderPart};
+    auto combined = MeshBuilder::buildAsset(primitives);
+    if (!combined || !combined->buildRecipe ||
+        combined->desc.subMeshes.size() != 3 ||
+        combined->desc.subMeshes[0].materialSlot != 2 ||
+        combined->desc.subMeshes[1].indexCount != 144 ||
+        combined->desc.subMeshes[2].indexCount != 96 ||
+        combined->meshData.vertexStreams[0].vertexCount != 24 + 45 + 38 ||
+        combined->desc.bounds.aabb.minimum.x > -2.49F ||
+        combined->desc.bounds.aabb.maximum.x < 2.49F) {
+        return 12;
+    }
+
+    BinaryWriter proceduralWriter;
+    if (!combined->transfer(proceduralWriter))
+        return 13;
+    MeshAsset proceduralDecoded;
+    BinaryReader proceduralReader{proceduralWriter.bytes()};
+    if (!proceduralDecoded.transfer(proceduralReader) ||
+        !proceduralReader.finished() || !proceduralDecoded.buildRecipe ||
+        proceduralDecoded.buildRecipe->parts.size() != 3 ||
+        proceduralDecoded.buildRecipe->parts[1].primitive.type() !=
+            MeshPrimitiveType::UvSphere) {
+        return 13;
+    }
+    Mesh proceduralRuntime = proceduralDecoded.instantiate();
+    if (!proceduralRuntime.buildRecipe() ||
+        proceduralRuntime.buildRecipe()->name != "PrimitiveAssembly")
+        return 14;
+
+    MeshBuildRecipe mirroredRecipe;
+    MeshPrimitivePart mirroredPart;
+    mirroredPart.primitive = PlaneGeometry{};
+    mirroredPart.scale = {-1.0F, 1.0F, 1.0F};
+    mirroredRecipe.parts.push_back(mirroredPart);
+    const auto mirrored = MeshBuilder::build(mirroredRecipe);
+    if (!mirrored)
+        return 15;
+    const math::Vec4 mirroredTangent =
+        readAt<math::Vec4>(mirrored->data.vertexStreams[0].bytes, 24);
+    if (!math::nearlyEqual(mirroredTangent.w, -1.0F))
+        return 15;
+
+    MeshBuildRecipe largeRecipe;
+    largeRecipe.parts.push_back({PlaneGeometry{{1.0F, 1.0F}, 256, 256}});
+    const auto large = MeshBuilder::build(largeRecipe);
+    if (!large || large->desc.indexType != IndexType::UInt32)
+        return 16;
+    largeRecipe.indexPolicy = MeshIndexPolicy::UInt16;
+    if (MeshBuilder::build(largeRecipe))
+        return 16;
+
+    MeshBuildRecipe invalidRecipe;
+    invalidRecipe.parts.push_back({UvSphereGeometry{0.0F, 8, 4}});
+    if (MeshBuilder::build(invalidRecipe))
+        return 17;
+
+    // A v2 payload has no recipe field and must remain readable.
+    BinaryWriter v2Writer;
+    std::uint32_t v2Magic = 0x4853454dU;
+    std::uint16_t v2Version = 2;
+    MeshDesc v2Desc = source.desc;
+    MeshData v2Data = source.meshData;
+    if (!v2Writer.beginObject({}) || !v2Writer.transfer("magic", v2Magic) ||
+        !v2Writer.transfer("version", v2Version) ||
+        !v2Writer.transfer("description", v2Desc) ||
+        !v2Writer.transfer("mesh_data", v2Data) || !v2Writer.endObject()) {
+        return 18;
+    }
+    MeshAsset v2Decoded;
+    BinaryReader v2Reader{v2Writer.bytes()};
+    if (!v2Decoded.transfer(v2Reader) || !v2Reader.finished() ||
+        v2Decoded.buildRecipe ||
+        v2Decoded.desc.debugName != source.desc.debugName) {
+        return 18;
     }
     return 0;
 }

@@ -1,0 +1,89 @@
+{
+  "$schemaVersion": 1,
+  "name": "Blinn-Phong Geometry Showcase",
+  "nodes": [
+    {
+      "id": 1,
+      "name": "Geometry Showcase",
+      "components": [
+        {
+          "type": "Transform",
+          "position": [0.0, 0.0, 0.0],
+          "rotation": [0.0, 0.0, 0.0, 1.0],
+          "scale": [1.0, 1.0, 1.0]
+        },
+        {
+          "type": "Mesh",
+          "mesh": "../meshes/procedural_showcase.mesh.json",
+          "cast_shadow": true,
+          "receive_shadow": true
+        },
+        {
+          "type": "Material",
+          "materials": [
+            "../materials/blinn_ground.material.json",
+            "../materials/blinn_red.material.json",
+            "../materials/blinn_blue.material.json",
+            "../materials/blinn_gold.material.json"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Main Camera",
+      "components": [
+        {
+          "type": "Transform",
+          "position": [0.0, 3.5, 9.0],
+          "rotation": [-0.17364818, 0.0, 0.0, 0.98480775]
+        },
+        {
+          "type": "Camera",
+          "projection": "perspective",
+          "field_of_view": 48.0,
+          "near_plane": 0.1,
+          "far_plane": 100.0,
+          "clear_color": [0.015, 0.025, 0.055, 1.0],
+          "primary": true,
+          "priority": 100
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Warm Directional Light",
+      "components": [
+        {
+          "type": "Transform",
+          "rotation": [-0.38268343, 0.0, 0.0, 0.92387953]
+        },
+        {
+          "type": "Light",
+          "light_type": "directional",
+          "color": [1.0, 0.86, 0.72],
+          "intensity": 0.9,
+          "cast_shadow": true
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Cool Point Light",
+      "components": [
+        {
+          "type": "Transform",
+          "position": [2.5, 2.4, 2.5]
+        },
+        {
+          "type": "Light",
+          "light_type": "point",
+          "color": [0.35, 0.58, 1.0],
+          "intensity": 4.0,
+          "range": 8.0,
+          "cast_shadow": false
+        }
+      ]
+    }
+  ]
+}

@@ -76,6 +76,8 @@ add_library(MiniAssetImporters STATIC
     src/asset/importer/SceneAssetImporter.cpp
     src/asset/importer/BuiltinAssetImporters.cpp
     src/render/mesh/Mesh.cpp
+    src/render/mesh/MeshPrimitive.cpp
+    src/render/mesh/MeshBuilder.cpp
 )
 target_include_directories(MiniAssetImporters PUBLIC src)
 target_include_directories(MiniAssetImporters SYSTEM PRIVATE

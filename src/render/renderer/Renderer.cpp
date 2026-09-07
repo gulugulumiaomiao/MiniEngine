@@ -3,9 +3,10 @@
 #include "asset/importer/AssetImportPipeline.h"
 #include "core/logging/Log.h"
 #include "render/backend/IRenderBackend.h"
-#include "render/mesh/Mesh.h"
-#include "render/renderer/RenderScene.h"
 #include "render/backend/vulkan/VulkanBackend.h"
+#include "render/mesh/Mesh.h"
+#include "render/mesh/MeshBuilder.h"
+#include "render/renderer/RenderScene.h"
 
 #include <algorithm>
 #include <array>
@@ -17,12 +18,9 @@ namespace {
 
 ShaderPassType passTypeForPhase(RenderPhase phase) {
     switch (phase) {
-    case RenderPhase::Forward:
-        return ShaderPassType::Forward;
-    case RenderPhase::DepthOnly:
-        return ShaderPassType::DepthOnly;
-    case RenderPhase::ShadowCaster:
-        return ShaderPassType::ShadowCaster;
+    case RenderPhase::Forward: return ShaderPassType::Forward;
+    case RenderPhase::DepthOnly: return ShaderPassType::DepthOnly;
+    case RenderPhase::ShadowCaster: return ShaderPassType::ShadowCaster;
     }
     return ShaderPassType::Forward;
 }
@@ -48,6 +46,13 @@ MeshHandle Renderer::createMesh(const MeshDesc& desc, const MeshData& data) {
     return MESH_MANAGER.insert(Mesh{desc, data});
 }
 
+MeshHandle Renderer::createProceduralMesh(const MeshBuildRecipe& recipe) {
+    auto asset = MeshBuilder::buildAsset(recipe);
+    if (!asset)
+        return {};
+    return MESH_MANAGER.insert(asset->instantiate());
+}
+
 MeshHandle Renderer::loadMesh(const VirtualPath& meshPath) {
     return MESH_MANAGER.load(meshPath);
 }
@@ -65,7 +70,8 @@ void Renderer::destroyMaterial(MaterialHandle handle) {
     MATERIAL_MANAGER.destroy(handle);
 }
 
-void Renderer::setMaterialFloat(MaterialHandle handle, std::string_view name, float value) {
+void Renderer::setMaterialFloat(MaterialHandle handle, std::string_view name,
+                                float value) {
     if (Material* material = MATERIAL_MANAGER.find(handle)) {
         material->setFloat(name, value);
     } else {
@@ -100,7 +106,8 @@ void Renderer::setMaterialVec4(MaterialHandle handle, std::string_view name,
     }
 }
 
-void Renderer::setMaterialBool(MaterialHandle handle, std::string_view name, bool value) {
+void Renderer::setMaterialBool(MaterialHandle handle, std::string_view name,
+                               bool value) {
     if (Material* material = MATERIAL_MANAGER.find(handle)) {
         material->setBool(name, value);
     } else {
@@ -125,8 +132,7 @@ void Renderer::setMaterialShader(MaterialHandle handle,
 void Renderer::renderFrame(const RenderScene& scene) {
     ASSET_IMPORT_PIPELINE.processFileEvents();
     constexpr std::array phases{RenderPhase::ShadowCaster,
-                                RenderPhase::DepthOnly,
-                                RenderPhase::Forward};
+                                RenderPhase::DepthOnly, RenderPhase::Forward};
     DrawList drawList;
     if (scene.camera()) {
         const RenderCamera& camera = *scene.camera();
@@ -134,8 +140,8 @@ void Renderer::renderFrame(const RenderScene& scene) {
         drawList.scene.cameraPosition = math::Vec4{camera.worldPosition, 1.0F};
         drawList.clearColor = camera.clearColor;
     }
-    const auto directional = std::ranges::find_if(
-        scene.lights(), [](const RenderLight& light) {
+    const auto directional =
+        std::ranges::find_if(scene.lights(), [](const RenderLight& light) {
             return light.type == LightType::Directional;
         });
     if (directional != scene.lights().end()) {
@@ -143,6 +149,16 @@ void Renderer::renderFrame(const RenderScene& scene) {
             math::Vec4{directional->direction, 1.0F};
         drawList.scene.directionalLightColorIntensity =
             math::Vec4{directional->color, directional->intensity};
+    }
+    const auto point = std::ranges::find_if(
+        scene.lights(), [](const RenderLight& light) {
+            return light.type == LightType::Point;
+        });
+    if (point != scene.lights().end()) {
+        drawList.scene.pointLightPositionRange =
+            math::Vec4{point->position, point->range};
+        drawList.scene.pointLightColorIntensity =
+            math::Vec4{point->color, point->intensity};
     }
     drawList.objects.reserve(scene.objects().size());
     for (const RenderObject& object : scene.objects()) {
@@ -155,7 +171,8 @@ void Renderer::renderFrame(const RenderScene& scene) {
             Log::warn("Renderer", "Skipping object with an invalid MeshHandle");
             continue;
         }
-        const MeshDrawInfo mesh = backend_->prepareMesh(object.mesh, *meshInstance);
+        const MeshDrawInfo mesh =
+            backend_->prepareMesh(object.mesh, *meshInstance);
         if (mesh.subMeshes.empty()) {
             Log::warn("Renderer", "Skipping Mesh without GPU draw data");
             continue;
@@ -175,7 +192,8 @@ void Renderer::renderFrame(const RenderScene& scene) {
             const SubShader* subShader =
                 material->shader().selectSubShader("MiniForward");
             if (!subShader) {
-                Log::error("Renderer", "Shader has no MiniForward SubShader: %s",
+                Log::error("Renderer",
+                           "Shader has no MiniForward SubShader: %s",
                            material->shader().name().c_str());
                 continue;
             }
@@ -186,17 +204,18 @@ void Renderer::renderFrame(const RenderScene& scene) {
                 }
                 const ShaderPass* shaderPass =
                     subShader->findPass(passTypeForPhase(renderPhase));
-                if (!shaderPass) continue;
+                if (!shaderPass)
+                    continue;
                 const ShaderVariantKey variant =
                     shaderPass->variantKey(material->keywords);
                 const rhi::GraphicsPipelineHandle pipeline =
-                    backend_->pipelineForPass(material->shader(), *shaderPass,
-                                              variant,
-                                              meshInstance->desc().vertexLayout);
+                    backend_->pipelineForPass(
+                        material->shader(), *shaderPass, variant,
+                        meshInstance->desc().vertexLayout);
                 if (!pipeline) {
-                    Log::error(
-                        "Renderer", "Skipping pass without a valid pipeline: %s",
-                        shaderPass->name().c_str());
+                    Log::error("Renderer",
+                               "Skipping pass without a valid pipeline: %s",
+                               shaderPass->name().c_str());
                     continue;
                 }
                 drawList.items.push_back({

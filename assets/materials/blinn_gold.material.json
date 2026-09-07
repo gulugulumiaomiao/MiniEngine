@@ -1,0 +1,12 @@
+{
+  "$schemaVersion": 1,
+  "name": "Blinn Gold",
+  "shader": "shaders/blinn_phong.shader.json",
+  "properties": {
+    "BaseColor": [0.72, 0.42, 0.08, 1.0],
+    "SpecularColor": [1.0, 0.86, 0.42, 1.0],
+    "AmbientColor": [0.09, 0.06, 0.02, 1.0],
+    "Shininess": 128.0
+  },
+  "keywords": []
+}

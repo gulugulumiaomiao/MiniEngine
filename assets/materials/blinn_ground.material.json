@@ -1,0 +1,12 @@
+{
+  "$schemaVersion": 1,
+  "name": "Blinn Ground",
+  "shader": "shaders/blinn_phong.shader.json",
+  "properties": {
+    "BaseColor": [0.18, 0.22, 0.27, 1.0],
+    "SpecularColor": [0.25, 0.28, 0.32, 1.0],
+    "AmbientColor": [0.18, 0.20, 0.24, 1.0],
+    "Shininess": 24.0
+  },
+  "keywords": []
+}

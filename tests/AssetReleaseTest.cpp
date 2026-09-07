@@ -2,7 +2,11 @@
 #include "asset/importer/FileWatcher.h"
 #include "asset/manager/AssetManager.h"
 #include "render/material/Material.h"
+#include "render/mesh/Mesh.h"
+#include "render/renderer/RenderScene.h"
 #include "render/shader/Shader.h"
+#include "scene/scene/Scene.h"
+#include "scene/scene/SceneAsset.h"
 #include "TestAssetEnvironment.h"
 
 #include <filesystem>
@@ -29,6 +33,28 @@ int main() {
                         "MiniEngine/VertexColor") {
         return 4;
     }
+
+    const auto showcase = ASSET_MANAGER.loadAsset<SceneAsset>(
+        VirtualPath{"asset://scenes/blinn_phong_showcase.scene.json"});
+    if (!showcase || showcase->nodes.size() != 4) return 6;
+    const SceneInstantiationContext context{
+        .loadMesh = [](const VirtualPath& path) {
+            return MESH_MANAGER.load(path);
+        },
+        .loadMaterial = [](const VirtualPath& path) {
+            return MATERIAL_MANAGER.load(path);
+        },
+    };
+    const std::unique_ptr<Scene> scene = showcase->instantiate(context);
+    if (!scene) return 6;
+    RenderScene renderScene;
+    scene->buildRenderScene(renderScene, 16.0F / 9.0F);
+    if (!renderScene.camera() || renderScene.objects().size() != 1 ||
+        renderScene.objects().front().materials.size() != 4 ||
+        renderScene.lights().size() != 2) {
+        return 6;
+    }
+    MESH_MANAGER.clear();
     MATERIAL_MANAGER.clear();
     SHADER_MANAGER.clear();
     test::shutdownAssetEnvironment();
