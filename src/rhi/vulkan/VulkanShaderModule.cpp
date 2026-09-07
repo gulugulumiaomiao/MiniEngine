@@ -1,17 +1,18 @@
-#include "rhi/vulkan/ShaderModule.h"
+#include "rhi/vulkan/VulkanShaderModule.h"
 #include "core/logging/Log.h"
 
 #include <string>
 
-namespace engine {
+namespace engine::rhi::vulkan {
 
-ShaderModule::ShaderModule(VkDevice device,
-                           std::span<const std::byte> bytecode,
-                           std::string_view debugName)
-    : device_(device) {
+VulkanShaderModule::VulkanShaderModule(VkDevice device,
+                                       ShaderStage stage,
+                                       std::span<const std::byte> bytecode,
+                                       std::string_view debugName)
+    : device_(device), stage_(stage) {
     const std::size_t byteCount = bytecode.size();
     if (byteCount == 0 || byteCount % sizeof(std::uint32_t) != 0) {
-        Log::fatal("ShaderModule",
+        Log::fatal("VulkanShaderModule",
                    "Invalid SPIR-V byte count: %.*s",
                    static_cast<int>(debugName.size()),
                    debugName.data());
@@ -22,15 +23,15 @@ ShaderModule::ShaderModule(VkDevice device,
     createInfo.pCode = reinterpret_cast<const std::uint32_t*>(bytecode.data());
     const VkResult result = vkCreateShaderModule(device_, &createInfo, nullptr, &module_);
     if (result != VK_SUCCESS) {
-        Log::fatal("ShaderModule",
+        Log::fatal("VulkanShaderModule",
                    "vkCreateShaderModule failed for: %.*s",
                    static_cast<int>(debugName.size()),
                    debugName.data());
     }
 }
 
-ShaderModule::~ShaderModule() {
+VulkanShaderModule::~VulkanShaderModule() {
     vkDestroyShaderModule(device_, module_, nullptr);
 }
 
-} // namespace engine
+} // namespace engine::rhi::vulkan

@@ -334,20 +334,20 @@ add_executable(MiniVulkanEngine
     src/render/shader/ShaderManager.cpp
     src/render/shader/ShaderCompiler.cpp
     src/render/shader/ShaderGenerator.cpp
-    src/rhi/vulkan/Buffer.cpp
+    src/rhi/vulkan/VulkanBuffer.cpp
     src/rhi/vulkan/DescriptorAllocator.cpp
     src/rhi/vulkan/GpuAllocator.cpp
     src/rhi/vulkan/VulkanGraphicsPipeline.cpp
     src/rhi/vulkan/VulkanDevice.cpp
     src/rhi/vulkan/VulkanFactory.cpp
     src/rhi/vulkan/VulkanSwapchain.cpp
-    src/rhi/vulkan/Image.cpp
+    src/rhi/vulkan/VulkanImage.cpp
     src/render/cache/MaterialGpuCache.cpp
     src/render/cache/MeshGpuCache.cpp
     src/render/cache/PipelineCache.cpp
     src/render/cache/RhiShaderCache.cpp
-    src/rhi/vulkan/Sampler.cpp
-    src/rhi/vulkan/ShaderModule.cpp
+    src/rhi/vulkan/VulkanSampler.cpp
+    src/rhi/vulkan/VulkanShaderModule.cpp
     src/rhi/vulkan/VmaImplementation.cpp
     src/rhi/vulkan/VulkanCommandEncoder.cpp
 )

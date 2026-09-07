@@ -1,11 +1,11 @@
 #include "rhi/vulkan/VulkanDevice.h"
 
 #include "core/logging/Log.h"
-#include "rhi/vulkan/Buffer.h"
 #include "rhi/vulkan/DescriptorAllocator.h"
 #include "rhi/vulkan/GpuAllocator.h"
-#include "rhi/vulkan/ShaderModule.h"
+#include "rhi/vulkan/VulkanBuffer.h"
 #include "rhi/vulkan/VulkanGraphicsPipeline.h"
+#include "rhi/vulkan/VulkanShaderModule.h"
 
 #include <algorithm>
 #include <array>
@@ -321,7 +321,7 @@ BufferHandle VulkanDevice::createBuffer(const BufferDesc& desc) {
     }
     auto slot = reusableSlot(buffers_);
     const auto [memoryUsage, allocationFlags] = toVulkan(desc.memoryUsage);
-    slot->resource = std::make_unique<::engine::Buffer>(
+    slot->resource = std::make_unique<VulkanBuffer>(
         allocator_->handle(), desc.size, toVulkan(desc.usage), memoryUsage, allocationFlags);
     slot->memoryUsage = desc.memoryUsage;
     return {static_cast<std::uint32_t>(std::distance(buffers_.begin(), slot)), slot->generation};
@@ -340,7 +340,7 @@ void VulkanDevice::destroyBuffer(BufferHandle handle) {
 void VulkanDevice::uploadBuffer(BufferHandle destination,
                                 std::span<const std::byte> data,
                                 std::uint64_t offset) {
-    Buffer& target = requireBuffer(destination);
+    VulkanBuffer& target = requireBuffer(destination);
     if (data.empty() || offset > target.size() || data.size_bytes() > target.size() - offset) {
         Log::fatal("VulkanDevice", "Invalid buffer upload range");
     }
@@ -350,11 +350,11 @@ void VulkanDevice::uploadBuffer(BufferHandle destination,
         return;
     }
 
-    Buffer staging{allocator_->handle(),
-                   data.size_bytes(),
-                   VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                   VMA_MEMORY_USAGE_AUTO,
-                   VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT};
+    VulkanBuffer staging{allocator_->handle(),
+                         data.size_bytes(),
+                         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                         VMA_MEMORY_USAGE_AUTO,
+                         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT};
     staging.upload(data);
 
     VkCommandBufferAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
@@ -386,7 +386,7 @@ ShaderHandle VulkanDevice::createShader(const ShaderDesc& desc) {
     }
     auto slot = reusableSlot(shaders_);
     slot->resource =
-        std::make_unique<::engine::ShaderModule>(device_, desc.bytecode, desc.debugName);
+        std::make_unique<VulkanShaderModule>(device_, desc.stage, desc.bytecode, desc.debugName);
     return {static_cast<std::uint32_t>(std::distance(shaders_.begin(), slot)), slot->generation};
 }
 
@@ -468,7 +468,7 @@ BindGroupHandle VulkanDevice::createBindGroup(const BindGroupDesc& desc) {
         if (entry.type == BindingType::SampledTexture) {
             Log::fatal("VulkanDevice", "Sampled texture bind groups require texture resources");
         }
-        const Buffer& buffer = requireBuffer(entry.buffer);
+        const VulkanBuffer& buffer = requireBuffer(entry.buffer);
         const std::uint64_t size = entry.size == 0 ? buffer.size() - entry.offset : entry.size;
         if (entry.offset > buffer.size() || size > buffer.size() - entry.offset) {
             Log::fatal("VulkanDevice", "Invalid bind group buffer range");
@@ -506,11 +506,11 @@ void VulkanDevice::waitIdle() {
     }
 }
 
-Buffer& VulkanDevice::requireBuffer(BufferHandle handle) {
-    return const_cast<Buffer&>(std::as_const(*this).requireBuffer(handle));
+VulkanBuffer& VulkanDevice::requireBuffer(BufferHandle handle) {
+    return const_cast<VulkanBuffer&>(std::as_const(*this).requireBuffer(handle));
 }
 
-const Buffer& VulkanDevice::requireBuffer(BufferHandle handle) const {
+const VulkanBuffer& VulkanDevice::requireBuffer(BufferHandle handle) const {
     if (handle.index >= buffers_.size()) {
         Log::fatal("VulkanDevice", "Invalid RHI buffer handle");
     }

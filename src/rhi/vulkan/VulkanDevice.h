@@ -13,15 +13,15 @@
 
 namespace engine {
 
-class Buffer;
 class GpuAllocator;
-class ShaderModule;
 class DescriptorAllocator;
 class DescriptorSetLayout;
 
 namespace rhi::vulkan {
 
 class VulkanGraphicsPipeline;
+class VulkanBuffer;
+class VulkanShaderModule;
 
 class VulkanDevice final : public IDevice, public IVulkanResourceResolver {
 public:
@@ -81,13 +81,13 @@ private:
     };
 
     struct BufferSlot {
-        std::unique_ptr<::engine::Buffer> resource;
+        std::unique_ptr<VulkanBuffer> resource;
         MemoryUsage memoryUsage{MemoryUsage::DeviceLocal};
         std::uint32_t generation{1};
     };
 
     struct ShaderSlot {
-        std::unique_ptr<::engine::ShaderModule> resource;
+        std::unique_ptr<VulkanShaderModule> resource;
         std::uint32_t generation{1};
     };
 
@@ -106,8 +106,8 @@ private:
         std::uint32_t generation{1};
     };
 
-    [[nodiscard]] ::engine::Buffer& requireBuffer(BufferHandle handle);
-    [[nodiscard]] const ::engine::Buffer& requireBuffer(BufferHandle handle) const;
+    [[nodiscard]] VulkanBuffer& requireBuffer(BufferHandle handle);
+    [[nodiscard]] const VulkanBuffer& requireBuffer(BufferHandle handle) const;
     void createInstance();
     void createDebugMessenger();
     void createSurface(const SurfaceSource& surface);

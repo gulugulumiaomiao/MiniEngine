@@ -1,15 +1,29 @@
-#include "rhi/vulkan/Image.h"
+#include "rhi/vulkan/VulkanImage.h"
 #include "core/logging/Log.h"
 
-namespace engine {
+namespace engine::rhi::vulkan {
+namespace {
 
-Image::Image(VmaAllocator allocator,
-             VkDevice device,
-             VkExtent3D extent,
-             VkFormat format,
-             VkImageUsageFlags usage,
-             VkImageAspectFlags aspectMask)
-    : allocator_(allocator), device_(device), format_(format) {
+TextureFormat fromVulkan(VkFormat format) {
+    switch (format) {
+    case VK_FORMAT_R8G8B8A8_UNORM: return TextureFormat::Rgba8Unorm;
+    case VK_FORMAT_R8G8B8A8_SRGB: return TextureFormat::Rgba8Srgb;
+    case VK_FORMAT_B8G8R8A8_UNORM: return TextureFormat::Bgra8Unorm;
+    case VK_FORMAT_B8G8R8A8_SRGB: return TextureFormat::Bgra8Srgb;
+    default: return TextureFormat::Undefined;
+    }
+}
+
+} // namespace
+
+VulkanImage::VulkanImage(VmaAllocator allocator,
+                         VkDevice device,
+                         VkExtent3D extent,
+                         VkFormat format,
+                         VkImageUsageFlags usage,
+                         VkImageAspectFlags aspectMask)
+    : allocator_(allocator), device_(device), nativeFormat_(format), format_(fromVulkan(format)),
+      extent_(extent) {
     VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
     imageInfo.extent = extent;
@@ -26,13 +40,13 @@ Image::Image(VmaAllocator allocator,
     allocationInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     if (vmaCreateImage(allocator_, &imageInfo, &allocationInfo, &image_, &allocation_, nullptr) !=
         VK_SUCCESS) {
-        Log::fatal("Image", "vmaCreateImage failed");
+        Log::fatal("VulkanImage", "vmaCreateImage failed");
     }
 
     VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
     viewInfo.image = image_;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = format_;
+    viewInfo.format = nativeFormat_;
     viewInfo.subresourceRange.aspectMask = aspectMask;
     viewInfo.subresourceRange.levelCount = 1;
     viewInfo.subresourceRange.layerCount = 1;
@@ -40,15 +54,15 @@ Image::Image(VmaAllocator allocator,
         vmaDestroyImage(allocator_, image_, allocation_);
         image_ = VK_NULL_HANDLE;
         allocation_ = VK_NULL_HANDLE;
-        Log::fatal("Image", "vkCreateImageView failed");
+        Log::fatal("VulkanImage", "vkCreateImageView failed");
     }
 }
 
-Image::~Image() {
+VulkanImage::~VulkanImage() {
     vkDestroyImageView(device_, view_, nullptr);
     if (image_ != VK_NULL_HANDLE) {
         vmaDestroyImage(allocator_, image_, allocation_);
     }
 }
 
-} // namespace engine
+} // namespace engine::rhi::vulkan

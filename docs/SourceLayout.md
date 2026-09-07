@@ -66,5 +66,9 @@ Render 层已经不再包含 Vulkan/VMA 类型。`Renderer` 负责 DrawList 编�
 创建并注入 Renderer，Render 不需要包含具体图形 API 的头文件。任何 `rhi` 文件都不能
 反向依赖 Material、Mesh 或 Shader 等 Render 概念。
 
+Buffer、Image、Sampler 和 ShaderModule 在 `rhi/api` 定义后端无关接口，在
+`rhi/vulkan` 分别由 `VulkanBuffer`、`VulkanImage`、`VulkanSampler` 和
+`VulkanShaderModule` 实现。Renderer 仍只通过 `IDevice` 和带 generation 的句柄使用资源。
+
 新增代码时应优先选择其所属子系统，不建立 `Managers/`、`Utils/`、
 `Misc/` 等跨职责聚合目录。
