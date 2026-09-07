@@ -12,6 +12,10 @@
   ],
   "editor.formatOnSave": false,
   "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd",
+  "[cpp]": {
+    "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd",
+    "editor.formatOnSave": true
+  },
   "files.associations": {
     "*.h": "cpp"
   }

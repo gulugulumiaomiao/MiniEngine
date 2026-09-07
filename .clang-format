@@ -1,0 +1,43 @@
+---
+BasedOnStyle: LLVM
+
+# Repository indentation
+IndentWidth: 4
+ContinuationIndentWidth: 4
+ConstructorInitializerIndentWidth: 4
+TabWidth: 4
+UseTab: Never
+AccessModifierOffset: -4
+IndentAccessModifiers: false
+IndentCaseLabels: false
+NamespaceIndentation: None
+
+# Braces and compact constructs already used throughout the codebase
+BreakBeforeBraces: Attach
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+# Type spelling
+DerivePointerAlignment: false
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# Keep manually grouped includes stable
+SortIncludes: Never
+IncludeBlocks: Preserve
+
+# Line wrapping
+ColumnLimit: 100
+BinPackArguments: false
+BinPackParameters: false
+AlignAfterOpenBracket: Align
+BreakConstructorInitializers: BeforeColon
+
+# C++20 project conventions
+Standard: c++20
+FixNamespaceComments: true
+ReflowComments: true
+...

@@ -27,7 +27,7 @@ engine::Log::info("Renderer", "renderer initialized");
 engine::Log::debug("Material", "uniform data uploaded");
 engine::Log::warn("Shader", "optional pass was not found");
 engine::Log::error("Texture", "texture upload failed");
-engine::Log::fatal("VulkanBackend", "failed to create Vulkan device");
+engine::Log::fatal("VulkanDevice", "failed to create Vulkan device");
 ```
 
 消息支持 `printf` 风格的格式化参数：
@@ -36,7 +36,7 @@ engine::Log::fatal("VulkanBackend", "failed to create Vulkan device");
 engine::Log::info("Renderer", "draw count: %u", drawCount);
 engine::Log::debug("Material", "name: %s, version: %llu",
                    name.c_str(), static_cast<unsigned long long>(version));
-engine::Log::error("VulkanBackend", "VkResult: %d", static_cast<int>(result));
+engine::Log::error("VulkanSwapchain", "VkResult: %d", static_cast<int>(result));
 ```
 
 格式参数遵循 C `printf` 规则，参数类型必须与 `%d`、`%u`、`%f`、`%s` 等占位符匹配；`std::string` 需要使用 `.c_str()` 传给 `%s`。不带格式参数的原有字符串接口仍然保留。

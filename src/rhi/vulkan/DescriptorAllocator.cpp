@@ -33,6 +33,7 @@ VkDescriptorPool DescriptorAllocator::createPool(std::uint32_t maxSets) const {
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxSets * 4},
     };
     VkDescriptorPoolCreateInfo createInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    createInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
     createInfo.maxSets = maxSets;
     createInfo.poolSizeCount = static_cast<std::uint32_t>(poolSizes.size());
     createInfo.pPoolSizes = poolSizes.data();
@@ -58,6 +59,7 @@ VkDescriptorSet DescriptorAllocator::allocate(VkDescriptorSetLayout layout) {
         VkDescriptorSet descriptor = VK_NULL_HANDLE;
         const VkResult result = vkAllocateDescriptorSets(device_, &allocateInfo, &descriptor);
         if (result == VK_SUCCESS) {
+            owners_.emplace(descriptor, pools_[activePool_]);
             return descriptor;
         }
         if (result != VK_ERROR_OUT_OF_POOL_MEMORY && result != VK_ERROR_FRAGMENTED_POOL) {
@@ -72,12 +74,22 @@ VkDescriptorSet DescriptorAllocator::allocate(VkDescriptorSetLayout layout) {
     }
 }
 
+void DescriptorAllocator::free(VkDescriptorSet descriptor) {
+    const auto found = owners_.find(descriptor);
+    if (found == owners_.end()) return;
+    if (vkFreeDescriptorSets(device_, found->second, 1, &descriptor) != VK_SUCCESS) {
+        Log::fatal("DescriptorAllocator", "vkFreeDescriptorSets failed");
+    }
+    owners_.erase(found);
+}
+
 void DescriptorAllocator::reset() {
     for (VkDescriptorPool pool : pools_) {
         if (vkResetDescriptorPool(device_, pool, 0) != VK_SUCCESS) {
             Log::fatal("DescriptorAllocator", "vkResetDescriptorPool failed");
         }
     }
+    owners_.clear();
     activePool_ = 0;
 }
 

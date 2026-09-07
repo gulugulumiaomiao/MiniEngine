@@ -15,7 +15,7 @@ src/
 │   ├── api/               后端无关的 GPU 命令与句柄
 │   └── vulkan/            Vulkan 底层资源和命令实现
 ├── render/
-│   ├── backend/           Render 后端接口及 Vulkan 渲染后端
+│   ├── backend/           后端无关的 Render 编排、GPU 缓存与 RHI 后端
 │   ├── material/          Material 资产与运行时对象
 │   ├── mesh/              Mesh 资产、运行时对象和顶点格式
 │   ├── render_graph/      RenderGraph
@@ -60,9 +60,11 @@ Runtime
 - `Scene` 管理节点、组件、场景资产及运行时场景。
 - `Runtime` 负责把窗口、资产、场景和渲染系统组装成可执行程序。
 
-Vulkan 渲染后端会同时接触 Render 数据和 Vulkan 对象，因此位于
-`render/backend/vulkan`；纯 Vulkan 资源封装仍位于 `rhi/vulkan`，避免让
-RHI 基础层反向依赖 Material、Mesh 或 Shader 等 Render 概念。
+Render 层已经不再包含 Vulkan/VMA 类型。`render/backend` 只依赖 `rhi/api`，负责
+DrawList 编排以及 Mesh、Material、Shader、Pipeline 的 GPU 缓存；BindGroup、Swapchain、
+帧同步、命令提交和所有 Vulkan 原生对象均位于 `rhi/vulkan`。默认后端通过
+`rhi/RhiFactory.h` 创建，Render 不需要包含具体图形 API 的头文件。任何 `rhi` 文件都不能
+反向依赖 Material、Mesh 或 Shader 等 Render 概念。
 
 新增代码时应优先选择其所属子系统，不建立 `Managers/`、`Utils/`、
 `Misc/` 等跨职责聚合目录。

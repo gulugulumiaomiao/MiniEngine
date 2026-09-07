@@ -26,6 +26,8 @@ struct TextureViewTag;
 struct GraphicsPipelineTag;
 struct BindGroupTag;
 struct ShaderTag;
+struct BindGroupLayoutTag;
+struct SamplerTag;
 
 using BufferHandle = Handle<BufferTag>;
 using TextureHandle = Handle<TextureTag>;
@@ -33,6 +35,8 @@ using TextureViewHandle = Handle<TextureViewTag>;
 using GraphicsPipelineHandle = Handle<GraphicsPipelineTag>;
 using BindGroupHandle = Handle<BindGroupTag>;
 using ShaderHandle = Handle<ShaderTag>;
+using BindGroupLayoutHandle = Handle<BindGroupLayoutTag>;
+using SamplerHandle = Handle<SamplerTag>;
 
 enum class IndexFormat { UInt16, UInt32 };
 enum class LoadOp { Load, Clear, DontCare };

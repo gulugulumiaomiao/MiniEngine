@@ -3,42 +3,38 @@
 #include "render/shader/ShaderCompiler.h"
 #include "rhi/api/RhiTypes.h"
 
-#include <vulkan/vulkan.h>
-
 #include <cstdint>
-#include <memory>
 #include <span>
 #include <unordered_map>
 #include <vector>
 
 namespace engine {
 
-class ShaderModule;
+namespace rhi {
+class IDevice;
+}
 
 class RhiShaderCache final {
-public:
-    RhiShaderCache(VkDevice device, CompiledShaderCache& compiledShaders);
+    public:
+    RhiShaderCache(rhi::IDevice& device, CompiledShaderCache& compiledShaders);
     ~RhiShaderCache();
 
     [[nodiscard]] rhi::ShaderHandle getOrCreate(CompiledShaderHandle shader);
-    [[nodiscard]] VkShaderModule resolve(rhi::ShaderHandle handle) const;
-    void invalidate(std::span<const CompiledShaderId> shaders,
-                    std::uint64_t retireSerial);
+    void invalidate(std::span<const CompiledShaderId> shaders, std::uint64_t retireSerial);
     void collect(std::uint64_t completedSerial);
     void clear();
 
-private:
+    private:
     struct Slot {
-        std::unique_ptr<ShaderModule> module;
+        rhi::ShaderHandle shader;
         CompiledShaderId compiledId{};
-        std::uint32_t generation{1};
     };
     struct RetiredModule {
-        std::unique_ptr<ShaderModule> module;
+        rhi::ShaderHandle shader;
         std::uint64_t serial{};
     };
 
-    VkDevice device_{VK_NULL_HANDLE};
+    rhi::IDevice& device_;
     CompiledShaderCache& compiledShaders_;
     std::unordered_map<CompiledShaderId, std::uint32_t> entries_;
     std::vector<Slot> slots_;

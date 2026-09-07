@@ -82,7 +82,10 @@ Pipeline key 包含：
 - `set = 1, binding = 0`：材质 uniform buffer；
 - `set = 1, binding = 1..16`：按 Shader properties 声明顺序排列的 Texture2D。
 
-每个 in-flight frame 有独立的材质 uniform buffer 和 descriptor set。`Material::version()` 负责标识 CPU 数据版本；同一帧内相同 `MaterialHandle` 只准备一次。纹理通过 `MaterialGpuCache::TextureResolver` 解耦 TextureAsset/GPU image 的加载，未安装 resolver 或纹理未就绪时只输出 warn。
+每个 in-flight frame 有独立的材质 uniform buffer 和 BindGroup。`MaterialGpuCache` 只通过
+`rhi::IDevice` 创建 Buffer 和 BindGroup，不接触 Vulkan descriptor。`Material::version()`
+负责标识 CPU 数据版本；同一帧内相同 `MaterialHandle` 只准备一次。纹理 resolver 返回
+RHI TextureView/Sampler handle，未安装 resolver 或纹理未就绪时只输出 warn。
 
 ### 9. Keyword、Variant 与多 Pass
 
@@ -111,9 +114,9 @@ ShadowCaster → DepthOnly → Forward
 | AssetManager | 规范化 `asset://` 路径 | `weak_ptr<Asset>`（当前为 ShaderAsset / MaterialAsset） |
 | CompiledShaderCache | SPIR-V 内容 + stage + entry + Variant | CompiledShader |
 | ShaderProgramCache | vertex CompileID + fragment CompileID + Variant | ShaderProgram |
-| RhiShaderCache | CompileID | VkShaderModule |
-| PipelineCache | ProgramID + LayoutID + VertexLayout + RenderState + RT format | VkPipeline |
-| MaterialGpuCache | frame + MaterialHandle + material version | uniform buffer + descriptor set |
+| RhiShaderCache | CompileID | RHI Shader handle |
+| PipelineCache | ProgramID + LayoutID + VertexLayout + RenderState + RT format | RHI Pipeline handle |
+| MaterialGpuCache | frame + MaterialHandle + material version | RHI uniform buffer + BindGroup |
 
 ## 生命周期和修改规则
 
@@ -127,8 +130,10 @@ ShadowCaster → DepthOnly → Forward
 
 - `src/render/shader/Shader.h/.cpp`：资产描述、运行时 Shader/SubShader/Pass、Reflection。
 - `src/render/shader/ShaderCompiler.h/.cpp`：预处理、CompiledShader、Program、依赖图和 Cooked 模型。
-- `src/render/backend/vulkan/RhiShaderCache.h/.cpp`：CompileID 到 Vulkan Shader module。
-- `src/render/backend/vulkan/PipelineCache.h/.cpp`：结构化 Pipeline 缓存。
-- `src/render/backend/vulkan/MaterialGpuCache.h/.cpp`：每帧材质 GPU 数据与 descriptor。
+- `src/render/backend/RhiShaderCache.h/.cpp`：CompileID 到 RHI Shader handle，不依赖 Vulkan 类型。
+- `src/render/backend/PipelineCache.h/.cpp`：将 ShaderPass、RenderState 与 VertexLayout 转换为 RHI Pipeline 描述并缓存 handle。
+- `src/rhi/vulkan/VulkanGraphicsPipeline.h/.cpp`：将 RHI Pipeline 描述转换为 Vulkan graphics pipeline。
+- `src/render/backend/MaterialGpuCache.h/.cpp`：每帧材质 GPU 数据与 RHI BindGroup。
 - `src/render/renderer/Renderer.cpp`：Variant 选择与多 Pass 场景提交。
-- `src/render/backend/vulkan/VulkanBackend.cpp`：缓存组装、绑定和热重载边界。
+- `src/render/backend/RhiRenderBackend.cpp`：缓存组装、DrawList 录制和热重载边界。
+- `src/rhi/vulkan/VulkanSwapchain.cpp`：acquire、命令缓冲、提交、同步与 present。

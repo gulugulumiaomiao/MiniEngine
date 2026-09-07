@@ -45,7 +45,8 @@ VkCommandBuffer / Vulkan 资源
 - `IGraphicsCommandEncoder`：屏障、动态渲染、viewport、scissor、pipeline、VB/IB、bind group、draw 和 debug label；
 - `ITransferCommandEncoder`：第一版只提供 `copyBuffer`。
 
-接口描述渲染意图，不复制 Vulkan 的创建流程。队列提交、fence、semaphore、swapchain acquire/present 仍由后端负责。
+接口描述渲染意图，不复制 Vulkan 的创建流程。`ISwapchain` 负责帧 acquire/present，
+其 Vulkan 实现内部管理命令缓冲、队列提交、fence 和 semaphore。
 
 ### 3. 实现 Vulkan encoder 和资源解析
 
@@ -57,11 +58,14 @@ VkCommandBuffer / Vulkan 资源
 - Debug 构建使用 `VK_EXT_debug_utils` 标记 Pass，Release 构建不编译这些调用；
 - encoder 记住当前 pipeline layout，从而安全绑定 descriptor set。
 
-资源解析集中在 `VulkanBackend`。当前 swapchain 图片、单 graphics pipeline、逐帧 descriptor set 和 buffer 资源表都具备句柄校验。
+资源解析按职责拆分：`VulkanDevice` 创建并拥有 Vulkan instance、surface、physical/logical
+device、queue、allocator、descriptor pool 和 command pool，同时管理并校验 Buffer、Shader、
+GraphicsPipeline、BindGroupLayout 与 BindGroup 句柄；`VulkanSwapchain` 管理交换链图片、
+命令缓冲、逐帧同步与提交，并为 encoder 解析当前 back buffer。
 
 ### 4. 迁移绘制命令
 
-`VulkanBackend::recordDrawCommands` 不再直接调用以下操作：
+`RhiRenderBackend::recordDrawCommands` 不直接调用以下操作：
 
 ```text
 vkCmdBeginRendering / vkCmdEndRendering
@@ -73,7 +77,8 @@ vkCmdDrawIndexed
 vkCmdPipelineBarrier
 ```
 
-这些操作全部经过 `IGraphicsCommandEncoder`。后端仍直接 begin/end `VkCommandBuffer`，因为 command buffer 分配、提交与同步属于后端队列职责。
+这些操作全部经过 `IGraphicsCommandEncoder`。`VkCommandBuffer` 的 begin/end、分配、提交和
+同步均封装在 `VulkanSwapchain` 内部。
 
 ### 5. Renderer 构建 DrawList
 
@@ -106,7 +111,7 @@ Mesh 上传的 staging buffer 和 device-local buffer 都进入带 generation �
 ```text
 等待当前 FrameContext fence
   → acquire swapchain image
-  → reset/更新逐帧 descriptor
+  → 选择逐帧场景/材质 BindGroup
   → 上传 Renderer 已提取到 DrawList 的对象数据快照
   → Renderer 已构建好的 DrawList 交给后端
   → begin VkCommandBuffer
@@ -130,12 +135,13 @@ Mesh 上传的 staging buffer 和 device-local buffer 都进入带 generation �
 
 - RenderGraph 只处理导入纹理和图形 Pass，尚未创建临时纹理，也没有 buffer barrier；
 - 每个 Pass 当前最多一个深度附件；
-- pipeline 仍只有一个活动 VertexLayout，后续需要 PipelineCache；
-- BindGroup 第一版对应当前帧的场景 descriptor，尚未拆分 Scene/Material/Object 频率；
+- Mesh 当前仍只有一个活动 VertexLayout；
+- BindGroup 已拆分为 Scene/Object（set 0）与 Material（set 1），Object 目前仍与 Scene 共用 set；
 - 未实现 compute encoder、indirect draw、push constants 和 secondary command buffer；
 - 资源销毁会等待 device idle，后续应加入按 frame/timeline 回收的 deferred deletion queue。
 
-建议下一阶段先实现 PipelineCache 与 Scene/Material/Object 三层 BindGroup，再扩展 RenderGraph 的深度附件和临时纹理；这样即可自然接入 ShaderLab 的 `ShadowCaster → Forward → 后处理` 多 Pass 链路。
+下一阶段可继续拆分 Object 更新频率，并扩展 Texture/Sampler 资源创建、RenderGraph 深度附件和
+临时纹理；这样即可自然接入 ShaderLab 的 `ShadowCaster → Forward → 后处理` 多 Pass 链路。
 
 ## 验证
 

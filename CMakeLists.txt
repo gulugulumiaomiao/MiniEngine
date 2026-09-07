@@ -337,16 +337,19 @@ add_executable(MiniVulkanEngine
     src/rhi/vulkan/Buffer.cpp
     src/rhi/vulkan/DescriptorAllocator.cpp
     src/rhi/vulkan/GpuAllocator.cpp
-    src/render/backend/vulkan/GraphicsPipeline.cpp
+    src/rhi/vulkan/VulkanGraphicsPipeline.cpp
+    src/rhi/vulkan/VulkanDevice.cpp
+    src/rhi/vulkan/VulkanFactory.cpp
+    src/rhi/vulkan/VulkanSwapchain.cpp
     src/rhi/vulkan/Image.cpp
-    src/render/backend/vulkan/MaterialGpuCache.cpp
-    src/render/backend/vulkan/MeshGpuCache.cpp
-    src/render/backend/vulkan/PipelineCache.cpp
-    src/render/backend/vulkan/RhiShaderCache.cpp
+    src/render/backend/MaterialGpuCache.cpp
+    src/render/backend/MeshGpuCache.cpp
+    src/render/backend/PipelineCache.cpp
+    src/render/backend/RhiShaderCache.cpp
     src/rhi/vulkan/Sampler.cpp
     src/rhi/vulkan/ShaderModule.cpp
     src/rhi/vulkan/VmaImplementation.cpp
-    src/render/backend/vulkan/VulkanBackend.cpp
+    src/render/backend/RhiRenderBackend.cpp
     src/rhi/vulkan/VulkanCommandEncoder.cpp
 )
 target_include_directories(MiniVulkanEngine PRIVATE
@@ -558,6 +561,7 @@ if(BUILD_TESTING)
     add_executable(MeshTest
         tests/MeshTest.cpp
         src/asset/manager/AssetManager.cpp
+        src/render/backend/MeshGpuCache.cpp
         src/render/material/Material.cpp
         src/render/shader/Shader.cpp
         src/render/shader/ShaderManager.cpp
@@ -818,4 +822,11 @@ if(BUILD_TESTING)
     endif()
     add_dependencies(AssetReleaseTest MiniVulkanEngine)
     add_test(NAME AssetReleaseTest COMMAND AssetReleaseTest)
+
+    add_test(
+        NAME RenderRhiBoundaryTest
+        COMMAND ${CMAKE_COMMAND}
+            -DMINI_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/RenderRhiBoundaryTest.cmake
+    )
 endif()

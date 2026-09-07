@@ -49,6 +49,9 @@ Shader 热重载使用相同 Handle、增加 Shader revision；MaterialManager �
 
 ## Renderer 与 RHI
 
-Renderer 每帧解析 MeshHandle 和 MaterialHandle，从 Material 选择 `Shader -> SubShader -> ShaderPass`，生成 DrawItem 并按 RenderQueue 排序。VulkanBackend 根据 Material version 更新 `MaterialGpuCache`，并通过 PipelineCache 获取 Pass 对应的 GPU Pipeline。
+Renderer 每帧解析 MeshHandle 和 MaterialHandle，从 Material 选择
+`Shader -> SubShader -> ShaderPass`，生成 DrawItem 并按 RenderQueue 排序。
+`RhiRenderBackend` 根据 Material version 更新 `MaterialGpuCache`，并通过 PipelineCache 获取
+Pass 对应的 RHI Pipeline；这些 Render 代码不接触 Vulkan 类型。
 
 完整资产导入和热重载流程见 [AssetPipeline.md](AssetPipeline.md)。

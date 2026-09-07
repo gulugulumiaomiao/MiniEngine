@@ -1,15 +1,82 @@
 #include "render/mesh/Mesh.h"
 #include "core/serialization/BinaryTransfer.h"
 #include "core/serialization/JsonTransfer.h"
+#include "render/backend/MeshGpuCache.h"
 #include "render/mesh/MeshBuilder.h"
+#include "rhi/api/Device.h"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <span>
+#include <vector>
 
 namespace {
+
+class FakeDevice final : public engine::rhi::IDevice {
+public:
+    struct BufferRecord {
+        engine::rhi::BufferDesc desc;
+        std::vector<std::byte> bytes;
+        bool alive{true};
+    };
+
+    engine::rhi::BufferHandle createBuffer(
+        const engine::rhi::BufferDesc& desc) override {
+        buffers.push_back({desc, std::vector<std::byte>(desc.size), true});
+        ++createdBuffers;
+        return {static_cast<std::uint32_t>(buffers.size() - 1), 1};
+    }
+
+    void destroyBuffer(engine::rhi::BufferHandle handle) override {
+        if (handle.index >= buffers.size() || !buffers[handle.index].alive)
+            return;
+        buffers[handle.index].alive = false;
+        ++destroyedBuffers;
+    }
+
+    void uploadBuffer(engine::rhi::BufferHandle destination,
+                      std::span<const std::byte> data,
+                      std::uint64_t offset) override {
+        if (destination.index >= buffers.size()) return;
+        BufferRecord& target = buffers[destination.index];
+        std::ranges::copy(
+            data, target.bytes.begin() + static_cast<std::ptrdiff_t>(offset));
+        ++uploads;
+    }
+
+    engine::rhi::ShaderHandle createShader(
+        const engine::rhi::ShaderDesc&) override {
+        return {};
+    }
+    void destroyShader(engine::rhi::ShaderHandle) override {}
+    engine::rhi::GraphicsPipelineHandle createGraphicsPipeline(
+        const engine::rhi::GraphicsPipelineDesc&) override {
+        return {};
+    }
+    void destroyGraphicsPipeline(
+        engine::rhi::GraphicsPipelineHandle) override {}
+    engine::rhi::BindGroupLayoutHandle createBindGroupLayout(
+        const engine::rhi::BindGroupLayoutDesc&) override {
+        return {};
+    }
+    void destroyBindGroupLayout(
+        engine::rhi::BindGroupLayoutHandle) override {}
+    engine::rhi::BindGroupHandle createBindGroup(
+        const engine::rhi::BindGroupDesc&) override {
+        return {};
+    }
+    void destroyBindGroup(engine::rhi::BindGroupHandle) override {}
+    void waitIdle() override { ++waits; }
+
+    std::vector<BufferRecord> buffers;
+    std::uint32_t createdBuffers{};
+    std::uint32_t destroyedBuffers{};
+    std::uint32_t uploads{};
+    std::uint32_t waits{};
+};
 
 template <typename Value>
 Value readAt(const std::vector<std::byte>& bytes, std::size_t offset) {
@@ -231,6 +298,40 @@ int main() {
         v2Decoded.buildRecipe ||
         v2Decoded.desc.debugName != source.desc.debugName) {
         return 18;
+    }
+    // The render-side cache is testable without Vulkan and uploads only when
+    // the Mesh version changes.
+    FakeDevice fakeDevice;
+    MeshGpuCache gpuCache{fakeDevice};
+    Mesh gpuMesh = source.instantiate();
+    const MeshHandle gpuHandle{7, 1};
+    const MeshDrawInfo firstDraw = gpuCache.prepare(gpuHandle, gpuMesh);
+    if (firstDraw.vertexBuffers.size() != 2 || !firstDraw.indexBuffer ||
+        fakeDevice.createdBuffers != 3 || fakeDevice.uploads != 3 ||
+        gpuMesh.dirty()) {
+        return 19;
+    }
+    const MeshDrawInfo cachedDraw = gpuCache.prepare(gpuHandle, gpuMesh);
+    if (cachedDraw.indexBuffer != firstDraw.indexBuffer ||
+        fakeDevice.createdBuffers != 3 || fakeDevice.uploads != 3) {
+        return 19;
+    }
+    const math::Vec3 gpuReplacement{5.0F, 6.0F, 7.0F};
+    if (!gpuMesh.updateVertexData(
+            0, 0, std::as_bytes(std::span{&gpuReplacement, 1}))) {
+        return 19;
+    }
+    const MeshDrawInfo rebuiltDraw = gpuCache.prepare(gpuHandle, gpuMesh);
+    if (!rebuiltDraw.indexBuffer ||
+        rebuiltDraw.indexBuffer == firstDraw.indexBuffer ||
+        fakeDevice.createdBuffers != 6 || fakeDevice.destroyedBuffers != 3 ||
+        fakeDevice.uploads != 6 || fakeDevice.waits != 1 || gpuMesh.dirty()) {
+        return 19;
+    }
+    gpuCache.invalidate(gpuHandle);
+    if (fakeDevice.destroyedBuffers != 6 || fakeDevice.waits != 2 ||
+        gpuCache.size() != 0) {
+        return 19;
     }
     return 0;
 }

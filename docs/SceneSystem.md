@@ -41,7 +41,7 @@ Application::onUpdate
   -> Scene::update
   -> Scene::buildRenderScene
   -> Renderer::renderFrame
-  -> VulkanBackend
+  -> RhiRenderBackend -> RHI
 ```
 
 场景 UBO 使用 set 0/binding 0，保存 view-projection、相机位置和第一方向光；对象 Transform SSBO 移到 set 0/binding 1。Material 仍使用 set 1。示例 Shader 已使用相机矩阵，并以二维表面的固定法线演示第一版方向光漫反射；加入带 Normal 的 Mesh 后可以直接替换为真实逐顶点或逐像素法线。

@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <unordered_map>
 #include <vector>
 
 namespace engine {
@@ -38,6 +39,7 @@ public:
     DescriptorAllocator& operator=(DescriptorAllocator&&) = delete;
 
     [[nodiscard]] VkDescriptorSet allocate(VkDescriptorSetLayout layout);
+    void free(VkDescriptorSet descriptor);
     void reset();
 
 private:
@@ -45,6 +47,7 @@ private:
 
     VkDevice device_{VK_NULL_HANDLE};
     std::vector<VkDescriptorPool> pools_;
+    std::unordered_map<VkDescriptorSet, VkDescriptorPool> owners_;
     std::size_t activePool_{};
     std::uint32_t nextPoolSize_{};
 };

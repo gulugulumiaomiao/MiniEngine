@@ -3,7 +3,7 @@
 #include "asset/importer/AssetImportPipeline.h"
 #include "core/logging/Log.h"
 #include "render/backend/IRenderBackend.h"
-#include "render/backend/vulkan/VulkanBackend.h"
+#include "render/backend/RhiRenderBackend.h"
 #include "render/mesh/Mesh.h"
 #include "render/mesh/MeshBuilder.h"
 #include "render/renderer/RenderScene.h"
@@ -37,7 +37,7 @@ int phaseOrder(RenderPhase phase) {
 } // namespace
 
 Renderer::Renderer(Window& window, bool vsync)
-    : backend_(std::make_unique<VulkanBackend>(window, vsync)) {}
+    : backend_(std::make_unique<RhiRenderBackend>(window, vsync)) {}
 Renderer::~Renderer() {
     backend_->waitIdle();
 }
