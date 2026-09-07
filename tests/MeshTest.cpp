@@ -23,8 +23,7 @@ public:
         bool alive{true};
     };
 
-    engine::rhi::BufferHandle createBuffer(
-        const engine::rhi::BufferDesc& desc) override {
+    engine::rhi::BufferHandle createBuffer(const engine::rhi::BufferDesc& desc) override {
         buffers.push_back({desc, std::vector<std::byte>(desc.size), true});
         ++createdBuffers;
         return {static_cast<std::uint32_t>(buffers.size() - 1), 1};
@@ -40,32 +39,26 @@ public:
     void uploadBuffer(engine::rhi::BufferHandle destination,
                       std::span<const std::byte> data,
                       std::uint64_t offset) override {
-        if (destination.index >= buffers.size()) return;
+        if (destination.index >= buffers.size())
+            return;
         BufferRecord& target = buffers[destination.index];
-        std::ranges::copy(
-            data, target.bytes.begin() + static_cast<std::ptrdiff_t>(offset));
+        std::ranges::copy(data, target.bytes.begin() + static_cast<std::ptrdiff_t>(offset));
         ++uploads;
     }
 
-    engine::rhi::ShaderHandle createShader(
-        const engine::rhi::ShaderDesc&) override {
-        return {};
-    }
+    engine::rhi::ShaderHandle createShader(const engine::rhi::ShaderDesc&) override { return {}; }
     void destroyShader(engine::rhi::ShaderHandle) override {}
-    engine::rhi::GraphicsPipelineHandle createGraphicsPipeline(
-        const engine::rhi::GraphicsPipelineDesc&) override {
+    engine::rhi::GraphicsPipelineHandle
+    createGraphicsPipeline(const engine::rhi::GraphicsPipelineDesc&) override {
         return {};
     }
-    void destroyGraphicsPipeline(
-        engine::rhi::GraphicsPipelineHandle) override {}
-    engine::rhi::BindGroupLayoutHandle createBindGroupLayout(
-        const engine::rhi::BindGroupLayoutDesc&) override {
+    void destroyGraphicsPipeline(engine::rhi::GraphicsPipelineHandle) override {}
+    engine::rhi::BindGroupLayoutHandle
+    createBindGroupLayout(const engine::rhi::BindGroupLayoutDesc&) override {
         return {};
     }
-    void destroyBindGroupLayout(
-        engine::rhi::BindGroupLayoutHandle) override {}
-    engine::rhi::BindGroupHandle createBindGroup(
-        const engine::rhi::BindGroupDesc&) override {
+    void destroyBindGroupLayout(engine::rhi::BindGroupLayoutHandle) override {}
+    engine::rhi::BindGroupHandle createBindGroup(const engine::rhi::BindGroupDesc&) override {
         return {};
     }
     void destroyBindGroup(engine::rhi::BindGroupHandle) override {}
@@ -78,8 +71,7 @@ public:
     std::uint32_t waits{};
 };
 
-template <typename Value>
-Value readAt(const std::vector<std::byte>& bytes, std::size_t offset) {
+template <typename Value> Value readAt(const std::vector<std::byte>& bytes, std::size_t offset) {
     Value value{};
     std::memcpy(&value, bytes.data() + offset, sizeof(Value));
     return value;
@@ -135,8 +127,7 @@ int main() {
     decoded.setAssetPath(source.assetPath());
     Asset& asset = decoded;
     BinaryReader reader{binary};
-    if (!asset.transfer(reader) || !reader.finished() ||
-        decoded.type() != AssetType::Mesh ||
+    if (!asset.transfer(reader) || !reader.finished() || decoded.type() != AssetType::Mesh ||
         decoded.desc.debugName != source.desc.debugName ||
         decoded.desc.vertexLayout != source.desc.vertexLayout ||
         decoded.meshData.vertexStreams != source.meshData.vertexStreams ||
@@ -151,8 +142,7 @@ int main() {
     MeshAsset jsonDecoded;
     jsonDecoded.setAssetPath(source.assetPath());
     JsonReader jsonReader{jsonWriter.toString()};
-    if (!jsonDecoded.transfer(jsonReader) ||
-        jsonDecoded.desc.debugName != source.desc.debugName ||
+    if (!jsonDecoded.transfer(jsonReader) || jsonDecoded.desc.debugName != source.desc.debugName ||
         jsonDecoded.desc.vertexLayout != source.desc.vertexLayout ||
         jsonDecoded.meshData.vertexStreams != source.meshData.vertexStreams ||
         jsonDecoded.meshData.indices != source.meshData.indices) {
@@ -160,20 +150,18 @@ int main() {
     }
 
     Mesh runtime = decoded.instantiate();
-    if (runtime.assetPath() != source.assetPath() || runtime.version() != 1 ||
-        !runtime.dirty() || runtime.data().vertexStreams.size() != 2) {
+    if (runtime.assetPath() != source.assetPath() || runtime.version() != 1 || !runtime.dirty() ||
+        runtime.data().vertexStreams.size() != 2) {
         return 4;
     }
     runtime.markClean();
     const math::Vec3 replacement{2.0F, 3.0F, 4.0F};
-    if (!runtime.updateVertexData(0, 1,
-                                  std::as_bytes(std::span{&replacement, 1})) ||
+    if (!runtime.updateVertexData(0, 1, std::as_bytes(std::span{&replacement, 1})) ||
         runtime.version() != 2 || !runtime.dirty()) {
         return 5;
     }
     const std::uint16_t replacementIndex = 1;
-    if (!runtime.updateIndexData(
-            2, std::as_bytes(std::span{&replacementIndex, 1})) ||
+    if (!runtime.updateIndexData(2, std::as_bytes(std::span{&replacementIndex, 1})) ||
         runtime.version() != 3) {
         return 6;
     }
@@ -182,8 +170,7 @@ int main() {
     invalid.front() = std::byte{0};
     const std::string originalName = decoded.desc.debugName;
     BinaryReader invalidReader{invalid};
-    if (decoded.transfer(invalidReader) ||
-        decoded.desc.debugName != originalName) {
+    if (decoded.transfer(invalidReader) || decoded.desc.debugName != originalName) {
         return 7;
     }
     const MeshHandle handle = MESH_MANAGER.insert(decoded.instantiate());
@@ -201,8 +188,7 @@ int main() {
     planeRecipe.name = "Plane";
     planeRecipe.parts.push_back({PlaneGeometry{{2.0F, 4.0F}, 1, 1}});
     const auto plane = MeshBuilder::build(planeRecipe);
-    if (!plane || plane->data.vertexStreams[0].vertexCount != 4 ||
-        plane->data.indexCount != 6 ||
+    if (!plane || plane->data.vertexStreams[0].vertexCount != 4 || plane->data.indexCount != 6 ||
         plane->desc.indexType != IndexType::UInt16 ||
         !math::nearlyEqual(plane->desc.bounds.aabb.minimum.x, -1.0F) ||
         !math::nearlyEqual(plane->desc.bounds.aabb.maximum.z, 2.0F)) {
@@ -219,14 +205,12 @@ int main() {
     spherePart.primitive = UvSphereGeometry{0.5F, 8, 4};
     spherePart.materialSlot = 3;
     MeshPrimitivePart cylinderPart;
-    cylinderPart.primitive =
-        CylinderGeometry{0.5F, 0.25F, 1.0F, 8, 1, true, true};
+    cylinderPart.primitive = CylinderGeometry{0.5F, 0.25F, 1.0F, 8, 1, true, true};
     cylinderPart.translation = {2.0F, 0.0F, 0.0F};
     cylinderPart.materialSlot = 4;
     primitives.parts = {boxPart, spherePart, cylinderPart};
     auto combined = MeshBuilder::buildAsset(primitives);
-    if (!combined || !combined->buildRecipe ||
-        combined->desc.subMeshes.size() != 3 ||
+    if (!combined || !combined->buildRecipe || combined->desc.subMeshes.size() != 3 ||
         combined->desc.subMeshes[0].materialSlot != 2 ||
         combined->desc.subMeshes[1].indexCount != 144 ||
         combined->desc.subMeshes[2].indexCount != 96 ||
@@ -241,11 +225,9 @@ int main() {
         return 13;
     MeshAsset proceduralDecoded;
     BinaryReader proceduralReader{proceduralWriter.bytes()};
-    if (!proceduralDecoded.transfer(proceduralReader) ||
-        !proceduralReader.finished() || !proceduralDecoded.buildRecipe ||
-        proceduralDecoded.buildRecipe->parts.size() != 3 ||
-        proceduralDecoded.buildRecipe->parts[1].primitive.type() !=
-            MeshPrimitiveType::UvSphere) {
+    if (!proceduralDecoded.transfer(proceduralReader) || !proceduralReader.finished() ||
+        !proceduralDecoded.buildRecipe || proceduralDecoded.buildRecipe->parts.size() != 3 ||
+        proceduralDecoded.buildRecipe->parts[1].primitive.type() != MeshPrimitiveType::UvSphere) {
         return 13;
     }
     Mesh proceduralRuntime = proceduralDecoded.instantiate();
@@ -287,15 +269,13 @@ int main() {
     MeshDesc v2Desc = source.desc;
     MeshData v2Data = source.meshData;
     if (!v2Writer.beginObject({}) || !v2Writer.transfer("magic", v2Magic) ||
-        !v2Writer.transfer("version", v2Version) ||
-        !v2Writer.transfer("description", v2Desc) ||
+        !v2Writer.transfer("version", v2Version) || !v2Writer.transfer("description", v2Desc) ||
         !v2Writer.transfer("mesh_data", v2Data) || !v2Writer.endObject()) {
         return 18;
     }
     MeshAsset v2Decoded;
     BinaryReader v2Reader{v2Writer.bytes()};
-    if (!v2Decoded.transfer(v2Reader) || !v2Reader.finished() ||
-        v2Decoded.buildRecipe ||
+    if (!v2Decoded.transfer(v2Reader) || !v2Reader.finished() || v2Decoded.buildRecipe ||
         v2Decoded.desc.debugName != source.desc.debugName) {
         return 18;
     }
@@ -307,30 +287,26 @@ int main() {
     const MeshHandle gpuHandle{7, 1};
     const MeshDrawInfo firstDraw = gpuCache.prepare(gpuHandle, gpuMesh);
     if (firstDraw.vertexBuffers.size() != 2 || !firstDraw.indexBuffer ||
-        fakeDevice.createdBuffers != 3 || fakeDevice.uploads != 3 ||
-        gpuMesh.dirty()) {
+        fakeDevice.createdBuffers != 3 || fakeDevice.uploads != 3 || gpuMesh.dirty()) {
         return 19;
     }
     const MeshDrawInfo cachedDraw = gpuCache.prepare(gpuHandle, gpuMesh);
-    if (cachedDraw.indexBuffer != firstDraw.indexBuffer ||
-        fakeDevice.createdBuffers != 3 || fakeDevice.uploads != 3) {
+    if (cachedDraw.indexBuffer != firstDraw.indexBuffer || fakeDevice.createdBuffers != 3 ||
+        fakeDevice.uploads != 3) {
         return 19;
     }
     const math::Vec3 gpuReplacement{5.0F, 6.0F, 7.0F};
-    if (!gpuMesh.updateVertexData(
-            0, 0, std::as_bytes(std::span{&gpuReplacement, 1}))) {
+    if (!gpuMesh.updateVertexData(0, 0, std::as_bytes(std::span{&gpuReplacement, 1}))) {
         return 19;
     }
     const MeshDrawInfo rebuiltDraw = gpuCache.prepare(gpuHandle, gpuMesh);
-    if (!rebuiltDraw.indexBuffer ||
-        rebuiltDraw.indexBuffer == firstDraw.indexBuffer ||
+    if (!rebuiltDraw.indexBuffer || rebuiltDraw.indexBuffer == firstDraw.indexBuffer ||
         fakeDevice.createdBuffers != 6 || fakeDevice.destroyedBuffers != 3 ||
         fakeDevice.uploads != 6 || fakeDevice.waits != 1 || gpuMesh.dirty()) {
         return 19;
     }
     gpuCache.invalidate(gpuHandle);
-    if (fakeDevice.destroyedBuffers != 6 || fakeDevice.waits != 2 ||
-        gpuCache.size() != 0) {
+    if (fakeDevice.destroyedBuffers != 6 || fakeDevice.waits != 2 || gpuCache.size() != 0) {
         return 19;
     }
     return 0;

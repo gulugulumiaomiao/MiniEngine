@@ -4,8 +4,7 @@ namespace engine {
 
 // CRTP singleton base. The function-local static keeps initialization lazy and
 // thread-safe, while each derived class controls construction through friendship.
-template <typename T>
-class Singleton {
+template <typename T> class Singleton {
 public:
     [[nodiscard]] static T& instance() {
         static T value;

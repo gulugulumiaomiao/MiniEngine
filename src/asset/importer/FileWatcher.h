@@ -24,10 +24,9 @@ class FileWatcher final : public Singleton<FileWatcher> {
 public:
     ~FileWatcher();
 
-    [[nodiscard]] bool start(
-        const VirtualPath& root = VirtualPath{"asset://"},
-        std::chrono::milliseconds debounce = std::chrono::milliseconds{200},
-        bool background = true);
+    [[nodiscard]] bool start(const VirtualPath& root = VirtualPath{"asset://"},
+                             std::chrono::milliseconds debounce = std::chrono::milliseconds{200},
+                             bool background = true);
     void stop();
     void scanNow();
     [[nodiscard]] std::vector<FileChangeEvent> pollEvents();
@@ -47,8 +46,7 @@ private:
         std::chrono::steady_clock::time_point time;
     };
 
-    [[nodiscard]] std::unordered_map<std::string, SnapshotEntry>
-    makeSnapshot() const;
+    [[nodiscard]] std::unordered_map<std::string, SnapshotEntry> makeSnapshot() const;
     void enqueue(FileChangeEvent event);
     [[nodiscard]] static bool ignored(const VirtualPath& path);
 

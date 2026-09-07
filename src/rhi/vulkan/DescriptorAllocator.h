@@ -12,8 +12,7 @@ namespace engine {
 
 class DescriptorSetLayout final {
 public:
-    DescriptorSetLayout(VkDevice device,
-                        std::span<const VkDescriptorSetLayoutBinding> bindings);
+    DescriptorSetLayout(VkDevice device, std::span<const VkDescriptorSetLayoutBinding> bindings);
     ~DescriptorSetLayout();
 
     DescriptorSetLayout(const DescriptorSetLayout&) = delete;

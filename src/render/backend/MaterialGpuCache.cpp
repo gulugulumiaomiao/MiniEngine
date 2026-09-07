@@ -9,10 +9,10 @@
 
 namespace engine {
 
-MaterialGpuCache::MaterialGpuCache(rhi::IDevice& device, rhi::BindGroupLayoutHandle layout,
+MaterialGpuCache::MaterialGpuCache(rhi::IDevice& device,
+                                   rhi::BindGroupLayoutHandle layout,
                                    std::uint32_t frameCount)
-    : device_(device), layout_(layout), frames_(frameCount) {
-}
+    : device_(device), layout_(layout), frames_(frameCount) {}
 
 MaterialGpuCache::~MaterialGpuCache() {
     clear();
@@ -78,8 +78,10 @@ rhi::BindGroupHandle MaterialGpuCache::prepare(MaterialHandle handle, const Mate
         const auto found = material.textures.find(property.name);
         const std::string path = found == material.textures.end() ? std::string{} : found->second;
         if (!textureResolver_) {
-            Log::warn("MaterialGpuCache", "Texture resolver is not installed; skipping %s (%s)",
-                      property.name.c_str(), path.c_str());
+            Log::warn("MaterialGpuCache",
+                      "Texture resolver is not installed; skipping %s (%s)",
+                      property.name.c_str(),
+                      path.c_str());
             ++textureBinding;
             continue;
         }

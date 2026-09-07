@@ -5,17 +5,13 @@
 
 namespace engine {
 
-inline constexpr std::uint32_t kInvalidHandleIndex =
-    std::numeric_limits<std::uint32_t>::max();
+inline constexpr std::uint32_t kInvalidHandleIndex = std::numeric_limits<std::uint32_t>::max();
 
-template <class Tag>
-struct Handle {
+template <class Tag> struct Handle {
     std::uint32_t index{kInvalidHandleIndex};
     std::uint32_t generation{};
 
-    [[nodiscard]] explicit operator bool() const {
-        return index != kInvalidHandleIndex;
-    }
+    [[nodiscard]] explicit operator bool() const { return index != kInvalidHandleIndex; }
     bool operator==(const Handle&) const = default;
 };
 

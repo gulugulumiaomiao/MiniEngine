@@ -21,7 +21,8 @@ struct MaterialComponentAsset final : public Transferable {
 class MaterialComponent final : public Component {
 public:
     void setMaterial(std::uint32_t slot, MaterialHandle material) {
-        if (materials_.size() <= slot) materials_.resize(slot + 1);
+        if (materials_.size() <= slot)
+            materials_.resize(slot + 1);
         materials_[slot] = material;
     }
 
@@ -32,9 +33,7 @@ public:
         return !materials_.empty() ? materials_.front() : MaterialHandle{};
     }
 
-    [[nodiscard]] const std::vector<MaterialHandle>& materials() const {
-        return materials_;
-    }
+    [[nodiscard]] const std::vector<MaterialHandle>& materials() const { return materials_; }
 
     void clearMaterials() { materials_.clear(); }
 

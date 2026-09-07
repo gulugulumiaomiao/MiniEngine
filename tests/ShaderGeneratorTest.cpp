@@ -15,8 +15,7 @@ namespace {
 std::string readFile(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
-        engine::Log::fatal("ShaderGeneratorTest",
-                           "Cannot open test fixture: " + path.string());
+        engine::Log::fatal("ShaderGeneratorTest", "Cannot open test fixture: " + path.string());
     }
     return {std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
 }
@@ -27,30 +26,29 @@ int main() {
     using namespace engine;
     const std::filesystem::path sourceFixtures{MINI_TEST_SHADER_FIXTURE_DIR};
     const std::filesystem::path fixtures =
-        std::filesystem::temp_directory_path() /
-        "MiniEngineShaderGeneratorFixtures" / "assets";
+        std::filesystem::temp_directory_path() / "MiniEngineShaderGeneratorFixtures" / "assets";
     std::error_code fixtureError;
     std::filesystem::remove_all(fixtures.parent_path(), fixtureError);
     std::filesystem::create_directories(fixtures.parent_path(), fixtureError);
-    std::filesystem::copy(sourceFixtures, fixtures,
-                          std::filesystem::copy_options::recursive,
-                          fixtureError);
-    if (fixtureError) return 7;
-    if (!test::initializeAssetEnvironment(fixtures)) return 8;
-    const std::shared_ptr<ShaderAsset> shaderOwner = ASSET_MANAGER
-        .loadAsset<ShaderAsset>(VirtualPath{"asset://material_values.shader.json"});
-    if (!shaderOwner) return 5;
+    std::filesystem::copy(
+        sourceFixtures, fixtures, std::filesystem::copy_options::recursive, fixtureError);
+    if (fixtureError)
+        return 7;
+    if (!test::initializeAssetEnvironment(fixtures))
+        return 8;
+    const std::shared_ptr<ShaderAsset> shaderOwner =
+        ASSET_MANAGER.loadAsset<ShaderAsset>(VirtualPath{"asset://material_values.shader.json"});
+    if (!shaderOwner)
+        return 5;
     const ShaderAsset& shader = *shaderOwner;
     UniformBlockLayout layout = buildUniformBlockLayout(shader.properties);
-    const auto generated =
-        shader_compiler::generateMaterialDeclarations(shader, layout);
-    if (!generated) return 1;
+    const auto generated = shader_compiler::generateMaterialDeclarations(shader, layout);
+    if (!generated)
+        return 1;
 
-    const std::string expected =
-        readFile(sourceFixtures / "material_declarations.expected.glsl");
-    if (generated->glsl != expected ||
-        generated->uniformBlockSize != 80 || generated->textures.size() != 1 ||
-        generated->textures[0].propertyName != "MainTexture" ||
+    const std::string expected = readFile(sourceFixtures / "material_declarations.expected.glsl");
+    if (generated->glsl != expected || generated->uniformBlockSize != 80 ||
+        generated->textures.size() != 1 || generated->textures[0].propertyName != "MainTexture" ||
         generated->textures[0].set != 1 || generated->textures[0].binding != 1) {
         return 1;
     }
@@ -61,10 +59,8 @@ int main() {
     options.firstTextureBinding = 8;
     options.uniformBlockName = "CustomProperties";
     options.uniformInstanceName = "CustomMaterial";
-    const auto custom =
-        shader_compiler::generateMaterialDeclarations(shader, layout, options);
-    if (!custom ||
-        custom->glsl.find("set = 3, binding = 4") == std::string::npos ||
+    const auto custom = shader_compiler::generateMaterialDeclarations(shader, layout, options);
+    if (!custom || custom->glsl.find("set = 3, binding = 4") == std::string::npos ||
         custom->glsl.find("uniform CustomProperties") == std::string::npos ||
         custom->glsl.find("} CustomMaterial;") == std::string::npos ||
         custom->textures[0].binding != 8) {
@@ -75,23 +71,21 @@ int main() {
         return 3;
     }
 
-    const std::shared_ptr<ShaderAsset> interfaceShaderOwner = ASSET_MANAGER
-        .loadAsset<ShaderAsset>(
-            VirtualPath{"asset://shader_interface_valid.shader.json"});
-    if (!interfaceShaderOwner) return 6;
+    const std::shared_ptr<ShaderAsset> interfaceShaderOwner = ASSET_MANAGER.loadAsset<ShaderAsset>(
+        VirtualPath{"asset://shader_interface_valid.shader.json"});
+    if (!interfaceShaderOwner)
+        return 6;
     const ShaderAsset& interfaceShader = *interfaceShaderOwner;
-    const ShaderPassDesc& interfacePass =
-        interfaceShader.subShaders.front().passes.front().pass;
-    const UniformBlockLayout interfaceLayout =
-        buildUniformBlockLayout(interfaceShader.properties);
+    const ShaderPassDesc& interfacePass = interfaceShader.subShaders.front().passes.front().pass;
+    const UniformBlockLayout interfaceLayout = buildUniformBlockLayout(interfaceShader.properties);
     const auto stages = shader_compiler::generatePassStages(
-        interfaceShader, interfacePass, interfaceLayout,
+        interfaceShader,
+        interfacePass,
+        interfaceLayout,
         *FILE_SYSTEM.readText(interfacePass.program.vertexSource),
         *FILE_SYSTEM.readText(interfacePass.program.fragmentSource));
-    std::string expectedVertex =
-        readFile(sourceFixtures / "shader_interface.expected.vert.glsl");
-    std::string expectedFragment =
-        readFile(sourceFixtures / "shader_interface.expected.frag.glsl");
+    std::string expectedVertex = readFile(sourceFixtures / "shader_interface.expected.vert.glsl");
+    std::string expectedFragment = readFile(sourceFixtures / "shader_interface.expected.frag.glsl");
     expectedVertex.replace(expectedVertex.find("generated_interface.vert"),
                            std::string{"generated_interface.vert"}.size(),
                            interfacePass.program.vertexSource.string());

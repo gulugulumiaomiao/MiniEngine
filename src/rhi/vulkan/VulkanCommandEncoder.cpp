@@ -22,14 +22,17 @@ VulkanState mapState(ResourceState state) {
     case ResourceState::Undefined:
         return {VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_IMAGE_LAYOUT_UNDEFINED};
     case ResourceState::CopySource:
-        return {VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+        return {VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_ACCESS_TRANSFER_READ_BIT,
                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL};
     case ResourceState::CopyDestination:
-        return {VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+        return {VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_ACCESS_TRANSFER_WRITE_BIT,
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL};
     case ResourceState::ShaderRead:
         return {VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+                VK_ACCESS_SHADER_READ_BIT,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     case ResourceState::ColorAttachment:
         return {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                 VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -62,12 +65,11 @@ VkAttachmentStoreOp mapStoreOp(StoreOp operation) {
 
 } // namespace
 
-VulkanGraphicsCommandEncoder::VulkanGraphicsCommandEncoder(
-    VkCommandBuffer commandBuffer, const IVulkanResourceResolver& resources)
+VulkanGraphicsCommandEncoder::VulkanGraphicsCommandEncoder(VkCommandBuffer commandBuffer,
+                                                           const IVulkanResourceResolver& resources)
     : commandBuffer_(commandBuffer), resources_(resources) {}
 
-void VulkanGraphicsCommandEncoder::resourceBarriers(
-    std::span<const TextureBarrier> barriers) {
+void VulkanGraphicsCommandEncoder::resourceBarriers(std::span<const TextureBarrier> barriers) {
     if (barriers.empty()) {
         return;
     }
@@ -95,8 +97,15 @@ void VulkanGraphicsCommandEncoder::resourceBarriers(
         sourceStages |= before.stage;
         destinationStages |= after.stage;
     }
-    vkCmdPipelineBarrier(commandBuffer_, sourceStages, destinationStages, 0, 0, nullptr, 0,
-                         nullptr, static_cast<std::uint32_t>(imageBarriers.size()),
+    vkCmdPipelineBarrier(commandBuffer_,
+                         sourceStages,
+                         destinationStages,
+                         0,
+                         0,
+                         nullptr,
+                         0,
+                         nullptr,
+                         static_cast<std::uint32_t>(imageBarriers.size()),
                          imageBarriers.data());
 }
 
@@ -109,8 +118,10 @@ void VulkanGraphicsCommandEncoder::beginRendering(const RenderingInfo& info) {
         native.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         native.loadOp = mapLoadOp(attachment.loadOp);
         native.storeOp = mapStoreOp(attachment.storeOp);
-        native.clearValue.color = {{attachment.clearColor.x, attachment.clearColor.y,
-                                    attachment.clearColor.z, attachment.clearColor.w}};
+        native.clearValue.color = {{attachment.clearColor.x,
+                                    attachment.clearColor.y,
+                                    attachment.clearColor.z,
+                                    attachment.clearColor.w}};
         colors.push_back(native);
     }
     std::vector<VkRenderingAttachmentInfo> depths;
@@ -125,8 +136,7 @@ void VulkanGraphicsCommandEncoder::beginRendering(const RenderingInfo& info) {
         depths.push_back(native);
     }
     if (depths.size() > 1) {
-        Log::fatal("VulkanCommandEncoder",
-                   "RHI supports at most one depth attachment per pass");
+        Log::fatal("VulkanCommandEncoder", "RHI supports at most one depth attachment per pass");
     }
     VkRenderingInfo native{VK_STRUCTURE_TYPE_RENDERING_INFO};
     native.renderArea.offset = {info.renderArea.x, info.renderArea.y};
@@ -138,11 +148,17 @@ void VulkanGraphicsCommandEncoder::beginRendering(const RenderingInfo& info) {
     vkCmdBeginRendering(commandBuffer_, &native);
 }
 
-void VulkanGraphicsCommandEncoder::endRendering() { vkCmdEndRendering(commandBuffer_); }
+void VulkanGraphicsCommandEncoder::endRendering() {
+    vkCmdEndRendering(commandBuffer_);
+}
 
 void VulkanGraphicsCommandEncoder::setViewport(const Viewport& viewport) {
-    const VkViewport native{viewport.x, viewport.y, viewport.width, viewport.height,
-                            viewport.minDepth, viewport.maxDepth};
+    const VkViewport native{viewport.x,
+                            viewport.y,
+                            viewport.width,
+                            viewport.height,
+                            viewport.minDepth,
+                            viewport.maxDepth};
     vkCmdSetViewport(commandBuffer_, 0, 1, &native);
 }
 
@@ -157,46 +173,59 @@ void VulkanGraphicsCommandEncoder::bindPipeline(GraphicsPipelineHandle pipeline)
     vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, native.pipeline);
 }
 
-void VulkanGraphicsCommandEncoder::bindVertexBuffer(std::uint32_t slot, BufferHandle buffer,
-                                                     std::uint64_t offset) {
+void VulkanGraphicsCommandEncoder::bindVertexBuffer(std::uint32_t slot,
+                                                    BufferHandle buffer,
+                                                    std::uint64_t offset) {
     const VkBuffer native = resources_.resolveBuffer(buffer);
     const VkDeviceSize nativeOffset = offset;
     vkCmdBindVertexBuffers(commandBuffer_, slot, 1, &native, &nativeOffset);
 }
 
-void VulkanGraphicsCommandEncoder::bindIndexBuffer(BufferHandle buffer, std::uint64_t offset,
-                                                    IndexFormat format) {
-    vkCmdBindIndexBuffer(commandBuffer_, resources_.resolveBuffer(buffer), offset,
+void VulkanGraphicsCommandEncoder::bindIndexBuffer(BufferHandle buffer,
+                                                   std::uint64_t offset,
+                                                   IndexFormat format) {
+    vkCmdBindIndexBuffer(commandBuffer_,
+                         resources_.resolveBuffer(buffer),
+                         offset,
                          format == IndexFormat::UInt16 ? VK_INDEX_TYPE_UINT16
                                                        : VK_INDEX_TYPE_UINT32);
 }
 
-void VulkanGraphicsCommandEncoder::bindGroup(
-    std::uint32_t set, BindGroupHandle group,
-    std::span<const std::uint32_t> dynamicOffsets) {
+void VulkanGraphicsCommandEncoder::bindGroup(std::uint32_t set,
+                                             BindGroupHandle group,
+                                             std::span<const std::uint32_t> dynamicOffsets) {
     if (boundPipelineLayout_ == VK_NULL_HANDLE) {
-        Log::fatal("VulkanCommandEncoder",
-                   "bindGroup requires a bound graphics pipeline");
+        Log::fatal("VulkanCommandEncoder", "bindGroup requires a bound graphics pipeline");
     }
     const VkDescriptorSet descriptor = resources_.resolveBindGroup(group);
-    vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            boundPipelineLayout_, set, 1, &descriptor,
+    vkCmdBindDescriptorSets(commandBuffer_,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            boundPipelineLayout_,
+                            set,
+                            1,
+                            &descriptor,
                             static_cast<std::uint32_t>(dynamicOffsets.size()),
                             dynamicOffsets.data());
 }
 
 void VulkanGraphicsCommandEncoder::draw(const DrawArguments& arguments) {
-    vkCmdDraw(commandBuffer_, arguments.vertexCount, arguments.instanceCount,
-              arguments.firstVertex, arguments.firstInstance);
+    vkCmdDraw(commandBuffer_,
+              arguments.vertexCount,
+              arguments.instanceCount,
+              arguments.firstVertex,
+              arguments.firstInstance);
 }
 
 void VulkanGraphicsCommandEncoder::drawIndexed(const DrawIndexedArguments& arguments) {
-    vkCmdDrawIndexed(commandBuffer_, arguments.indexCount, arguments.instanceCount,
-                     arguments.firstIndex, arguments.vertexOffset, arguments.firstInstance);
+    vkCmdDrawIndexed(commandBuffer_,
+                     arguments.indexCount,
+                     arguments.instanceCount,
+                     arguments.firstIndex,
+                     arguments.vertexOffset,
+                     arguments.firstInstance);
 }
 
-void VulkanGraphicsCommandEncoder::beginDebugLabel(std::string_view name,
-                                                    const math::Vec4& color) {
+void VulkanGraphicsCommandEncoder::beginDebugLabel(std::string_view name, const math::Vec4& color) {
 #if defined(MINI_DEBUG)
     const auto begin = reinterpret_cast<PFN_vkCmdBeginDebugUtilsLabelEXT>(
         vkGetDeviceProcAddr(resources_.device(), "vkCmdBeginDebugUtilsLabelEXT"));
@@ -226,14 +255,17 @@ void VulkanGraphicsCommandEncoder::endDebugLabel() {
 #endif
 }
 
-VulkanTransferCommandEncoder::VulkanTransferCommandEncoder(
-    VkCommandBuffer commandBuffer, const IVulkanResourceResolver& resources)
+VulkanTransferCommandEncoder::VulkanTransferCommandEncoder(VkCommandBuffer commandBuffer,
+                                                           const IVulkanResourceResolver& resources)
     : commandBuffer_(commandBuffer), resources_(resources) {}
 
 void VulkanTransferCommandEncoder::copyBuffer(const BufferCopy& copy) {
     const VkBufferCopy native{copy.sourceOffset, copy.destinationOffset, copy.size};
-    vkCmdCopyBuffer(commandBuffer_, resources_.resolveBuffer(copy.source),
-                    resources_.resolveBuffer(copy.destination), 1, &native);
+    vkCmdCopyBuffer(commandBuffer_,
+                    resources_.resolveBuffer(copy.source),
+                    resources_.resolveBuffer(copy.destination),
+                    1,
+                    &native);
 }
 
 } // namespace engine::rhi::vulkan

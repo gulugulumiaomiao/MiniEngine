@@ -11,8 +11,7 @@ namespace engine {
 
 class ShaderModule final {
 public:
-    ShaderModule(VkDevice device, std::span<const std::byte> bytecode,
-                 std::string_view debugName);
+    ShaderModule(VkDevice device, std::span<const std::byte> bytecode, std::string_view debugName);
     ~ShaderModule();
 
     ShaderModule(const ShaderModule&) = delete;

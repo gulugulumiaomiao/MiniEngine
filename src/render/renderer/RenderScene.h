@@ -20,7 +20,8 @@ struct RenderObject {
     bool receiveShadow{true};
 
     [[nodiscard]] MaterialHandle material(std::uint32_t slot) const {
-        if (slot < materials.size() && materials[slot]) return materials[slot];
+        if (slot < materials.size() && materials[slot])
+            return materials[slot];
         return !materials.empty() ? materials.front() : MaterialHandle{};
     }
 };

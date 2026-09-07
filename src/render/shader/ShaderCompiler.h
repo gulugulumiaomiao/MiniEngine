@@ -119,21 +119,19 @@ struct ShaderCookedAsset {
 
 [[nodiscard]] ShaderHash hashBytes(std::span<const std::byte> bytes,
                                    ShaderHash seed = 14695981039346656037ULL);
-[[nodiscard]] ShaderHash hashString(
-    std::string_view text, ShaderHash seed = 14695981039346656037ULL);
+[[nodiscard]] ShaderHash hashString(std::string_view text,
+                                    ShaderHash seed = 14695981039346656037ULL);
 
 class ShaderPreprocessor final {
 public:
-    [[nodiscard]] std::shared_ptr<PreprocessedShader> process(
-        const ShaderCompileRequest& request) const;
+    [[nodiscard]] std::shared_ptr<PreprocessedShader>
+    process(const ShaderCompileRequest& request) const;
 };
 
 class ShaderDependencyGraph final {
 public:
-    void track(CompiledShaderId shader,
-               std::span<const VirtualPath> dependencies);
-    [[nodiscard]] std::vector<CompiledShaderId> affectedBy(
-        const VirtualPath& dependency) const;
+    void track(CompiledShaderId shader, std::span<const VirtualPath> dependencies);
+    [[nodiscard]] std::vector<CompiledShaderId> affectedBy(const VirtualPath& dependency) const;
     void remove(CompiledShaderId shader);
     void clear();
 
@@ -143,12 +141,12 @@ private:
 
 class CompiledShaderCache final {
 public:
-    [[nodiscard]] CompiledShaderHandle getOrLoad(
-        const VirtualPath& binaryPath, ShaderStage stage,
-        std::string_view entryPoint, const ShaderVariantKey& variant = {});
+    [[nodiscard]] CompiledShaderHandle getOrLoad(const VirtualPath& binaryPath,
+                                                 ShaderStage stage,
+                                                 std::string_view entryPoint,
+                                                 const ShaderVariantKey& variant = {});
     [[nodiscard]] const CompiledShader& resolve(CompiledShaderHandle handle) const;
-    [[nodiscard]] std::vector<CompiledShaderId> invalidateDependency(
-        const VirtualPath& dependency);
+    [[nodiscard]] std::vector<CompiledShaderId> invalidateDependency(const VirtualPath& dependency);
     [[nodiscard]] std::vector<CompiledShaderId> invalidateChanged();
     void clear();
 
@@ -159,9 +157,10 @@ private:
         std::uint32_t generation{1};
     };
 
-    [[nodiscard]] static CompiledShaderId makeId(
-        std::span<const std::byte> bytecode, ShaderStage stage,
-        std::string_view entryPoint, const ShaderVariantKey& variant);
+    [[nodiscard]] static CompiledShaderId makeId(std::span<const std::byte> bytecode,
+                                                 ShaderStage stage,
+                                                 std::string_view entryPoint,
+                                                 const ShaderVariantKey& variant);
     void removeId(CompiledShaderId id, std::vector<CompiledShaderId>& removed);
 
     std::unordered_map<CompiledShaderId, std::uint32_t> entries_;
@@ -173,9 +172,8 @@ class ShaderProgramCache final {
 public:
     explicit ShaderProgramCache(CompiledShaderCache& shaders);
 
-    [[nodiscard]] ShaderProgramHandle getOrCreate(
-        const Shader& shader, const ShaderPass& pass,
-        const ShaderVariantKey& variant = {});
+    [[nodiscard]] ShaderProgramHandle
+    getOrCreate(const Shader& shader, const ShaderPass& pass, const ShaderVariantKey& variant = {});
     [[nodiscard]] const ShaderProgram& resolve(ShaderProgramHandle handle) const;
     void invalidate(std::span<const CompiledShaderId> shaders);
     void clear();
@@ -186,19 +184,21 @@ private:
         std::uint32_t generation{1};
     };
 
-    [[nodiscard]] static std::optional<ShaderProgramLayout> mergeLayout(
-        const CompiledShader& vertex, const CompiledShader& fragment);
-    [[nodiscard]] CompiledShaderHandle compileStage(
-        const Shader& shader, const ShaderPass& pass, ShaderStage stage,
-        const ShaderVariantKey& variant, VirtualPath& binaryPath);
+    [[nodiscard]] static std::optional<ShaderProgramLayout>
+    mergeLayout(const CompiledShader& vertex, const CompiledShader& fragment);
+    [[nodiscard]] CompiledShaderHandle compileStage(const Shader& shader,
+                                                    const ShaderPass& pass,
+                                                    ShaderStage stage,
+                                                    const ShaderVariantKey& variant,
+                                                    VirtualPath& binaryPath);
 
     CompiledShaderCache& shaders_;
     std::unordered_map<ShaderProgramId, std::uint32_t> entries_;
     std::vector<Slot> slots_;
 };
 
-[[nodiscard]] ShaderCookedAsset buildCookedShaderAsset(
-    const ShaderAsset& asset,
-    std::span<const std::pair<const ShaderPass*, ShaderProgram>> programs);
+[[nodiscard]] ShaderCookedAsset
+buildCookedShaderAsset(const ShaderAsset& asset,
+                       std::span<const std::pair<const ShaderPass*, ShaderProgram>> programs);
 
 } // namespace engine

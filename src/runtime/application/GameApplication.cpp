@@ -16,14 +16,15 @@ AppConfig GameApplication::getConfig() const {
 }
 
 void GameApplication::onStart() {
-    if (!ENGINE.loadScene(
-            VirtualPath{"asset://scenes/blinn_phong_showcase.scene.json"})) {
+    if (!ENGINE.loadScene(VirtualPath{"asset://scenes/blinn_phong_showcase.scene.json"})) {
         Log::error("GameApplication", "Cannot load the showcase Scene");
         ENGINE.requestQuit();
     }
 }
 
-void GameApplication::onUpdate(float deltaTime) { (void)deltaTime; }
+void GameApplication::onUpdate(float deltaTime) {
+    (void)deltaTime;
+}
 
 void GameApplication::onStop() {
     ENGINE.scene().clear();

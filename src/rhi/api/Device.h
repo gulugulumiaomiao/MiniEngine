@@ -11,12 +11,13 @@
 namespace engine::rhi {
 
 class IDevice {
-    public:
+public:
     virtual ~IDevice() = default;
 
     [[nodiscard]] virtual BufferHandle createBuffer(const BufferDesc& desc) = 0;
     virtual void destroyBuffer(BufferHandle handle) = 0;
-    virtual void uploadBuffer(BufferHandle destination, std::span<const std::byte> data,
+    virtual void uploadBuffer(BufferHandle destination,
+                              std::span<const std::byte> data,
                               std::uint64_t offset = 0) = 0;
 
     [[nodiscard]] virtual ShaderHandle createShader(const ShaderDesc& desc) = 0;

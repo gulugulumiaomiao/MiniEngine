@@ -22,14 +22,15 @@ namespace engine {
 
 RhiRenderBackend::RhiRenderBackend(Window& window, bool vsync) : window_(window) {
     const auto [width, height] = window.framebufferSize();
-    rhi::Context context = rhi::createDefaultContext(window.nativeInstance(), window.nativeHandle(),
-                                                     {width, height, vsync});
+    rhi::Context context = rhi::createDefaultContext(
+        window.nativeInstance(), window.nativeHandle(), {width, height, vsync});
     device_ = std::move(context.device);
     swapchain_ = std::move(context.swapchain);
     createBindGroupLayouts();
     createFrameResources();
     if (!FILE_SYSTEM.mountDirectory("shader", MINI_GENERATED_SHADER_DIR, false)) {
-        Log::fatal("RhiRenderBackend", "Cannot mount generated Shader directory: %s",
+        Log::fatal("RhiRenderBackend",
+                   "Cannot mount generated Shader directory: %s",
                    MINI_GENERATED_SHADER_DIR);
     }
     compiledShaderCache_ = std::make_unique<CompiledShaderCache>();
@@ -38,9 +39,12 @@ RhiRenderBackend::RhiRenderBackend(Window& window, bool vsync) : window_(window)
     materialGpuCache_ =
         std::make_unique<MaterialGpuCache>(*device_, materialBindGroupLayout_, kFramesInFlight);
     meshGpuCache_ = std::make_unique<MeshGpuCache>(*device_);
-    pipelineCache_ = std::make_unique<PipelineCache>(
-        *device_, sceneBindGroupLayout_, materialBindGroupLayout_, *compiledShaderCache_,
-        *shaderProgramCache_, *rhiShaderCache_);
+    pipelineCache_ = std::make_unique<PipelineCache>(*device_,
+                                                     sceneBindGroupLayout_,
+                                                     materialBindGroupLayout_,
+                                                     *compiledShaderCache_,
+                                                     *shaderProgramCache_,
+                                                     *rhiShaderCache_);
 }
 
 RhiRenderBackend::~RhiRenderBackend() {
@@ -71,8 +75,8 @@ void RhiRenderBackend::createBindGroupLayouts() {
         rhi::ShaderVisibility::Vertex | rhi::ShaderVisibility::Fragment;
     const std::array sceneBindings{
         rhi::BindGroupLayoutEntry{0, rhi::BindingType::UniformBuffer, allGraphics},
-        rhi::BindGroupLayoutEntry{1, rhi::BindingType::StorageBuffer,
-                                  rhi::ShaderVisibility::Vertex},
+        rhi::BindGroupLayoutEntry{
+            1, rhi::BindingType::StorageBuffer, rhi::ShaderVisibility::Vertex},
     };
     sceneBindGroupLayout_ =
         device_->createBindGroupLayout({sceneBindings, "Scene bind group layout"});
@@ -179,14 +183,21 @@ void RhiRenderBackend::recordDrawCommands(FrameResources& frame, const DrawList&
     });
     rhi::RenderingInfo rendering;
     rendering.renderArea = {0, 0, swapchain_->width(), swapchain_->height()};
-    rendering.colorAttachments.push_back({swapchain_->currentTextureView(), rhi::LoadOp::Clear,
-                                          rhi::StoreOp::Store, drawList.clearColor});
+    rendering.colorAttachments.push_back({swapchain_->currentTextureView(),
+                                          rhi::LoadOp::Clear,
+                                          rhi::StoreOp::Store,
+                                          drawList.clearColor});
     graph.addGraphicsPass(
-        "Forward", std::move(rendering),
+        "Forward",
+        std::move(rendering),
         {{backBuffer, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment}},
         [this, &frame, &drawList](rhi::IGraphicsCommandEncoder& encoder) {
-            encoder.setViewport({0.0F, 0.0F, static_cast<float>(swapchain_->width()),
-                                 static_cast<float>(swapchain_->height()), 0.0F, 1.0F});
+            encoder.setViewport({0.0F,
+                                 0.0F,
+                                 static_cast<float>(swapchain_->width()),
+                                 static_cast<float>(swapchain_->height()),
+                                 0.0F,
+                                 1.0F});
             encoder.setScissor({0, 0, swapchain_->width(), swapchain_->height()});
             rhi::GraphicsPipelineHandle boundPipeline;
             MaterialHandle boundMaterial;

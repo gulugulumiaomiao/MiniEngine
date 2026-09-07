@@ -10,13 +10,13 @@
 
 namespace engine {
 
-template <typename Resource, typename HandleType>
-class InstanceManager {
+template <typename Resource, typename HandleType> class InstanceManager {
 public:
     virtual ~InstanceManager() = default;
 
     [[nodiscard]] HandleType insert(Resource resource) {
-        if (!validate(resource)) return {};
+        if (!validate(resource))
+            return {};
 
         const VirtualPath path = pathOf(resource);
         if (path.valid()) {
@@ -27,7 +27,8 @@ public:
         }
 
         const HandleType handle = pool_.insert(std::move(resource));
-        if (path.valid()) pathIndex_.insert_or_assign(path.string(), handle);
+        if (path.valid())
+            pathIndex_.insert_or_assign(path.string(), handle);
         return handle;
     }
 
@@ -35,7 +36,8 @@ public:
 
     bool destroy(HandleType handle) {
         Resource* resource = pool_.find(handle);
-        if (!resource) return false;
+        if (!resource)
+            return false;
 
         const VirtualPath path = pathOf(*resource);
         if (path.valid()) {
@@ -47,13 +49,9 @@ public:
         return pool_.release(handle);
     }
 
-    [[nodiscard]] Resource* find(HandleType handle) {
-        return pool_.find(handle);
-    }
+    [[nodiscard]] Resource* find(HandleType handle) { return pool_.find(handle); }
 
-    [[nodiscard]] const Resource* find(HandleType handle) const {
-        return pool_.find(handle);
-    }
+    [[nodiscard]] const Resource* find(HandleType handle) const { return pool_.find(handle); }
 
     [[nodiscard]] Resource* find(const VirtualPath& path) {
         return const_cast<Resource*>(std::as_const(*this).find(path));
@@ -74,20 +72,17 @@ public:
 protected:
     InstanceManager() = default;
 
-    template <typename Function>
-    void forEach(Function&& function) {
+    template <typename Function> void forEach(Function&& function) {
         pool_.forEach(std::forward<Function>(function));
     }
 
     [[nodiscard]] HandleType handleFor(const VirtualPath& path) const {
         const auto indexed = pathIndex_.find(path.string());
-        return indexed != pathIndex_.end() && pool_.find(indexed->second)
-                   ? indexed->second
-                   : HandleType{};
+        return indexed != pathIndex_.end() && pool_.find(indexed->second) ? indexed->second
+                                                                          : HandleType{};
     }
 
-    [[nodiscard]] virtual const VirtualPath& pathOf(
-        const Resource& resource) const = 0;
+    [[nodiscard]] virtual const VirtualPath& pathOf(const Resource& resource) const = 0;
     [[nodiscard]] virtual bool validate(const Resource&) const { return true; }
 
 private:

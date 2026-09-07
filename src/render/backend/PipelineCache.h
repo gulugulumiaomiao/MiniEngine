@@ -19,19 +19,24 @@ class RhiShaderCache;
 struct VertexLayout;
 
 class PipelineCache final {
-    public:
-    PipelineCache(rhi::IDevice& device, rhi::BindGroupLayoutHandle sceneLayout,
-                  rhi::BindGroupLayoutHandle materialLayout, CompiledShaderCache& compiledShaders,
-                  ShaderProgramCache& programs, RhiShaderCache& shaders);
+public:
+    PipelineCache(rhi::IDevice& device,
+                  rhi::BindGroupLayoutHandle sceneLayout,
+                  rhi::BindGroupLayoutHandle materialLayout,
+                  CompiledShaderCache& compiledShaders,
+                  ShaderProgramCache& programs,
+                  RhiShaderCache& shaders);
 
-    [[nodiscard]] rhi::GraphicsPipelineHandle
-    getOrCreate(const Shader& shader, const ShaderPass& pass, const ShaderVariantKey& variant,
-                const VertexLayout& vertexLayout, rhi::TextureFormat colorFormat);
+    [[nodiscard]] rhi::GraphicsPipelineHandle getOrCreate(const Shader& shader,
+                                                          const ShaderPass& pass,
+                                                          const ShaderVariantKey& variant,
+                                                          const VertexLayout& vertexLayout,
+                                                          rhi::TextureFormat colorFormat);
     void clear();
     void invalidate(std::span<const CompiledShaderId> shaders, std::uint64_t retireSerial);
     void collect(std::uint64_t completedSerial);
 
-    private:
+private:
     struct Slot {
         rhi::GraphicsPipelineHandle pipeline;
         ShaderProgramId program{};
@@ -46,18 +51,22 @@ class PipelineCache final {
         std::uint64_t serial{};
     };
 
-    [[nodiscard]] static std::uint64_t makeKey(const ShaderProgram& program, const ShaderPass& pass,
+    [[nodiscard]] static std::uint64_t makeKey(const ShaderProgram& program,
+                                               const ShaderPass& pass,
                                                const VertexLayout& vertexLayout,
                                                rhi::TextureFormat colorFormat);
-    [[nodiscard]] static std::uint64_t makeFallbackKey(const Shader& shader, const ShaderPass& pass,
+    [[nodiscard]] static std::uint64_t makeFallbackKey(const Shader& shader,
+                                                       const ShaderPass& pass,
                                                        const ShaderVariantKey& variant,
                                                        const VertexLayout& vertexLayout,
                                                        rhi::TextureFormat colorFormat);
-    [[nodiscard]] rhi::GraphicsPipelineDesc
-    makeDesc(const ShaderPass& pass, const VertexLayout& vertexLayout,
-             rhi::TextureFormat colorFormat, rhi::ShaderHandle vertexShader,
-             std::string vertexEntry, rhi::ShaderHandle fragmentShader,
-             std::string fragmentEntry) const;
+    [[nodiscard]] rhi::GraphicsPipelineDesc makeDesc(const ShaderPass& pass,
+                                                     const VertexLayout& vertexLayout,
+                                                     rhi::TextureFormat colorFormat,
+                                                     rhi::ShaderHandle vertexShader,
+                                                     std::string vertexEntry,
+                                                     rhi::ShaderHandle fragmentShader,
+                                                     std::string fragmentEntry) const;
 
     rhi::IDevice& device_;
     rhi::BindGroupLayoutHandle sceneLayout_;

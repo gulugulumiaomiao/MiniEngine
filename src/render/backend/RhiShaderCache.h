@@ -15,7 +15,7 @@ class IDevice;
 }
 
 class RhiShaderCache final {
-    public:
+public:
     RhiShaderCache(rhi::IDevice& device, CompiledShaderCache& compiledShaders);
     ~RhiShaderCache();
 
@@ -24,7 +24,7 @@ class RhiShaderCache final {
     void collect(std::uint64_t completedSerial);
     void clear();
 
-    private:
+private:
     struct Slot {
         rhi::ShaderHandle shader;
         CompiledShaderId compiledId{};

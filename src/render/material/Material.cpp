@@ -23,8 +23,7 @@ struct MaterialPropertyEntry {
     ShaderValue value;
 
     [[nodiscard]] bool transfer(Transfer& archive) {
-        return archive.transfer("name", name) &&
-               archive.transfer("value", value);
+        return archive.transfer("name", name) && archive.transfer("value", value);
     }
 };
 
@@ -32,10 +31,8 @@ bool transferMaterialPayload(Transfer& archive, MaterialAsset& value) {
     std::uint32_t magic = kMaterialAssetMagic;
     std::uint16_t version = kMaterialAssetVersion;
     if (!archive.transfer("magic", magic) || magic != kMaterialAssetMagic ||
-        !archive.transfer("version", version) ||
-        version != kMaterialAssetVersion ||
-        !archive.transfer("name", value.name) ||
-        !archive.transfer("shader", value.shader)) {
+        !archive.transfer("version", version) || version != kMaterialAssetVersion ||
+        !archive.transfer("name", value.name) || !archive.transfer("shader", value.shader)) {
         return false;
     }
 
@@ -47,12 +44,12 @@ bool transferMaterialPayload(Transfer& archive, MaterialAsset& value) {
         }
         std::ranges::sort(entries, {}, &MaterialPropertyEntry::name);
     }
-    if (!archive.transfer("properties", entries)) return false;
+    if (!archive.transfer("properties", entries))
+        return false;
     if (archive.reading()) {
         value.properties.clear();
         for (MaterialPropertyEntry& entry : entries) {
-            if (!value.properties.emplace(std::move(entry.name),
-                                          std::move(entry.value)).second) {
+            if (!value.properties.emplace(std::move(entry.name), std::move(entry.value)).second) {
                 return false;
             }
         }
@@ -68,10 +65,10 @@ bool MaterialAsset::transfer(Transfer& archive) {
     MaterialAsset& target = archive.reading() ? decoded : *this;
     if (!archive.beginObject({}) || !transferMaterialPayload(archive, target) ||
         !archive.endObject()) {
-        Log::error("MaterialAsset", "Invalid payload %s: %s",
+        Log::error("MaterialAsset",
+                   "Invalid payload %s: %s",
                    assetPath().string().c_str(),
-                   archive.error().empty() ? "validation failed"
-                                           : archive.error().c_str());
+                   archive.error().empty() ? "validation failed" : archive.error().c_str());
         return false;
     }
     if (archive.reading()) {
@@ -86,32 +83,40 @@ bool MaterialAsset::transfer(Transfer& archive) {
 
 namespace {
 
-bool requireType(const UniformMemberLayout& member, ShaderPropertyType expected,
+bool requireType(const UniformMemberLayout& member,
+                 ShaderPropertyType expected,
                  std::string_view name) {
     if (member.type != expected) {
-        Log::warn("Material", "Property has the wrong type: %.*s",
-                  static_cast<int>(name.size()), name.data());
+        Log::warn("Material",
+                  "Property has the wrong type: %.*s",
+                  static_cast<int>(name.size()),
+                  name.data());
         return false;
     }
     return true;
 }
 
-bool requireOneOf(const UniformMemberLayout& member, ShaderPropertyType first,
-                  ShaderPropertyType second, std::string_view name) {
+bool requireOneOf(const UniformMemberLayout& member,
+                  ShaderPropertyType first,
+                  ShaderPropertyType second,
+                  std::string_view name) {
     if (member.type != first && member.type != second) {
-        Log::warn("Material", "Property has the wrong type: %.*s",
-                  static_cast<int>(name.size()), name.data());
+        Log::warn("Material",
+                  "Property has the wrong type: %.*s",
+                  static_cast<int>(name.size()),
+                  name.data());
         return false;
     }
     return true;
 }
 
-const UniformMemberLayout* findMember(const UniformBlockLayout& layout,
-                                      std::string_view name) {
+const UniformMemberLayout* findMember(const UniformBlockLayout& layout, std::string_view name) {
     const UniformMemberLayout* member = layout.findMember(name);
     if (!member) {
-        Log::warn("Material", "Property does not exist: %.*s",
-                  static_cast<int>(name.size()), name.data());
+        Log::warn("Material",
+                  "Property does not exist: %.*s",
+                  static_cast<int>(name.size()),
+                  name.data());
     }
     return member;
 }
@@ -140,10 +145,8 @@ Value readUniformValue(const Material& material, const UniformMemberLayout& memb
 }
 
 template <typename Value>
-void writeUniformValue(Material& material, const UniformMemberLayout& member,
-                       const Value& value) {
-    if (sizeof(Value) > member.size ||
-        member.offset + member.size > material.uniformData.size()) {
+void writeUniformValue(Material& material, const UniformMemberLayout& member, const Value& value) {
+    if (sizeof(Value) > member.size || member.offset + member.size > material.uniformData.size()) {
         Log::fatal("Material", "Uniform layout exceeds its byte buffer");
     }
     std::fill_n(material.uniformData.data() + member.offset, member.size, std::byte{0});
@@ -155,8 +158,10 @@ const Value* requireValue(const ShaderValue& value, std::string_view name) {
     if (const Value* typed = std::get_if<Value>(&value)) {
         return typed;
     }
-    Log::warn("Material", "Value does not match property type: %.*s",
-              static_cast<int>(name.size()), name.data());
+    Log::warn("Material",
+              "Value does not match property type: %.*s",
+              static_cast<int>(name.size()),
+              name.data());
     return nullptr;
 }
 
@@ -164,26 +169,21 @@ const Value* requireValue(const ShaderValue& value, std::string_view name) {
 
 const Shader& Material::shader() const {
     const Shader* shader = SHADER_MANAGER.find(shaderHandle_);
-    if (!shader) Log::fatal("Material", "Invalid or stale ShaderHandle");
+    if (!shader)
+        Log::fatal("Material", "Invalid or stale ShaderHandle");
     return *shader;
 }
 
 ShaderValue Material::propertyValue(const ShaderPropertyDesc& property) const {
     switch (property.type) {
     case ShaderPropertyType::Float:
-    case ShaderPropertyType::Range:
-        return getFloat(property.name);
-    case ShaderPropertyType::Boolean:
-        return getBool(property.name);
-    case ShaderPropertyType::Vec2:
-        return getVec2(property.name);
-    case ShaderPropertyType::Vec3:
-        return getVec3(property.name);
+    case ShaderPropertyType::Range: return getFloat(property.name);
+    case ShaderPropertyType::Boolean: return getBool(property.name);
+    case ShaderPropertyType::Vec2: return getVec2(property.name);
+    case ShaderPropertyType::Vec3: return getVec3(property.name);
     case ShaderPropertyType::Vec4:
-    case ShaderPropertyType::Color:
-        return getVec4(property.name);
-    case ShaderPropertyType::Texture2D:
-        return getTexture(property.name);
+    case ShaderPropertyType::Color: return getVec4(property.name);
+    case ShaderPropertyType::Texture2D: return getTexture(property.name);
     }
     assert(false && "Unsupported shader property type");
 }
@@ -214,8 +214,7 @@ void Material::setShader(ShaderHandle shader) {
     rebuildForShader(shader, true);
 }
 
-void Material::rebuildForShader(ShaderHandle newShaderHandle,
-                                bool preserveValues) {
+void Material::rebuildForShader(ShaderHandle newShaderHandle, bool preserveValues) {
     const Shader* newShaderValue = SHADER_MANAGER.find(newShaderHandle);
     if (!newShaderValue) {
         Log::error("Material", "ShaderHandle must be valid");
@@ -226,8 +225,7 @@ void Material::rebuildForShader(ShaderHandle newShaderHandle,
     std::unordered_map<std::string, std::pair<ShaderPropertyType, ShaderValue>> oldValues;
     if (preserveValues && SHADER_MANAGER.find(shaderHandle_)) {
         for (const ShaderPropertyDesc& property : shader().properties()) {
-            oldValues.emplace(property.name,
-                              std::pair{property.type, propertyValue(property)});
+            oldValues.emplace(property.name, std::pair{property.type, propertyValue(property)});
         }
     }
 
@@ -239,14 +237,13 @@ void Material::rebuildForShader(ShaderHandle newShaderHandle,
     replacement.renderQueueOverride_ = renderQueueOverride_;
     replacement.uniformLayout = newShader.uniformBlockLayout();
     replacement.uniformData.resize(replacement.uniformLayout.byteSize, std::byte{0});
-    replacement.renderQueue = replacement.renderQueueOverride_.value_or(
-        newShader.defaultSubShader().renderQueue());
+    replacement.renderQueue =
+        replacement.renderQueueOverride_.value_or(newShader.defaultSubShader().renderQueue());
     replacement.suppressChanges_ = true;
     for (const ShaderPropertyDesc& property : newShader.properties()) {
         replacement.setPropertyValue(property.name, property.defaultValue);
         const auto old = oldValues.find(property.name);
-        if (old != oldValues.end() &&
-            compatiblePropertyTypes(old->second.first, property.type)) {
+        if (old != oldValues.end() && compatiblePropertyTypes(old->second.first, property.type)) {
             replacement.setPropertyValue(property.name, old->second.second);
         }
     }
@@ -270,7 +267,8 @@ void Material::rebuildForShader(ShaderHandle newShaderHandle,
 Material MaterialAsset::instantiate(ShaderHandle shaderHandle) const {
     Material material;
     material.initialize(assetPath(), name, shaderHandle, renderQueue);
-    if (!SHADER_MANAGER.find(shaderHandle)) return material;
+    if (!SHADER_MANAGER.find(shaderHandle))
+        return material;
     material.keywords = keywords;
     material.suppressChanges_ = true;
     for (const auto& [propertyName, value] : properties) {
@@ -284,8 +282,8 @@ Material MaterialAsset::instantiate(ShaderHandle shaderHandle) const {
 
 float Material::getFloat(std::string_view name) const {
     const UniformMemberLayout* member = findMember(uniformLayout, name);
-    return member && requireOneOf(*member, ShaderPropertyType::Float,
-                                  ShaderPropertyType::Range, name)
+    return member &&
+                   requireOneOf(*member, ShaderPropertyType::Float, ShaderPropertyType::Range, name)
                ? readUniformValue<float>(*this, *member)
                : 0.0F;
 }
@@ -306,8 +304,8 @@ math::Vec3 Material::getVec3(std::string_view name) const {
 
 math::Vec4 Material::getVec4(std::string_view name) const {
     const UniformMemberLayout* member = findMember(uniformLayout, name);
-    return member && requireOneOf(*member, ShaderPropertyType::Vec4,
-                                  ShaderPropertyType::Color, name)
+    return member &&
+                   requireOneOf(*member, ShaderPropertyType::Vec4, ShaderPropertyType::Color, name)
                ? readUniformValue<math::Vec4>(*this, *member)
                : math::Vec4{};
 }
@@ -321,8 +319,10 @@ bool Material::getBool(std::string_view name) const {
 const std::string& Material::getTexture(std::string_view name) const {
     const auto texture = textures.find(std::string{name});
     if (texture == textures.end()) {
-        Log::warn("Material", "Texture property does not exist: %.*s",
-                  static_cast<int>(name.size()), name.data());
+        Log::warn("Material",
+                  "Texture property does not exist: %.*s",
+                  static_cast<int>(name.size()),
+                  name.data());
         static const std::string empty;
         return empty;
     }
@@ -331,37 +331,42 @@ const std::string& Material::getTexture(std::string_view name) const {
 
 void Material::setFloat(std::string_view name, float value) {
     const UniformMemberLayout* member = findMember(uniformLayout, name);
-    if (!member || !requireOneOf(*member, ShaderPropertyType::Float,
-                                 ShaderPropertyType::Range, name)) return;
+    if (!member ||
+        !requireOneOf(*member, ShaderPropertyType::Float, ShaderPropertyType::Range, name))
+        return;
     writeUniformValue(*this, *member, value);
     markChanged();
 }
 
 void Material::setVec2(std::string_view name, const math::Vec2& value) {
     const UniformMemberLayout* member = findMember(uniformLayout, name);
-    if (!member || !requireType(*member, ShaderPropertyType::Vec2, name)) return;
+    if (!member || !requireType(*member, ShaderPropertyType::Vec2, name))
+        return;
     writeUniformValue(*this, *member, value);
     markChanged();
 }
 
 void Material::setVec3(std::string_view name, const math::Vec3& value) {
     const UniformMemberLayout* member = findMember(uniformLayout, name);
-    if (!member || !requireType(*member, ShaderPropertyType::Vec3, name)) return;
+    if (!member || !requireType(*member, ShaderPropertyType::Vec3, name))
+        return;
     writeUniformValue(*this, *member, value);
     markChanged();
 }
 
 void Material::setVec4(std::string_view name, const math::Vec4& value) {
     const UniformMemberLayout* member = findMember(uniformLayout, name);
-    if (!member || !requireOneOf(*member, ShaderPropertyType::Vec4,
-                                 ShaderPropertyType::Color, name)) return;
+    if (!member ||
+        !requireOneOf(*member, ShaderPropertyType::Vec4, ShaderPropertyType::Color, name))
+        return;
     writeUniformValue(*this, *member, value);
     markChanged();
 }
 
 void Material::setBool(std::string_view name, bool value) {
     const UniformMemberLayout* member = findMember(uniformLayout, name);
-    if (!member || !requireType(*member, ShaderPropertyType::Boolean, name)) return;
+    if (!member || !requireType(*member, ShaderPropertyType::Boolean, name))
+        return;
     const std::uint32_t encoded = value ? 1U : 0U;
     writeUniformValue(*this, *member, encoded);
     markChanged();
@@ -370,8 +375,10 @@ void Material::setBool(std::string_view name, bool value) {
 void Material::setTexture(std::string_view name, std::string value) {
     const auto texture = textures.find(std::string{name});
     if (texture == textures.end()) {
-        Log::warn("Material", "Texture property does not exist: %.*s",
-                  static_cast<int>(name.size()), name.data());
+        Log::warn("Material",
+                  "Texture property does not exist: %.*s",
+                  static_cast<int>(name.size()),
+                  name.data());
         return;
     }
     texture->second = std::move(value);
@@ -413,8 +420,7 @@ void Material::setPropertyValue(std::string_view name, const ShaderValue& value)
             }
             return;
         }
-        case ShaderPropertyType::Texture2D:
-            break;
+        case ShaderPropertyType::Texture2D: break;
         }
     }
     if (const std::string* typed = requireValue<std::string>(value, name)) {
@@ -436,8 +442,7 @@ void Material::markChanged() {
 
 MaterialHandle MaterialManager::load(const VirtualPath& materialPath) {
     if (!materialPath.valid()) {
-        Log::error("MaterialManager", "Invalid Material path: %s",
-                   materialPath.string().c_str());
+        Log::error("MaterialManager", "Invalid Material path: %s", materialPath.string().c_str());
         return {};
     }
     if (const MaterialHandle existing = handleFor(materialPath); existing) {
@@ -450,7 +455,8 @@ MaterialHandle MaterialManager::load(const VirtualPath& materialPath) {
         return {};
     }
     const ShaderHandle shader = SHADER_MANAGER.load(asset->shader);
-    if (!shader) return {};
+    if (!shader)
+        return {};
     return insert(asset->instantiate(shader));
 }
 
@@ -462,8 +468,7 @@ bool MaterialManager::validate(const Material& material) const {
     return true;
 }
 
-void MaterialManager::setShader(MaterialHandle handle,
-                                const VirtualPath& shaderPath) {
+void MaterialManager::setShader(MaterialHandle handle, const VirtualPath& shaderPath) {
     Material* material = find(handle);
     if (!material) {
         Log::error("MaterialManager", "Cannot set Shader on an invalid Material");
@@ -471,8 +476,7 @@ void MaterialManager::setShader(MaterialHandle handle,
     }
     const ShaderHandle shader = SHADER_MANAGER.load(shaderPath);
     if (!shader) {
-        Log::error("MaterialManager", "Shader failed to load: %s",
-                   shaderPath.string().c_str());
+        Log::error("MaterialManager", "Shader failed to load: %s", shaderPath.string().c_str());
         return;
     }
     material->setShader(shader);

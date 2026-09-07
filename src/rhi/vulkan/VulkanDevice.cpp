@@ -28,8 +28,9 @@ constexpr std::array kDeviceExtensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 void check(VkResult result, const char* operation) {
     if (result != VK_SUCCESS) {
-        Log::fatal("VulkanDevice", std::string(operation) + " failed (VkResult " +
-                                       std::to_string(static_cast<int>(result)) + ")");
+        Log::fatal("VulkanDevice",
+                   std::string(operation) + " failed (VkResult " +
+                       std::to_string(static_cast<int>(result)) + ")");
     }
 }
 
@@ -333,7 +334,8 @@ void VulkanDevice::destroyBuffer(BufferHandle handle) {
     ++slot.generation;
 }
 
-void VulkanDevice::uploadBuffer(BufferHandle destination, std::span<const std::byte> data,
+void VulkanDevice::uploadBuffer(BufferHandle destination,
+                                std::span<const std::byte> data,
                                 std::uint64_t offset) {
     Buffer& target = requireBuffer(destination);
     if (data.empty() || offset > target.size() || data.size_bytes() > target.size() - offset) {
@@ -345,8 +347,11 @@ void VulkanDevice::uploadBuffer(BufferHandle destination, std::span<const std::b
         return;
     }
 
-    Buffer staging{allocator_->handle(), data.size_bytes(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                   VMA_MEMORY_USAGE_AUTO, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT};
+    Buffer staging{allocator_->handle(),
+                   data.size_bytes(),
+                   VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                   VMA_MEMORY_USAGE_AUTO,
+                   VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT};
     staging.upload(data);
 
     VkCommandBufferAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
@@ -402,9 +407,11 @@ GraphicsPipelineHandle VulkanDevice::createGraphicsPipeline(const GraphicsPipeli
         layouts.push_back(resolveBindGroupLayout(layout));
     }
     auto slot = reusableSlot(pipelines_);
-    slot->resource =
-        std::make_unique<VulkanGraphicsPipeline>(device_, desc, resolveShader(desc.vertexShader),
-                                                 resolveShader(desc.fragmentShader), layouts);
+    slot->resource = std::make_unique<VulkanGraphicsPipeline>(device_,
+                                                              desc,
+                                                              resolveShader(desc.vertexShader),
+                                                              resolveShader(desc.fragmentShader),
+                                                              layouts);
     return {static_cast<std::uint32_t>(std::distance(pipelines_.begin(), slot)), slot->generation};
 }
 
@@ -472,8 +479,8 @@ BindGroupHandle VulkanDevice::createBindGroup(const BindGroupDesc& desc) {
         write.pBufferInfo = &bufferInfos.back();
         writes.push_back(write);
     }
-    vkUpdateDescriptorSets(device_, static_cast<std::uint32_t>(writes.size()), writes.data(), 0,
-                           nullptr);
+    vkUpdateDescriptorSets(
+        device_, static_cast<std::uint32_t>(writes.size()), writes.data(), 0, nullptr);
     auto slot = reusableSlot(bindGroups_);
     slot->resource = descriptor;
     return {static_cast<std::uint32_t>(std::distance(bindGroups_.begin(), slot)), slot->generation};

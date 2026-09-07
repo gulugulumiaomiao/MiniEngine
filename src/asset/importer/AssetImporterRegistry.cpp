@@ -4,8 +4,7 @@
 
 namespace engine {
 
-bool AssetImporterRegistry::registerImporter(
-    std::unique_ptr<IAssetImporter> importer) {
+bool AssetImporterRegistry::registerImporter(std::unique_ptr<IAssetImporter> importer) {
     if (!importer || importer->assetType() == AssetType::Unknown) {
         Log::error("AssetImporterRegistry", "Cannot register invalid Importer");
         return false;
@@ -14,8 +13,7 @@ bool AssetImporterRegistry::registerImporter(
     const auto [entry, inserted] = importers_.emplace(type, std::move(importer));
     (void)entry;
     if (!inserted) {
-        Log::error("AssetImporterRegistry", "Importer already registered: %s",
-                   assetTypeName(type));
+        Log::error("AssetImporterRegistry", "Importer already registered: %s", assetTypeName(type));
     }
     return inserted;
 }

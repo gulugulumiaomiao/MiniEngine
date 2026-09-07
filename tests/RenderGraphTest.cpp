@@ -19,9 +19,10 @@ public:
     void setScissor(const engine::rhi::Rect&) override {}
     void bindPipeline(engine::rhi::GraphicsPipelineHandle) override {}
     void bindVertexBuffer(std::uint32_t, engine::rhi::BufferHandle, std::uint64_t) override {}
-    void bindIndexBuffer(engine::rhi::BufferHandle, std::uint64_t,
-                         engine::rhi::IndexFormat) override {}
-    void bindGroup(std::uint32_t, engine::rhi::BindGroupHandle,
+    void
+    bindIndexBuffer(engine::rhi::BufferHandle, std::uint64_t, engine::rhi::IndexFormat) override {}
+    void bindGroup(std::uint32_t,
+                   engine::rhi::BindGroupHandle,
                    std::span<const std::uint32_t>) override {}
     void draw(const engine::rhi::DrawArguments&) override {}
     void drawIndexed(const engine::rhi::DrawIndexedArguments&) override {}
@@ -42,14 +43,17 @@ int main() {
     const rhi::TextureViewHandle view{3, 7};
 
     RenderGraph graph;
-    graph.importTexture({texture, rhi::ResourceState::Undefined,
-                         rhi::ResourceState::Present, rhi::TextureAspect::Color});
+    graph.importTexture({texture,
+                         rhi::ResourceState::Undefined,
+                         rhi::ResourceState::Present,
+                         rhi::TextureAspect::Color});
     rhi::RenderingInfo rendering;
     rendering.renderArea = {0, 0, 1280, 720};
     rendering.colorAttachments.push_back(
         {view, rhi::LoadOp::Clear, rhi::StoreOp::Store, {0.0F, 0.0F, 0.0F, 1.0F}});
     graph.addGraphicsPass(
-        "Forward", std::move(rendering),
+        "Forward",
+        std::move(rendering),
         {{texture, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment}},
         [](rhi::IGraphicsCommandEncoder&) {});
 
@@ -57,8 +61,7 @@ int main() {
     graph.execute(encoder);
 
     const std::vector<std::string> expectedEvents{
-        "label:Forward", "barriers:1", "beginRendering",
-        "endRendering", "endLabel", "barriers:1"};
+        "label:Forward", "barriers:1", "beginRendering", "endRendering", "endLabel", "barriers:1"};
     if (encoder.events != expectedEvents || encoder.recordedBarriers.size() != 2 ||
         encoder.recordedBarriers[0].before != rhi::ResourceState::Undefined ||
         encoder.recordedBarriers[0].after != rhi::ResourceState::ColorAttachment ||

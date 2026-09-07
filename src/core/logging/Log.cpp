@@ -19,16 +19,11 @@ namespace {
 
 constexpr std::string_view color(LogLevel level) {
     switch (level) {
-    case LogLevel::Info:
-        return "\x1b[32m";
-    case LogLevel::Debug:
-        return "\x1b[36m";
-    case LogLevel::Warn:
-        return "\x1b[33m";
-    case LogLevel::Error:
-        return "\x1b[31m";
-    case LogLevel::Fatal:
-        return "\x1b[1;35m";
+    case LogLevel::Info: return "\x1b[32m";
+    case LogLevel::Debug: return "\x1b[36m";
+    case LogLevel::Warn: return "\x1b[33m";
+    case LogLevel::Error: return "\x1b[31m";
+    case LogLevel::Fatal: return "\x1b[1;35m";
     }
     return "";
 }
@@ -80,11 +75,9 @@ void Log::write(LogLevel level, std::string_view source, std::string_view messag
     }();
     (void)ansiEnabled;
     std::scoped_lock lock{logMutex()};
-    std::ostream& output = level == LogLevel::Info || level == LogLevel::Debug
-                               ? std::cout
-                               : std::cerr;
-    output << color(level) << '[' << source << "]: \"" << message
-           << "\"\x1b[0m\n";
+    std::ostream& output =
+        level == LogLevel::Info || level == LogLevel::Debug ? std::cout : std::cerr;
+    output << color(level) << '[' << source << "]: \"" << message << "\"\x1b[0m\n";
     output.flush();
 }
 

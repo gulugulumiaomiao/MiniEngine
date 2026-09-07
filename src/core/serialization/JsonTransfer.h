@@ -35,8 +35,7 @@ private:
     bool transferFloat(std::string_view name, float& value) override;
     bool transferDouble(std::string_view name, double& value) override;
     bool transferString(std::string_view name, std::string& value) override;
-    bool transferBytes(std::string_view name,
-                       std::vector<std::byte>& value) override;
+    bool transferBytes(std::string_view name, std::vector<std::byte>& value) override;
 
     struct Impl;
     std::unique_ptr<Impl> impl_;
@@ -69,8 +68,7 @@ private:
     bool transferFloat(std::string_view name, float& value) override;
     bool transferDouble(std::string_view name, double& value) override;
     bool transferString(std::string_view name, std::string& value) override;
-    bool transferBytes(std::string_view name,
-                       std::vector<std::byte>& value) override;
+    bool transferBytes(std::string_view name, std::vector<std::byte>& value) override;
 
     struct Impl;
     std::unique_ptr<Impl> impl_;

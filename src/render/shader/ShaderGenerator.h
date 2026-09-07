@@ -35,20 +35,25 @@ struct GeneratedPassStages {
     std::string fragmentGlsl;
 };
 
-[[nodiscard]] std::shared_ptr<std::string> generateShaderStage(
-    const ShaderAsset& shader, const ShaderPassDesc& pass,
-    const UniformBlockLayout& layout, ShaderStage stage,
-    std::string_view source,
-    const ShaderGenerationOptions& options = {});
+[[nodiscard]] std::shared_ptr<std::string>
+generateShaderStage(const ShaderAsset& shader,
+                    const ShaderPassDesc& pass,
+                    const UniformBlockLayout& layout,
+                    ShaderStage stage,
+                    std::string_view source,
+                    const ShaderGenerationOptions& options = {});
 
-[[nodiscard]] std::shared_ptr<GeneratedMaterialDeclarations> generateMaterialDeclarations(
-    const ShaderAsset& shader, const UniformBlockLayout& layout,
-    const ShaderGenerationOptions& options = {});
+[[nodiscard]] std::shared_ptr<GeneratedMaterialDeclarations>
+generateMaterialDeclarations(const ShaderAsset& shader,
+                             const UniformBlockLayout& layout,
+                             const ShaderGenerationOptions& options = {});
 
-[[nodiscard]] std::shared_ptr<GeneratedPassStages> generatePassStages(
-    const ShaderAsset& shader, const ShaderPassDesc& pass,
-    const UniformBlockLayout& layout, std::string_view vertexSource,
-    std::string_view fragmentSource,
-    const ShaderGenerationOptions& options = {});
+[[nodiscard]] std::shared_ptr<GeneratedPassStages>
+generatePassStages(const ShaderAsset& shader,
+                   const ShaderPassDesc& pass,
+                   const UniformBlockLayout& layout,
+                   std::string_view vertexSource,
+                   std::string_view fragmentSource,
+                   const ShaderGenerationOptions& options = {});
 
 } // namespace engine::shader_compiler

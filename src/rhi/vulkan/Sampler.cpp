@@ -1,7 +1,6 @@
 #include "rhi/vulkan/Sampler.h"
 #include "core/logging/Log.h"
 
-
 namespace engine {
 
 Sampler::Sampler(VkDevice device, VkFilter filter) : device_(device) {

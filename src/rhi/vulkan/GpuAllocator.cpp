@@ -1,7 +1,6 @@
 #include "rhi/vulkan/GpuAllocator.h"
 #include "core/logging/Log.h"
 
-
 namespace engine {
 
 GpuAllocator::GpuAllocator(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device) {

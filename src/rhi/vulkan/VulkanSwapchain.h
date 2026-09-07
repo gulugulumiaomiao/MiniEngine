@@ -15,7 +15,7 @@ namespace engine::rhi::vulkan {
 class VulkanDevice;
 
 class VulkanSwapchain final : public ISwapchain, private IVulkanResourceResolver {
-    public:
+public:
     VulkanSwapchain(VulkanDevice& device, const SwapchainDesc& desc);
     ~VulkanSwapchain() override;
 
@@ -35,7 +35,7 @@ class VulkanSwapchain final : public ISwapchain, private IVulkanResourceResolver
     [[nodiscard]] std::uint32_t height() const override { return extent_.height; }
     [[nodiscard]] std::uint32_t frameIndex() const override { return currentFrame_; }
 
-    private:
+private:
     static constexpr std::uint32_t kFramesInFlight = 2;
 
     struct Support {

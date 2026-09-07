@@ -27,18 +27,17 @@ public:
     std::vector<SceneNodeAsset> nodes;
 
     [[nodiscard]] bool transfer(Transfer& archive) override;
-    [[nodiscard]] std::unique_ptr<Scene> instantiate(
-        const SceneInstantiationContext& context) const;
+    [[nodiscard]] std::unique_ptr<Scene>
+    instantiate(const SceneInstantiationContext& context) const;
 };
 
 namespace detail {
 
-[[nodiscard]] std::shared_ptr<SceneAsset> parseSceneAsset(
-    const VirtualPath& path, std::string_view source);
+[[nodiscard]] std::shared_ptr<SceneAsset> parseSceneAsset(const VirtualPath& path,
+                                                          std::string_view source);
 
 } // namespace detail
 
-[[nodiscard]] bool validateSceneAsset(
-    const SceneAsset& asset, const VirtualPath& scenePath);
+[[nodiscard]] bool validateSceneAsset(const SceneAsset& asset, const VirtualPath& scenePath);
 
 } // namespace engine

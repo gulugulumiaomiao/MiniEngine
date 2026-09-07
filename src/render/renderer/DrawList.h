@@ -20,8 +20,7 @@ struct SceneDrawData {
     math::Vec4 pointLightPositionRange{0.0F};
     math::Vec4 pointLightColorIntensity{0.0F};
 };
-static_assert(sizeof(SceneDrawData) == 144,
-              "SceneDrawData must match the std140 shader layout");
+static_assert(sizeof(SceneDrawData) == 144, "SceneDrawData must match the std140 shader layout");
 static_assert(offsetof(SceneDrawData, cameraPosition) == 64);
 static_assert(offsetof(SceneDrawData, directionalLightDirection) == 80);
 static_assert(offsetof(SceneDrawData, directionalLightColorIntensity) == 96);
@@ -31,8 +30,7 @@ static_assert(offsetof(SceneDrawData, pointLightColorIntensity) == 128);
 struct ObjectDrawData {
     math::Mat44 transform;
 };
-static_assert(sizeof(ObjectDrawData) == 64,
-              "ObjectDrawData must match the std430 shader layout");
+static_assert(sizeof(ObjectDrawData) == 64, "ObjectDrawData must match the std430 shader layout");
 
 struct DrawItem {
     const ShaderPass* shaderPass{};

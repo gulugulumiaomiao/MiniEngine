@@ -17,11 +17,11 @@ public:
     virtual void setViewport(const Viewport& viewport) = 0;
     virtual void setScissor(const Rect& scissor) = 0;
     virtual void bindPipeline(GraphicsPipelineHandle pipeline) = 0;
-    virtual void bindVertexBuffer(std::uint32_t slot, BufferHandle buffer,
-                                  std::uint64_t offset = 0) = 0;
-    virtual void bindIndexBuffer(BufferHandle buffer, std::uint64_t offset,
-                                 IndexFormat format) = 0;
-    virtual void bindGroup(std::uint32_t set, BindGroupHandle group,
+    virtual void
+    bindVertexBuffer(std::uint32_t slot, BufferHandle buffer, std::uint64_t offset = 0) = 0;
+    virtual void bindIndexBuffer(BufferHandle buffer, std::uint64_t offset, IndexFormat format) = 0;
+    virtual void bindGroup(std::uint32_t set,
+                           BindGroupHandle group,
                            std::span<const std::uint32_t> dynamicOffsets = {}) = 0;
     virtual void draw(const DrawArguments& arguments) = 0;
     virtual void drawIndexed(const DrawIndexedArguments& arguments) = 0;

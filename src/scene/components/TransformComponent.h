@@ -19,12 +19,8 @@ struct TransformComponentAsset final : public Transferable {
 
 class TransformComponent final : public Component {
 public:
-    [[nodiscard]] const math::Vec3& localPosition() const {
-        return localPosition_;
-    }
-    [[nodiscard]] const math::Quat& localRotation() const {
-        return localRotation_;
-    }
+    [[nodiscard]] const math::Vec3& localPosition() const { return localPosition_; }
+    [[nodiscard]] const math::Quat& localRotation() const { return localRotation_; }
     [[nodiscard]] const math::Vec3& localScale() const { return localScale_; }
 
     void setLocalPosition(const math::Vec3& position);
@@ -41,8 +37,7 @@ private:
 
     void markLocalDirty();
     void markWorldDirty() { worldDirty_ = true; }
-    [[nodiscard]] bool updateWorld(const math::Mat44& parentWorld,
-                                   bool parentChanged);
+    [[nodiscard]] bool updateWorld(const math::Mat44& parentWorld, bool parentChanged);
 
     math::Vec3 localPosition_{0.0F};
     math::Quat localRotation_{1.0F, 0.0F, 0.0F, 0.0F};

@@ -7,10 +7,8 @@
 namespace engine {
 
 bool SceneNodeAsset::transfer(Transfer& archive) {
-    return archive.transfer("id", id) &&
-           archive.transfer("parent", parent) &&
-           archive.transfer("name", name) &&
-           archive.transfer("active", active) &&
+    return archive.transfer("id", id) && archive.transfer("parent", parent) &&
+           archive.transfer("name", name) && archive.transfer("active", active) &&
            archive.transfer("components", components);
 }
 
@@ -23,7 +21,8 @@ void Node::initialize(NodeHandle handle) {
 }
 
 void Node::setActive(bool active) {
-    if (activeSelf_ == active) return;
+    if (activeSelf_ == active)
+        return;
     activeSelf_ = active;
     const Node* parent = scene_->findNode(parent_);
     refreshActiveSubtree(!parent || parent->activeInHierarchy_);
@@ -34,18 +33,19 @@ bool Node::setParent(NodeHandle parentHandle) {
         Log::warn("Node", "Scene root cannot be reparented");
         return false;
     }
-    if (!parentHandle) parentHandle = scene_->rootHandle();
+    if (!parentHandle)
+        parentHandle = scene_->rootHandle();
     Node* parent = scene_->findNode(parentHandle);
     if (!parent) {
-        Log::warn("Node", "Cannot parent node %s to an invalid node",
-                  name_.c_str());
+        Log::warn("Node", "Cannot parent node %s to an invalid node", name_.c_str());
         return false;
     }
     if (parentHandle == handle_ || wouldCreateCycle(parentHandle)) {
         Log::warn("Node", "Cannot create a cyclic node hierarchy");
         return false;
     }
-    if (parent_ == parentHandle) return true;
+    if (parent_ == parentHandle)
+        return true;
 
     if (Node* previousParent = scene_->findNode(parent_)) {
         std::erase(previousParent->children_, handle_);
@@ -74,13 +74,16 @@ void Node::markTransformDirty() {
     }
 }
 
-TransformComponent& Node::transform() { return *transform_; }
+TransformComponent& Node::transform() {
+    return *transform_;
+}
 
-const TransformComponent& Node::transform() const { return *transform_; }
+const TransformComponent& Node::transform() const {
+    return *transform_;
+}
 
 void Node::detachComponents() {
-    for (auto iterator = components_.rbegin(); iterator != components_.rend();
-         ++iterator) {
+    for (auto iterator = components_.rbegin(); iterator != components_.rend(); ++iterator) {
         (*iterator)->detach();
     }
     components_.clear();
@@ -110,8 +113,7 @@ void Node::updateComponentsSubtree(float deltaTime) {
     }
 }
 
-void Node::updateTransformSubtree(const math::Mat44& parentWorld,
-                                  bool parentChanged) {
+void Node::updateTransformSubtree(const math::Mat44& parentWorld, bool parentChanged) {
     const bool changed = transform_->updateWorld(parentWorld, parentChanged);
     const math::Mat44& world = transform_->worldMatrix_;
     for (NodeHandle child : children_) {
@@ -124,7 +126,8 @@ void Node::updateTransformSubtree(const math::Mat44& parentWorld,
 bool Node::wouldCreateCycle(NodeHandle parentHandle) const {
     const Node* candidate = scene_->findNode(parentHandle);
     while (candidate) {
-        if (candidate->handle_ == handle_) return true;
+        if (candidate->handle_ == handle_)
+            return true;
         candidate = scene_->findNode(candidate->parent_);
     }
     return false;

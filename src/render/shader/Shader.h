@@ -46,21 +46,17 @@ public:
     ShaderKeywordSchema() = default;
     explicit ShaderKeywordSchema(std::vector<std::string> keywords);
 
-    [[nodiscard]] const std::vector<std::string>& keywords() const {
-        return keywords_;
-    }
+    [[nodiscard]] const std::vector<std::string>& keywords() const { return keywords_; }
     [[nodiscard]] bool declares(std::string_view keyword) const;
-    [[nodiscard]] ShaderVariantKey makeKey(
-        std::span<const std::string> enabledKeywords,
-        std::uint32_t meshFeatureBits = 0,
-        std::uint32_t platformFeatureBits = 0) const;
+    [[nodiscard]] ShaderVariantKey makeKey(std::span<const std::string> enabledKeywords,
+                                           std::uint32_t meshFeatureBits = 0,
+                                           std::uint32_t platformFeatureBits = 0) const;
 
 private:
     std::vector<std::string> keywords_;
 };
 
-using ShaderValue =
-    std::variant<float, bool, math::Vec2, math::Vec3, math::Vec4, std::string>;
+using ShaderValue = std::variant<float, bool, math::Vec2, math::Vec3, math::Vec4, std::string>;
 
 struct ShaderPropertyDesc {
     std::string name;
@@ -147,8 +143,8 @@ public:
 
 namespace detail {
 
-[[nodiscard]] std::shared_ptr<ShaderAsset> parseShaderAsset(
-    const VirtualPath& path, std::string_view source);
+[[nodiscard]] std::shared_ptr<ShaderAsset> parseShaderAsset(const VirtualPath& path,
+                                                            std::string_view source);
 } // namespace detail
 
 struct UniformMemberLayout {
@@ -207,12 +203,11 @@ struct SpirvReflection {
     std::vector<ShaderDescriptorBinding> descriptors;
 };
 
-[[nodiscard]] std::shared_ptr<SpirvReflection> reflectSpirv(
-    const VirtualPath& path);
-[[nodiscard]] bool validateSpirvReflection(
-    const ShaderAsset& shader, const ShaderPassDesc& pass,
-    const VirtualPath& vertexSpirv,
-    const VirtualPath& fragmentSpirv);
+[[nodiscard]] std::shared_ptr<SpirvReflection> reflectSpirv(const VirtualPath& path);
+[[nodiscard]] bool validateSpirvReflection(const ShaderAsset& shader,
+                                           const ShaderPassDesc& pass,
+                                           const VirtualPath& vertexSpirv,
+                                           const VirtualPath& fragmentSpirv);
 
 class ShaderPass final {
 public:
@@ -224,21 +219,16 @@ public:
     [[nodiscard]] const std::vector<ShaderInterfaceVariable>& vertexInput() const {
         return vertexInput_;
     }
-    [[nodiscard]] const std::vector<ShaderInterfaceVariable>& varyings() const {
-        return varyings_;
-    }
+    [[nodiscard]] const std::vector<ShaderInterfaceVariable>& varyings() const { return varyings_; }
     [[nodiscard]] const std::vector<ShaderInterfaceVariable>& fragmentOutputs() const {
         return fragmentOutputs_;
     }
     [[nodiscard]] const RenderStateDesc& renderState() const { return renderState_; }
     [[nodiscard]] const std::vector<std::string>& features() const { return features_; }
-    [[nodiscard]] const ShaderKeywordSchema& keywordSchema() const {
-        return keywordSchema_;
-    }
-    [[nodiscard]] ShaderVariantKey variantKey(
-        std::span<const std::string> materialKeywords,
-        std::uint32_t meshFeatureBits = 0,
-        std::uint32_t platformFeatureBits = 0) const;
+    [[nodiscard]] const ShaderKeywordSchema& keywordSchema() const { return keywordSchema_; }
+    [[nodiscard]] ShaderVariantKey variantKey(std::span<const std::string> materialKeywords,
+                                              std::uint32_t meshFeatureBits = 0,
+                                              std::uint32_t platformFeatureBits = 0) const;
 
 private:
     std::string name_;
@@ -277,16 +267,12 @@ public:
 
     [[nodiscard]] const VirtualPath& assetPath() const { return assetPath_; }
     [[nodiscard]] const std::string& name() const { return name_; }
-    [[nodiscard]] const std::vector<ShaderPropertyDesc>& properties() const {
-        return properties_;
-    }
+    [[nodiscard]] const std::vector<ShaderPropertyDesc>& properties() const { return properties_; }
     [[nodiscard]] const UniformBlockLayout& uniformBlockLayout() const {
         return uniformBlockLayout_;
     }
-    [[nodiscard]] const SubShader* selectSubShader(
-        std::string_view renderPipeline) const;
-    [[nodiscard]] const SubShader& requireSubShader(
-        std::string_view renderPipeline) const;
+    [[nodiscard]] const SubShader* selectSubShader(std::string_view renderPipeline) const;
+    [[nodiscard]] const SubShader& requireSubShader(std::string_view renderPipeline) const;
     [[nodiscard]] const SubShader& defaultSubShader() const;
     [[nodiscard]] bool declaresKeyword(std::string_view keyword) const;
     [[nodiscard]] std::uint64_t revision() const { return revision_; }
@@ -312,8 +298,7 @@ private:
     friend class Singleton<ShaderManager>;
     ShaderManager() = default;
 
-    [[nodiscard]] const VirtualPath& pathOf(
-        const Shader& shader) const override {
+    [[nodiscard]] const VirtualPath& pathOf(const Shader& shader) const override {
         return shader.assetPath();
     }
 };

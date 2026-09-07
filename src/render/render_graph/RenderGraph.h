@@ -26,8 +26,10 @@ public:
     };
 
     void importTexture(ImportedTexture texture);
-    void addGraphicsPass(std::string name, rhi::RenderingInfo rendering,
-                         std::vector<ResourceUsage> resources, ExecuteCallback execute);
+    void addGraphicsPass(std::string name,
+                         rhi::RenderingInfo rendering,
+                         std::vector<ResourceUsage> resources,
+                         ExecuteCallback execute);
     void execute(rhi::IGraphicsCommandEncoder& encoder) const;
 
 private:

@@ -12,7 +12,6 @@ protected:
     void onStart() override;
     void onUpdate(float deltaTime) override;
     void onStop() override;
-
 };
 
 } // namespace engine

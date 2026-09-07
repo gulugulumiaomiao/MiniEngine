@@ -6,8 +6,12 @@ namespace engine {
 
 class Image final {
 public:
-    Image(VmaAllocator allocator, VkDevice device, VkExtent3D extent, VkFormat format,
-          VkImageUsageFlags usage, VkImageAspectFlags aspectMask);
+    Image(VmaAllocator allocator,
+          VkDevice device,
+          VkExtent3D extent,
+          VkFormat format,
+          VkImageUsageFlags usage,
+          VkImageAspectFlags aspectMask);
     ~Image();
 
     Image(const Image&) = delete;

@@ -19,16 +19,13 @@ int main() {
 
     const AssetId id = AssetId::generate();
     const auto parsedId = AssetId::parse(id.toString());
-    if (!id.valid() || !parsedId || *parsedId != id ||
-        AssetId::parse("not-an-asset-id")) {
+    if (!id.valid() || !parsedId || *parsedId != id || AssetId::parse("not-an-asset-id")) {
         return 1;
     }
 
-    const auto unique =
-        std::chrono::steady_clock::now().time_since_epoch().count();
-    const std::filesystem::path root =
-        std::filesystem::temp_directory_path() /
-        ("mini-vulkan-asset-test-" + std::to_string(unique));
+    const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
+    const std::filesystem::path root = std::filesystem::temp_directory_path() /
+                                       ("mini-vulkan-asset-test-" + std::to_string(unique));
     const std::filesystem::path assetRoot = root / "assets";
     const std::filesystem::path libraryRoot = root / "library";
     std::error_code error;
@@ -41,8 +38,7 @@ int main() {
 
     const VirtualPath shaderPath{"asset://shaders/test.shader.json"};
     const VirtualPath materialPath{"asset://materials/test.material.json"};
-    if (!FILE_SYSTEM.writeText(shaderPath, "{}") ||
-        !FILE_SYSTEM.writeText(materialPath, "{}") ||
+    if (!FILE_SYSTEM.writeText(shaderPath, "{}") || !FILE_SYSTEM.writeText(materialPath, "{}") ||
         inferAssetType(shaderPath) != AssetType::Shader ||
         inferAssetType(materialPath) != AssetType::Material) {
         return 3;
@@ -50,8 +46,7 @@ int main() {
 
     const auto shaderMeta = createAssetMeta(shaderPath);
     const auto materialMeta = createAssetMeta(materialPath);
-    if (!shaderMeta || !materialMeta ||
-        shaderMeta->assetType != AssetType::Shader ||
+    if (!shaderMeta || !materialMeta || shaderMeta->assetType != AssetType::Shader ||
         materialMeta->assetType != AssetType::Material) {
         return 4;
     }
@@ -85,8 +80,8 @@ int main() {
     materialRecord.artifactPath = database.artifactPath(materialMeta->assetId);
     materialRecord.importerVersion = 1;
     materialRecord.dependencies.push_back(shaderPath);
-    if (!database.addOrUpdate(shaderRecord) ||
-        !database.addOrUpdate(materialRecord) || !database.save()) {
+    if (!database.addOrUpdate(shaderRecord) || !database.addOrUpdate(materialRecord) ||
+        !database.save()) {
         return 7;
     }
     const auto found = database.findByPath(shaderPath);
@@ -102,8 +97,8 @@ int main() {
     const std::string testPayload{"shader payload"};
     std::vector<std::byte> payload(testPayload.size());
     std::memcpy(payload.data(), testPayload.data(), testPayload.size());
-    const AssetArtifact artifact{1, shaderMeta->assetId, AssetType::Shader,
-                                 shaderPath, std::move(payload)};
+    const AssetArtifact artifact{
+        1, shaderMeta->assetId, AssetType::Shader, shaderPath, std::move(payload)};
     const VirtualPath artifactPath = database.artifactPath(shaderMeta->assetId);
     if (!saveAssetArtifact(artifactPath, artifact)) {
         return 10;

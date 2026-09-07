@@ -23,7 +23,7 @@ namespace rhi::vulkan {
 class VulkanGraphicsPipeline;
 
 class VulkanDevice final : public IDevice, public IVulkanResourceResolver {
-    public:
+public:
     VulkanDevice(void* nativeInstance, void* nativeWindow);
     ~VulkanDevice() override;
 
@@ -32,7 +32,8 @@ class VulkanDevice final : public IDevice, public IVulkanResourceResolver {
 
     [[nodiscard]] BufferHandle createBuffer(const BufferDesc& desc) override;
     void destroyBuffer(BufferHandle handle) override;
-    void uploadBuffer(BufferHandle destination, std::span<const std::byte> data,
+    void uploadBuffer(BufferHandle destination,
+                      std::span<const std::byte> data,
                       std::uint64_t offset = 0) override;
 
     [[nodiscard]] ShaderHandle createShader(const ShaderDesc& desc) override;
@@ -69,7 +70,7 @@ class VulkanDevice final : public IDevice, public IVulkanResourceResolver {
     [[nodiscard]] ResolvedPipeline resolvePipeline(GraphicsPipelineHandle handle) const override;
     [[nodiscard]] VkDescriptorSet resolveBindGroup(BindGroupHandle handle) const override;
 
-    private:
+private:
     struct QueueFamilies {
         std::uint32_t graphics{};
         std::uint32_t present{};

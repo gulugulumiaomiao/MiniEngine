@@ -19,19 +19,16 @@ constexpr std::uint16_t kMeshVersion = 3;
 constexpr std::uint16_t kMinimumMeshVersion = 2;
 
 bool fail(std::string_view message) {
-    Log::error("Mesh", "%.*s", static_cast<int>(message.size()),
-               message.data());
+    Log::error("Mesh", "%.*s", static_cast<int>(message.size()), message.data());
     return false;
 }
 
 bool valid(VertexSemanticType value) {
-    return value >= VertexSemanticType::Position &&
-           value <= VertexSemanticType::Custom;
+    return value >= VertexSemanticType::Position && value <= VertexSemanticType::Custom;
 }
 
 bool valid(VertexInputRate value) {
-    return value == VertexInputRate::Vertex ||
-           value == VertexInputRate::Instance;
+    return value == VertexInputRate::Vertex || value == VertexInputRate::Instance;
 }
 
 bool valid(IndexType value) {
@@ -43,12 +40,10 @@ bool valid(MeshUsage value) {
 }
 
 bool valid(MeshTopology value) {
-    return value == MeshTopology::TriangleList ||
-           value == MeshTopology::LineList;
+    return value == MeshTopology::TriangleList || value == MeshTopology::LineList;
 }
 
-template <typename Value>
-void appendHash(std::uint64_t& hash, Value value) {
+template <typename Value> void appendHash(std::uint64_t& hash, Value value) {
     const auto bytes = std::as_bytes(std::span{&value, 1});
     for (const std::byte byte : bytes) {
         hash ^= std::to_integer<std::uint8_t>(byte);
@@ -63,32 +58,26 @@ bool VertexSemantic::transfer(Transfer& archive) {
 }
 
 bool VertexBinding::transfer(Transfer& archive) {
-    return archive.transfer("binding", binding) &&
-           archive.transfer("stride", stride) &&
+    return archive.transfer("binding", binding) && archive.transfer("stride", stride) &&
            archive.transfer("input_rate", inputRate);
 }
 
 bool VertexAttribute::transfer(Transfer& archive) {
-    return archive.transfer("semantic", semantic) &&
-           archive.transfer("format", format) &&
-           archive.transfer("location", location) &&
-           archive.transfer("binding", binding) &&
+    return archive.transfer("semantic", semantic) && archive.transfer("format", format) &&
+           archive.transfer("location", location) && archive.transfer("binding", binding) &&
            archive.transfer("offset", offset);
 }
 
 bool VertexLayout::transfer(Transfer& archive) {
-    return archive.transfer("bindings", bindings) &&
-           archive.transfer("attributes", attributes);
+    return archive.transfer("bindings", bindings) && archive.transfer("attributes", attributes);
 }
 
 bool Aabb::transfer(Transfer& archive) {
-    return archive.transfer("minimum", minimum) &&
-           archive.transfer("maximum", maximum);
+    return archive.transfer("minimum", minimum) && archive.transfer("maximum", maximum);
 }
 
 bool BoundingSphere::transfer(Transfer& archive) {
-    return archive.transfer("center", center) &&
-           archive.transfer("radius", radius);
+    return archive.transfer("center", center) && archive.transfer("radius", radius);
 }
 
 bool MeshBounds::transfer(Transfer& archive) {
@@ -99,47 +88,40 @@ bool SubMesh::transfer(Transfer& archive) {
     return archive.transfer("first_index", firstIndex) &&
            archive.transfer("index_count", indexCount) &&
            archive.transfer("vertex_offset", vertexOffset) &&
-           archive.transfer("material_slot", materialSlot) &&
-           archive.transfer("bounds", bounds);
+           archive.transfer("material_slot", materialSlot) && archive.transfer("bounds", bounds);
 }
 
 bool MeshDesc::transfer(Transfer& archive) {
     return archive.transfer("debug_name", debugName) &&
            archive.transfer("vertex_layout", vertexLayout) &&
-           archive.transfer("index_type", indexType) &&
-           archive.transfer("usage", usage) &&
-           archive.transfer("topology", topology) &&
-           archive.transfer("sub_meshes", subMeshes) &&
-           archive.transfer("bounds", bounds) &&
-           archive.transfer("keep_cpu_copy", keepCpuCopy);
+           archive.transfer("index_type", indexType) && archive.transfer("usage", usage) &&
+           archive.transfer("topology", topology) && archive.transfer("sub_meshes", subMeshes) &&
+           archive.transfer("bounds", bounds) && archive.transfer("keep_cpu_copy", keepCpuCopy);
 }
 
 bool MeshBuildRecipe::transfer(Transfer& archive) {
     return archive.transfer("name", name) && archive.transfer("parts", parts) &&
            archive.transfer("vertex_layout", vertexLayout) &&
-           archive.transfer("index_policy", indexPolicy) &&
-           archive.transfer("usage", usage) &&
+           archive.transfer("index_policy", indexPolicy) && archive.transfer("usage", usage) &&
            archive.transfer("keep_cpu_copy", keepCpuCopy);
 }
 
 bool VertexStream::transfer(Transfer& archive) {
-    return archive.transfer("binding", binding) &&
-           archive.transfer("vertex_count", vertexCount) &&
+    return archive.transfer("binding", binding) && archive.transfer("vertex_count", vertexCount) &&
            archive.transfer("bytes", bytes);
 }
 
 bool MeshData::transfer(Transfer& archive) {
     return archive.transfer("vertex_streams", vertexStreams) &&
-           archive.transfer("indices", indices) &&
-           archive.transfer("index_count", indexCount);
+           archive.transfer("indices", indices) && archive.transfer("index_count", indexCount);
 }
 
 bool transferMeshAsset(Transfer& archive, MeshAsset& value) {
     std::uint32_t magic = kMeshMagic;
     std::uint16_t version = kMeshVersion;
     if (!archive.transfer("magic", magic) || magic != kMeshMagic ||
-        !archive.transfer("version", version) ||
-        version < kMinimumMeshVersion || version > kMeshVersion) {
+        !archive.transfer("version", version) || version < kMinimumMeshVersion ||
+        version > kMeshVersion) {
         return false;
     }
     if (version >= 3 && !archive.transfer("build_recipe", value.buildRecipe)) {
@@ -170,14 +152,12 @@ std::uint32_t indexTypeSize(IndexType type) {
 }
 
 const VertexBinding* VertexLayout::findBinding(std::uint32_t binding) const {
-    const auto found =
-        std::ranges::find(bindings, binding, &VertexBinding::binding);
+    const auto found = std::ranges::find(bindings, binding, &VertexBinding::binding);
     return found == bindings.end() ? nullptr : &*found;
 }
 
 const VertexAttribute* VertexLayout::find(VertexSemantic semantic) const {
-    const auto found =
-        std::ranges::find(attributes, semantic, &VertexAttribute::semantic);
+    const auto found = std::ranges::find(attributes, semantic, &VertexAttribute::semantic);
     return found == attributes.end() ? nullptr : &*found;
 }
 
@@ -211,8 +191,7 @@ bool VertexLayout::validate() const {
         if (!locations.insert(attribute.location).second) {
             return fail("VertexLayout contains a duplicate location");
         }
-        if (attribute.offset > binding->stride ||
-            formatSize > binding->stride - attribute.offset) {
+        if (attribute.offset > binding->stride || formatSize > binding->stride - attribute.offset) {
             return fail("Vertex attribute exceeds its binding stride");
         }
     }
@@ -222,11 +201,9 @@ bool VertexLayout::validate() const {
             if (attributes[left].binding != attributes[right].binding)
                 continue;
             const std::uint32_t leftBegin = attributes[left].offset;
-            const std::uint32_t leftEnd =
-                leftBegin + vertexFormatSize(attributes[left].format);
+            const std::uint32_t leftEnd = leftBegin + vertexFormatSize(attributes[left].format);
             const std::uint32_t rightBegin = attributes[right].offset;
-            const std::uint32_t rightEnd =
-                rightBegin + vertexFormatSize(attributes[right].format);
+            const std::uint32_t rightEnd = rightBegin + vertexFormatSize(attributes[right].format);
             if (leftBegin < rightEnd && rightBegin < leftEnd) {
                 return fail("Vertex attributes overlap in one binding");
             }
@@ -256,17 +233,16 @@ std::uint64_t VertexLayout::hash() const {
 }
 
 const VertexStream* MeshData::findVertexStream(std::uint32_t binding) const {
-    const auto found =
-        std::ranges::find(vertexStreams, binding, &VertexStream::binding);
+    const auto found = std::ranges::find(vertexStreams, binding, &VertexStream::binding);
     return found == vertexStreams.end() ? nullptr : &*found;
 }
 
 VertexStream* MeshData::findVertexStream(std::uint32_t binding) {
-    return const_cast<VertexStream*>(
-        std::as_const(*this).findVertexStream(binding));
+    return const_cast<VertexStream*>(std::as_const(*this).findVertexStream(binding));
 }
 
-bool MeshData::setVertexData(std::uint32_t binding, std::uint32_t vertexCount,
+bool MeshData::setVertexData(std::uint32_t binding,
+                             std::uint32_t vertexCount,
                              std::span<const std::byte> source) {
     if (vertexCount == 0 || source.empty()) {
         return fail("Vertex stream data must not be empty");
@@ -282,8 +258,7 @@ bool MeshData::setVertexData(std::uint32_t binding, std::uint32_t vertexCount,
     return true;
 }
 
-bool MeshData::setIndexData(std::uint32_t count,
-                            std::span<const std::byte> source) {
+bool MeshData::setIndexData(std::uint32_t count, std::span<const std::byte> source) {
     if (count == 0 || source.empty())
         return fail("Index data must not be empty");
     indexCount = count;
@@ -305,16 +280,13 @@ MeshBounds calculateBounds(std::span<const math::Vec3> positions) {
     const math::Vec3 center = (minimum + maximum) * 0.5F;
     float radiusSquared = 0.0F;
     for (const math::Vec3& position : positions) {
-        radiusSquared =
-            std::max(radiusSquared, math::lengthSquared(position - center));
+        radiusSquared = std::max(radiusSquared, math::lengthSquared(position - center));
     }
     return {{minimum, maximum}, {center, std::sqrt(radiusSquared)}};
 }
 
-Mesh::Mesh(MeshDesc desc, MeshData data,
-           std::optional<MeshBuildRecipe> buildRecipe)
-    : desc_(std::move(desc)), data_(std::move(data)),
-      buildRecipe_(std::move(buildRecipe)) {
+Mesh::Mesh(MeshDesc desc, MeshData data, std::optional<MeshBuildRecipe> buildRecipe)
+    : desc_(std::move(desc)), data_(std::move(data)), buildRecipe_(std::move(buildRecipe)) {
     if (!validateMesh(desc_, data_)) {
         desc_ = {};
         data_ = {};
@@ -324,14 +296,11 @@ Mesh::Mesh(MeshDesc desc, MeshData data,
 bool validateMesh(const MeshDesc& desc, const MeshData& data) {
     if (!desc.vertexLayout.validate())
         return false;
-    const VertexAttribute* position =
-        desc.vertexLayout.find({VertexSemanticType::Position, 0});
+    const VertexAttribute* position = desc.vertexLayout.find({VertexSemanticType::Position, 0});
     if (!position)
         return fail("VertexLayout requires POSITION0");
-    const VertexBinding* positionBinding =
-        desc.vertexLayout.findBinding(position->binding);
-    if (!positionBinding ||
-        positionBinding->inputRate != VertexInputRate::Vertex) {
+    const VertexBinding* positionBinding = desc.vertexLayout.findBinding(position->binding);
+    if (!positionBinding || positionBinding->inputRate != VertexInputRate::Vertex) {
         return fail("POSITION0 must use a per-vertex binding");
     }
     if (!valid(desc.indexType) || !valid(desc.usage) || !valid(desc.topology)) {
@@ -347,8 +316,7 @@ bool validateMesh(const MeshDesc& desc, const MeshData& data) {
         if (!stream || stream->vertexCount == 0) {
             return fail("MeshData is missing a vertex stream");
         }
-        const std::size_t expected =
-            static_cast<std::size_t>(binding.stride) * stream->vertexCount;
+        const std::size_t expected = static_cast<std::size_t>(binding.stride) * stream->vertexCount;
         if (stream->bytes.size() != expected) {
             return fail("Vertex stream byte size does not match its layout");
         }
@@ -364,8 +332,7 @@ bool validateMesh(const MeshDesc& desc, const MeshData& data) {
 
     const std::uint32_t indexSize = indexTypeSize(desc.indexType);
     if (data.indexCount == 0 || indexSize == 0 ||
-        data.indices.size() !=
-            static_cast<std::size_t>(indexSize) * data.indexCount) {
+        data.indices.size() != static_cast<std::size_t>(indexSize) * data.indexCount) {
         return fail("Index data does not match IndexType and indexCount");
     }
     if (desc.subMeshes.empty())
@@ -381,8 +348,7 @@ bool validateMesh(const MeshDesc& desc, const MeshData& data) {
             std::uint32_t vertexIndex{};
             if (desc.indexType == IndexType::UInt16) {
                 std::uint16_t value{};
-                std::memcpy(&value, data.indices.data() + index * sizeof(value),
-                            sizeof(value));
+                std::memcpy(&value, data.indices.data() + index * sizeof(value), sizeof(value));
                 vertexIndex = value;
             } else {
                 std::memcpy(&vertexIndex,
@@ -413,9 +379,8 @@ Mesh MeshAsset::instantiate() const {
 bool MeshAsset::transfer(Transfer& archive) {
     MeshAsset decoded;
     MeshAsset& target = archive.reading() ? decoded : *this;
-    if ((archive.writing() && !validateMesh(desc, meshData)) ||
-        !archive.beginObject({}) || !transferMeshAsset(archive, target) ||
-        !archive.endObject() ||
+    if ((archive.writing() && !validateMesh(desc, meshData)) || !archive.beginObject({}) ||
+        !transferMeshAsset(archive, target) || !archive.endObject() ||
         (archive.reading() && !validateMesh(decoded.desc, decoded.meshData))) {
         return fail("Invalid MeshAsset payload");
     }
@@ -427,31 +392,27 @@ bool MeshAsset::transfer(Transfer& archive) {
     return true;
 }
 
-bool Mesh::updateVertexData(std::uint32_t binding, std::uint32_t firstVertex,
+bool Mesh::updateVertexData(std::uint32_t binding,
+                            std::uint32_t firstVertex,
                             std::span<const std::byte> source) {
     if (desc_.usage == MeshUsage::Static) {
         return fail("Cannot update a Static Mesh");
     }
     const VertexBinding* layout = desc_.vertexLayout.findBinding(binding);
     VertexStream* stream = data_.findVertexStream(binding);
-    if (!layout || !stream || source.empty() ||
-        source.size() % layout->stride != 0) {
+    if (!layout || !stream || source.empty() || source.size() % layout->stride != 0) {
         return fail("Invalid vertex update");
     }
-    const std::size_t offset =
-        static_cast<std::size_t>(firstVertex) * layout->stride;
-    if (offset > stream->bytes.size() ||
-        source.size() > stream->bytes.size() - offset) {
+    const std::size_t offset = static_cast<std::size_t>(firstVertex) * layout->stride;
+    if (offset > stream->bytes.size() || source.size() > stream->bytes.size() - offset) {
         return fail("Vertex update exceeds the stream");
     }
-    std::ranges::copy(source, stream->bytes.begin() +
-                                  static_cast<std::ptrdiff_t>(offset));
+    std::ranges::copy(source, stream->bytes.begin() + static_cast<std::ptrdiff_t>(offset));
     markChanged();
     return true;
 }
 
-bool Mesh::updateIndexData(std::uint32_t firstIndex,
-                           std::span<const std::byte> source) {
+bool Mesh::updateIndexData(std::uint32_t firstIndex, std::span<const std::byte> source) {
     if (desc_.usage == MeshUsage::Static) {
         return fail("Cannot update a Static Mesh");
     }
@@ -460,12 +421,10 @@ bool Mesh::updateIndexData(std::uint32_t firstIndex,
         return fail("Invalid index update");
     }
     const std::size_t offset = static_cast<std::size_t>(firstIndex) * stride;
-    if (offset > data_.indices.size() ||
-        source.size() > data_.indices.size() - offset) {
+    if (offset > data_.indices.size() || source.size() > data_.indices.size() - offset) {
         return fail("Index update exceeds the index buffer");
     }
-    std::ranges::copy(source, data_.indices.begin() +
-                                  static_cast<std::ptrdiff_t>(offset));
+    std::ranges::copy(source, data_.indices.begin() + static_cast<std::ptrdiff_t>(offset));
     markChanged();
     return true;
 }
@@ -481,15 +440,13 @@ void Mesh::markChanged() {
 
 MeshHandle MeshManager::load(const VirtualPath& meshPath) {
     if (!meshPath.valid()) {
-        Log::error("MeshManager", "Invalid Mesh path: %s",
-                   meshPath.string().c_str());
+        Log::error("MeshManager", "Invalid Mesh path: %s", meshPath.string().c_str());
         return {};
     }
     if (const MeshHandle existing = handleFor(meshPath); existing) {
         return existing;
     }
-    const std::shared_ptr<MeshAsset> asset =
-        ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
+    const std::shared_ptr<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
     return asset ? insert(asset->instantiate()) : MeshHandle{};
 }
 
@@ -500,8 +457,8 @@ bool MeshManager::replace(MeshHandle handle, Mesh mesh) {
         return false;
     }
     if (current->assetPath() != mesh.assetPath() || !validate(mesh)) {
-        Log::error("MeshManager", "Replacement Mesh is invalid: %s",
-                   mesh.assetPath().string().c_str());
+        Log::error(
+            "MeshManager", "Replacement Mesh is invalid: %s", mesh.assetPath().string().c_str());
         return false;
     }
     if (current->version_ == std::numeric_limits<std::uint64_t>::max()) {
@@ -518,8 +475,7 @@ bool MeshManager::replace(const VirtualPath& meshPath) {
     const MeshHandle handle = handleFor(meshPath);
     if (!handle)
         return true;
-    const std::shared_ptr<MeshAsset> asset =
-        ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
+    const std::shared_ptr<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
     return asset && replace(handle, asset->instantiate());
 }
 

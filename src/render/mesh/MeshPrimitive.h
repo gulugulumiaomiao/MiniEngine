@@ -57,8 +57,7 @@ struct CylinderGeometry {
 };
 
 struct MeshPrimitive {
-    using Value = std::variant<PlaneGeometry, BoxGeometry, UvSphereGeometry,
-                               CylinderGeometry>;
+    using Value = std::variant<PlaneGeometry, BoxGeometry, UvSphereGeometry, CylinderGeometry>;
 
     Value value{PlaneGeometry{}};
 

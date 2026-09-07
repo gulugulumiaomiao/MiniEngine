@@ -14,20 +14,19 @@ FileWatcher::~FileWatcher() {
 
 bool FileWatcher::ignored(const VirtualPath& path) {
     const std::string name = path.filename();
-    return name.empty() || name.starts_with(".") || name.ends_with("~") ||
-           name.ends_with(".tmp") || name.ends_with(".swp") ||
-           name.ends_with(".part") || name.find(".tmp-") != std::string::npos;
+    return name.empty() || name.starts_with(".") || name.ends_with("~") || name.ends_with(".tmp") ||
+           name.ends_with(".swp") || name.ends_with(".part") ||
+           name.find(".tmp-") != std::string::npos;
 }
 
-std::unordered_map<std::string, FileWatcher::SnapshotEntry>
-FileWatcher::makeSnapshot() const {
+std::unordered_map<std::string, FileWatcher::SnapshotEntry> FileWatcher::makeSnapshot() const {
     std::unordered_map<std::string, SnapshotEntry> result;
     for (const VirtualPath& path : FILE_SYSTEM.listFiles(root_, true)) {
-        if (ignored(path)) continue;
+        if (ignored(path))
+            continue;
         const auto stat = FILE_SYSTEM.stat(path);
         if (stat && stat->isFile) {
-            result.emplace(path.string(),
-                           SnapshotEntry{path, stat->size, stat->modifiedTime});
+            result.emplace(path.string(), SnapshotEntry{path, stat->size, stat->modifiedTime});
         }
     }
     return result;
@@ -37,15 +36,14 @@ bool FileWatcher::start(const VirtualPath& root,
                         std::chrono::milliseconds debounce,
                         bool background) {
     stop();
-    if (!root.valid() || root.scheme() != "asset" ||
-        !FILE_SYSTEM.isDirectory(root)) {
-        Log::error("FileWatcher", "Only an asset:// directory can be watched: %s",
-                   root.string().c_str());
+    if (!root.valid() || root.scheme() != "asset" || !FILE_SYSTEM.isDirectory(root)) {
+        Log::error(
+            "FileWatcher", "Only an asset:// directory can be watched: %s", root.string().c_str());
         return false;
     }
     root_ = root;
-    debounce_ = std::clamp(debounce, std::chrono::milliseconds{100},
-                           std::chrono::milliseconds{300});
+    debounce_ =
+        std::clamp(debounce, std::chrono::milliseconds{100}, std::chrono::milliseconds{300});
     snapshot_ = makeSnapshot();
     {
         std::scoped_lock lock{mutex_};
@@ -57,7 +55,8 @@ bool FileWatcher::start(const VirtualPath& root,
         worker_ = std::jthread([this](std::stop_token stopToken) {
             while (!stopToken.stop_requested()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds{50});
-                if (!stopToken.stop_requested()) scanNow();
+                if (!stopToken.stop_requested())
+                    scanNow();
             }
         });
     }
@@ -82,8 +81,7 @@ bool FileWatcher::running() const {
 }
 
 void FileWatcher::enqueue(FileChangeEvent event) {
-    if (!event.path.valid() || event.path.scheme() != "asset" ||
-        ignored(event.path)) {
+    if (!event.path.valid() || event.path.scheme() != "asset" || ignored(event.path)) {
         return;
     }
     std::scoped_lock lock{mutex_};
@@ -93,7 +91,8 @@ void FileWatcher::enqueue(FileChangeEvent event) {
 void FileWatcher::scanNow() {
     {
         std::scoped_lock lock{mutex_};
-        if (!running_) return;
+        if (!running_)
+            return;
     }
     auto current = makeSnapshot();
     std::vector<SnapshotEntry> removed;
@@ -107,20 +106,19 @@ void FileWatcher::scanNow() {
                 removed.push_back(oldEntry);
             } else if (found->second.size != oldEntry.size ||
                        found->second.modifiedTime != oldEntry.modifiedTime) {
-                changes.push_back({FileChangeType::Modified,
-                                   found->second.path, {}});
+                changes.push_back({FileChangeType::Modified, found->second.path, {}});
             }
         }
         for (const auto& [key, newEntry] : current) {
-            if (!snapshot_.contains(key)) added.push_back(newEntry);
+            if (!snapshot_.contains(key))
+                added.push_back(newEntry);
         }
 
         std::vector<bool> usedAdded(added.size());
         for (const SnapshotEntry& oldEntry : removed) {
             auto match = added.end();
             for (auto candidate = added.begin(); candidate != added.end(); ++candidate) {
-                const std::size_t index =
-                    static_cast<std::size_t>(candidate - added.begin());
+                const std::size_t index = static_cast<std::size_t>(candidate - added.begin());
                 if (!usedAdded[index] && candidate->size == oldEntry.size &&
                     candidate->modifiedTime == oldEntry.modifiedTime) {
                     match = candidate;
@@ -129,8 +127,7 @@ void FileWatcher::scanNow() {
                 }
             }
             if (match != added.end()) {
-                changes.push_back({FileChangeType::Renamed, match->path,
-                                   oldEntry.path});
+                changes.push_back({FileChangeType::Renamed, match->path, oldEntry.path});
             } else {
                 changes.push_back({FileChangeType::Removed, oldEntry.path, {}});
             }
@@ -142,7 +139,8 @@ void FileWatcher::scanNow() {
         }
         snapshot_ = std::move(current);
     }
-    for (FileChangeEvent& change : changes) enqueue(std::move(change));
+    for (FileChangeEvent& change : changes)
+        enqueue(std::move(change));
 }
 
 std::vector<FileChangeEvent> FileWatcher::pollEvents() {
@@ -157,8 +155,7 @@ std::vector<FileChangeEvent> FileWatcher::pollEvents() {
             continue;
         }
         FileChangeEvent& previous = found->second.event;
-        if (previous.type == FileChangeType::Added &&
-            timed.event.type == FileChangeType::Removed) {
+        if (previous.type == FileChangeType::Added && timed.event.type == FileChangeType::Removed) {
             pending_.erase(found);
             continue;
         }

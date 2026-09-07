@@ -18,16 +18,11 @@ enum class AssetType {
 
 [[nodiscard]] constexpr const char* assetTypeName(AssetType type) {
     switch (type) {
-    case AssetType::Shader:
-        return "Shader";
-    case AssetType::Material:
-        return "Material";
-    case AssetType::Mesh:
-        return "Mesh";
-    case AssetType::Scene:
-        return "Scene";
-    default:
-        return "Unknown";
+    case AssetType::Shader: return "Shader";
+    case AssetType::Material: return "Material";
+    case AssetType::Mesh: return "Mesh";
+    case AssetType::Scene: return "Scene";
+    default: return "Unknown";
     }
 }
 
@@ -49,8 +44,7 @@ public:
 
 protected:
     Asset() = default;
-    Asset(AssetId id, VirtualPath path)
-        : assetId_(id), assetPath_(std::move(path)) {}
+    Asset(AssetId id, VirtualPath path) : assetId_(id), assetPath_(std::move(path)) {}
 
 private:
     AssetId assetId_;

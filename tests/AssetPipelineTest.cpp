@@ -27,33 +27,23 @@ namespace {
 
 using namespace std::chrono_literals;
 
-static_assert(std::is_base_of_v<engine::Singleton<engine::FileSystem>,
-                                engine::FileSystem>);
-static_assert(std::is_base_of_v<engine::Singleton<engine::AssetDatabase>,
-                                engine::AssetDatabase>);
-static_assert(std::is_base_of_v<engine::Singleton<engine::AssetImportPipeline>,
-                                engine::AssetImportPipeline>);
-static_assert(std::is_base_of_v<engine::Singleton<engine::FileWatcher>,
-                                engine::FileWatcher>);
-static_assert(std::is_base_of_v<engine::Singleton<engine::AssetManager>,
-                                engine::AssetManager>);
-static_assert(std::is_base_of_v<engine::Singleton<engine::ShaderManager>,
+static_assert(std::is_base_of_v<engine::Singleton<engine::FileSystem>, engine::FileSystem>);
+static_assert(std::is_base_of_v<engine::Singleton<engine::AssetDatabase>, engine::AssetDatabase>);
+static_assert(
+    std::is_base_of_v<engine::Singleton<engine::AssetImportPipeline>, engine::AssetImportPipeline>);
+static_assert(std::is_base_of_v<engine::Singleton<engine::FileWatcher>, engine::FileWatcher>);
+static_assert(std::is_base_of_v<engine::Singleton<engine::AssetManager>, engine::AssetManager>);
+static_assert(std::is_base_of_v<engine::Singleton<engine::ShaderManager>, engine::ShaderManager>);
+static_assert(
+    std::is_base_of_v<engine::Singleton<engine::MaterialManager>, engine::MaterialManager>);
+static_assert(std::is_base_of_v<engine::Singleton<engine::MeshManager>, engine::MeshManager>);
+static_assert(std::is_base_of_v<engine::InstanceManager<engine::Shader, engine::ShaderHandle>,
                                 engine::ShaderManager>);
-static_assert(std::is_base_of_v<engine::Singleton<engine::MaterialManager>,
+static_assert(std::is_base_of_v<engine::InstanceManager<engine::Material, engine::MaterialHandle>,
                                 engine::MaterialManager>);
-static_assert(std::is_base_of_v<engine::Singleton<engine::MeshManager>,
+static_assert(std::is_base_of_v<engine::InstanceManager<engine::Mesh, engine::MeshHandle>,
                                 engine::MeshManager>);
-static_assert(std::is_base_of_v<
-              engine::InstanceManager<engine::Shader, engine::ShaderHandle>,
-              engine::ShaderManager>);
-static_assert(std::is_base_of_v<
-              engine::InstanceManager<engine::Material, engine::MaterialHandle>,
-              engine::MaterialManager>);
-static_assert(std::is_base_of_v<
-              engine::InstanceManager<engine::Mesh, engine::MeshHandle>,
-              engine::MeshManager>);
-static_assert(std::is_abstract_v<
-              engine::InstanceManager<engine::Shader, engine::ShaderHandle>>);
+static_assert(std::is_abstract_v<engine::InstanceManager<engine::Shader, engine::ShaderHandle>>);
 
 struct TestWorkspace {
     std::filesystem::path root =
@@ -88,8 +78,10 @@ std::string shaderSource(std::string_view name, bool extraProperty = false) {
     }
     return std::string{R"json({
   "$schemaVersion": 1,
-  "name": ")json"} + std::string{name} + R"json(",
-  "properties": [)json" + properties + R"json(],
+  "name": ")json"} +
+           std::string{name} + R"json(",
+  "properties": [)json" +
+           properties + R"json(],
   "subShader": {
     "passes": [{
       "name": "Forward",
@@ -119,13 +111,14 @@ std::string meshSource(float leftX) {
         {"name", "Pipeline Mesh"},
         {"index_type", "uint16"},
         {"usage", "dynamic"},
-        {"bindings", {{{"binding", 0},
-                        {"stride", sizeof(engine::math::Vec3)}}}},
-        {"attributes", {{{"semantic", "position"},
-                           {"format", "vec3_float32"}, {"location", 0},
-                           {"binding", 0}, {"offset", 0}}}},
-        {"vertex_streams", {{{"binding", 0}, {"vertex_count", 3},
-                              {"bytes", bytes}}}},
+        {"bindings", {{{"binding", 0}, {"stride", sizeof(engine::math::Vec3)}}}},
+        {"attributes",
+         {{{"semantic", "position"},
+           {"format", "vec3_float32"},
+           {"location", 0},
+           {"binding", 0},
+           {"offset", 0}}}},
+        {"vertex_streams", {{{"binding", 0}, {"vertex_count", 3}, {"bytes", bytes}}}},
         {"indices", {0, 1, 2}},
     };
     return root.dump();
@@ -137,7 +130,8 @@ int main() {
     using namespace engine;
 
     TestWorkspace workspace;
-    if (!test::initializeAssetEnvironment(workspace.assets)) return 20;
+    if (!test::initializeAssetEnvironment(workspace.assets))
+        return 20;
     FILE_WATCHER.stop();
 
     if (!FILE_SYSTEM.writeText(VirtualPath{"asset://shaders/simple.vert"},
@@ -149,9 +143,8 @@ int main() {
                                shaderSource("Tests/First")) ||
         !FILE_SYSTEM.writeText(VirtualPath{"asset://shaders/second.shader.json"},
                                shaderSource("Tests/Second", true)) ||
-        !FILE_SYSTEM.writeText(
-            VirtualPath{"asset://materials/test.material.json"},
-            R"json({
+        !FILE_SYSTEM.writeText(VirtualPath{"asset://materials/test.material.json"},
+                               R"json({
   "$schemaVersion": 1,
   "name": "Pipeline Material",
   "shader": "shaders/first.shader.json",
@@ -161,15 +154,16 @@ int main() {
 })json")) {
         return 1;
     }
-    if (!ASSET_IMPORT_PIPELINE.scanAll()) return 2;
+    if (!ASSET_IMPORT_PIPELINE.scanAll())
+        return 2;
 
     const VirtualPath meshPath{"asset://meshes/test.mesh.json"};
-    if (!FILE_SYSTEM.writeText(meshPath, meshSource(-1.0F))) return 25;
+    if (!FILE_SYSTEM.writeText(meshPath, meshSource(-1.0F)))
+        return 25;
     const MeshHandle meshHandle = MESH_MANAGER.load(meshPath);
     const auto meshAsset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
     Mesh* runtimeMesh = MESH_MANAGER.find(meshHandle);
-    if (!meshHandle || !meshAsset || !runtimeMesh ||
-        runtimeMesh->assetPath() != meshPath ||
+    if (!meshHandle || !meshAsset || !runtimeMesh || runtimeMesh->assetPath() != meshPath ||
         runtimeMesh->data().indexCount != 3) {
         return 26;
     }
@@ -179,8 +173,7 @@ int main() {
         return 27;
     }
     runtimeMesh = MESH_MANAGER.find(meshHandle);
-    if (!runtimeMesh || runtimeMesh->version() != meshVersion + 1 ||
-        !runtimeMesh->dirty()) {
+    if (!runtimeMesh || runtimeMesh->version() != meshVersion + 1 || !runtimeMesh->dirty()) {
         return 28;
     }
 
@@ -200,8 +193,7 @@ int main() {
 })json";
     int sceneChanges = 0;
     ASSET_MANAGER.setChangeListener(
-        [&sceneChanges, &scenePath](const VirtualPath& path, AssetType type,
-                                   bool removed) {
+        [&sceneChanges, &scenePath](const VirtualPath& path, AssetType type, bool removed) {
             if (path == scenePath && type == AssetType::Scene && !removed) {
                 ++sceneChanges;
             }
@@ -213,52 +205,46 @@ int main() {
     const auto sceneAsset = ASSET_MANAGER.loadAsset<SceneAsset>(scenePath);
     const auto sceneRecord = ASSET_DATABASE.findByPath(scenePath);
     if (!sceneAsset || !sceneRecord || sceneAsset->name != "Pipeline Scene" ||
-        sceneRecord->dependencies != std::vector<VirtualPath>{
-            VirtualPath{"asset://materials/test.material.json"}, meshPath} ||
+        sceneRecord->dependencies !=
+            std::vector<VirtualPath>{VirtualPath{"asset://materials/test.material.json"},
+                                     meshPath} ||
         sceneChanges != 1) {
         return 30;
     }
     const SceneInstantiationContext sceneContext{
-        .loadMesh = [](const VirtualPath& path) {
-            return MESH_MANAGER.load(path);
-        },
-        .loadMaterial = [](const VirtualPath& path) {
-            return MATERIAL_MANAGER.load(path);
-        },
+        .loadMesh = [](const VirtualPath& path) { return MESH_MANAGER.load(path); },
+        .loadMaterial = [](const VirtualPath& path) { return MATERIAL_MANAGER.load(path); },
     };
-    const std::unique_ptr<Scene> runtimeScene =
-        sceneAsset->instantiate(sceneContext);
-    if (!runtimeScene || runtimeScene->nodeCount() != 2) return 31;
+    const std::unique_ptr<Scene> runtimeScene = sceneAsset->instantiate(sceneContext);
+    if (!runtimeScene || runtimeScene->nodeCount() != 2)
+        return 31;
 
     const VirtualPath firstPath{"asset://shaders/first.shader.json"};
     const VirtualPath materialPath{"asset://materials/test.material.json"};
     const auto firstRecord = ASSET_DATABASE.findByPath(firstPath);
     const auto materialRecord = ASSET_DATABASE.findByPath(materialPath);
-    if (!firstRecord || !materialRecord ||
-        firstRecord->status != AssetImportStatus::Imported ||
+    if (!firstRecord || !materialRecord || firstRecord->status != AssetImportStatus::Imported ||
         materialRecord->status != AssetImportStatus::Imported ||
         materialRecord->dependencies != std::vector<VirtualPath>{firstPath} ||
         !FILE_SYSTEM.isFile(firstRecord->metaPath) ||
         !FILE_SYSTEM.isFile(firstRecord->artifactPath) ||
-        ASSET_DATABASE.dependentsOf(firstPath) !=
-            std::vector<VirtualPath>{materialPath}) {
+        ASSET_DATABASE.dependentsOf(firstPath) != std::vector<VirtualPath>{materialPath}) {
         return 3;
     }
 
     const VirtualPath latePath{"asset://shaders/late.shader.json"};
-    if (!FILE_SYSTEM.writeText(latePath, shaderSource("Tests/Late"))) return 18;
+    if (!FILE_SYSTEM.writeText(latePath, shaderSource("Tests/Late")))
+        return 18;
     const auto lateAsset = ASSET_MANAGER.loadAsset<ShaderAsset>(latePath);
     const auto lateRecord = ASSET_DATABASE.findByPath(latePath);
-    if (!lateAsset || !lateRecord ||
-        lateRecord->status != AssetImportStatus::Imported ||
+    if (!lateAsset || !lateRecord || lateRecord->status != AssetImportStatus::Imported ||
         !FILE_SYSTEM.isFile(lateRecord->artifactPath)) {
         return 19;
     }
 
     const auto shaderAssetA = ASSET_MANAGER.loadAsset<ShaderAsset>(firstPath);
     const auto shaderAssetB = ASSET_MANAGER.loadAsset<ShaderAsset>(firstPath);
-    const auto materialAsset =
-        ASSET_MANAGER.loadAsset<MaterialAsset>(materialPath);
+    const auto materialAsset = ASSET_MANAGER.loadAsset<MaterialAsset>(materialPath);
     if (!shaderAssetA || shaderAssetA != shaderAssetB || !materialAsset ||
         materialAsset->shader != firstPath || materialAsset->renderQueue != 2450) {
         return 4;
@@ -267,15 +253,15 @@ int main() {
     const ShaderHandle firstHandleA = SHADER_MANAGER.load(firstPath);
     const ShaderHandle firstHandleB = SHADER_MANAGER.load(firstPath);
     const MaterialHandle materialHandle = MATERIAL_MANAGER.load(materialPath);
-    if (!firstHandleA || firstHandleA != firstHandleB || !materialHandle) return 5;
+    if (!firstHandleA || firstHandleA != firstHandleB || !materialHandle)
+        return 5;
     Material& material = *MATERIAL_MANAGER.find(materialHandle);
     if (material.shaderHandle() != firstHandleA || material.renderQueue != 2450 ||
         material.getVec4("BaseColor") != math::Vec4{0.25F, 0.5F, 0.75F, 1.0F}) {
         return 6;
     }
 
-    MATERIAL_MANAGER.setShader(
-        materialHandle, VirtualPath{"asset://shaders/second.shader.json"});
+    MATERIAL_MANAGER.setShader(materialHandle, VirtualPath{"asset://shaders/second.shader.json"});
     const ShaderHandle secondHandle = material.shaderHandle();
     if (!secondHandle || secondHandle == firstHandleA ||
         material.shader().name() != "Tests/Second" ||
@@ -284,7 +270,8 @@ int main() {
         return 7;
     }
 
-    if (!FILE_WATCHER.start(VirtualPath{"asset://"}, 100ms, false)) return 8;
+    if (!FILE_WATCHER.start(VirtualPath{"asset://"}, 100ms, false))
+        return 8;
     const std::uint64_t oldRevision = SHADER_MANAGER.find(firstHandleA)->revision();
     if (!FILE_SYSTEM.writeText(firstPath, shaderSource("Tests/First Reloaded"))) {
         return 9;
@@ -299,7 +286,8 @@ int main() {
     }
 
     const std::uint64_t validRevision = SHADER_MANAGER.find(firstHandleA)->revision();
-    if (!FILE_SYSTEM.writeText(firstPath, "{ invalid json")) return 11;
+    if (!FILE_SYSTEM.writeText(firstPath, "{ invalid json"))
+        return 11;
     FILE_WATCHER.scanNow();
     waitForEvents();
     ASSET_IMPORT_PIPELINE.processFileEvents();
@@ -317,8 +305,7 @@ int main() {
         return 13;
     }
     FILE_WATCHER.scanNow();
-    if (!FILE_SYSTEM.writeText(VirtualPath{"asset://watch.txt"},
-                               "watch changed")) {
+    if (!FILE_SYSTEM.writeText(VirtualPath{"asset://watch.txt"}, "watch changed")) {
         return 20;
     }
     FILE_WATCHER.scanNow();
@@ -327,8 +314,7 @@ int main() {
     if (events.size() != 1 || events.front().type != FileChangeType::Added) {
         return 14;
     }
-    if (!FILE_SYSTEM.move(VirtualPath{"asset://watch.txt"},
-                          VirtualPath{"asset://renamed.txt"})) {
+    if (!FILE_SYSTEM.move(VirtualPath{"asset://watch.txt"}, VirtualPath{"asset://renamed.txt"})) {
         return 15;
     }
     FILE_WATCHER.scanNow();
@@ -339,8 +325,7 @@ int main() {
         events.front().path != VirtualPath{"asset://renamed.txt"}) {
         return 16;
     }
-    if (!FILE_SYSTEM.writeText(VirtualPath{"asset://renamed.txt"},
-                               "modified contents")) {
+    if (!FILE_SYSTEM.writeText(VirtualPath{"asset://renamed.txt"}, "modified contents")) {
         return 21;
     }
     FILE_WATCHER.scanNow();
@@ -349,7 +334,8 @@ int main() {
     if (events.size() != 1 || events.front().type != FileChangeType::Modified) {
         return 22;
     }
-    if (!FILE_SYSTEM.removeFile(VirtualPath{"asset://renamed.txt"})) return 23;
+    if (!FILE_SYSTEM.removeFile(VirtualPath{"asset://renamed.txt"}))
+        return 23;
     FILE_WATCHER.scanNow();
     waitForEvents();
     events = FILE_WATCHER.pollEvents();

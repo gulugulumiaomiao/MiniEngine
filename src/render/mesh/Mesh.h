@@ -54,8 +54,7 @@ enum class MeshTopology { TriangleList, LineList };
 struct MeshBuildRecipe {
     std::string name;
     std::vector<MeshPrimitivePart> parts;
-    PrimitiveVertexLayout vertexLayout{
-        PrimitiveVertexLayout::PositionNormalTangentUv};
+    PrimitiveVertexLayout vertexLayout{PrimitiveVertexLayout::PositionNormalTangentUv};
     MeshIndexPolicy indexPolicy{MeshIndexPolicy::Auto};
     MeshUsage usage{MeshUsage::Static};
     bool keepCpuCopy{};
@@ -100,12 +99,8 @@ struct Aabb {
     math::Vec3 minimum{0.0F};
     math::Vec3 maximum{0.0F};
 
-    [[nodiscard]] math::Vec3 center() const {
-        return (minimum + maximum) * 0.5F;
-    }
-    [[nodiscard]] math::Vec3 extent() const {
-        return (maximum - minimum) * 0.5F;
-    }
+    [[nodiscard]] math::Vec3 center() const { return (minimum + maximum) * 0.5F; }
+    [[nodiscard]] math::Vec3 extent() const { return (maximum - minimum) * 0.5F; }
 
     bool operator==(const Aabb&) const = default;
     [[nodiscard]] bool transfer(Transfer& archive);
@@ -165,45 +160,39 @@ struct MeshData {
     std::vector<std::byte> indices;
     std::uint32_t indexCount{};
 
-    [[nodiscard]] const VertexStream*
-    findVertexStream(std::uint32_t binding) const;
+    [[nodiscard]] const VertexStream* findVertexStream(std::uint32_t binding) const;
     [[nodiscard]] VertexStream* findVertexStream(std::uint32_t binding);
 
-    bool setVertexData(std::uint32_t binding, std::uint32_t vertexCount,
+    bool setVertexData(std::uint32_t binding,
+                       std::uint32_t vertexCount,
                        std::span<const std::byte> source);
     bool setIndexData(std::uint32_t count, std::span<const std::byte> source);
     [[nodiscard]] bool transfer(Transfer& archive);
 
     template <typename Vertex, std::size_t Extent>
         requires std::is_trivially_copyable_v<std::remove_cv_t<Vertex>>
-    bool setVertexData(std::uint32_t binding,
-                       std::span<Vertex, Extent> vertices) {
-        return setVertexData(binding,
-                             static_cast<std::uint32_t>(vertices.size()),
-                             std::as_bytes(vertices));
+    bool setVertexData(std::uint32_t binding, std::span<Vertex, Extent> vertices) {
+        return setVertexData(
+            binding, static_cast<std::uint32_t>(vertices.size()), std::as_bytes(vertices));
     }
 
     template <typename Index, std::size_t Extent>
         requires(std::is_same_v<std::remove_cv_t<Index>, std::uint16_t> ||
                  std::is_same_v<std::remove_cv_t<Index>, std::uint32_t>)
     bool setIndexData(std::span<Index, Extent> values) {
-        return setIndexData(static_cast<std::uint32_t>(values.size()),
-                            std::as_bytes(values));
+        return setIndexData(static_cast<std::uint32_t>(values.size()), std::as_bytes(values));
     }
 };
 
 class Mesh final {
-  public:
+public:
     Mesh() = default;
-    Mesh(MeshDesc desc, MeshData data,
-         std::optional<MeshBuildRecipe> buildRecipe = std::nullopt);
+    Mesh(MeshDesc desc, MeshData data, std::optional<MeshBuildRecipe> buildRecipe = std::nullopt);
 
     [[nodiscard]] const VirtualPath& assetPath() const { return assetPath_; }
     [[nodiscard]] const MeshDesc& desc() const { return desc_; }
     [[nodiscard]] const MeshData& data() const { return data_; }
-    [[nodiscard]] const std::optional<MeshBuildRecipe>& buildRecipe() const {
-        return buildRecipe_;
-    }
+    [[nodiscard]] const std::optional<MeshBuildRecipe>& buildRecipe() const { return buildRecipe_; }
     [[nodiscard]] std::uint64_t version() const { return version_; }
     [[nodiscard]] bool dirty() const { return dirty_; }
     void markClean() { dirty_ = false; }
@@ -211,10 +200,9 @@ class Mesh final {
     [[nodiscard]] bool updateVertexData(std::uint32_t binding,
                                         std::uint32_t firstVertex,
                                         std::span<const std::byte> source);
-    [[nodiscard]] bool updateIndexData(std::uint32_t firstIndex,
-                                       std::span<const std::byte> source);
+    [[nodiscard]] bool updateIndexData(std::uint32_t firstIndex, std::span<const std::byte> source);
 
-  private:
+private:
     friend class MeshAsset;
     friend class MeshManager;
 
@@ -229,7 +217,7 @@ class Mesh final {
 };
 
 class MeshAsset final : public Asset {
-  public:
+public:
     [[nodiscard]] AssetType type() const override { return AssetType::Mesh; }
 
     MeshDesc desc;
@@ -240,14 +228,13 @@ class MeshAsset final : public Asset {
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-class MeshManager final : public Singleton<MeshManager>,
-                          public InstanceManager<Mesh, MeshHandle> {
-  public:
+class MeshManager final : public Singleton<MeshManager>, public InstanceManager<Mesh, MeshHandle> {
+public:
     [[nodiscard]] MeshHandle load(const VirtualPath& meshPath) override;
     [[nodiscard]] bool replace(MeshHandle handle, Mesh mesh);
     [[nodiscard]] bool replace(const VirtualPath& meshPath);
 
-  private:
+private:
     friend class Singleton<MeshManager>;
     MeshManager() = default;
 

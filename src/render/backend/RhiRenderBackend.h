@@ -22,7 +22,7 @@ class MeshGpuCache;
 class ShaderPass;
 
 class RhiRenderBackend final : public IRenderBackend {
-    public:
+public:
     RhiRenderBackend(Window& window, bool vsync);
     ~RhiRenderBackend() override;
 
@@ -32,12 +32,14 @@ class RhiRenderBackend final : public IRenderBackend {
     [[nodiscard]] MeshDrawInfo prepareMesh(MeshHandle handle, Mesh& mesh) override;
     void releaseMesh(MeshHandle handle) override;
     [[nodiscard]] rhi::GraphicsPipelineHandle
-    pipelineForPass(const Shader& shader, const ShaderPass& pass, const ShaderVariantKey& variant,
+    pipelineForPass(const Shader& shader,
+                    const ShaderPass& pass,
+                    const ShaderVariantKey& variant,
                     const VertexLayout& vertexLayout) override;
     void renderFrame(const DrawList& drawList) override;
     void waitIdle() override;
 
-    private:
+private:
     static constexpr std::uint32_t kFramesInFlight = 2;
     static constexpr std::uint32_t kMaxRenderObjects = 1024;
 

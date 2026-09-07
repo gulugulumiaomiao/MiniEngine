@@ -12,7 +12,7 @@ struct Context {
     std::unique_ptr<ISwapchain> swapchain;
 };
 
-[[nodiscard]] Context createDefaultContext(void* nativeInstance, void* nativeWindow,
-                                           const SwapchainDesc& swapchainDesc);
+[[nodiscard]] Context
+createDefaultContext(void* nativeInstance, void* nativeWindow, const SwapchainDesc& swapchainDesc);
 
 } // namespace engine::rhi

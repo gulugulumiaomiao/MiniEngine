@@ -14,8 +14,9 @@ namespace {
 
 void check(VkResult result, const char* operation) {
     if (result != VK_SUCCESS) {
-        Log::fatal("VulkanSwapchain", std::string(operation) + " failed (VkResult " +
-                                          std::to_string(static_cast<int>(result)) + ")");
+        Log::fatal("VulkanSwapchain",
+                   std::string(operation) + " failed (VkResult " +
+                       std::to_string(static_cast<int>(result)) + ")");
     }
 }
 
@@ -49,19 +50,19 @@ VulkanSwapchain::~VulkanSwapchain() {
 
 VulkanSwapchain::Support VulkanSwapchain::querySupport() const {
     Support result;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device_.physicalDevice(), device_.surface(),
-                                              &result.capabilities);
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+        device_.physicalDevice(), device_.surface(), &result.capabilities);
     std::uint32_t count = 0;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device_.physicalDevice(), device_.surface(), &count,
-                                         nullptr);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(
+        device_.physicalDevice(), device_.surface(), &count, nullptr);
     result.formats.resize(count);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device_.physicalDevice(), device_.surface(), &count,
-                                         result.formats.data());
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device_.physicalDevice(), device_.surface(), &count,
-                                              nullptr);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(
+        device_.physicalDevice(), device_.surface(), &count, result.formats.data());
+    vkGetPhysicalDeviceSurfacePresentModesKHR(
+        device_.physicalDevice(), device_.surface(), &count, nullptr);
     result.presentModes.resize(count);
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device_.physicalDevice(), device_.surface(), &count,
-                                              result.presentModes.data());
+    vkGetPhysicalDeviceSurfacePresentModesKHR(
+        device_.physicalDevice(), device_.surface(), &count, result.presentModes.data());
     return result;
 }
 
@@ -85,9 +86,11 @@ void VulkanSwapchain::create() {
         extent_ = support.capabilities.currentExtent;
     } else {
         extent_ = {
-            std::clamp(desc_.width, support.capabilities.minImageExtent.width,
+            std::clamp(desc_.width,
+                       support.capabilities.minImageExtent.width,
                        support.capabilities.maxImageExtent.width),
-            std::clamp(desc_.height, support.capabilities.minImageExtent.height,
+            std::clamp(desc_.height,
+                       support.capabilities.minImageExtent.height,
                        support.capabilities.maxImageExtent.height),
         };
     }

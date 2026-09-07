@@ -33,11 +33,10 @@ public:
     void setViewport(const Viewport& viewport) override;
     void setScissor(const Rect& scissor) override;
     void bindPipeline(GraphicsPipelineHandle pipeline) override;
-    void bindVertexBuffer(std::uint32_t slot, BufferHandle buffer,
-                          std::uint64_t offset) override;
-    void bindIndexBuffer(BufferHandle buffer, std::uint64_t offset,
-                         IndexFormat format) override;
-    void bindGroup(std::uint32_t set, BindGroupHandle group,
+    void bindVertexBuffer(std::uint32_t slot, BufferHandle buffer, std::uint64_t offset) override;
+    void bindIndexBuffer(BufferHandle buffer, std::uint64_t offset, IndexFormat format) override;
+    void bindGroup(std::uint32_t set,
+                   BindGroupHandle group,
                    std::span<const std::uint32_t> dynamicOffsets) override;
     void draw(const DrawArguments& arguments) override;
     void drawIndexed(const DrawIndexedArguments& arguments) override;

@@ -21,7 +21,8 @@ Scene::Scene(std::string name) : name_(std::move(name)) {
 
 Scene::~Scene() {
     clear();
-    if (Node* rootNode = nodes_.find(root_)) rootNode->detachComponents();
+    if (Node* rootNode = nodes_.find(root_))
+        rootNode->detachComponents();
     (void)nodes_.release(root_);
 }
 
@@ -41,7 +42,8 @@ bool Scene::destroyNode(NodeHandle handle) {
         return false;
     }
     Node* node = nodes_.find(handle);
-    if (!node) return false;
+    if (!node)
+        return false;
 
     const std::vector<NodeHandle> children = node->children_;
     for (NodeHandle child : children) {
@@ -57,14 +59,17 @@ bool Scene::destroyNode(NodeHandle handle) {
 
 void Scene::clear() {
     Node* rootNode = nodes_.find(root_);
-    if (!rootNode) return;
+    if (!rootNode)
+        return;
     const std::vector<NodeHandle> children = rootNode->children_;
-    for (NodeHandle child : children) (void)destroyNode(child);
+    for (NodeHandle child : children)
+        (void)destroyNode(child);
 }
 
 void Scene::update(float deltaTime) {
     Node* rootNode = nodes_.find(root_);
-    if (!rootNode) return;
+    if (!rootNode)
+        return;
     rootNode->updateComponentsSubtree(deltaTime);
     updateTransforms();
 }
@@ -79,14 +84,13 @@ void Scene::buildRenderScene(RenderScene& output, float aspectRatio) {
     output.clear();
     updateTransforms();
     if (Node* rootNode = nodes_.find(root_)) {
-        extractRenderNode(*rootNode, output,
-                          aspectRatio > math::kEpsilon ? aspectRatio : 1.0F);
+        extractRenderNode(*rootNode, output, aspectRatio > math::kEpsilon ? aspectRatio : 1.0F);
     }
 }
 
-void Scene::extractRenderNode(Node& node, RenderScene& output,
-                              float aspectRatio) {
-    if (!node.activeInHierarchy_) return;
+void Scene::extractRenderNode(Node& node, RenderScene& output, float aspectRatio) {
+    if (!node.activeInHierarchy_)
+        return;
 
     const math::Mat44& world = node.transform_->worldMatrix_;
     if (const CameraComponent* camera = node.getComponent<CameraComponent>();
@@ -102,8 +106,7 @@ void Scene::extractRenderNode(Node& node, RenderScene& output,
         };
         const auto& selected = output.camera();
         if (!selected || (candidate.primary && !selected->primary) ||
-            (candidate.primary == selected->primary &&
-             candidate.priority > selected->priority)) {
+            (candidate.primary == selected->primary && candidate.priority > selected->priority)) {
             output.setCamera(std::move(candidate));
         }
     }
@@ -113,9 +116,8 @@ void Scene::extractRenderNode(Node& node, RenderScene& output,
         output.submit({
             .type = light->type,
             .position = node.transform_->worldPosition(),
-            .direction = math::normalize(
-                math::transformVector(world, {0.0F, 0.0F, -1.0F}),
-                math::Vec3{0.0F, 0.0F, -1.0F}),
+            .direction = math::normalize(math::transformVector(world, {0.0F, 0.0F, -1.0F}),
+                                         math::Vec3{0.0F, 0.0F, -1.0F}),
             .color = light->color,
             .intensity = light->intensity,
             .range = light->range,
@@ -128,8 +130,7 @@ void Scene::extractRenderNode(Node& node, RenderScene& output,
 
     const MeshComponent* mesh = node.getComponent<MeshComponent>();
     const MaterialComponent* material = node.getComponent<MaterialComponent>();
-    if (mesh && material && mesh->active() && material->active() &&
-        mesh->visible && mesh->mesh) {
+    if (mesh && material && mesh->active() && material->active() && mesh->visible && mesh->mesh) {
         output.submit({
             .mesh = mesh->mesh,
             .materials = material->materials(),

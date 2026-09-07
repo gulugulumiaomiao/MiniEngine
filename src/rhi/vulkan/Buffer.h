@@ -9,7 +9,9 @@ namespace engine {
 
 class Buffer final {
 public:
-    Buffer(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags usage,
+    Buffer(VmaAllocator allocator,
+           VkDeviceSize size,
+           VkBufferUsageFlags usage,
            VmaMemoryUsage memoryUsage = VMA_MEMORY_USAGE_AUTO,
            VmaAllocationCreateFlags allocationFlags = 0);
     ~Buffer();

@@ -30,36 +30,29 @@ AssetType inferAssetType(const VirtualPath& sourcePath) {
 }
 
 VirtualPath assetMetaPath(const VirtualPath& sourcePath) {
-    return sourcePath.valid()
-               ? VirtualPath{sourcePath.string() + ".meta"}
-               : VirtualPath{};
+    return sourcePath.valid() ? VirtualPath{sourcePath.string() + ".meta"} : VirtualPath{};
 }
 
-std::optional<AssetMeta> parseAssetMeta(const VirtualPath& metaPath,
-                                        std::string_view source) {
+std::optional<AssetMeta> parseAssetMeta(const VirtualPath& metaPath, std::string_view source) {
     const Json root = Json::parse(source, nullptr, false);
     if (root.is_discarded() || !root.is_object()) {
-        Log::error("AssetMeta", "Invalid Meta JSON: %s",
-                   metaPath.string().c_str());
+        Log::error("AssetMeta", "Invalid Meta JSON: %s", metaPath.string().c_str());
         return std::nullopt;
     }
     const auto version = root.find("version");
     const auto id = root.find("asset_id");
     const auto type = root.find("asset_type");
-    if (version == root.end() || !version->is_number_unsigned() ||
-        id == root.end() || !id->is_string() || type == root.end() ||
-        !type->is_string()) {
-        Log::error("AssetMeta", "Meta fields are missing or invalid: %s",
-                   metaPath.string().c_str());
+    if (version == root.end() || !version->is_number_unsigned() || id == root.end() ||
+        !id->is_string() || type == root.end() || !type->is_string()) {
+        Log::error(
+            "AssetMeta", "Meta fields are missing or invalid: %s", metaPath.string().c_str());
         return std::nullopt;
     }
 
     const auto parsedId = AssetId::parse(id->get_ref<const std::string&>());
-    const AssetType parsedType =
-        assetTypeFromName(type->get_ref<const std::string&>());
+    const AssetType parsedType = assetTypeFromName(type->get_ref<const std::string&>());
     if (!parsedId || parsedType == AssetType::Unknown) {
-        Log::error("AssetMeta", "Meta identity is invalid: %s",
-                   metaPath.string().c_str());
+        Log::error("AssetMeta", "Meta identity is invalid: %s", metaPath.string().c_str());
         return std::nullopt;
     }
 
@@ -79,10 +72,8 @@ std::optional<AssetMeta> loadAssetMeta(const VirtualPath& metaPath) {
 }
 
 bool saveAssetMeta(const VirtualPath& metaPath, const AssetMeta& meta) {
-    if (!metaPath.valid() || !meta.assetId.valid() ||
-        meta.assetType == AssetType::Unknown) {
-        Log::error("AssetMeta", "Cannot save invalid Meta: %s",
-                   metaPath.string().c_str());
+    if (!metaPath.valid() || !meta.assetId.valid() || meta.assetType == AssetType::Unknown) {
+        Log::error("AssetMeta", "Cannot save invalid Meta: %s", metaPath.string().c_str());
         return false;
     }
     const std::string content = serializeAssetMeta(meta);
@@ -92,8 +83,7 @@ bool saveAssetMeta(const VirtualPath& metaPath, const AssetMeta& meta) {
 std::optional<AssetMeta> createAssetMeta(const VirtualPath& sourcePath) {
     const AssetType type = inferAssetType(sourcePath);
     if (!sourcePath.valid() || type == AssetType::Unknown) {
-        Log::error("AssetMeta", "Cannot infer asset type: %s",
-                   sourcePath.string().c_str());
+        Log::error("AssetMeta", "Cannot infer asset type: %s", sourcePath.string().c_str());
         return std::nullopt;
     }
     AssetMeta meta{1, AssetId::generate(), type};

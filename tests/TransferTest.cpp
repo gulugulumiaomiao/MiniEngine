@@ -33,29 +33,21 @@ struct Sample {
 };
 
 bool Sample::transfer(engine::Transfer& archive) {
-    return archive.transfer("enabled", enabled) &&
-           archive.transfer("count", count) &&
-           archive.transfer("mask", mask) &&
-           archive.transfer("weight", weight) &&
-           archive.transfer("distance", distance) &&
-           archive.transfer("name", name) && archive.transfer("path", path) &&
-           archive.transfer("uv", uv) &&
-           archive.transfer("position", position) &&
-           archive.transfer("color", color) &&
-           archive.transfer("basis", basis) &&
-           archive.transfer("matrix", matrix) &&
-           archive.transfer("rotation", rotation) &&
-           archive.transfer("values", values) &&
-           archive.transfer("bytes", bytes) &&
-           archive.transfer("optional", optional) &&
+    return archive.transfer("enabled", enabled) && archive.transfer("count", count) &&
+           archive.transfer("mask", mask) && archive.transfer("weight", weight) &&
+           archive.transfer("distance", distance) && archive.transfer("name", name) &&
+           archive.transfer("path", path) && archive.transfer("uv", uv) &&
+           archive.transfer("position", position) && archive.transfer("color", color) &&
+           archive.transfer("basis", basis) && archive.transfer("matrix", matrix) &&
+           archive.transfer("rotation", rotation) && archive.transfer("values", values) &&
+           archive.transfer("bytes", bytes) && archive.transfer("optional", optional) &&
            archive.transfer("variant", variant);
 }
 
 bool equal(const Sample& left, const Sample& right) {
-    return left.enabled == right.enabled && left.count == right.count &&
-           left.mask == right.mask && left.weight == right.weight &&
-           left.distance == right.distance && left.name == right.name &&
-           left.path == right.path && left.uv == right.uv &&
+    return left.enabled == right.enabled && left.count == right.count && left.mask == right.mask &&
+           left.weight == right.weight && left.distance == right.distance &&
+           left.name == right.name && left.path == right.path && left.uv == right.uv &&
            left.position == right.position && left.color == right.color &&
            left.basis == right.basis && left.matrix == right.matrix &&
            left.rotation == right.rotation && left.values == right.values &&
@@ -71,25 +63,29 @@ int main() {
 
     Sample source;
     BinaryWriter binaryWriter;
-    if (!binaryWriter.transfer("root", source) || !binaryWriter.valid()) return 1;
+    if (!binaryWriter.transfer("root", source) || !binaryWriter.valid())
+        return 1;
     const std::vector<std::byte> binary = binaryWriter.takeBytes();
     Sample binaryResult;
     BinaryReader binaryReader{binary};
-    if (!binaryReader.transfer("root", binaryResult) ||
-        !binaryReader.finished() ||
-        !transfer_test::equal(source, binaryResult)) return 2;
+    if (!binaryReader.transfer("root", binaryResult) || !binaryReader.finished() ||
+        !transfer_test::equal(source, binaryResult))
+        return 2;
 
     JsonWriter jsonWriter;
-    if (!jsonWriter.transfer("root", source) || !jsonWriter.valid()) return 3;
+    if (!jsonWriter.transfer("root", source) || !jsonWriter.valid())
+        return 3;
     const std::string json = jsonWriter.toString();
     Sample jsonResult;
     JsonReader jsonReader{json};
     if (!jsonReader.transfer("root", jsonResult) || !jsonReader.valid() ||
-        !transfer_test::equal(source, jsonResult)) return 4;
+        !transfer_test::equal(source, jsonResult))
+        return 4;
 
     JsonReader malformed{"{not-json"};
     Sample ignored;
-    if (malformed.valid() || malformed.transfer("root", ignored)) return 5;
+    if (malformed.valid() || malformed.transfer("root", ignored))
+        return 5;
 
     std::vector<std::byte> truncated = binary;
     truncated.pop_back();

@@ -16,42 +16,39 @@ int main() {
     if (!test::initializeAssetEnvironment(MINI_TEST_COOKED_ASSET_DIR, true)) {
         return 5;
     }
-    if (FILE_WATCHER.running() || ASSET_IMPORT_PIPELINE.initialized()) return 1;
+    if (FILE_WATCHER.running() || ASSET_IMPORT_PIPELINE.initialized())
+        return 1;
 
     const auto shader = ASSET_MANAGER.loadAsset<ShaderAsset>(
         VirtualPath{"asset://shaders/vertex_color.shader.json"});
     const auto material = ASSET_MANAGER.loadAsset<MaterialAsset>(
         VirtualPath{"asset://materials/warm_vertex_color.material.json"});
-    if (!shader || !material) return 2;
-    if (ASSET_MANAGER.loadAsset<ShaderAsset>(
-            VirtualPath{"asset://shaders/missing.shader.json"})) {
+    if (!shader || !material)
+        return 2;
+    if (ASSET_MANAGER.loadAsset<ShaderAsset>(VirtualPath{"asset://shaders/missing.shader.json"})) {
         return 3;
     }
 
     const MaterialHandle runtime = MATERIAL_MANAGER.load(material->assetPath());
-    if (!runtime || MATERIAL_MANAGER.find(runtime)->shader().name() !=
-                        "MiniEngine/VertexColor") {
+    if (!runtime || MATERIAL_MANAGER.find(runtime)->shader().name() != "MiniEngine/VertexColor") {
         return 4;
     }
 
     const auto showcase = ASSET_MANAGER.loadAsset<SceneAsset>(
         VirtualPath{"asset://scenes/blinn_phong_showcase.scene.json"});
-    if (!showcase || showcase->nodes.size() != 4) return 6;
+    if (!showcase || showcase->nodes.size() != 4)
+        return 6;
     const SceneInstantiationContext context{
-        .loadMesh = [](const VirtualPath& path) {
-            return MESH_MANAGER.load(path);
-        },
-        .loadMaterial = [](const VirtualPath& path) {
-            return MATERIAL_MANAGER.load(path);
-        },
+        .loadMesh = [](const VirtualPath& path) { return MESH_MANAGER.load(path); },
+        .loadMaterial = [](const VirtualPath& path) { return MATERIAL_MANAGER.load(path); },
     };
     const std::unique_ptr<Scene> scene = showcase->instantiate(context);
-    if (!scene) return 6;
+    if (!scene)
+        return 6;
     RenderScene renderScene;
     scene->buildRenderScene(renderScene, 16.0F / 9.0F);
     if (!renderScene.camera() || renderScene.objects().size() != 1 ||
-        renderScene.objects().front().materials.size() != 4 ||
-        renderScene.lights().size() != 2) {
+        renderScene.objects().front().materials.size() != 4 || renderScene.lights().size() != 2) {
         return 6;
     }
     MESH_MANAGER.clear();

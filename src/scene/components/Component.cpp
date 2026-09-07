@@ -3,13 +3,17 @@
 namespace engine {
 
 void Component::setEnabled(bool enabled) {
-    if (enabled_ == enabled) return;
+    if (enabled_ == enabled)
+        return;
     enabled_ = enabled;
     const bool next = enabled_ && scene_ && ownerActive_;
-    if (next == active_) return;
+    if (next == active_)
+        return;
     active_ = next;
-    if (active_) onEnable();
-    else onDisable();
+    if (active_)
+        onEnable();
+    else
+        onDisable();
 }
 
 void Component::attach(Scene& scene, NodeHandle owner, bool ownerActive) {
@@ -18,12 +22,15 @@ void Component::attach(Scene& scene, NodeHandle owner, bool ownerActive) {
     ownerActive_ = ownerActive;
     onAttach();
     active_ = enabled_ && ownerActive_;
-    if (active_) onEnable();
+    if (active_)
+        onEnable();
 }
 
 void Component::detach() {
-    if (!scene_) return;
-    if (active_) onDisable();
+    if (!scene_)
+        return;
+    if (active_)
+        onDisable();
     active_ = false;
     onDetach();
     owner_ = {};
@@ -34,14 +41,18 @@ void Component::detach() {
 void Component::setOwnerActive(bool ownerActive) {
     ownerActive_ = ownerActive;
     const bool next = enabled_ && ownerActive_;
-    if (next == active_) return;
+    if (next == active_)
+        return;
     active_ = next;
-    if (active_) onEnable();
-    else onDisable();
+    if (active_)
+        onEnable();
+    else
+        onDisable();
 }
 
 void Component::update(float deltaTime) {
-    if (active_) onUpdate(deltaTime);
+    if (active_)
+        onUpdate(deltaTime);
 }
 
 } // namespace engine

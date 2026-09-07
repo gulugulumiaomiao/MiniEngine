@@ -49,19 +49,18 @@ int main() {
     Node* root = scene.findNode(rootHandle);
     Node* child = scene.findNode(childHandle);
     if (!sceneRoot || !root || !child || scene.nodeCount() != 3 ||
-        root->parent() != sceneRootHandle ||
-        !root->getComponent<TransformComponent>()) {
+        root->parent() != sceneRootHandle || !root->getComponent<TransformComponent>()) {
         return 1;
     }
 
-    if (!child->setParent(*root) ||
-        child->parent() != rootHandle || root->children().size() != 1 ||
+    if (!child->setParent(*root) || child->parent() != rootHandle || root->children().size() != 1 ||
         root->setParent(childHandle) || sceneRoot->setParent(rootHandle) ||
         scene.destroyNode(sceneRootHandle)) {
         return 2;
     }
     Scene otherScene{"Other"};
-    if (child->setParent(otherScene.root())) return 17;
+    if (child->setParent(otherScene.root()))
+        return 17;
 
     root->transform().setLocalPosition({2.0F, 0.0F, 0.0F});
     child->transform().setLocalPosition({0.0F, 3.0F, 0.0F});
@@ -80,29 +79,33 @@ int main() {
         return 5;
     }
     scene.update(1.0F / 60.0F);
-    if (counts.updated != 1) return 6;
+    if (counts.updated != 1)
+        return 6;
 
     root->setActive(false);
     if (child->activeInHierarchy() || probe->active() || counts.disabled != 1) {
         return 7;
     }
     scene.update(1.0F / 60.0F);
-    if (counts.updated != 1) return 8;
+    if (counts.updated != 1)
+        return 8;
     root->setActive(true);
-    if (!probe->active() || counts.enabled != 2) return 9;
+    if (!probe->active() || counts.enabled != 2)
+        return 9;
 
     probe->setEnabled(false);
-    if (probe->active() || counts.disabled != 2) return 10;
+    if (probe->active() || counts.disabled != 2)
+        return 10;
     probe->setEnabled(true);
-    if (!probe->active() || counts.enabled != 3) return 11;
+    if (!probe->active() || counts.enabled != 3)
+        return 11;
 
     MeshComponent* mesh = child->addComponent<MeshComponent>();
     MaterialComponent* material = child->addComponent<MaterialComponent>();
     mesh->mesh = MeshHandle{7, 2};
     material->setMaterial(0, MaterialHandle{3, 1});
     material->setMaterial(2, MaterialHandle{8, 4});
-    if (mesh->mesh != MeshHandle{7, 2} ||
-        material->material(1) != MaterialHandle{3, 1} ||
+    if (mesh->mesh != MeshHandle{7, 2} || material->material(1) != MaterialHandle{3, 1} ||
         material->material(2) != MaterialHandle{8, 4} ||
         root->removeComponent<TransformComponent>()) {
         return 12;
@@ -129,8 +132,7 @@ int main() {
         renderScene.objects().front().mesh != MeshHandle{7, 2} ||
         renderScene.objects().front().material(1) != MaterialHandle{3, 1} ||
         !near(renderScene.camera()->worldPosition, {0.0F, 0.0F, 5.0F}) ||
-        !near(renderScene.lights().front().direction,
-              {0.0F, 0.0F, -1.0F}) ||
+        !near(renderScene.lights().front().direction, {0.0F, 0.0F, -1.0F}) ||
         renderScene.lights().front().intensity != 2.0F) {
         return 18;
     }
@@ -140,8 +142,8 @@ int main() {
     }
 
     child = scene.findNode(childHandle);
-    if (!child->removeComponent<ProbeComponent>() || counts.disabled != 3 ||
-        counts.detached != 1 || child->getComponent<ProbeComponent>()) {
+    if (!child->removeComponent<ProbeComponent>() || counts.disabled != 3 || counts.detached != 1 ||
+        child->getComponent<ProbeComponent>()) {
         return 13;
     }
 
@@ -150,8 +152,7 @@ int main() {
         return 14;
     }
     const NodeHandle reused = scene.createNode("Reused");
-    if (reused.index != rootHandle.index ||
-        reused.generation == rootHandle.generation ||
+    if (reused.index != rootHandle.index || reused.generation == rootHandle.generation ||
         scene.findNode(reused)->parent() != sceneRootHandle) {
         return 15;
     }

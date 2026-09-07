@@ -10,7 +10,8 @@ int main() {
     using namespace engine;
 
     const std::filesystem::path fixtures{MINI_TEST_SHADER_FIXTURE_DIR};
-    if (!FILE_SYSTEM.mountDirectory("fixture", fixtures, true)) return 12;
+    if (!FILE_SYSTEM.mountDirectory("fixture", fixtures, true))
+        return 12;
     ShaderPreprocessor preprocessor;
     ShaderCompileRequest request;
     request.source = VirtualPath{"fixture://preprocess_root.glsl"};
@@ -19,8 +20,7 @@ int main() {
     const auto processed = preprocessor.process(request);
     if (!processed || processed->dependencies.size() != 2 ||
         !processed->source.starts_with("#version 450\n#define TEST_VALUE 0.5") ||
-        processed->source.find("BuildColor") == std::string::npos ||
-        processed->sourceHash == 0) {
+        processed->source.find("BuildColor") == std::string::npos || processed->sourceHash == 0) {
         return 1;
     }
     if (preprocessor.process({})) {
@@ -35,30 +35,26 @@ int main() {
         return 2;
     }
 
-    if (!FILE_SYSTEM.mountDirectory("shader", MINI_TEST_GENERATED_SHADER_DIR,
-                                    false)) {
+    if (!FILE_SYSTEM.mountDirectory("shader", MINI_TEST_GENERATED_SHADER_DIR, false)) {
         return 8;
     }
-    if (!test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR)) return 11;
-    const std::shared_ptr<ShaderAsset> assetOwner =
-        ASSET_MANAGER.loadAsset<ShaderAsset>(
+    if (!test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR))
+        return 11;
+    const std::shared_ptr<ShaderAsset> assetOwner = ASSET_MANAGER.loadAsset<ShaderAsset>(
         VirtualPath{"asset://shaders/vertex_color.shader.json"});
-    if (!assetOwner) return 10;
+    if (!assetOwner)
+        return 10;
     const ShaderAsset& asset = *assetOwner;
     const Shader runtimeShader{asset};
-    const ShaderPass& pass = runtimeShader.defaultSubShader().requirePass(
-        ShaderPassType::Forward);
+    const ShaderPass& pass = runtimeShader.defaultSubShader().requirePass(ShaderPassType::Forward);
     CompiledShaderCache compiledShaders;
     ShaderProgramCache programs{compiledShaders};
-    const ShaderProgramHandle programHandle =
-        programs.getOrCreate(runtimeShader, pass);
+    const ShaderProgramHandle programHandle = programs.getOrCreate(runtimeShader, pass);
     const ShaderProgram& program = programs.resolve(programHandle);
     const CompiledShader& vertex = compiledShaders.resolve(program.vertex);
     const CompiledShader& fragment = compiledShaders.resolve(program.fragment);
-    if (vertex.stage != ShaderStage::Vertex ||
-        fragment.stage != ShaderStage::Fragment ||
-        program.layout.vertexInputs.size() != 2 ||
-        program.layout.fragmentOutputs.size() != 1 ||
+    if (vertex.stage != ShaderStage::Vertex || fragment.stage != ShaderStage::Fragment ||
+        program.layout.vertexInputs.size() != 2 || program.layout.fragmentOutputs.size() != 1 ||
         program.layout.descriptors.empty() || program.layout.id == 0) {
         return 3;
     }
@@ -66,8 +62,7 @@ int main() {
         return 4;
     }
 
-    const ShaderPassDesc& assetPass =
-        asset.subShaders.front().requirePass(ShaderPassType::Forward);
+    const ShaderPassDesc& assetPass = asset.subShaders.front().requirePass(ShaderPassType::Forward);
     ShaderCompileRequest generatedRequest;
     generatedRequest.source = assetPass.program.vertexSource;
     generatedRequest.stage = ShaderStage::Vertex;

@@ -16,13 +16,10 @@ struct AssetArtifact {
     std::vector<std::byte> payload;
 };
 
-[[nodiscard]] std::vector<std::byte> serializeAssetArtifact(
-    const AssetArtifact& artifact);
-[[nodiscard]] std::optional<AssetArtifact> parseAssetArtifact(
-    const VirtualPath& artifactPath, std::span<const std::byte> source);
-[[nodiscard]] bool saveAssetArtifact(const VirtualPath& path,
-                                     const AssetArtifact& artifact);
-[[nodiscard]] std::optional<AssetArtifact> loadAssetArtifact(
-    const VirtualPath& path);
+[[nodiscard]] std::vector<std::byte> serializeAssetArtifact(const AssetArtifact& artifact);
+[[nodiscard]] std::optional<AssetArtifact> parseAssetArtifact(const VirtualPath& artifactPath,
+                                                              std::span<const std::byte> source);
+[[nodiscard]] bool saveAssetArtifact(const VirtualPath& path, const AssetArtifact& artifact);
+[[nodiscard]] std::optional<AssetArtifact> loadAssetArtifact(const VirtualPath& path);
 
 } // namespace engine

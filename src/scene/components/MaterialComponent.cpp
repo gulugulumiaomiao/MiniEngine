@@ -5,8 +5,7 @@
 namespace engine {
 
 bool MaterialComponentAsset::transfer(Transfer& archive) {
-    return archive.transfer("materials", materials) &&
-           archive.transfer("enabled", enabled);
+    return archive.transfer("materials", materials) && archive.transfer("enabled", enabled);
 }
 
 } // namespace engine

@@ -19,23 +19,21 @@
 namespace engine {
 namespace {
 
-template <typename Value>
-void hashValue(ShaderHash& hash, const Value& value) {
-    hash = hashBytes(
-        {reinterpret_cast<const std::byte*>(&value), sizeof(Value)}, hash);
+template <typename Value> void hashValue(ShaderHash& hash, const Value& value) {
+    hash = hashBytes({reinterpret_cast<const std::byte*>(&value), sizeof(Value)}, hash);
 }
 
 std::string normalizedPath(const VirtualPath& path) {
     return path.string();
 }
 
-bool preprocessSource(const VirtualPath& path, std::string_view content,
+bool preprocessSource(const VirtualPath& path,
+                      std::string_view content,
                       std::unordered_set<std::string>& visiting,
                       PreprocessedShader& result) {
     const std::string key = normalizedPath(path);
     if (!visiting.insert(key).second) {
-        Log::error("ShaderPreprocessor", "Cyclic include dependency: %s",
-                   key.c_str());
+        Log::error("ShaderPreprocessor", "Cyclic include dependency: %s", key.c_str());
         return false;
     }
     result.dependencies.emplace_back(key);
@@ -47,29 +45,27 @@ bool preprocessSource(const VirtualPath& path, std::string_view content,
         if (first != std::string::npos && line.compare(first, 8, "#include") == 0) {
             const std::size_t quote = line.find('"', first + 8);
             const std::size_t endQuote =
-                quote == std::string::npos ? std::string::npos
-                                           : line.find('"', quote + 1);
+                quote == std::string::npos ? std::string::npos : line.find('"', quote + 1);
             if (quote == std::string::npos || endQuote == std::string::npos) {
-                Log::error("ShaderPreprocessor", "Malformed include in: %s",
-                           key.c_str());
+                Log::error("ShaderPreprocessor", "Malformed include in: %s", key.c_str());
                 return false;
             }
-            const std::string include =
-                line.substr(quote + 1, endQuote - quote - 1);
+            const std::string include = line.substr(quote + 1, endQuote - quote - 1);
             const auto resolved = ShaderIncludeResolver::resolve(path, include);
             if (!resolved) {
-                Log::error("ShaderPreprocessor", "Cannot resolve include %s from %s",
-                           include.c_str(), key.c_str());
+                Log::error("ShaderPreprocessor",
+                           "Cannot resolve include %s from %s",
+                           include.c_str(),
+                           key.c_str());
                 return false;
             }
             const auto includedSource = FILE_SYSTEM.readText(*resolved);
             if (!includedSource) {
-                Log::error("ShaderPreprocessor", "Cannot read include: %s",
-                           resolved->string().c_str());
+                Log::error(
+                    "ShaderPreprocessor", "Cannot read include: %s", resolved->string().c_str());
                 return false;
             }
-            if (!preprocessSource(*resolved, *includedSource, visiting,
-                                  result)) {
+            if (!preprocessSource(*resolved, *includedSource, visiting, result)) {
                 return false;
             }
             continue;
@@ -143,12 +139,11 @@ ShaderHash hashBytes(std::span<const std::byte> bytes, ShaderHash seed) {
 }
 
 ShaderHash hashString(std::string_view text, ShaderHash seed) {
-    return hashBytes({reinterpret_cast<const std::byte*>(text.data()), text.size()},
-                     seed);
+    return hashBytes({reinterpret_cast<const std::byte*>(text.data()), text.size()}, seed);
 }
 
-std::shared_ptr<PreprocessedShader> ShaderPreprocessor::process(
-    const ShaderCompileRequest& request) const {
+std::shared_ptr<PreprocessedShader>
+ShaderPreprocessor::process(const ShaderCompileRequest& request) const {
     if (request.source.empty()) {
         Log::error("ShaderPreprocessor", "Shader source path must not be empty");
         return {};
@@ -160,22 +155,24 @@ std::shared_ptr<PreprocessedShader> ShaderPreprocessor::process(
     }
     const auto userSource = FILE_SYSTEM.readText(request.source);
     if (!userSource) {
-        Log::error("ShaderPreprocessor", "Cannot read shader source: %s",
-                   request.source.string().c_str());
+        Log::error(
+            "ShaderPreprocessor", "Cannot read shader source: %s", request.source.string().c_str());
         return {};
     }
     std::string source = *userSource;
     if ((request.shaderAsset == nullptr) != (request.shaderPass == nullptr)) {
-        Log::error("ShaderPreprocessor",
-                   "ShaderAsset and ShaderPass must be supplied together");
+        Log::error("ShaderPreprocessor", "ShaderAsset and ShaderPass must be supplied together");
         return {};
     }
     if (request.shaderAsset && request.shaderPass) {
         const auto generated = shader_compiler::generateShaderStage(
-            *request.shaderAsset, *request.shaderPass,
+            *request.shaderAsset,
+            *request.shaderPass,
             buildUniformBlockLayout(request.shaderAsset->properties),
-            request.stage, source);
-        if (!generated) return {};
+            request.stage,
+            source);
+        if (!generated)
+            return {};
         source = *generated;
     }
     std::unordered_set<std::string> visiting;
@@ -184,9 +181,8 @@ std::shared_ptr<PreprocessedShader> ShaderPreprocessor::process(
     }
     if (result->source.starts_with("#version")) {
         const std::size_t lineEnd = result->source.find('\n');
-        result->source.insert(lineEnd == std::string::npos ? result->source.size()
-                                                          : lineEnd + 1,
-                             defines);
+        result->source.insert(lineEnd == std::string::npos ? result->source.size() : lineEnd + 1,
+                              defines);
     } else {
         result->source.insert(0, defines);
     }
@@ -199,17 +195,16 @@ std::shared_ptr<PreprocessedShader> ShaderPreprocessor::process(
     return result;
 }
 
-void ShaderDependencyGraph::track(
-    CompiledShaderId shader,
-    std::span<const VirtualPath> dependencies) {
+void ShaderDependencyGraph::track(CompiledShaderId shader,
+                                  std::span<const VirtualPath> dependencies) {
     remove(shader);
     for (const VirtualPath& dependency : dependencies) {
         edges_[normalizedPath(dependency)].insert(shader);
     }
 }
 
-std::vector<CompiledShaderId> ShaderDependencyGraph::affectedBy(
-    const VirtualPath& dependency) const {
+std::vector<CompiledShaderId>
+ShaderDependencyGraph::affectedBy(const VirtualPath& dependency) const {
     const auto found = edges_.find(normalizedPath(dependency));
     if (found == edges_.end()) {
         return {};
@@ -232,9 +227,10 @@ void ShaderDependencyGraph::clear() {
     edges_.clear();
 }
 
-CompiledShaderId CompiledShaderCache::makeId(
-    std::span<const std::byte> bytecode, ShaderStage stage,
-    std::string_view entryPoint, const ShaderVariantKey& variant) {
+CompiledShaderId CompiledShaderCache::makeId(std::span<const std::byte> bytecode,
+                                             ShaderStage stage,
+                                             std::string_view entryPoint,
+                                             const ShaderVariantKey& variant) {
     ShaderHash hash = hashBytes(bytecode);
     hashValue(hash, stage);
     hash = hashString(entryPoint, hash);
@@ -244,14 +240,14 @@ CompiledShaderId CompiledShaderCache::makeId(
     return hash;
 }
 
-CompiledShaderHandle CompiledShaderCache::getOrLoad(
-    const VirtualPath& binaryPath, ShaderStage stage,
-    std::string_view entryPoint, const ShaderVariantKey& variant) {
+CompiledShaderHandle CompiledShaderCache::getOrLoad(const VirtualPath& binaryPath,
+                                                    ShaderStage stage,
+                                                    std::string_view entryPoint,
+                                                    const ShaderVariantKey& variant) {
     const VirtualPath& path = binaryPath;
     const auto bytes = FILE_SYSTEM.readBinary(path);
     if (!bytes || bytes->empty() || bytes->size() % sizeof(std::uint32_t) != 0) {
-        Log::error("CompiledShaderCache", "Invalid shader binary: %s",
-                   path.string().c_str());
+        Log::error("CompiledShaderCache", "Invalid shader binary: %s", path.string().c_str());
         return {};
     }
     const CompiledShaderId id = makeId(*bytes, stage, entryPoint, variant);
@@ -260,16 +256,13 @@ CompiledShaderHandle CompiledShaderCache::getOrLoad(
         return {found->second, slot.generation};
     }
 
-    auto slot = std::ranges::find_if(slots_,
-                                     [](const Slot& value) {
-                                         return !value.shader.has_value();
-                                     });
+    auto slot =
+        std::ranges::find_if(slots_, [](const Slot& value) { return !value.shader.has_value(); });
     if (slot == slots_.end()) {
         slots_.emplace_back();
         slot = std::prev(slots_.end());
     }
-    const std::uint32_t index =
-        static_cast<std::uint32_t>(std::distance(slots_.begin(), slot));
+    const std::uint32_t index = static_cast<std::uint32_t>(std::distance(slots_.begin(), slot));
     CompiledShader shader;
     shader.id = id;
     shader.stage = stage;
@@ -281,8 +274,7 @@ CompiledShaderHandle CompiledShaderCache::getOrLoad(
     }
     shader.reflection = *reflection;
     if (shader.reflection.stage != stage) {
-        Log::error("CompiledShaderCache", "Shader stage mismatch: %s",
-                   path.string().c_str());
+        Log::error("CompiledShaderCache", "Shader stage mismatch: %s", path.string().c_str());
         return {};
     }
     shader.dependencies.push_back(path);
@@ -296,8 +288,7 @@ CompiledShaderHandle CompiledShaderCache::getOrLoad(
     return {index, slot->generation};
 }
 
-const CompiledShader& CompiledShaderCache::resolve(
-    CompiledShaderHandle handle) const {
+const CompiledShader& CompiledShaderCache::resolve(CompiledShaderHandle handle) const {
     if (handle.index >= slots_.size()) {
         Log::fatal("CompiledShaderCache", "Invalid compiled shader handle");
     }
@@ -308,8 +299,7 @@ const CompiledShader& CompiledShaderCache::resolve(
     return *slot.shader;
 }
 
-void CompiledShaderCache::removeId(CompiledShaderId id,
-                                   std::vector<CompiledShaderId>& removed) {
+void CompiledShaderCache::removeId(CompiledShaderId id, std::vector<CompiledShaderId>& removed) {
     const auto found = entries_.find(id);
     if (found == entries_.end()) {
         return;
@@ -322,11 +312,10 @@ void CompiledShaderCache::removeId(CompiledShaderId id,
     removed.push_back(id);
 }
 
-std::vector<CompiledShaderId> CompiledShaderCache::invalidateDependency(
-    const VirtualPath& dependency) {
+std::vector<CompiledShaderId>
+CompiledShaderCache::invalidateDependency(const VirtualPath& dependency) {
     std::vector<CompiledShaderId> removed;
-    const std::vector<CompiledShaderId> affected =
-        dependencies_.affectedBy(dependency);
+    const std::vector<CompiledShaderId> affected = dependencies_.affectedBy(dependency);
     for (const CompiledShaderId id : affected) {
         removeId(id, removed);
     }
@@ -340,9 +329,9 @@ std::vector<CompiledShaderId> CompiledShaderCache::invalidateChanged() {
             continue;
         }
         std::error_code error;
-        const auto physical = FILE_SYSTEM.resolvePhysicalPath(
-            slot.shader->dependencies.front());
-        if (!physical) continue;
+        const auto physical = FILE_SYSTEM.resolvePhysicalPath(slot.shader->dependencies.front());
+        if (!physical)
+            continue;
         const auto timestamp = std::filesystem::last_write_time(*physical, error);
         if (!error && timestamp != slot.timestamp) {
             changed.push_back(slot.shader->dependencies.front());
@@ -369,18 +358,18 @@ void CompiledShaderCache::clear() {
     }
 }
 
-ShaderProgramCache::ShaderProgramCache(CompiledShaderCache& shaders)
-    : shaders_(shaders) {}
+ShaderProgramCache::ShaderProgramCache(CompiledShaderCache& shaders) : shaders_(shaders) {}
 
-CompiledShaderHandle ShaderProgramCache::compileStage(
-    const Shader& shader, const ShaderPass& pass, ShaderStage stage,
-    const ShaderVariantKey& variant, VirtualPath& binaryPath) {
+CompiledShaderHandle ShaderProgramCache::compileStage(const Shader& shader,
+                                                      const ShaderPass& pass,
+                                                      ShaderStage stage,
+                                                      const ShaderVariantKey& variant,
+                                                      VirtualPath& binaryPath) {
     const ShaderAsset asset = compileAsset(shader);
     const ShaderPassDesc passDesc = compilePass(pass);
     ShaderCompileRequest request;
-    request.source = stage == ShaderStage::Vertex
-                         ? pass.program().vertexSource
-                         : pass.program().fragmentSource;
+    request.source =
+        stage == ShaderStage::Vertex ? pass.program().vertexSource : pass.program().fragmentSource;
     request.stage = stage;
     request.shaderAsset = &asset;
     request.shaderPass = &passDesc;
@@ -398,34 +387,31 @@ CompiledShaderHandle ShaderProgramCache::compileStage(
             request.defines.push_back({keywords[bit], "1"});
         }
     }
+    request.defines.push_back({"MINI_MESH_FEATURE_BITS", std::to_string(variant.meshFeatureBits)});
     request.defines.push_back(
-        {"MINI_MESH_FEATURE_BITS", std::to_string(variant.meshFeatureBits)});
-    request.defines.push_back(
-        {"MINI_PLATFORM_FEATURE_BITS",
-         std::to_string(variant.platformFeatureBits)});
+        {"MINI_PLATFORM_FEATURE_BITS", std::to_string(variant.platformFeatureBits)});
 
     ShaderPreprocessor preprocessor;
-    const std::shared_ptr<PreprocessedShader> processed =
-        preprocessor.process(request);
-    if (!processed) return {};
+    const std::shared_ptr<PreprocessedShader> processed = preprocessor.process(request);
+    if (!processed)
+        return {};
 
     std::ostringstream name;
-    name << "runtime/" << std::hex << std::setfill('0') << std::setw(16)
-         << processed->sourceHash
+    name << "runtime/" << std::hex << std::setfill('0') << std::setw(16) << processed->sourceHash
          << (stage == ShaderStage::Vertex ? ".vert" : ".frag");
     const VirtualPath sourcePath{"shader://" + name.str() + ".glsl"};
     binaryPath = VirtualPath{"shader://" + name.str() + ".spv"};
     if (!FILE_SYSTEM.isFile(binaryPath)) {
         if (!FILE_SYSTEM.writeText(sourcePath, processed->source)) {
-            Log::error("ShaderProgramCache", "Cannot write generated Shader: %s",
+            Log::error("ShaderProgramCache",
+                       "Cannot write generated Shader: %s",
                        sourcePath.string().c_str());
             return {};
         }
         const auto sourcePhysical = FILE_SYSTEM.resolvePhysicalPath(sourcePath);
         const auto binaryPhysical = FILE_SYSTEM.resolvePhysicalPath(binaryPath);
         if (!sourcePhysical || !binaryPhysical) {
-            Log::error("ShaderProgramCache",
-                       "Cannot resolve generated Shader paths");
+            Log::error("ShaderProgramCache", "Cannot resolve generated Shader paths");
             return {};
         }
 #if !defined(MINI_GLSLC_EXECUTABLE)
@@ -443,17 +429,16 @@ CompiledShaderHandle ShaderProgramCache::compileStage(
         // debug names while still using release optimization.
         command += "-O -g ";
 #endif
-        command += stage == ShaderStage::Vertex
-                       ? "-fshader-stage=vert "
-                       : "-fshader-stage=frag ";
-        command += quotedPath(*sourcePhysical) + " -o " +
-                   quotedPath(*binaryPhysical);
+        command += stage == ShaderStage::Vertex ? "-fshader-stage=vert " : "-fshader-stage=frag ";
+        command += quotedPath(*sourcePhysical) + " -o " + quotedPath(*binaryPhysical);
         command += '"';
-        Log::info("ShaderProgramCache", "Compiling Shader on demand: %s/%s",
-                  shader.name().c_str(), pass.name().c_str());
-        if (std::system(command.c_str()) != 0 ||
-            !FILE_SYSTEM.isFile(binaryPath)) {
-            Log::error("ShaderProgramCache", "Shader compilation failed: %s",
+        Log::info("ShaderProgramCache",
+                  "Compiling Shader on demand: %s/%s",
+                  shader.name().c_str(),
+                  pass.name().c_str());
+        if (std::system(command.c_str()) != 0 || !FILE_SYSTEM.isFile(binaryPath)) {
+            Log::error("ShaderProgramCache",
+                       "Shader compilation failed: %s",
                        request.source.string().c_str());
             return {};
         }
@@ -462,43 +447,38 @@ CompiledShaderHandle ShaderProgramCache::compileStage(
     return shaders_.getOrLoad(binaryPath, stage, "main", variant);
 }
 
-std::optional<ShaderProgramLayout> ShaderProgramCache::mergeLayout(
-    const CompiledShader& vertex, const CompiledShader& fragment) {
+std::optional<ShaderProgramLayout> ShaderProgramCache::mergeLayout(const CompiledShader& vertex,
+                                                                   const CompiledShader& fragment) {
     ShaderProgramLayout layout;
     layout.vertexInputs = vertex.reflection.inputs;
     layout.fragmentOutputs = fragment.reflection.outputs;
     layout.descriptors = vertex.reflection.descriptors;
-    for (const ShaderDescriptorBinding& descriptor :
-         fragment.reflection.descriptors) {
+    for (const ShaderDescriptorBinding& descriptor : fragment.reflection.descriptors) {
         const auto existing = std::ranges::find_if(
-            layout.descriptors,
-            [&descriptor](const ShaderDescriptorBinding& value) {
-                return value.set == descriptor.set &&
-                       value.binding == descriptor.binding;
+            layout.descriptors, [&descriptor](const ShaderDescriptorBinding& value) {
+                return value.set == descriptor.set && value.binding == descriptor.binding;
             });
         if (existing == layout.descriptors.end()) {
             layout.descriptors.push_back(descriptor);
         } else if (existing->type != descriptor.type) {
-            Log::error("ShaderProgramCache",
-                       "Descriptor type differs between shader stages");
+            Log::error("ShaderProgramCache", "Descriptor type differs between shader stages");
             return std::nullopt;
         } else if (existing->members.empty()) {
             existing->members = descriptor.members;
         }
     }
-    std::ranges::sort(layout.descriptors,
-                      [](const ShaderDescriptorBinding& left,
-                         const ShaderDescriptorBinding& right) {
-                          return std::tie(left.set, left.binding) <
-                                 std::tie(right.set, right.binding);
-                      });
+    std::ranges::sort(
+        layout.descriptors,
+        [](const ShaderDescriptorBinding& left, const ShaderDescriptorBinding& right) {
+            return std::tie(left.set, left.binding) < std::tie(right.set, right.binding);
+        });
     layout.id = hashReflection(layout);
     return layout;
 }
 
-ShaderProgramHandle ShaderProgramCache::getOrCreate(
-    const Shader& shader, const ShaderPass& pass,
-    const ShaderVariantKey& variant) {
+ShaderProgramHandle ShaderProgramCache::getOrCreate(const Shader& shader,
+                                                    const ShaderPass& pass,
+                                                    const ShaderVariantKey& variant) {
     VirtualPath vertexPath;
     VirtualPath fragmentPath;
     const CompiledShaderHandle vertex =
@@ -506,8 +486,7 @@ ShaderProgramHandle ShaderProgramCache::getOrCreate(
     const CompiledShaderHandle fragment =
         compileStage(shader, pass, ShaderStage::Fragment, variant, fragmentPath);
     if (!vertex || !fragment) {
-        Log::error("ShaderProgramCache", "Shader program failed to load: %s",
-                   pass.name().c_str());
+        Log::error("ShaderProgramCache", "Shader program failed to load: %s", pass.name().c_str());
         return {};
     }
     const CompiledShader& vertexShader = shaders_.resolve(vertex);
@@ -523,35 +502,28 @@ ShaderProgramHandle ShaderProgramCache::getOrCreate(
     const ShaderAsset asset = compileAsset(shader);
     const ShaderPassDesc passDesc = compilePass(pass);
     if (!validateSpirvReflection(asset, passDesc, vertexPath, fragmentPath)) {
-        Log::error("ShaderProgramCache", "Shader reflection validation failed: %s",
-                   pass.name().c_str());
+        Log::error(
+            "ShaderProgramCache", "Shader reflection validation failed: %s", pass.name().c_str());
         return {};
     }
-    std::optional<ShaderProgramLayout> layout =
-        mergeLayout(vertexShader, fragmentShader);
+    std::optional<ShaderProgramLayout> layout = mergeLayout(vertexShader, fragmentShader);
     if (!layout) {
         return {};
     }
-    auto slot = std::ranges::find_if(slots_,
-                                     [](const Slot& value) {
-                                         return !value.program.has_value();
-                                     });
+    auto slot =
+        std::ranges::find_if(slots_, [](const Slot& value) { return !value.program.has_value(); });
     if (slot == slots_.end()) {
         slots_.emplace_back();
         slot = std::prev(slots_.end());
     }
-    const std::uint32_t index =
-        static_cast<std::uint32_t>(std::distance(slots_.begin(), slot));
-    slot->program =
-        ShaderProgram{id, variant, vertex, fragment, vertexShader.id,
-                      fragmentShader.id,
-                      std::move(*layout)};
+    const std::uint32_t index = static_cast<std::uint32_t>(std::distance(slots_.begin(), slot));
+    slot->program = ShaderProgram{
+        id, variant, vertex, fragment, vertexShader.id, fragmentShader.id, std::move(*layout)};
     entries_[id] = index;
     return {index, slot->generation};
 }
 
-const ShaderProgram& ShaderProgramCache::resolve(
-    ShaderProgramHandle handle) const {
+const ShaderProgram& ShaderProgramCache::resolve(ShaderProgramHandle handle) const {
     if (handle.index >= slots_.size()) {
         Log::fatal("ShaderProgramCache", "Invalid shader program handle");
     }
@@ -562,14 +534,12 @@ const ShaderProgram& ShaderProgramCache::resolve(
     return *slot.program;
 }
 
-void ShaderProgramCache::invalidate(
-    std::span<const CompiledShaderId> shaders) {
+void ShaderProgramCache::invalidate(std::span<const CompiledShaderId> shaders) {
     for (auto entry = entries_.begin(); entry != entries_.end();) {
         Slot& slot = slots_[entry->second];
-        const bool affected = slot.program && std::ranges::any_of(
-            shaders, [&slot](CompiledShaderId id) {
-                return slot.program->vertexId == id ||
-                       slot.program->fragmentId == id;
+        const bool affected =
+            slot.program && std::ranges::any_of(shaders, [&slot](CompiledShaderId id) {
+                return slot.program->vertexId == id || slot.program->fragmentId == id;
             });
         if (affected) {
             slot.program.reset();
@@ -591,9 +561,9 @@ void ShaderProgramCache::clear() {
     }
 }
 
-ShaderCookedAsset buildCookedShaderAsset(
-    const ShaderAsset& asset,
-    std::span<const std::pair<const ShaderPass*, ShaderProgram>> programs) {
+ShaderCookedAsset
+buildCookedShaderAsset(const ShaderAsset& asset,
+                       std::span<const std::pair<const ShaderPass*, ShaderProgram>> programs) {
     ShaderCookedAsset cooked;
     cooked.name = asset.name;
     cooked.properties = asset.properties;
@@ -601,13 +571,11 @@ ShaderCookedAsset buildCookedShaderAsset(
     for (const SubShaderDesc& subShader : asset.subShaders) {
         for (const ShaderPassAsset& passAsset : subShader.passes) {
             const ShaderPassDesc& pass = passAsset.pass;
-            ShaderCookedPass cookedPass{pass.name, pass.type,
-                                        passAsset.renderState, {}};
+            ShaderCookedPass cookedPass{pass.name, pass.type, passAsset.renderState, {}};
             for (const auto& [runtimePass, program] : programs) {
                 if (runtimePass && runtimePass->name() == pass.name) {
                     cookedPass.variants.push_back(
-                        {program.variant, program.vertexId,
-                         program.fragmentId, program.layout.id});
+                        {program.variant, program.vertexId, program.fragmentId, program.layout.id});
                 }
             }
             cooked.passes.push_back(std::move(cookedPass));

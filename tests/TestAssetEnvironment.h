@@ -13,15 +13,13 @@ inline void shutdownAssetEnvironment() {
     (void)FILE_SYSTEM.unmount("library");
 }
 
-[[nodiscard]] inline bool initializeAssetEnvironment(
-    const std::filesystem::path& assetRoot, bool assetReadOnly = false) {
+[[nodiscard]] inline bool initializeAssetEnvironment(const std::filesystem::path& assetRoot,
+                                                     bool assetReadOnly = false) {
     shutdownAssetEnvironment();
     const std::filesystem::path normalizedRoot =
         std::filesystem::absolute(assetRoot).lexically_normal();
     if (!FILE_SYSTEM.mountDirectory("asset", normalizedRoot, assetReadOnly) ||
-        !FILE_SYSTEM.mountDirectory("library",
-                                    normalizedRoot.parent_path() / "library",
-                                    false)) {
+        !FILE_SYSTEM.mountDirectory("library", normalizedRoot.parent_path() / "library", false)) {
         shutdownAssetEnvironment();
         return false;
     }

@@ -22,11 +22,9 @@ struct AssetImportResult {
     std::vector<VirtualPath> dependencies;
     std::string error;
 
-    [[nodiscard]] static AssetImportResult failed(AssetType type,
-                                                  std::string error);
-    [[nodiscard]] static AssetImportResult succeeded(
-        AssetType type, VirtualPath artifactPath,
-        std::vector<VirtualPath> dependencies = {});
+    [[nodiscard]] static AssetImportResult failed(AssetType type, std::string error);
+    [[nodiscard]] static AssetImportResult
+    succeeded(AssetType type, VirtualPath artifactPath, std::vector<VirtualPath> dependencies = {});
 };
 
 class IAssetImporter {
@@ -35,8 +33,7 @@ public:
 
     [[nodiscard]] virtual AssetType assetType() const = 0;
     [[nodiscard]] virtual std::uint32_t version() const = 0;
-    [[nodiscard]] virtual AssetImportResult import(
-        const AssetImportContext& context) const = 0;
+    [[nodiscard]] virtual AssetImportResult import(const AssetImportContext& context) const = 0;
 };
 
 } // namespace engine

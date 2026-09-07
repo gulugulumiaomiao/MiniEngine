@@ -9,8 +9,7 @@ namespace engine {
 
 class AssetImporterRegistry final {
 public:
-    [[nodiscard]] bool registerImporter(
-        std::unique_ptr<IAssetImporter> importer);
+    [[nodiscard]] bool registerImporter(std::unique_ptr<IAssetImporter> importer);
     [[nodiscard]] const IAssetImporter* find(AssetType type) const;
     void clear();
 

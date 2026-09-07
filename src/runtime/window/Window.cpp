@@ -25,9 +25,18 @@ Window::Window(std::uint32_t width, std::uint32_t height, std::string_view title
     RECT rectangle{0, 0, static_cast<LONG>(width), static_cast<LONG>(height)};
     AdjustWindowRect(&rectangle, WS_OVERLAPPEDWINDOW, FALSE);
     const std::string ownedTitle(title);
-    handle_ = CreateWindowExA(0, kWindowClass, ownedTitle.c_str(), WS_OVERLAPPEDWINDOW,
-                              CW_USEDEFAULT, CW_USEDEFAULT, rectangle.right - rectangle.left,
-                              rectangle.bottom - rectangle.top, nullptr, nullptr, instance_, this);
+    handle_ = CreateWindowExA(0,
+                              kWindowClass,
+                              ownedTitle.c_str(),
+                              WS_OVERLAPPEDWINDOW,
+                              CW_USEDEFAULT,
+                              CW_USEDEFAULT,
+                              rectangle.right - rectangle.left,
+                              rectangle.bottom - rectangle.top,
+                              nullptr,
+                              nullptr,
+                              instance_,
+                              this);
     if (!handle_) {
         UnregisterClassA(kWindowClass, instance_);
         Log::fatal("Window", "Win32 window creation failed");

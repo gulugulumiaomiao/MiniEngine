@@ -70,8 +70,7 @@ void Renderer::destroyMaterial(MaterialHandle handle) {
     MATERIAL_MANAGER.destroy(handle);
 }
 
-void Renderer::setMaterialFloat(MaterialHandle handle, std::string_view name,
-                                float value) {
+void Renderer::setMaterialFloat(MaterialHandle handle, std::string_view name, float value) {
     if (Material* material = MATERIAL_MANAGER.find(handle)) {
         material->setFloat(name, value);
     } else {
@@ -79,7 +78,8 @@ void Renderer::setMaterialFloat(MaterialHandle handle, std::string_view name,
     }
 }
 
-void Renderer::setMaterialVec2(MaterialHandle handle, std::string_view name,
+void Renderer::setMaterialVec2(MaterialHandle handle,
+                               std::string_view name,
                                const math::Vec2& value) {
     if (Material* material = MATERIAL_MANAGER.find(handle)) {
         material->setVec2(name, value);
@@ -88,7 +88,8 @@ void Renderer::setMaterialVec2(MaterialHandle handle, std::string_view name,
     }
 }
 
-void Renderer::setMaterialVec3(MaterialHandle handle, std::string_view name,
+void Renderer::setMaterialVec3(MaterialHandle handle,
+                               std::string_view name,
                                const math::Vec3& value) {
     if (Material* material = MATERIAL_MANAGER.find(handle)) {
         material->setVec3(name, value);
@@ -97,7 +98,8 @@ void Renderer::setMaterialVec3(MaterialHandle handle, std::string_view name,
     }
 }
 
-void Renderer::setMaterialVec4(MaterialHandle handle, std::string_view name,
+void Renderer::setMaterialVec4(MaterialHandle handle,
+                               std::string_view name,
                                const math::Vec4& value) {
     if (Material* material = MATERIAL_MANAGER.find(handle)) {
         material->setVec4(name, value);
@@ -106,8 +108,7 @@ void Renderer::setMaterialVec4(MaterialHandle handle, std::string_view name,
     }
 }
 
-void Renderer::setMaterialBool(MaterialHandle handle, std::string_view name,
-                               bool value) {
+void Renderer::setMaterialBool(MaterialHandle handle, std::string_view name, bool value) {
     if (Material* material = MATERIAL_MANAGER.find(handle)) {
         material->setBool(name, value);
     } else {
@@ -115,8 +116,7 @@ void Renderer::setMaterialBool(MaterialHandle handle, std::string_view name,
     }
 }
 
-void Renderer::setMaterialTexture(MaterialHandle handle, std::string_view name,
-                                  std::string value) {
+void Renderer::setMaterialTexture(MaterialHandle handle, std::string_view name, std::string value) {
     if (Material* material = MATERIAL_MANAGER.find(handle)) {
         material->setTexture(name, std::move(value));
     } else {
@@ -124,15 +124,14 @@ void Renderer::setMaterialTexture(MaterialHandle handle, std::string_view name,
     }
 }
 
-void Renderer::setMaterialShader(MaterialHandle handle,
-                                 const VirtualPath& shaderPath) {
+void Renderer::setMaterialShader(MaterialHandle handle, const VirtualPath& shaderPath) {
     MATERIAL_MANAGER.setShader(handle, shaderPath);
 }
 
 void Renderer::renderFrame(const RenderScene& scene) {
     ASSET_IMPORT_PIPELINE.processFileEvents();
-    constexpr std::array phases{RenderPhase::ShadowCaster,
-                                RenderPhase::DepthOnly, RenderPhase::Forward};
+    constexpr std::array phases{
+        RenderPhase::ShadowCaster, RenderPhase::DepthOnly, RenderPhase::Forward};
     DrawList drawList;
     if (scene.camera()) {
         const RenderCamera& camera = *scene.camera();
@@ -140,30 +139,23 @@ void Renderer::renderFrame(const RenderScene& scene) {
         drawList.scene.cameraPosition = math::Vec4{camera.worldPosition, 1.0F};
         drawList.clearColor = camera.clearColor;
     }
-    const auto directional =
-        std::ranges::find_if(scene.lights(), [](const RenderLight& light) {
-            return light.type == LightType::Directional;
-        });
+    const auto directional = std::ranges::find_if(scene.lights(), [](const RenderLight& light) {
+        return light.type == LightType::Directional;
+    });
     if (directional != scene.lights().end()) {
-        drawList.scene.directionalLightDirection =
-            math::Vec4{directional->direction, 1.0F};
+        drawList.scene.directionalLightDirection = math::Vec4{directional->direction, 1.0F};
         drawList.scene.directionalLightColorIntensity =
             math::Vec4{directional->color, directional->intensity};
     }
     const auto point = std::ranges::find_if(
-        scene.lights(), [](const RenderLight& light) {
-            return light.type == LightType::Point;
-        });
+        scene.lights(), [](const RenderLight& light) { return light.type == LightType::Point; });
     if (point != scene.lights().end()) {
-        drawList.scene.pointLightPositionRange =
-            math::Vec4{point->position, point->range};
-        drawList.scene.pointLightColorIntensity =
-            math::Vec4{point->color, point->intensity};
+        drawList.scene.pointLightPositionRange = math::Vec4{point->position, point->range};
+        drawList.scene.pointLightColorIntensity = math::Vec4{point->color, point->intensity};
     }
     drawList.objects.reserve(scene.objects().size());
     for (const RenderObject& object : scene.objects()) {
-        if (scene.camera() &&
-            (object.layerMask & scene.camera()->cullingMask) == 0) {
+        if (scene.camera() && (object.layerMask & scene.camera()->cullingMask) == 0) {
             continue;
         }
         Mesh* meshInstance = MESH_MANAGER.find(object.mesh);
@@ -171,26 +163,21 @@ void Renderer::renderFrame(const RenderScene& scene) {
             Log::warn("Renderer", "Skipping object with an invalid MeshHandle");
             continue;
         }
-        const MeshDrawInfo mesh =
-            backend_->prepareMesh(object.mesh, *meshInstance);
+        const MeshDrawInfo mesh = backend_->prepareMesh(object.mesh, *meshInstance);
         if (mesh.subMeshes.empty()) {
             Log::warn("Renderer", "Skipping Mesh without GPU draw data");
             continue;
         }
-        const std::uint32_t objectIndex =
-            static_cast<std::uint32_t>(drawList.objects.size());
+        const std::uint32_t objectIndex = static_cast<std::uint32_t>(drawList.objects.size());
         drawList.objects.push_back({object.transform});
         for (const MeshDrawInfo::Range& range : mesh.subMeshes) {
-            const MaterialHandle materialHandle =
-                object.material(range.materialSlot);
+            const MaterialHandle materialHandle = object.material(range.materialSlot);
             const Material* material = MATERIAL_MANAGER.find(materialHandle);
             if (!material) {
-                Log::warn("Renderer",
-                          "Skipping SubMesh with an invalid Material slot");
+                Log::warn("Renderer", "Skipping SubMesh with an invalid Material slot");
                 continue;
             }
-            const SubShader* subShader =
-                material->shader().selectSubShader("MiniForward");
+            const SubShader* subShader = material->shader().selectSubShader("MiniForward");
             if (!subShader) {
                 Log::error("Renderer",
                            "Shader has no MiniForward SubShader: %s",
@@ -198,20 +185,15 @@ void Renderer::renderFrame(const RenderScene& scene) {
                 continue;
             }
             for (const RenderPhase renderPhase : phases) {
-                if (renderPhase == RenderPhase::ShadowCaster &&
-                    !object.castShadow) {
+                if (renderPhase == RenderPhase::ShadowCaster && !object.castShadow) {
                     continue;
                 }
-                const ShaderPass* shaderPass =
-                    subShader->findPass(passTypeForPhase(renderPhase));
+                const ShaderPass* shaderPass = subShader->findPass(passTypeForPhase(renderPhase));
                 if (!shaderPass)
                     continue;
-                const ShaderVariantKey variant =
-                    shaderPass->variantKey(material->keywords);
-                const rhi::GraphicsPipelineHandle pipeline =
-                    backend_->pipelineForPass(
-                        material->shader(), *shaderPass, variant,
-                        meshInstance->desc().vertexLayout);
+                const ShaderVariantKey variant = shaderPass->variantKey(material->keywords);
+                const rhi::GraphicsPipelineHandle pipeline = backend_->pipelineForPass(
+                    material->shader(), *shaderPass, variant, meshInstance->desc().vertexLayout);
                 if (!pipeline) {
                     Log::error("Renderer",
                                "Skipping pass without a valid pipeline: %s",
@@ -236,8 +218,7 @@ void Renderer::renderFrame(const RenderScene& scene) {
             }
         }
     }
-    std::ranges::stable_sort(drawList.items, [](const DrawItem& left,
-                                                const DrawItem& right) {
+    std::ranges::stable_sort(drawList.items, [](const DrawItem& left, const DrawItem& right) {
         if (left.renderPhase != right.renderPhase) {
             return phaseOrder(left.renderPhase) < phaseOrder(right.renderPhase);
         }

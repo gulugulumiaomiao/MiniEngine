@@ -19,8 +19,7 @@ public:
     bool endArray() override;
 
 private:
-    template <typename T>
-    bool writeInteger(T value);
+    template <typename T> bool writeInteger(T value);
 
     bool transferBool(std::string_view, bool& value) override;
     bool transferInt8(std::string_view, std::int8_t& value) override;
@@ -34,8 +33,7 @@ private:
     bool transferFloat(std::string_view, float& value) override;
     bool transferDouble(std::string_view, double& value) override;
     bool transferString(std::string_view, std::string& value) override;
-    bool transferBytes(std::string_view,
-                       std::vector<std::byte>& value) override;
+    bool transferBytes(std::string_view, std::vector<std::byte>& value) override;
 
     std::vector<std::byte> bytes_;
 };
@@ -44,12 +42,8 @@ class BinaryReader final : public Reader {
 public:
     explicit BinaryReader(std::span<const std::byte> bytes) : bytes_(bytes) {}
 
-    [[nodiscard]] std::size_t remaining() const {
-        return bytes_.size() - offset_;
-    }
-    [[nodiscard]] bool finished() const {
-        return valid() && offset_ == bytes_.size();
-    }
+    [[nodiscard]] std::size_t remaining() const { return bytes_.size() - offset_; }
+    [[nodiscard]] bool finished() const { return valid() && offset_ == bytes_.size(); }
 
     bool beginObject(std::string_view name) override;
     bool endObject() override;
@@ -59,8 +53,7 @@ public:
     bool endArray() override;
 
 private:
-    template <typename T>
-    bool readInteger(T& value);
+    template <typename T> bool readInteger(T& value);
 
     bool transferBool(std::string_view, bool& value) override;
     bool transferInt8(std::string_view, std::int8_t& value) override;
@@ -74,8 +67,7 @@ private:
     bool transferFloat(std::string_view, float& value) override;
     bool transferDouble(std::string_view, double& value) override;
     bool transferString(std::string_view, std::string& value) override;
-    bool transferBytes(std::string_view,
-                       std::vector<std::byte>& value) override;
+    bool transferBytes(std::string_view, std::vector<std::byte>& value) override;
 
     std::span<const std::byte> bytes_;
     std::size_t offset_{};

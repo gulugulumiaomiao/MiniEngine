@@ -9,9 +9,10 @@ namespace engine {
 
 class ShaderIncludeResolver final {
 public:
-    [[nodiscard]] static std::optional<VirtualPath> resolve(
-        const VirtualPath& includingFile, std::string_view include) {
-        if (!includingFile.valid() || include.empty()) return std::nullopt;
+    [[nodiscard]] static std::optional<VirtualPath> resolve(const VirtualPath& includingFile,
+                                                            std::string_view include) {
+        if (!includingFile.valid() || include.empty())
+            return std::nullopt;
 
         const VirtualPath candidate = include.find("://") != std::string_view::npos
                                           ? VirtualPath{include}

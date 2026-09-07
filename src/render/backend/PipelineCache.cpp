@@ -63,15 +63,17 @@ rhi::ColorWriteMask toRhiColorMask(std::string_view mask) {
 
 } // namespace
 
-PipelineCache::PipelineCache(rhi::IDevice& device, rhi::BindGroupLayoutHandle sceneLayout,
+PipelineCache::PipelineCache(rhi::IDevice& device,
+                             rhi::BindGroupLayoutHandle sceneLayout,
                              rhi::BindGroupLayoutHandle materialLayout,
-                             CompiledShaderCache& compiledShaders, ShaderProgramCache& programs,
+                             CompiledShaderCache& compiledShaders,
+                             ShaderProgramCache& programs,
                              RhiShaderCache& shaders)
     : device_(device), sceneLayout_(sceneLayout), materialLayout_(materialLayout),
-      compiledShaders_(compiledShaders), programs_(programs), shaders_(shaders) {
-}
+      compiledShaders_(compiledShaders), programs_(programs), shaders_(shaders) {}
 
-std::uint64_t PipelineCache::makeKey(const ShaderProgram& program, const ShaderPass& pass,
+std::uint64_t PipelineCache::makeKey(const ShaderProgram& program,
+                                     const ShaderPass& pass,
                                      const VertexLayout& vertexLayout,
                                      rhi::TextureFormat colorFormat) {
     const RenderStateDesc& state = pass.renderState();
@@ -105,7 +107,8 @@ std::uint64_t PipelineCache::makeKey(const ShaderProgram& program, const ShaderP
     return key;
 }
 
-std::uint64_t PipelineCache::makeFallbackKey(const Shader& shader, const ShaderPass& pass,
+std::uint64_t PipelineCache::makeFallbackKey(const Shader& shader,
+                                             const ShaderPass& pass,
                                              const ShaderVariantKey& variant,
                                              const VertexLayout& vertexLayout,
                                              rhi::TextureFormat colorFormat) {
@@ -135,11 +138,13 @@ std::uint64_t PipelineCache::makeFallbackKey(const Shader& shader, const ShaderP
     return key;
 }
 
-rhi::GraphicsPipelineDesc
-PipelineCache::makeDesc(const ShaderPass& pass, const VertexLayout& vertexLayout,
-                        rhi::TextureFormat colorFormat, rhi::ShaderHandle vertexShader,
-                        std::string vertexEntry, rhi::ShaderHandle fragmentShader,
-                        std::string fragmentEntry) const {
+rhi::GraphicsPipelineDesc PipelineCache::makeDesc(const ShaderPass& pass,
+                                                  const VertexLayout& vertexLayout,
+                                                  rhi::TextureFormat colorFormat,
+                                                  rhi::ShaderHandle vertexShader,
+                                                  std::string vertexEntry,
+                                                  rhi::ShaderHandle fragmentShader,
+                                                  std::string fragmentEntry) const {
     rhi::GraphicsPipelineDesc desc;
     desc.vertexShader = vertexShader;
     desc.vertexEntry = std::move(vertexEntry);
@@ -150,7 +155,8 @@ PipelineCache::makeDesc(const ShaderPass& pass, const VertexLayout& vertexLayout
 
     desc.vertexBindings.reserve(vertexLayout.bindings.size());
     for (const VertexBinding& binding : vertexLayout.bindings) {
-        desc.vertexBindings.push_back({binding.binding, binding.stride,
+        desc.vertexBindings.push_back({binding.binding,
+                                       binding.stride,
                                        binding.inputRate == VertexInputRate::Vertex
                                            ? rhi::VertexInputRate::Vertex
                                            : rhi::VertexInputRate::Instance});
@@ -184,7 +190,8 @@ PipelineCache::makeDesc(const ShaderPass& pass, const VertexLayout& vertexLayout
     return desc;
 }
 
-rhi::GraphicsPipelineHandle PipelineCache::getOrCreate(const Shader& shader, const ShaderPass& pass,
+rhi::GraphicsPipelineHandle PipelineCache::getOrCreate(const Shader& shader,
+                                                       const ShaderPass& pass,
                                                        const ShaderVariantKey& variant,
                                                        const VertexLayout& vertexLayout,
                                                        rhi::TextureFormat colorFormat) {
@@ -199,12 +206,13 @@ rhi::GraphicsPipelineHandle PipelineCache::getOrCreate(const Shader& shader, con
                 Log::error("PipelineCache",
                            "Keeping the previous pipeline after Shader reload "
                            "failure: %s/%s",
-                           shader.name().c_str(), pass.name().c_str());
+                           shader.name().c_str(),
+                           pass.name().c_str());
                 return slot.pipeline;
             }
         }
-        Log::error("PipelineCache", "Shader program is unavailable for pass: %s",
-                   pass.name().c_str());
+        Log::error(
+            "PipelineCache", "Shader program is unavailable for pass: %s", pass.name().c_str());
         return {};
     }
 
@@ -226,9 +234,13 @@ rhi::GraphicsPipelineHandle PipelineCache::getOrCreate(const Shader& shader, con
     const CompiledShader& fragment = compiledShaders_.resolve(program.fragment);
     const rhi::ShaderHandle vertexHandle = shaders_.getOrCreate(program.vertex);
     const rhi::ShaderHandle fragmentHandle = shaders_.getOrCreate(program.fragment);
-    slot->pipeline = device_.createGraphicsPipeline(makeDesc(pass, vertexLayout, colorFormat,
-                                                             vertexHandle, vertex.entryPoint,
-                                                             fragmentHandle, fragment.entryPoint));
+    slot->pipeline = device_.createGraphicsPipeline(makeDesc(pass,
+                                                             vertexLayout,
+                                                             colorFormat,
+                                                             vertexHandle,
+                                                             vertex.entryPoint,
+                                                             fragmentHandle,
+                                                             fragment.entryPoint));
     slot->program = program.id;
     slot->vertex = program.vertexId;
     slot->fragment = program.fragmentId;

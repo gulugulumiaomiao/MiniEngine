@@ -25,7 +25,8 @@ int Engine::run(Application& application) {
         return 1;
     }
 
-    if (!initialize(application.getConfig())) return 1;
+    if (!initialize(application.getConfig()))
+        return 1;
 
     Log::info("Engine", "Starting application: %s", config_.name.c_str());
     application.onStart();
@@ -53,27 +54,23 @@ bool Engine::initialize(const AppConfig& config) {
 #endif
     const std::filesystem::path assetRoot{MINI_ASSET_DIR};
     if (!FILE_SYSTEM.mountDirectory("asset", assetRoot, assetReadOnly) ||
-        !FILE_SYSTEM.mountDirectory("library", assetRoot.parent_path() / "library",
-                                    false) ||
+        !FILE_SYSTEM.mountDirectory("library", assetRoot.parent_path() / "library", false) ||
         !ASSET_MANAGER.initialize()) {
-        Log::error("Engine", "Cannot initialize asset system: %s",
-                   assetRoot.string().c_str());
+        Log::error("Engine", "Cannot initialize asset system: %s", assetRoot.string().c_str());
         shutdown();
         return false;
     }
-    ASSET_MANAGER.setChangeListener(
-        [this](const VirtualPath& path, AssetType type, bool removed) {
-            if (type != AssetType::Scene || path != activeScenePath_) return;
-            if (removed) {
-                Log::warn("Engine", "Active Scene source was removed: %s",
-                          path.string().c_str());
-                return;
-            }
-            sceneReloadPending_ = true;
-        });
+    ASSET_MANAGER.setChangeListener([this](const VirtualPath& path, AssetType type, bool removed) {
+        if (type != AssetType::Scene || path != activeScenePath_)
+            return;
+        if (removed) {
+            Log::warn("Engine", "Active Scene source was removed: %s", path.string().c_str());
+            return;
+        }
+        sceneReloadPending_ = true;
+    });
 
-    window_ = std::make_unique<Window>(config_.width, config_.height,
-                                       config_.name);
+    window_ = std::make_unique<Window>(config_.width, config_.height, config_.name);
     renderer_ = std::make_unique<Renderer>(*window_, config_.vsync);
     running_ = true;
     return true;
@@ -93,18 +90,15 @@ void Engine::loop(Application& application) {
         }
 
         const auto currentTime = Clock::now();
-        deltaTime_ = std::min(
-            std::chrono::duration<float>(currentTime - previousTime).count(),
-            0.25F);
+        deltaTime_ =
+            std::min(std::chrono::duration<float>(currentTime - previousTime).count(), 0.25F);
         previousTime = currentTime;
 
         application.onUpdate(deltaTime_);
         scene_->update(deltaTime_);
         const auto [width, height] = window_->framebufferSize();
-        const float aspectRatio = height != 0
-                                      ? static_cast<float>(width) /
-                                            static_cast<float>(height)
-                                      : 1.0F;
+        const float aspectRatio =
+            height != 0 ? static_cast<float>(width) / static_cast<float>(height) : 1.0F;
         scene_->buildRenderScene(renderScene_, aspectRatio);
         renderer_->renderFrame(renderScene_);
     }
@@ -114,7 +108,8 @@ void Engine::loop(Application& application) {
 void Engine::shutdown() {
     scene_->clear();
     renderScene_.clear();
-    if (renderer_) renderer_->waitIdle();
+    if (renderer_)
+        renderer_->waitIdle();
     renderer_.reset();
     MESH_MANAGER.clear();
     MATERIAL_MANAGER.clear();
@@ -134,26 +129,20 @@ void Engine::shutdown() {
 
 bool Engine::loadScene(const VirtualPath& scenePath) {
     if (!scenePath.valid() || scenePath.scheme() != "asset") {
-        Log::error("Engine", "Invalid Scene path: %s",
-                   scenePath.string().c_str());
+        Log::error("Engine", "Invalid Scene path: %s", scenePath.string().c_str());
         return false;
     }
-    const std::shared_ptr<SceneAsset> asset =
-        ASSET_MANAGER.loadAsset<SceneAsset>(scenePath);
-    if (!asset) return false;
+    const std::shared_ptr<SceneAsset> asset = ASSET_MANAGER.loadAsset<SceneAsset>(scenePath);
+    if (!asset)
+        return false;
 
     const SceneInstantiationContext context{
-        .loadMesh = [](const VirtualPath& path) {
-            return MESH_MANAGER.load(path);
-        },
-        .loadMaterial = [](const VirtualPath& path) {
-            return MATERIAL_MANAGER.load(path);
-        },
+        .loadMesh = [](const VirtualPath& path) { return MESH_MANAGER.load(path); },
+        .loadMaterial = [](const VirtualPath& path) { return MATERIAL_MANAGER.load(path); },
     };
     std::unique_ptr<Scene> loaded = asset->instantiate(context);
     if (!loaded) {
-        Log::error("Engine", "Cannot instantiate Scene: %s",
-                   scenePath.string().c_str());
+        Log::error("Engine", "Cannot instantiate Scene: %s", scenePath.string().c_str());
         return false;
     }
     scene_ = std::move(loaded);
@@ -172,12 +161,14 @@ bool Engine::reloadScene() {
 }
 
 Window& Engine::window() {
-    if (!window_) Log::fatal("Engine", "Window is unavailable");
+    if (!window_)
+        Log::fatal("Engine", "Window is unavailable");
     return *window_;
 }
 
 Renderer& Engine::renderer() {
-    if (!renderer_) Log::fatal("Engine", "Renderer is unavailable");
+    if (!renderer_)
+        Log::fatal("Engine", "Renderer is unavailable");
     return *renderer_;
 }
 

@@ -40,10 +40,8 @@ private:
     friend class Singleton<AssetImportPipeline>;
     AssetImportPipeline() = default;
 
-    [[nodiscard]] bool importAssetInternal(const VirtualPath& sourcePath,
-                                           bool force);
-    [[nodiscard]] bool ensureMaterialShaderImported(
-        const VirtualPath& materialPath);
+    [[nodiscard]] bool importAssetInternal(const VirtualPath& sourcePath, bool force);
+    [[nodiscard]] bool ensureMaterialShaderImported(const VirtualPath& materialPath);
     void notify(const AssetImportNotification& notification) const;
 
     AssetImporterRegistry registry_;

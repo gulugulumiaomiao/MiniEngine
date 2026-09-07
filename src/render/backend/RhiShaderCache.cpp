@@ -9,8 +9,7 @@
 namespace engine {
 
 RhiShaderCache::RhiShaderCache(rhi::IDevice& device, CompiledShaderCache& compiledShaders)
-    : device_(device), compiledShaders_(compiledShaders) {
-}
+    : device_(device), compiledShaders_(compiledShaders) {}
 
 RhiShaderCache::~RhiShaderCache() {
     clear();

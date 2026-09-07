@@ -11,8 +11,7 @@ namespace {
 
 [[nodiscard]] bool parseHex(std::string_view text, std::uint64_t& value) {
     value = 0;
-    const auto result = std::from_chars(text.data(), text.data() + text.size(),
-                                        value, 16);
+    const auto result = std::from_chars(text.data(), text.data() + text.size(), value, 16);
     return result.ec == std::errc{} && result.ptr == text.data() + text.size();
 }
 
@@ -25,11 +24,9 @@ namespace {
 } // namespace
 
 AssetId AssetId::generate() {
-    static std::atomic_uint64_t sequence{
-        static_cast<std::uint64_t>(
-            std::chrono::high_resolution_clock::now().time_since_epoch().count())};
-    const std::uint64_t seed =
-        sequence.fetch_add(0x9e3779b97f4a7c15ULL, std::memory_order_relaxed);
+    static std::atomic_uint64_t sequence{static_cast<std::uint64_t>(
+        std::chrono::high_resolution_clock::now().time_since_epoch().count())};
+    const std::uint64_t seed = sequence.fetch_add(0x9e3779b97f4a7c15ULL, std::memory_order_relaxed);
     std::uint64_t high = mix(seed);
     std::uint64_t low = mix(seed + 0x9e3779b97f4a7c15ULL);
 
@@ -44,8 +41,8 @@ AssetId AssetId::generate() {
 }
 
 std::optional<AssetId> AssetId::parse(std::string_view text) {
-    if (text.size() != 36 || text[8] != '-' || text[13] != '-' ||
-        text[18] != '-' || text[23] != '-') {
+    if (text.size() != 36 || text[8] != '-' || text[13] != '-' || text[18] != '-' ||
+        text[23] != '-') {
         return std::nullopt;
     }
 
@@ -59,8 +56,7 @@ std::optional<AssetId> AssetId::parse(std::string_view text) {
 
     std::uint64_t high = 0;
     std::uint64_t low = 0;
-    if (output != compact.size() ||
-        !parseHex({compact.data(), 16}, high) ||
+    if (output != compact.size() || !parseHex({compact.data(), 16}, high) ||
         !parseHex({compact.data() + 16, 16}, low)) {
         return std::nullopt;
     }
@@ -71,7 +67,9 @@ std::optional<AssetId> AssetId::parse(std::string_view text) {
 
 std::string AssetId::toString() const {
     char result[37]{};
-    std::snprintf(result, sizeof(result), "%08llx-%04llx-%04llx-%04llx-%012llx",
+    std::snprintf(result,
+                  sizeof(result),
+                  "%08llx-%04llx-%04llx-%04llx-%012llx",
                   static_cast<unsigned long long>(high_ >> 32U),
                   static_cast<unsigned long long>((high_ >> 16U) & 0xffffULL),
                   static_cast<unsigned long long>(high_ & 0xffffULL),

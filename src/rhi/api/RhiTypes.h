@@ -8,11 +8,9 @@
 
 namespace engine::rhi {
 
-inline constexpr std::uint32_t kInvalidHandleIndex =
-    std::numeric_limits<std::uint32_t>::max();
+inline constexpr std::uint32_t kInvalidHandleIndex = std::numeric_limits<std::uint32_t>::max();
 
-template <typename Tag>
-struct Handle {
+template <typename Tag> struct Handle {
     std::uint32_t index{kInvalidHandleIndex};
     std::uint32_t generation{};
 

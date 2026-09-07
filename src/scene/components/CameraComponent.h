@@ -31,11 +31,10 @@ public:
     [[nodiscard]] math::Mat44 projectionMatrix(float aspectRatio) const {
         if (projection == CameraProjection::Orthographic) {
             const float halfWidth = orthographicSize * aspectRatio;
-            return math::orthographic(-halfWidth, halfWidth, -orthographicSize,
-                                      orthographicSize, nearPlane, farPlane);
+            return math::orthographic(
+                -halfWidth, halfWidth, -orthographicSize, orthographicSize, nearPlane, farPlane);
         }
-        return math::perspective(math::radians(fieldOfView), aspectRatio,
-                                 nearPlane, farPlane);
+        return math::perspective(math::radians(fieldOfView), aspectRatio, nearPlane, farPlane);
     }
 
     CameraProjection projection{CameraProjection::Perspective};

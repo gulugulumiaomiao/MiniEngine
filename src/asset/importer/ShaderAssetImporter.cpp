@@ -42,25 +42,21 @@ struct DependencyCollector {
         while (!remaining.empty()) {
             const std::size_t lineEnd = remaining.find('\n');
             const std::string_view line = remaining.substr(0, lineEnd);
-            remaining = lineEnd == std::string_view::npos
-                            ? std::string_view{}
-                            : remaining.substr(lineEnd + 1);
+            remaining = lineEnd == std::string_view::npos ? std::string_view{}
+                                                          : remaining.substr(lineEnd + 1);
             const std::size_t first = line.find_first_not_of(" \t");
-            if (first == std::string::npos ||
-                line.compare(first, 8, "#include") != 0) {
+            if (first == std::string::npos || line.compare(first, 8, "#include") != 0) {
                 continue;
             }
             const std::size_t quote = line.find('"', first + 8);
             const std::size_t endQuote =
-                quote == std::string::npos ? std::string::npos
-                                           : line.find('"', quote + 1);
+                quote == std::string::npos ? std::string::npos : line.find('"', quote + 1);
             if (quote == std::string::npos || endQuote == std::string::npos) {
                 visiting.erase(key);
                 error = "Malformed include in: " + key;
                 return false;
             }
-            const std::string include{
-                line.substr(quote + 1, endQuote - quote - 1)};
+            const std::string include{line.substr(quote + 1, endQuote - quote - 1)};
             const auto resolved = ShaderIncludeResolver::resolve(path, include);
             if (!resolved) {
                 visiting.erase(key);
@@ -85,23 +81,19 @@ struct DependencyCollector {
 
 } // namespace
 
-AssetImportResult ShaderAssetImporter::import(
-    const AssetImportContext& context) const {
-    if (context.meta.assetType != AssetType::Shader ||
-        !context.meta.assetId.valid() || !context.sourcePath.valid() ||
-        !context.artifactPath.valid()) {
+AssetImportResult ShaderAssetImporter::import(const AssetImportContext& context) const {
+    if (context.meta.assetType != AssetType::Shader || !context.meta.assetId.valid() ||
+        !context.sourcePath.valid() || !context.artifactPath.valid()) {
         return failImport("Invalid Shader import context");
     }
     const auto source = FILE_SYSTEM.readText(context.sourcePath);
     if (!source) {
-        return failImport("Cannot read ShaderAsset: " +
-                          context.sourcePath.string());
+        return failImport("Cannot read ShaderAsset: " + context.sourcePath.string());
     }
     const std::shared_ptr<ShaderAsset> shader =
         detail::parseShaderAsset(context.sourcePath, *source);
     if (!shader) {
-        return failImport("Cannot parse ShaderAsset: " +
-                          context.sourcePath.string());
+        return failImport("Cannot parse ShaderAsset: " + context.sourcePath.string());
     }
 
     DependencyCollector collector;
@@ -120,18 +112,15 @@ AssetImportResult ShaderAssetImporter::import(
     }
     BinaryWriter writer;
     if (!shader->transfer(writer)) {
-        return failImport("Cannot serialize Shader Artifact: " +
-                          context.sourcePath.string());
+        return failImport("Cannot serialize Shader Artifact: " + context.sourcePath.string());
     }
-    const AssetArtifact artifact{1, context.meta.assetId, AssetType::Shader,
-                                 context.sourcePath, writer.takeBytes()};
+    const AssetArtifact artifact{
+        1, context.meta.assetId, AssetType::Shader, context.sourcePath, writer.takeBytes()};
     if (!saveAssetArtifact(context.artifactPath, artifact)) {
-        return failImport("Cannot save Shader Artifact: " +
-                          context.artifactPath.string());
+        return failImport("Cannot save Shader Artifact: " + context.artifactPath.string());
     }
     return AssetImportResult::succeeded(
-        AssetType::Shader, context.artifactPath,
-        std::move(collector.dependencies));
+        AssetType::Shader, context.artifactPath, std::move(collector.dependencies));
 }
 
 } // namespace engine

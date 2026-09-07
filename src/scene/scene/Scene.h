@@ -30,9 +30,7 @@ public:
     void clear();
 
     [[nodiscard]] Node* findNode(NodeHandle node) { return nodes_.find(node); }
-    [[nodiscard]] const Node* findNode(NodeHandle node) const {
-        return nodes_.find(node);
-    }
+    [[nodiscard]] const Node* findNode(NodeHandle node) const { return nodes_.find(node); }
     [[nodiscard]] std::size_t nodeCount() const { return nodes_.size(); }
     [[nodiscard]] NodeHandle rootHandle() const { return root_; }
     [[nodiscard]] Node& root() { return *nodes_.find(root_); }
@@ -46,8 +44,7 @@ private:
     friend class Node;
     friend class TransformComponent;
 
-    void extractRenderNode(Node& node, RenderScene& output,
-                           float aspectRatio);
+    void extractRenderNode(Node& node, RenderScene& output, float aspectRatio);
 
     std::string name_;
     HandlePool<Node, NodeHandle> nodes_;

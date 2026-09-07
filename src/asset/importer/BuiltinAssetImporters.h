@@ -4,7 +4,6 @@ namespace engine {
 
 class AssetImporterRegistry;
 
-[[nodiscard]] bool registerBuiltinAssetImporters(
-    AssetImporterRegistry& registry);
+[[nodiscard]] bool registerBuiltinAssetImporters(AssetImporterRegistry& registry);
 
 } // namespace engine

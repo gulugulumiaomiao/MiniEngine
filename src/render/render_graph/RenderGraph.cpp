@@ -11,11 +11,12 @@ void RenderGraph::importTexture(ImportedTexture texture) {
     textures_.push_back(texture);
 }
 
-void RenderGraph::addGraphicsPass(std::string name, rhi::RenderingInfo rendering,
+void RenderGraph::addGraphicsPass(std::string name,
+                                  rhi::RenderingInfo rendering,
                                   std::vector<ResourceUsage> resources,
                                   ExecuteCallback execute) {
-    passes_.push_back({std::move(name), std::move(rendering), std::move(resources),
-                       std::move(execute)});
+    passes_.push_back(
+        {std::move(name), std::move(rendering), std::move(resources), std::move(execute)});
 }
 
 void RenderGraph::execute(rhi::IGraphicsCommandEncoder& encoder) const {
@@ -28,8 +29,8 @@ void RenderGraph::execute(rhi::IGraphicsCommandEncoder& encoder) const {
     std::vector<State> states;
     states.reserve(textures_.size());
     for (const ImportedTexture& texture : textures_) {
-        states.push_back({texture.texture, texture.aspect, texture.initialState,
-                          texture.finalState});
+        states.push_back(
+            {texture.texture, texture.aspect, texture.initialState, texture.finalState});
     }
 
     for (const GraphicsPass& pass : passes_) {
@@ -39,8 +40,7 @@ void RenderGraph::execute(rhi::IGraphicsCommandEncoder& encoder) const {
                 return candidate.texture == usage.texture;
             });
             if (state == states.end()) {
-                Log::fatal("RenderGraph",
-                           "Pass uses a texture that was not imported");
+                Log::fatal("RenderGraph", "Pass uses a texture that was not imported");
             }
             if (state->current != usage.state) {
                 barriers.push_back({usage.texture, usage.aspect, state->current, usage.state});

@@ -15,10 +15,11 @@ namespace engine {
 class Material;
 
 class MaterialGpuCache final {
-    public:
+public:
     using TextureResolver = std::function<std::optional<rhi::TextureBinding>(std::string_view)>;
 
-    MaterialGpuCache(rhi::IDevice& device, rhi::BindGroupLayoutHandle layout,
+    MaterialGpuCache(rhi::IDevice& device,
+                     rhi::BindGroupLayoutHandle layout,
                      std::uint32_t frameCount);
     ~MaterialGpuCache();
 
@@ -27,7 +28,7 @@ class MaterialGpuCache final {
     [[nodiscard]] rhi::BindGroupHandle prepare(MaterialHandle handle, const Material& material);
     void clear();
 
-    private:
+private:
     struct Entry {
         rhi::BufferHandle uniformBuffer;
         std::uint64_t uniformCapacity{};

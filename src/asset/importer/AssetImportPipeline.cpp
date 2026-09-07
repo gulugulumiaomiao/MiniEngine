@@ -28,8 +28,7 @@ namespace {
 
 [[nodiscard]] std::optional<std::uint64_t> hashFile(const VirtualPath& path) {
     const auto bytes = FILE_SYSTEM.readBinary(path);
-    return bytes ? std::optional<std::uint64_t>{hashContent(*bytes)}
-                 : std::nullopt;
+    return bytes ? std::optional<std::uint64_t>{hashContent(*bytes)} : std::nullopt;
 }
 
 [[nodiscard]] bool isSourceAsset(const VirtualPath& path) {
@@ -40,10 +39,10 @@ namespace {
 
 bool AssetImportPipeline::initialize() {
     std::scoped_lock lock{mutex_};
-    if (initialized_) return true;
+    if (initialized_)
+        return true;
     registry_.clear();
-    if (!registerBuiltinAssetImporters(registry_) ||
-        !ASSET_DATABASE.initialize()) {
+    if (!registerBuiltinAssetImporters(registry_) || !ASSET_DATABASE.initialize()) {
         Log::error("AssetImportPipeline", "Initialization failed");
         registry_.clear();
         return false;
@@ -54,7 +53,8 @@ bool AssetImportPipeline::initialize() {
 
 void AssetImportPipeline::shutdown() {
     std::scoped_lock lock{mutex_};
-    if (!initialized_) return;
+    if (!initialized_)
+        return;
     (void)ASSET_DATABASE.save();
     importing_.clear();
     listener_ = {};
@@ -72,9 +72,9 @@ void AssetImportPipeline::setListener(Listener listener) {
     listener_ = std::move(listener);
 }
 
-void AssetImportPipeline::notify(
-    const AssetImportNotification& notification) const {
-    if (listener_) listener_(notification);
+void AssetImportPipeline::notify(const AssetImportNotification& notification) const {
+    if (listener_)
+        listener_(notification);
 }
 
 bool AssetImportPipeline::scanAll() {
@@ -85,11 +85,11 @@ bool AssetImportPipeline::scanAll() {
     }
     std::vector<VirtualPath> sources;
     for (const VirtualPath& path : FILE_SYSTEM.listFiles(VirtualPath{"asset://"}, true)) {
-        if (isSourceAsset(path)) sources.push_back(path);
+        if (isSourceAsset(path))
+            sources.push_back(path);
     }
     std::ranges::sort(sources, {}, [](const VirtualPath& path) {
-        return std::pair{inferAssetType(path) == AssetType::Material,
-                         path.string()};
+        return std::pair{inferAssetType(path) == AssetType::Material, path.string()};
     });
     bool success = true;
     std::unordered_set<std::string> present;
@@ -115,32 +115,32 @@ bool AssetImportPipeline::reimportAsset(const VirtualPath& sourcePath) {
     return importAssetInternal(sourcePath, true);
 }
 
-bool AssetImportPipeline::ensureMaterialShaderImported(
-    const VirtualPath& materialPath) {
+bool AssetImportPipeline::ensureMaterialShaderImported(const VirtualPath& materialPath) {
     const auto source = FILE_SYSTEM.readText(materialPath);
-    if (!source) return false;
+    if (!source)
+        return false;
     const std::shared_ptr<MaterialAsset> material =
         detail::parseMaterialAsset(materialPath, *source);
-    if (!material) return false;
+    if (!material)
+        return false;
     if (inferAssetType(material->shader) != AssetType::Shader) {
-        Log::error("AssetImportPipeline", "Material Shader path is invalid: %s",
+        Log::error("AssetImportPipeline",
+                   "Material Shader path is invalid: %s",
                    material->shader.string().c_str());
         return false;
     }
     return importAssetInternal(material->shader, false);
 }
 
-bool AssetImportPipeline::importAssetInternal(const VirtualPath& sourcePath,
-                                              bool force) {
+bool AssetImportPipeline::importAssetInternal(const VirtualPath& sourcePath, bool force) {
     if (!initialized_ || !sourcePath.valid() || !isSourceAsset(sourcePath)) {
-        Log::error("AssetImportPipeline", "Unsupported asset path: %s",
-                   sourcePath.string().c_str());
+        Log::error(
+            "AssetImportPipeline", "Unsupported asset path: %s", sourcePath.string().c_str());
         return false;
     }
     const std::string key = sourcePath.string();
     if (!importing_.insert(key).second) {
-        Log::error("AssetImportPipeline", "Cyclic asset dependency: %s",
-                   key.c_str());
+        Log::error("AssetImportPipeline", "Cyclic asset dependency: %s", key.c_str());
         return false;
     }
     struct ImportGuard {
@@ -151,42 +151,36 @@ bool AssetImportPipeline::importAssetInternal(const VirtualPath& sourcePath,
 
     const AssetType inferredType = inferAssetType(sourcePath);
     const VirtualPath metaPath = assetMetaPath(sourcePath);
-    std::optional<AssetMeta> meta = FILE_SYSTEM.isFile(metaPath)
-                                        ? loadAssetMeta(metaPath)
-                                        : createAssetMeta(sourcePath);
+    std::optional<AssetMeta> meta =
+        FILE_SYSTEM.isFile(metaPath) ? loadAssetMeta(metaPath) : createAssetMeta(sourcePath);
     if (!meta || meta->assetType != inferredType) {
-        Log::error("AssetImportPipeline", "Invalid Meta for asset: %s",
-                   key.c_str());
+        Log::error("AssetImportPipeline", "Invalid Meta for asset: %s", key.c_str());
         return false;
     }
     const IAssetImporter* importer = registry_.find(meta->assetType);
     if (!importer) {
-        Log::error("AssetImportPipeline", "No Importer for asset: %s",
-                   key.c_str());
+        Log::error("AssetImportPipeline", "No Importer for asset: %s", key.c_str());
         return false;
     }
     const VirtualPath artifactPath = ASSET_DATABASE.artifactPath(meta->assetId);
     const auto sourceHash = hashFile(sourcePath);
     const auto metaHash = hashFile(metaPath);
-    if (!sourceHash || !metaHash) return false;
+    if (!sourceHash || !metaHash)
+        return false;
 
     const auto existing = ASSET_DATABASE.findByPath(sourcePath);
     if (!force && existing && existing->id == meta->assetId &&
         existing->status == AssetImportStatus::Imported &&
-        existing->importerVersion == importer->version() &&
-        existing->sourceHash == *sourceHash &&
-        existing->metaHash == *metaHash &&
-        FILE_SYSTEM.isFile(existing->artifactPath)) {
+        existing->importerVersion == importer->version() && existing->sourceHash == *sourceHash &&
+        existing->metaHash == *metaHash && FILE_SYSTEM.isFile(existing->artifactPath)) {
         return true;
     }
 
     AssetImportContext context{*meta, sourcePath, metaPath, artifactPath};
     AssetImportResult result =
-        meta->assetType == AssetType::Material &&
-                !ensureMaterialShaderImported(sourcePath)
-            ? AssetImportResult::failed(
-                  AssetType::Material,
-                  "Material Shader dependency import failed")
+        meta->assetType == AssetType::Material && !ensureMaterialShaderImported(sourcePath)
+            ? AssetImportResult::failed(AssetType::Material,
+                                        "Material Shader dependency import failed")
             : importer->import(context);
     AssetRecord record = existing.value_or(AssetRecord{});
     record.id = meta->assetId;
@@ -199,17 +193,18 @@ bool AssetImportPipeline::importAssetInternal(const VirtualPath& sourcePath,
     record.metaHash = *metaHash;
     if (result.success) {
         const auto artifactHash = hashFile(artifactPath);
-        if (!artifactHash) result = AssetImportResult::failed(
-            meta->assetType, "Importer did not produce an Artifact");
-        else record.artifactHash = *artifactHash;
+        if (!artifactHash)
+            result =
+                AssetImportResult::failed(meta->assetType, "Importer did not produce an Artifact");
+        else
+            record.artifactHash = *artifactHash;
     }
-    record.status = result.success ? AssetImportStatus::Imported
-                                   : AssetImportStatus::Failed;
+    record.status = result.success ? AssetImportStatus::Imported : AssetImportStatus::Failed;
     record.lastError = result.error;
-    if (result.success) record.dependencies = std::move(result.dependencies);
+    if (result.success)
+        record.dependencies = std::move(result.dependencies);
     if (!ASSET_DATABASE.addOrUpdate(record) || !ASSET_DATABASE.save()) {
-        Log::error("AssetImportPipeline", "Cannot update AssetDatabase: %s",
-                   key.c_str());
+        Log::error("AssetImportPipeline", "Cannot update AssetDatabase: %s", key.c_str());
         return false;
     }
     notify({sourcePath, meta->assetType, result.success, false});
@@ -230,7 +225,8 @@ bool AssetImportPipeline::importDependencies(const VirtualPath& sourcePath) {
 bool AssetImportPipeline::removeAsset(const VirtualPath& sourcePath) {
     std::scoped_lock lock{mutex_};
     const auto record = ASSET_DATABASE.findByPath(sourcePath);
-    if (!record) return true;
+    if (!record)
+        return true;
     if (FILE_SYSTEM.isFile(record->artifactPath)) {
         (void)FILE_SYSTEM.removeFile(record->artifactPath);
     }
@@ -243,36 +239,33 @@ bool AssetImportPipeline::removeAsset(const VirtualPath& sourcePath) {
 
 void AssetImportPipeline::processFileEvents() {
     std::scoped_lock lock{mutex_};
-    if (!initialized_) return;
+    if (!initialized_)
+        return;
 
     const auto sourceForMeta = [](const VirtualPath& path) {
         constexpr std::string_view suffix{".meta"};
         return path.string().ends_with(suffix)
-                   ? VirtualPath{path.string().substr(
-                         0, path.string().size() - suffix.size())}
+                   ? VirtualPath{path.string().substr(0, path.string().size() - suffix.size())}
                    : VirtualPath{};
     };
     std::unordered_set<std::string> cascaded;
     std::function<void(const VirtualPath&)> reimportDependents;
-    reimportDependents = [this, &cascaded, &reimportDependents](
-                             const VirtualPath& dependency) {
-        if (!cascaded.insert(dependency.string()).second) return;
-        for (const VirtualPath& dependent :
-             ASSET_DATABASE.dependentsOf(dependency)) {
+    reimportDependents = [this, &cascaded, &reimportDependents](const VirtualPath& dependency) {
+        if (!cascaded.insert(dependency.string()).second)
+            return;
+        for (const VirtualPath& dependent : ASSET_DATABASE.dependentsOf(dependency)) {
             if (importAssetInternal(dependent, true)) {
                 reimportDependents(dependent);
             }
         }
     };
-    const auto consume = [this, &sourceForMeta, &reimportDependents](
-                             const VirtualPath& path,
-                             FileChangeType type) {
+    const auto consume = [this, &sourceForMeta, &reimportDependents](const VirtualPath& path,
+                                                                     FileChangeType type) {
         if (isSourceAsset(path)) {
             if (type == FileChangeType::Removed) {
                 reimportDependents(path);
                 (void)removeAsset(path);
-            } else if (importAssetInternal(
-                           path, type == FileChangeType::Modified)) {
+            } else if (importAssetInternal(path, type == FileChangeType::Modified)) {
                 reimportDependents(path);
             }
             return;

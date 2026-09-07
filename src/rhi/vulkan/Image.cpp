@@ -1,11 +1,14 @@
 #include "rhi/vulkan/Image.h"
 #include "core/logging/Log.h"
 
-
 namespace engine {
 
-Image::Image(VmaAllocator allocator, VkDevice device, VkExtent3D extent, VkFormat format,
-             VkImageUsageFlags usage, VkImageAspectFlags aspectMask)
+Image::Image(VmaAllocator allocator,
+             VkDevice device,
+             VkExtent3D extent,
+             VkFormat format,
+             VkImageUsageFlags usage,
+             VkImageAspectFlags aspectMask)
     : allocator_(allocator), device_(device), format_(format) {
     VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     imageInfo.imageType = VK_IMAGE_TYPE_2D;

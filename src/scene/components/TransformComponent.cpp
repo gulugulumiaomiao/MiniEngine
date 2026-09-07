@@ -6,26 +6,28 @@
 namespace engine {
 
 bool TransformComponentAsset::transfer(Transfer& archive) {
-    return archive.transfer("position", position) &&
-           archive.transfer("rotation", rotation) &&
+    return archive.transfer("position", position) && archive.transfer("rotation", rotation) &&
            archive.transfer("scale", scale);
 }
 
 void TransformComponent::setLocalPosition(const math::Vec3& position) {
-    if (localPosition_ == position) return;
+    if (localPosition_ == position)
+        return;
     localPosition_ = position;
     markLocalDirty();
 }
 
 void TransformComponent::setLocalRotation(const math::Quat& rotation) {
     const math::Quat normalized = math::normalize(rotation);
-    if (localRotation_ == normalized) return;
+    if (localRotation_ == normalized)
+        return;
     localRotation_ = normalized;
     markLocalDirty();
 }
 
 void TransformComponent::setLocalScale(const math::Vec3& scale) {
-    if (localScale_ == scale) return;
+    if (localScale_ == scale)
+        return;
     localScale_ = scale;
     markLocalDirty();
 }
@@ -62,10 +64,10 @@ void TransformComponent::markLocalDirty() {
     }
 }
 
-bool TransformComponent::updateWorld(const math::Mat44& parentWorld,
-                                     bool parentChanged) {
+bool TransformComponent::updateWorld(const math::Mat44& parentWorld, bool parentChanged) {
     const bool changed = localDirty_ || worldDirty_ || parentChanged;
-    if (!changed) return false;
+    if (!changed)
+        return false;
     worldMatrix_ = parentWorld * localMatrix();
     worldDirty_ = false;
     return true;

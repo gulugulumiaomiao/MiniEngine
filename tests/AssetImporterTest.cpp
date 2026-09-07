@@ -21,11 +21,9 @@
 int main() {
     using namespace engine;
 
-    const auto unique =
-        std::chrono::steady_clock::now().time_since_epoch().count();
-    const std::filesystem::path root =
-        std::filesystem::temp_directory_path() /
-        ("mini-vulkan-importer-test-" + std::to_string(unique));
+    const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
+    const std::filesystem::path root = std::filesystem::temp_directory_path() /
+                                       ("mini-vulkan-importer-test-" + std::to_string(unique));
     const std::filesystem::path assetRoot = root / "assets";
     const std::filesystem::path libraryRoot = root / "library";
     std::error_code error;
@@ -56,45 +54,37 @@ int main() {
   }]
 })";
     if (!FILE_SYSTEM.writeText(shaderPath, shaderSource) ||
-        !FILE_SYSTEM.writeText(
-            vertexPath, "#include \"include/common.glsl\"\nvoid main() {}\n") ||
+        !FILE_SYSTEM.writeText(vertexPath, "#include \"include/common.glsl\"\nvoid main() {}\n") ||
         !FILE_SYSTEM.writeText(fragmentPath, "void main() {}\n") ||
-        !FILE_SYSTEM.writeText(
-            commonPath, "#include \"asset://shaders/include/nested.glsl\"\n") ||
+        !FILE_SYSTEM.writeText(commonPath, "#include \"asset://shaders/include/nested.glsl\"\n") ||
         !FILE_SYSTEM.writeText(nestedPath, "const float nested = 1.0;\n")) {
         return 2;
     }
 
     AssetImporterRegistry registry;
-    if (!registerBuiltinAssetImporters(registry) ||
-        !registry.find(AssetType::Shader) ||
-        !registry.find(AssetType::Material) ||
-        !registry.find(AssetType::Mesh) || !registry.find(AssetType::Scene) ||
-        registry.find(AssetType::Unknown)) {
+    if (!registerBuiltinAssetImporters(registry) || !registry.find(AssetType::Shader) ||
+        !registry.find(AssetType::Material) || !registry.find(AssetType::Mesh) ||
+        !registry.find(AssetType::Scene) || registry.find(AssetType::Unknown)) {
         return 3;
     }
 
     const AssetMeta meta{1, AssetId::generate(), AssetType::Shader};
     const VirtualPath artifactPath = ASSET_DATABASE.artifactPath(meta.assetId);
-    const AssetImportContext context{meta, shaderPath,
-                                     assetMetaPath(shaderPath), artifactPath};
-    const AssetImportResult result =
-        registry.find(AssetType::Shader)->import(context);
+    const AssetImportContext context{meta, shaderPath, assetMetaPath(shaderPath), artifactPath};
+    const AssetImportResult result = registry.find(AssetType::Shader)->import(context);
     if (!result.success || result.type != AssetType::Shader ||
-        result.artifactPath.string() != artifactPath.string() ||
-        result.dependencies.size() != 4) {
+        result.artifactPath.string() != artifactPath.string() || result.dependencies.size() != 4) {
         return 4;
     }
 
     const auto contains = [&result](const VirtualPath& expected) {
         return std::ranges::find_if(result.dependencies,
                                     [&expected](const VirtualPath& dependency) {
-                                        return dependency.string() ==
-                                               expected.string();
+                                        return dependency.string() == expected.string();
                                     }) != result.dependencies.end();
     };
-    if (!contains(vertexPath) || !contains(fragmentPath) ||
-        !contains(commonPath) || !contains(nestedPath)) {
+    if (!contains(vertexPath) || !contains(fragmentPath) || !contains(commonPath) ||
+        !contains(nestedPath)) {
         return 5;
     }
 
@@ -126,32 +116,25 @@ int main() {
     for (const std::byte value : std::as_bytes(std::span{positions})) {
         positionBytes.push_back(std::to_integer<std::uint8_t>(value));
     }
-    meshJson["vertex_streams"] = {
-        {{"binding", 0}, {"vertex_count", 3}, {"bytes", positionBytes}}};
+    meshJson["vertex_streams"] = {{{"binding", 0}, {"vertex_count", 3}, {"bytes", positionBytes}}};
     if (!FILE_SYSTEM.writeText(meshPath, meshJson.dump()))
         return 7;
     const AssetMeta meshMeta{1, AssetId::generate(), AssetType::Mesh};
-    const VirtualPath meshArtifactPath =
-        ASSET_DATABASE.artifactPath(meshMeta.assetId);
+    const VirtualPath meshArtifactPath = ASSET_DATABASE.artifactPath(meshMeta.assetId);
     const AssetImportContext meshContext{
         meshMeta, meshPath, assetMetaPath(meshPath), meshArtifactPath};
-    const AssetImportResult meshResult =
-        registry.find(AssetType::Mesh)->import(meshContext);
+    const AssetImportResult meshResult = registry.find(AssetType::Mesh)->import(meshContext);
     const auto meshArtifact = loadAssetArtifact(meshArtifactPath);
     MeshAsset mesh;
     mesh.setAssetPath(meshPath);
-    BinaryReader meshReader{meshArtifact ? meshArtifact->payload
-                                         : std::span<const std::byte>{}};
-    if (!meshResult.success || !meshArtifact ||
-        meshArtifact->assetType != AssetType::Mesh ||
+    BinaryReader meshReader{meshArtifact ? meshArtifact->payload : std::span<const std::byte>{}};
+    if (!meshResult.success || !meshArtifact || meshArtifact->assetType != AssetType::Mesh ||
         !mesh.transfer(meshReader) || !meshReader.finished() ||
-        mesh.desc.debugName != "ImporterMesh" ||
-        mesh.meshData.indexCount != 3) {
+        mesh.desc.debugName != "ImporterMesh" || mesh.meshData.indexCount != 3) {
         return 8;
     }
 
-    const VirtualPath proceduralPath{
-        "asset://meshes/procedural_test.mesh.json"};
+    const VirtualPath proceduralPath{"asset://meshes/procedural_test.mesh.json"};
     const nlohmann::json proceduralJson{
         {"name", "ProceduralImporterMesh"},
         {"keep_cpu_copy", true},
@@ -167,31 +150,25 @@ int main() {
                 {"material_slot", 4}},
                {{"type", "sphere"},
                 {"parameters",
-                 {{"radius", 0.5},
-                  {"longitude_segments", 8},
-                  {"latitude_segments", 4}}},
+                 {{"radius", 0.5}, {"longitude_segments", 8}, {"latitude_segments", 4}}},
                 {"translation", {1.0, 0.0, 0.0}},
                 {"material_slot", 7}},
            }}}}};
     if (!FILE_SYSTEM.writeText(proceduralPath, proceduralJson.dump()))
         return 10;
     const AssetMeta proceduralMeta{1, AssetId::generate(), AssetType::Mesh};
-    const VirtualPath proceduralArtifactPath =
-        ASSET_DATABASE.artifactPath(proceduralMeta.assetId);
-    const AssetImportContext proceduralContext{proceduralMeta, proceduralPath,
-                                               assetMetaPath(proceduralPath),
-                                               proceduralArtifactPath};
+    const VirtualPath proceduralArtifactPath = ASSET_DATABASE.artifactPath(proceduralMeta.assetId);
+    const AssetImportContext proceduralContext{
+        proceduralMeta, proceduralPath, assetMetaPath(proceduralPath), proceduralArtifactPath};
     const AssetImportResult proceduralResult =
         registry.find(AssetType::Mesh)->import(proceduralContext);
     const auto proceduralArtifact = loadAssetArtifact(proceduralArtifactPath);
     MeshAsset proceduralMesh;
-    BinaryReader proceduralReader{proceduralArtifact
-                                      ? proceduralArtifact->payload
-                                      : std::span<const std::byte>{}};
+    BinaryReader proceduralReader{proceduralArtifact ? proceduralArtifact->payload
+                                                     : std::span<const std::byte>{}};
     if (!proceduralResult.success || !proceduralArtifact ||
-        !proceduralMesh.transfer(proceduralReader) ||
-        !proceduralReader.finished() || !proceduralMesh.buildRecipe ||
-        proceduralMesh.buildRecipe->parts.size() != 2 ||
+        !proceduralMesh.transfer(proceduralReader) || !proceduralReader.finished() ||
+        !proceduralMesh.buildRecipe || proceduralMesh.buildRecipe->parts.size() != 2 ||
         proceduralMesh.desc.subMeshes.size() != 2 ||
         proceduralMesh.desc.subMeshes[0].materialSlot != 4 ||
         proceduralMesh.desc.subMeshes[1].materialSlot != 7 ||

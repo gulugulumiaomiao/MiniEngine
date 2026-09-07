@@ -31,80 +31,92 @@ constexpr std::uint32_t kMaxComponentsPerNode = 32;
 constexpr std::uint32_t kMaxMaterialsPerNode = 1U << 16U;
 
 bool fail(const VirtualPath& path, std::string_view message) {
-    Log::error("SceneAsset", "%s: %.*s", path.string().c_str(),
-               static_cast<int>(message.size()), message.data());
+    Log::error("SceneAsset",
+               "%s: %.*s",
+               path.string().c_str(),
+               static_cast<int>(message.size()),
+               message.data());
     return false;
 }
 
-bool finite(float value) { return std::isfinite(value); }
+bool finite(float value) {
+    return std::isfinite(value);
+}
 bool finite(const math::Vec3& value) {
     return finite(value.x) && finite(value.y) && finite(value.z);
 }
 bool finite(const math::Vec4& value) {
-    return finite(value.x) && finite(value.y) && finite(value.z) &&
-           finite(value.w);
+    return finite(value.x) && finite(value.y) && finite(value.z) && finite(value.w);
 }
 bool finite(const math::Quat& value) {
-    return finite(value.x) && finite(value.y) && finite(value.z) &&
-           finite(value.w);
+    return finite(value.x) && finite(value.y) && finite(value.z) && finite(value.w);
 }
 
-bool readFloat(const Json& object, const char* key, float& result,
-               bool optional = true) {
+bool readFloat(const Json& object, const char* key, float& result, bool optional = true) {
     const auto value = object.find(key);
-    if (value == object.end()) return optional;
-    if (!value->is_number()) return false;
+    if (value == object.end())
+        return optional;
+    if (!value->is_number())
+        return false;
     result = value->get<float>();
     return finite(result);
 }
 
-bool readBool(const Json& object, const char* key, bool& result,
-              bool optional = true) {
+bool readBool(const Json& object, const char* key, bool& result, bool optional = true) {
     const auto value = object.find(key);
-    if (value == object.end()) return optional;
-    if (!value->is_boolean()) return false;
+    if (value == object.end())
+        return optional;
+    if (!value->is_boolean())
+        return false;
     result = value->get<bool>();
     return true;
 }
 
-bool readUInt(const Json& object, const char* key, std::uint32_t& result,
-              bool optional = true) {
+bool readUInt(const Json& object, const char* key, std::uint32_t& result, bool optional = true) {
     const auto value = object.find(key);
-    if (value == object.end()) return optional;
-    if (!value->is_number_unsigned()) return false;
+    if (value == object.end())
+        return optional;
+    if (!value->is_number_unsigned())
+        return false;
     result = value->get<std::uint32_t>();
     return true;
 }
 
-bool readInt(const Json& object, const char* key, int& result,
-             bool optional = true) {
+bool readInt(const Json& object, const char* key, int& result, bool optional = true) {
     const auto value = object.find(key);
-    if (value == object.end()) return optional;
-    if (!value->is_number_integer()) return false;
+    if (value == object.end())
+        return optional;
+    if (!value->is_number_integer())
+        return false;
     result = value->get<int>();
     return true;
 }
 
 template <typename Vector>
-bool readVector(const Json& object, const char* key, Vector& result,
-                std::size_t size, bool optional = true) {
+bool readVector(
+    const Json& object, const char* key, Vector& result, std::size_t size, bool optional = true) {
     const auto value = object.find(key);
-    if (value == object.end()) return optional;
-    if (!value->is_array() || value->size() != size) return false;
+    if (value == object.end())
+        return optional;
+    if (!value->is_array() || value->size() != size)
+        return false;
     for (std::size_t index = 0; index < size; ++index) {
-        if (!(*value)[index].is_number()) return false;
-        result[static_cast<typename Vector::length_type>(index)] =
-            (*value)[index].get<float>();
+        if (!(*value)[index].is_number())
+            return false;
+        result[static_cast<typename Vector::length_type>(index)] = (*value)[index].get<float>();
     }
     return true;
 }
 
 bool readRotation(const Json& object, math::Quat& result) {
     const auto value = object.find("rotation");
-    if (value == object.end()) return true;
-    if (!value->is_array() || value->size() != 4) return false;
+    if (value == object.end())
+        return true;
+    if (!value->is_array() || value->size() != 4)
+        return false;
     for (const Json& element : *value) {
-        if (!element.is_number()) return false;
+        if (!element.is_number())
+            return false;
     }
     result.x = (*value)[0].get<float>();
     result.y = (*value)[1].get<float>();
@@ -113,37 +125,40 @@ bool readRotation(const Json& object, math::Quat& result) {
     return finite(result);
 }
 
-VirtualPath readAssetPath(const VirtualPath& owner,
-                          const std::string& value) {
-    if (value.find("://") != std::string::npos) return VirtualPath{value};
+VirtualPath readAssetPath(const VirtualPath& owner, const std::string& value) {
+    if (value.find("://") != std::string::npos)
+        return VirtualPath{value};
     return owner.parent().joined(value);
 }
 
-bool parseComponent(const VirtualPath& path, const Json& source,
-                    SceneComponentAsset& result) {
-    if (!source.is_object()) return false;
+bool parseComponent(const VirtualPath& path, const Json& source, SceneComponentAsset& result) {
+    if (!source.is_object())
+        return false;
     const auto type = source.find("type");
-    if (type == source.end() || !type->is_string()) return false;
+    if (type == source.end() || !type->is_string())
+        return false;
     const std::string& typeName = type->get_ref<const std::string&>();
 
     if (typeName == "Transform") {
         TransformComponentAsset value;
         if (!readVector(source, "position", value.position, 3) ||
-            !readRotation(source, value.rotation) ||
-            !readVector(source, "scale", value.scale, 3)) return false;
+            !readRotation(source, value.rotation) || !readVector(source, "scale", value.scale, 3))
+            return false;
         result = value;
         return true;
     }
     if (typeName == "Mesh") {
         const auto mesh = source.find("mesh");
-        if (mesh == source.end() || !mesh->is_string()) return false;
+        if (mesh == source.end() || !mesh->is_string())
+            return false;
         MeshComponentAsset value;
         value.mesh = readAssetPath(path, mesh->get_ref<const std::string&>());
         if (!readBool(source, "enabled", value.enabled) ||
             !readBool(source, "visible", value.visible) ||
             !readBool(source, "cast_shadow", value.castShadow) ||
             !readBool(source, "receive_shadow", value.receiveShadow) ||
-            !readUInt(source, "layer_mask", value.layerMask)) return false;
+            !readUInt(source, "layer_mask", value.layerMask))
+            return false;
         result = std::move(value);
         return true;
     }
@@ -151,25 +166,29 @@ bool parseComponent(const VirtualPath& path, const Json& source,
         MaterialComponentAsset value;
         const auto materials = source.find("materials");
         if (materials == source.end() || !materials->is_array() ||
-            !readBool(source, "enabled", value.enabled)) return false;
+            !readBool(source, "enabled", value.enabled))
+            return false;
         value.materials.reserve(materials->size());
         for (const Json& material : *materials) {
-            if (!material.is_string()) return false;
-            value.materials.push_back(readAssetPath(
-                path, material.get_ref<const std::string&>()));
+            if (!material.is_string())
+                return false;
+            value.materials.push_back(readAssetPath(path, material.get_ref<const std::string&>()));
         }
         result = std::move(value);
         return true;
     }
     if (typeName == "Camera") {
         CameraComponentAsset value;
-        if (const auto projection = source.find("projection");
-            projection != source.end()) {
-            if (!projection->is_string()) return false;
+        if (const auto projection = source.find("projection"); projection != source.end()) {
+            if (!projection->is_string())
+                return false;
             const std::string& name = projection->get_ref<const std::string&>();
-            if (name == "perspective") value.projection = CameraProjection::Perspective;
-            else if (name == "orthographic") value.projection = CameraProjection::Orthographic;
-            else return false;
+            if (name == "perspective")
+                value.projection = CameraProjection::Perspective;
+            else if (name == "orthographic")
+                value.projection = CameraProjection::Orthographic;
+            else
+                return false;
         }
         if (!readFloat(source, "field_of_view", value.fieldOfView) ||
             !readFloat(source, "orthographic_size", value.orthographicSize) ||
@@ -179,20 +198,25 @@ bool parseComponent(const VirtualPath& path, const Json& source,
             !readUInt(source, "culling_mask", value.cullingMask) ||
             !readInt(source, "priority", value.priority) ||
             !readBool(source, "primary", value.primary) ||
-            !readBool(source, "enabled", value.enabled)) return false;
+            !readBool(source, "enabled", value.enabled))
+            return false;
         result = value;
         return true;
     }
     if (typeName == "Light") {
         LightComponentAsset value;
-        if (const auto lightType = source.find("light_type");
-            lightType != source.end()) {
-            if (!lightType->is_string()) return false;
+        if (const auto lightType = source.find("light_type"); lightType != source.end()) {
+            if (!lightType->is_string())
+                return false;
             const std::string& name = lightType->get_ref<const std::string&>();
-            if (name == "directional") value.type = LightType::Directional;
-            else if (name == "point") value.type = LightType::Point;
-            else if (name == "spot") value.type = LightType::Spot;
-            else return false;
+            if (name == "directional")
+                value.type = LightType::Directional;
+            else if (name == "point")
+                value.type = LightType::Point;
+            else if (name == "spot")
+                value.type = LightType::Spot;
+            else
+                return false;
         }
         if (!readVector(source, "color", value.color, 3) ||
             !readFloat(source, "intensity", value.intensity) ||
@@ -201,7 +225,8 @@ bool parseComponent(const VirtualPath& path, const Json& source,
             !readFloat(source, "outer_spot_angle", value.outerSpotAngle) ||
             !readBool(source, "cast_shadow", value.castShadow) ||
             !readUInt(source, "culling_mask", value.cullingMask) ||
-            !readBool(source, "enabled", value.enabled)) return false;
+            !readBool(source, "enabled", value.enabled))
+            return false;
         result = value;
         return true;
     }
@@ -214,16 +239,13 @@ bool transferSceneAsset(Transfer& archive, SceneAsset& value) {
     std::uint32_t magic = kSceneMagic;
     std::uint16_t version = kSceneBinaryVersion;
     return archive.transfer("magic", magic) && magic == kSceneMagic &&
-           archive.transfer("version", version) &&
-           version == kSceneBinaryVersion &&
-           archive.transfer("name", value.name) &&
-           archive.transfer("nodes", value.nodes);
+           archive.transfer("version", version) && version == kSceneBinaryVersion &&
+           archive.transfer("name", value.name) && archive.transfer("nodes", value.nodes);
 }
 
 namespace detail {
 
-std::shared_ptr<SceneAsset> parseSceneAsset(const VirtualPath& path,
-                                            std::string_view source) {
+std::shared_ptr<SceneAsset> parseSceneAsset(const VirtualPath& path, std::string_view source) {
     const Json root = Json::parse(source, nullptr, false);
     if (root.is_discarded() || !root.is_object()) {
         fail(path, "Invalid Scene JSON");
@@ -233,9 +255,9 @@ std::shared_ptr<SceneAsset> parseSceneAsset(const VirtualPath& path,
     const auto name = root.find("name");
     const auto nodes = root.find("nodes");
     if (version == root.end() || !version->is_number_unsigned() ||
-        version->get<std::uint32_t>() != kSceneJsonVersion ||
-        name == root.end() || !name->is_string() ||
-        nodes == root.end() || !nodes->is_array() || nodes->size() > kMaxNodes) {
+        version->get<std::uint32_t>() != kSceneJsonVersion || name == root.end() ||
+        !name->is_string() || nodes == root.end() || !nodes->is_array() ||
+        nodes->size() > kMaxNodes) {
         fail(path, "Scene header fields are missing or invalid");
         return {};
     }
@@ -251,9 +273,8 @@ std::shared_ptr<SceneAsset> parseSceneAsset(const VirtualPath& path,
         const auto id = sourceNode.find("id");
         const auto nodeName = sourceNode.find("name");
         const auto components = sourceNode.find("components");
-        if (id == sourceNode.end() || !id->is_number_unsigned() ||
-            nodeName == sourceNode.end() || !nodeName->is_string() ||
-            components == sourceNode.end() || !components->is_array() ||
+        if (id == sourceNode.end() || !id->is_number_unsigned() || nodeName == sourceNode.end() ||
+            !nodeName->is_string() || components == sourceNode.end() || !components->is_array() ||
             components->size() > kMaxComponentsPerNode) {
             fail(path, "Scene node fields are missing or invalid");
             return {};
@@ -290,16 +311,16 @@ std::shared_ptr<SceneAsset> parseSceneAsset(const VirtualPath& path,
 
 } // namespace detail
 
-bool validateSceneAsset(const SceneAsset& asset,
-                        const VirtualPath& scenePath) {
-    if (asset.name.empty()) return fail(scenePath, "Scene name is empty");
-    if (asset.nodes.size() > kMaxNodes) return fail(scenePath, "Too many Scene nodes");
+bool validateSceneAsset(const SceneAsset& asset, const VirtualPath& scenePath) {
+    if (asset.name.empty())
+        return fail(scenePath, "Scene name is empty");
+    if (asset.nodes.size() > kMaxNodes)
+        return fail(scenePath, "Too many Scene nodes");
 
     std::unordered_map<SceneNodeAssetId, const SceneNodeAsset*> nodeById;
     nodeById.reserve(asset.nodes.size());
     for (const SceneNodeAsset& node : asset.nodes) {
-        if (node.id == 0 || node.name.empty() ||
-            !nodeById.emplace(node.id, &node).second) {
+        if (node.id == 0 || node.name.empty() || !nodeById.emplace(node.id, &node).second) {
             return fail(scenePath, "Scene node identity is invalid or duplicated");
         }
         if (node.parent && *node.parent == node.id) {
@@ -314,47 +335,48 @@ bool validateSceneAsset(const SceneAsset& asset,
                 return fail(scenePath, "Scene node has a duplicate component type");
             }
             seen[component.index()] = true;
-            const bool valid = std::visit([](const auto& value) {
-                using T = std::decay_t<decltype(value)>;
-                if constexpr (std::is_same_v<T, TransformComponentAsset>) {
-                    const float lengthSquared = value.rotation.x * value.rotation.x +
-                        value.rotation.y * value.rotation.y +
-                        value.rotation.z * value.rotation.z +
-                        value.rotation.w * value.rotation.w;
-                    return finite(value.position) && finite(value.rotation) &&
-                           finite(value.scale) && lengthSquared > math::kEpsilon;
-                } else if constexpr (std::is_same_v<T, MeshComponentAsset>) {
-                    return value.mesh.valid() && value.mesh.scheme() == "asset" &&
-                           value.mesh.relativePath().ends_with(".mesh.json");
-                } else if constexpr (std::is_same_v<T, MaterialComponentAsset>) {
-                    return value.materials.size() <= kMaxMaterialsPerNode &&
-                           std::ranges::all_of(value.materials,
-                               [](const VirtualPath& path) {
+            const bool valid = std::visit(
+                [](const auto& value) {
+                    using T = std::decay_t<decltype(value)>;
+                    if constexpr (std::is_same_v<T, TransformComponentAsset>) {
+                        const float lengthSquared = value.rotation.x * value.rotation.x +
+                                                    value.rotation.y * value.rotation.y +
+                                                    value.rotation.z * value.rotation.z +
+                                                    value.rotation.w * value.rotation.w;
+                        return finite(value.position) && finite(value.rotation) &&
+                               finite(value.scale) && lengthSquared > math::kEpsilon;
+                    } else if constexpr (std::is_same_v<T, MeshComponentAsset>) {
+                        return value.mesh.valid() && value.mesh.scheme() == "asset" &&
+                               value.mesh.relativePath().ends_with(".mesh.json");
+                    } else if constexpr (std::is_same_v<T, MaterialComponentAsset>) {
+                        return value.materials.size() <= kMaxMaterialsPerNode &&
+                               std::ranges::all_of(value.materials, [](const VirtualPath& path) {
                                    return path.valid() && path.scheme() == "asset" &&
-                                       path.relativePath().ends_with(".material.json");
+                                          path.relativePath().ends_with(".material.json");
                                });
-                } else if constexpr (std::is_same_v<T, CameraComponentAsset>) {
-                    return (value.projection == CameraProjection::Perspective ||
-                            value.projection == CameraProjection::Orthographic) &&
-                           finite(value.fieldOfView) && value.fieldOfView > 0.0F &&
-                           value.fieldOfView < 180.0F &&
-                           finite(value.orthographicSize) && value.orthographicSize > 0.0F &&
-                           finite(value.nearPlane) && value.nearPlane > 0.0F &&
-                           finite(value.farPlane) && value.farPlane > value.nearPlane &&
-                           finite(value.clearColor);
-                } else if constexpr (std::is_same_v<T, LightComponentAsset>) {
-                    return value.type >= LightType::Directional &&
-                           value.type <= LightType::Spot && finite(value.color) &&
-                           finite(value.intensity) && value.intensity >= 0.0F &&
-                           finite(value.range) && value.range > 0.0F &&
-                           finite(value.innerSpotAngle) && value.innerSpotAngle >= 0.0F &&
-                           finite(value.outerSpotAngle) &&
-                           value.outerSpotAngle >= value.innerSpotAngle &&
-                           value.outerSpotAngle < 180.0F;
-                }
-                return false;
-            }, component);
-            if (!valid) return fail(scenePath, "Scene component data is invalid");
+                    } else if constexpr (std::is_same_v<T, CameraComponentAsset>) {
+                        return (value.projection == CameraProjection::Perspective ||
+                                value.projection == CameraProjection::Orthographic) &&
+                               finite(value.fieldOfView) && value.fieldOfView > 0.0F &&
+                               value.fieldOfView < 180.0F && finite(value.orthographicSize) &&
+                               value.orthographicSize > 0.0F && finite(value.nearPlane) &&
+                               value.nearPlane > 0.0F && finite(value.farPlane) &&
+                               value.farPlane > value.nearPlane && finite(value.clearColor);
+                    } else if constexpr (std::is_same_v<T, LightComponentAsset>) {
+                        return value.type >= LightType::Directional &&
+                               value.type <= LightType::Spot && finite(value.color) &&
+                               finite(value.intensity) && value.intensity >= 0.0F &&
+                               finite(value.range) && value.range > 0.0F &&
+                               finite(value.innerSpotAngle) && value.innerSpotAngle >= 0.0F &&
+                               finite(value.outerSpotAngle) &&
+                               value.outerSpotAngle >= value.innerSpotAngle &&
+                               value.outerSpotAngle < 180.0F;
+                    }
+                    return false;
+                },
+                component);
+            if (!valid)
+                return fail(scenePath, "Scene component data is invalid");
         }
         if (!seen[0]) {
             return fail(scenePath, "Scene node requires one Transform component");
@@ -370,16 +392,20 @@ bool validateSceneAsset(const SceneAsset& asset,
     std::unordered_map<SceneNodeAssetId, Visit> visits;
     std::function<bool(SceneNodeAssetId)> visit = [&](SceneNodeAssetId id) {
         Visit& state = visits[id];
-        if (state == Visit::Visiting) return false;
-        if (state == Visit::Finished) return true;
+        if (state == Visit::Visiting)
+            return false;
+        if (state == Visit::Finished)
+            return true;
         state = Visit::Visiting;
         const SceneNodeAsset& node = *nodeById.at(id);
-        if (node.parent && !visit(*node.parent)) return false;
+        if (node.parent && !visit(*node.parent))
+            return false;
         state = Visit::Finished;
         return true;
     };
     for (const SceneNodeAsset& node : asset.nodes) {
-        if (!visit(node.id)) return fail(scenePath, "Scene hierarchy contains a cycle");
+        if (!visit(node.id))
+            return fail(scenePath, "Scene hierarchy contains a cycle");
     }
     return true;
 }
@@ -389,8 +415,7 @@ bool SceneAsset::transfer(Transfer& archive) {
     decoded.setAssetPath(assetPath());
     SceneAsset& target = archive.reading() ? decoded : *this;
     if ((archive.writing() && !validateSceneAsset(*this, assetPath())) ||
-        !archive.beginObject({}) || !transferSceneAsset(archive, target) ||
-        !archive.endObject() ||
+        !archive.beginObject({}) || !transferSceneAsset(archive, target) || !archive.endObject() ||
         (archive.reading() && !validateSceneAsset(decoded, assetPath()))) {
         return fail(assetPath(), "Invalid SceneAsset contents");
     }
@@ -401,8 +426,7 @@ bool SceneAsset::transfer(Transfer& archive) {
     return true;
 }
 
-std::unique_ptr<Scene> SceneAsset::instantiate(
-    const SceneInstantiationContext& context) const {
+std::unique_ptr<Scene> SceneAsset::instantiate(const SceneInstantiationContext& context) const {
     if (!validateSceneAsset(*this, assetPath())) {
         fail(assetPath(), "Scene cannot be instantiated");
         return {};
@@ -415,23 +439,24 @@ std::unique_ptr<Scene> SceneAsset::instantiate(
     for (const SceneNodeAsset& source : nodes) {
         const NodeHandle handle = scene->createNode(source.name);
         Node* node = scene->findNode(handle);
-        if (!node || !handles.emplace(source.id, handle).second) return {};
+        if (!node || !handles.emplace(source.id, handle).second)
+            return {};
         node->setActive(source.active);
 
         for (const SceneComponentAsset& component : source.components) {
             const bool succeeded = std::visit(
                 [&](const auto& value) {
                     using T = std::decay_t<decltype(value)>;
-                    if constexpr (std::is_same_v<T,
-                                                 TransformComponentAsset>) {
+                    if constexpr (std::is_same_v<T, TransformComponentAsset>) {
                         node->transform().setLocalPosition(value.position);
                         node->transform().setLocalRotation(value.rotation);
                         node->transform().setLocalScale(value.scale);
-                    } else if constexpr (std::is_same_v<T,
-                                                        MeshComponentAsset>) {
-                        if (!context.loadMesh) return false;
+                    } else if constexpr (std::is_same_v<T, MeshComponentAsset>) {
+                        if (!context.loadMesh)
+                            return false;
                         const MeshHandle mesh = context.loadMesh(value.mesh);
-                        if (!mesh) return false;
+                        if (!mesh)
+                            return false;
                         MeshComponent* runtime = node->addComponent<MeshComponent>();
                         runtime->mesh = mesh;
                         runtime->visible = value.visible;
@@ -439,25 +464,20 @@ std::unique_ptr<Scene> SceneAsset::instantiate(
                         runtime->receiveShadow = value.receiveShadow;
                         runtime->layerMask = value.layerMask;
                         runtime->setEnabled(value.enabled);
-                    } else if constexpr (std::is_same_v<
-                                             T, MaterialComponentAsset>) {
-                        MaterialComponent* runtime =
-                            node->addComponent<MaterialComponent>();
-                        if (!value.materials.empty() &&
-                            !context.loadMaterial) return false;
-                        for (std::size_t slot = 0;
-                             slot < value.materials.size(); ++slot) {
+                    } else if constexpr (std::is_same_v<T, MaterialComponentAsset>) {
+                        MaterialComponent* runtime = node->addComponent<MaterialComponent>();
+                        if (!value.materials.empty() && !context.loadMaterial)
+                            return false;
+                        for (std::size_t slot = 0; slot < value.materials.size(); ++slot) {
                             const MaterialHandle material =
                                 context.loadMaterial(value.materials[slot]);
-                            if (!material) return false;
-                            runtime->setMaterial(
-                                static_cast<std::uint32_t>(slot), material);
+                            if (!material)
+                                return false;
+                            runtime->setMaterial(static_cast<std::uint32_t>(slot), material);
                         }
                         runtime->setEnabled(value.enabled);
-                    } else if constexpr (std::is_same_v<T,
-                                                        CameraComponentAsset>) {
-                        CameraComponent* runtime =
-                            node->addComponent<CameraComponent>();
+                    } else if constexpr (std::is_same_v<T, CameraComponentAsset>) {
+                        CameraComponent* runtime = node->addComponent<CameraComponent>();
                         runtime->projection = value.projection;
                         runtime->fieldOfView = value.fieldOfView;
                         runtime->orthographicSize = value.orthographicSize;
@@ -468,10 +488,8 @@ std::unique_ptr<Scene> SceneAsset::instantiate(
                         runtime->priority = value.priority;
                         runtime->primary = value.primary;
                         runtime->setEnabled(value.enabled);
-                    } else if constexpr (std::is_same_v<T,
-                                                        LightComponentAsset>) {
-                        LightComponent* runtime =
-                            node->addComponent<LightComponent>();
+                    } else if constexpr (std::is_same_v<T, LightComponentAsset>) {
+                        LightComponent* runtime = node->addComponent<LightComponent>();
                         runtime->type = value.type;
                         runtime->color = value.color;
                         runtime->intensity = value.intensity;
@@ -493,11 +511,11 @@ std::unique_ptr<Scene> SceneAsset::instantiate(
     }
 
     for (const SceneNodeAsset& source : nodes) {
-        if (!source.parent) continue;
+        if (!source.parent)
+            continue;
         Node* node = scene->findNode(handles.at(source.id));
         const auto parent = handles.find(*source.parent);
-        if (!node || parent == handles.end() ||
-            !node->setParent(parent->second)) {
+        if (!node || parent == handles.end() || !node->setParent(parent->second)) {
             fail(assetPath(), "Cannot instantiate Scene hierarchy");
             return {};
         }

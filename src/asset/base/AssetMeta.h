@@ -16,14 +16,11 @@ struct AssetMeta {
 
 [[nodiscard]] AssetType inferAssetType(const VirtualPath& sourcePath);
 [[nodiscard]] VirtualPath assetMetaPath(const VirtualPath& sourcePath);
-[[nodiscard]] std::optional<AssetMeta> parseAssetMeta(
-    const VirtualPath& metaPath, std::string_view source);
+[[nodiscard]] std::optional<AssetMeta> parseAssetMeta(const VirtualPath& metaPath,
+                                                      std::string_view source);
 [[nodiscard]] std::string serializeAssetMeta(const AssetMeta& meta);
-[[nodiscard]] std::optional<AssetMeta> loadAssetMeta(
-    const VirtualPath& metaPath);
-[[nodiscard]] bool saveAssetMeta(const VirtualPath& metaPath,
-                                 const AssetMeta& meta);
-[[nodiscard]] std::optional<AssetMeta> createAssetMeta(
-    const VirtualPath& sourcePath);
+[[nodiscard]] std::optional<AssetMeta> loadAssetMeta(const VirtualPath& metaPath);
+[[nodiscard]] bool saveAssetMeta(const VirtualPath& metaPath, const AssetMeta& meta);
+[[nodiscard]] std::optional<AssetMeta> createAssetMeta(const VirtualPath& sourcePath);
 
 } // namespace engine

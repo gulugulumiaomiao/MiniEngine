@@ -29,9 +29,7 @@ public:
     [[nodiscard]] RenderScene& renderScene() { return renderScene_; }
     [[nodiscard]] bool loadScene(const VirtualPath& scenePath);
     [[nodiscard]] bool reloadScene();
-    [[nodiscard]] const VirtualPath& activeScenePath() const {
-        return activeScenePath_;
-    }
+    [[nodiscard]] const VirtualPath& activeScenePath() const { return activeScenePath_; }
 
 private:
     friend class Singleton<Engine>;

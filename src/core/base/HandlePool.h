@@ -12,15 +12,11 @@
 
 namespace engine {
 
-template <typename Resource, typename HandleType>
-class HandlePool final {
+template <typename Resource, typename HandleType> class HandlePool final {
 public:
-    [[nodiscard]] HandleType insert(Resource resource) {
-        return emplace(std::move(resource));
-    }
+    [[nodiscard]] HandleType insert(Resource resource) { return emplace(std::move(resource)); }
 
-    template <typename... Args>
-    [[nodiscard]] HandleType emplace(Args&&... args) {
+    template <typename... Args> [[nodiscard]] HandleType emplace(Args&&... args) {
         std::uint32_t index{};
         if (!freeList_.empty()) {
             index = freeList_.back();
@@ -44,15 +40,15 @@ public:
     }
 
     [[nodiscard]] const Resource* find(HandleType handle) const {
-        if (handle.index >= slots_.size()) return nullptr;
+        if (handle.index >= slots_.size())
+            return nullptr;
         const Slot& slot = slots_[handle.index];
-        return slot.value && slot.generation == handle.generation
-                   ? &*slot.value
-                   : nullptr;
+        return slot.value && slot.generation == handle.generation ? &*slot.value : nullptr;
     }
 
     [[nodiscard]] bool release(HandleType handle) {
-        if (!find(handle)) return false;
+        if (!find(handle))
+            return false;
         Slot& slot = slots_[handle.index];
         slot.value.reset();
         incrementGeneration(slot);
@@ -75,17 +71,17 @@ public:
         activeCount_ = 0;
     }
 
-    template <typename Function>
-    void forEach(Function&& function) {
+    template <typename Function> void forEach(Function&& function) {
         for (Slot& slot : slots_) {
-            if (slot.value) function(*slot.value);
+            if (slot.value)
+                function(*slot.value);
         }
     }
 
-    template <typename Function>
-    void forEach(Function&& function) const {
+    template <typename Function> void forEach(Function&& function) const {
         for (const Slot& slot : slots_) {
-            if (slot.value) function(*slot.value);
+            if (slot.value)
+                function(*slot.value);
         }
     }
 

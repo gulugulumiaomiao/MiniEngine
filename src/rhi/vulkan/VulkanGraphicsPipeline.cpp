@@ -86,8 +86,11 @@ void applyBlend(BlendMode mode, VkPipelineColorBlendAttachmentState& blend) {
 } // namespace
 
 VulkanGraphicsPipeline::VulkanGraphicsPipeline(
-    VkDevice device, const GraphicsPipelineDesc& desc, VkShaderModule vertexShader,
-    VkShaderModule fragmentShader, std::span<const VkDescriptorSetLayout> descriptorLayouts)
+    VkDevice device,
+    const GraphicsPipelineDesc& desc,
+    VkShaderModule vertexShader,
+    VkShaderModule fragmentShader,
+    std::span<const VkDescriptorSetLayout> descriptorLayouts)
     : device_(device) {
     std::array<VkPipelineShaderStageCreateInfo, 2> stages{};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -102,7 +105,8 @@ VulkanGraphicsPipeline::VulkanGraphicsPipeline(
     std::vector<VkVertexInputBindingDescription> vertexBindings;
     vertexBindings.reserve(desc.vertexBindings.size());
     for (const VertexBindingDesc& binding : desc.vertexBindings) {
-        vertexBindings.push_back({binding.binding, binding.stride,
+        vertexBindings.push_back({binding.binding,
+                                  binding.stride,
                                   binding.inputRate == VertexInputRate::Vertex
                                       ? VK_VERTEX_INPUT_RATE_VERTEX
                                       : VK_VERTEX_INPUT_RATE_INSTANCE});

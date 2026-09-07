@@ -28,54 +28,41 @@ constexpr std::uint32_t kShaderAssetMagic = 0x52444853U;
 constexpr std::uint16_t kShaderAssetVersion = 2;
 
 template <typename Enum>
-bool transferShaderEnum(Transfer& archive, std::string_view name, Enum& value,
-                        Enum maximum) {
-    return archive.transfer(name, value) && value >= static_cast<Enum>(0) &&
-           value <= maximum;
+bool transferShaderEnum(Transfer& archive, std::string_view name, Enum& value, Enum maximum) {
+    return archive.transfer(name, value) && value >= static_cast<Enum>(0) && value <= maximum;
 }
 
 } // namespace
 
 bool ShaderInterfaceVariable::transfer(Transfer& archive) {
-    return archive.transfer("name", name) &&
-           archive.transfer("semantic", semantic) &&
-           transferShaderEnum(archive, "type", type,
-                              ShaderValueType::Vec4) &&
+    return archive.transfer("name", name) && archive.transfer("semantic", semantic) &&
+           transferShaderEnum(archive, "type", type, ShaderValueType::Vec4) &&
            archive.transfer("location", location) &&
-           transferShaderEnum(archive, "interpolation", interpolation,
-                              ShaderInterpolation::NoPerspective);
+           transferShaderEnum(
+               archive, "interpolation", interpolation, ShaderInterpolation::NoPerspective);
 }
 
 bool RenderStateDesc::transfer(Transfer& archive) {
     return transferShaderEnum(archive, "cull", cull, CullMode::Back) &&
-           transferShaderEnum(archive, "front_face", frontFace,
-                              FrontFace::CounterClockwise) &&
-           transferShaderEnum(archive, "fill", fill,
-                              FillMode::Wireframe) &&
-           transferShaderEnum(archive, "topology", topology,
-                              PrimitiveTopology::LineList) &&
+           transferShaderEnum(archive, "front_face", frontFace, FrontFace::CounterClockwise) &&
+           transferShaderEnum(archive, "fill", fill, FillMode::Wireframe) &&
+           transferShaderEnum(archive, "topology", topology, PrimitiveTopology::LineList) &&
            archive.transfer("depth_write", depthWrite) &&
-           transferShaderEnum(archive, "depth_test", depthTest,
-                              DepthCompare::Always) &&
-           transferShaderEnum(archive, "blend", blend,
-                              BlendMode::PremultipliedAlpha) &&
+           transferShaderEnum(archive, "depth_test", depthTest, DepthCompare::Always) &&
+           transferShaderEnum(archive, "blend", blend, BlendMode::PremultipliedAlpha) &&
            archive.transfer("color_mask", colorMask);
 }
 
 bool ShaderPropertyDesc::transfer(Transfer& archive) {
-    return archive.transfer("name", name) &&
-           archive.transfer("display_name", displayName) &&
-           transferShaderEnum(archive, "property_type", type,
-                              ShaderPropertyType::Boolean) &&
-           archive.transfer("default_value", defaultValue) &&
-           archive.transfer("range", range) &&
+    return archive.transfer("name", name) && archive.transfer("display_name", displayName) &&
+           transferShaderEnum(archive, "property_type", type, ShaderPropertyType::Boolean) &&
+           archive.transfer("default_value", defaultValue) && archive.transfer("range", range) &&
            archive.transfer("attributes", attributes);
 }
 
 bool ShaderPassAsset::transfer(Transfer& archive) {
     return archive.transfer("name", pass.name) &&
-           transferShaderEnum(archive, "pass_type", pass.type,
-                              ShaderPassType::ShadowCaster) &&
+           transferShaderEnum(archive, "pass_type", pass.type, ShaderPassType::ShadowCaster) &&
            archive.transfer("vertex_source", pass.program.vertexSource) &&
            archive.transfer("fragment_source", pass.program.fragmentSource) &&
            archive.transfer("vertex_input", pass.vertexInput) &&
@@ -88,8 +75,7 @@ bool ShaderPassAsset::transfer(Transfer& archive) {
 bool SubShaderDesc::transfer(Transfer& archive) {
     return archive.transfer("render_pipeline", renderPipeline) &&
            archive.transfer("render_type", renderType) &&
-           archive.transfer("render_queue", renderQueue) &&
-           archive.transfer("passes", passes);
+           archive.transfer("render_queue", renderQueue) && archive.transfer("passes", passes);
 }
 
 bool ShaderAsset::transfer(Transfer& archive) {
@@ -97,19 +83,18 @@ bool ShaderAsset::transfer(Transfer& archive) {
     ShaderAsset& target = archive.reading() ? decoded : *this;
     std::uint32_t magic = kShaderAssetMagic;
     std::uint16_t version = kShaderAssetVersion;
-    const bool succeeded =
-        archive.beginObject({}) && archive.transfer("magic", magic) &&
-        magic == kShaderAssetMagic && archive.transfer("version", version) &&
-        version == kShaderAssetVersion &&
-        archive.transfer("name", target.name) &&
-        archive.transfer("properties", target.properties) &&
-        archive.transfer("sub_shaders", target.subShaders) &&
-        !target.subShaders.empty() && archive.endObject();
+    const bool succeeded = archive.beginObject({}) && archive.transfer("magic", magic) &&
+                           magic == kShaderAssetMagic && archive.transfer("version", version) &&
+                           version == kShaderAssetVersion &&
+                           archive.transfer("name", target.name) &&
+                           archive.transfer("properties", target.properties) &&
+                           archive.transfer("sub_shaders", target.subShaders) &&
+                           !target.subShaders.empty() && archive.endObject();
     if (!succeeded) {
-        Log::error("ShaderAsset", "Invalid payload %s: %s",
+        Log::error("ShaderAsset",
+                   "Invalid payload %s: %s",
                    assetPath().string().c_str(),
-                   archive.error().empty() ? "validation failed"
-                                           : archive.error().c_str());
+                   archive.error().empty() ? "validation failed" : archive.error().c_str());
         return false;
     }
     if (archive.reading()) {
@@ -124,8 +109,7 @@ namespace {
 
 struct ReflectionFailure final {};
 
-template <typename... Args>
-[[noreturn]] void reflectionFail(const char* format, Args... args) {
+template <typename... Args> [[noreturn]] void reflectionFail(const char* format, Args... args) {
     Log::error("SpirvReflection", format, args...);
     throw ReflectionFailure{};
 }
@@ -134,10 +118,9 @@ using Json = nlohmann::json;
 
 struct AssetParseFailure final {};
 
-[[noreturn]] void fail(const VirtualPath& file, const std::string& path,
-                       const std::string& message) {
-    Log::error("ShaderAsset", "%s: %s: %s", file.string().c_str(), path.c_str(),
-               message.c_str());
+[[noreturn]] void
+fail(const VirtualPath& file, const std::string& path, const std::string& message) {
+    Log::error("ShaderAsset", "%s: %s: %s", file.string().c_str(), path.c_str(), message.c_str());
     throw AssetParseFailure{};
 }
 
@@ -145,14 +128,14 @@ Json readJson(const VirtualPath& file, std::string_view source) {
     try {
         return Json::parse(source.begin(), source.end());
     } catch (const Json::parse_error& error) {
-        fail(file, "$", "JSON parse error at byte " +
-                            std::to_string(error.byte) + ": " + error.what());
+        fail(file,
+             "$",
+             "JSON parse error at byte " + std::to_string(error.byte) + ": " + error.what());
     }
 }
 
 template <typename T>
-T required(const Json& object, const char* key, const VirtualPath& file,
-           const std::string& path) {
+T required(const Json& object, const char* key, const VirtualPath& file, const std::string& path) {
     if (!object.contains(key)) {
         fail(file, path, std::string("missing required field '") + key + "'");
     }
@@ -166,7 +149,8 @@ T required(const Json& object, const char* key, const VirtualPath& file,
 template <typename Enum>
 Enum parseEnum(const std::string& value,
                std::initializer_list<std::pair<const char*, Enum>> values,
-               const VirtualPath& file, const std::string& path) {
+               const VirtualPath& file,
+               const std::string& path) {
     for (const auto& [name, result] : values) {
         if (value == name) {
             return result;
@@ -176,8 +160,7 @@ Enum parseEnum(const std::string& value,
 }
 
 template <glm::length_t Length, typename Vector>
-Vector vectorValue(const Json& value, const VirtualPath& file,
-                   const std::string& path) {
+Vector vectorValue(const Json& value, const VirtualPath& file, const std::string& path) {
     if (!value.is_array() || value.size() != Length) {
         fail(file, path, "expected an array of " + std::to_string(Length) + " numbers");
     }
@@ -192,36 +175,41 @@ Vector vectorValue(const Json& value, const VirtualPath& file,
     }
 }
 
-ShaderPropertyType propertyType(const std::string& value, const VirtualPath& file,
-                                const std::string& path) {
-    return parseEnum<ShaderPropertyType>(
-        value,
-        {{"Float", ShaderPropertyType::Float}, {"Range", ShaderPropertyType::Range},
-         {"Vec2", ShaderPropertyType::Vec2}, {"Vec3", ShaderPropertyType::Vec3},
-         {"Vec4", ShaderPropertyType::Vec4}, {"Vector", ShaderPropertyType::Vec4},
-         {"Color", ShaderPropertyType::Color},
-         {"Texture2D", ShaderPropertyType::Texture2D}, {"Bool", ShaderPropertyType::Boolean}},
-        file, path);
+ShaderPropertyType
+propertyType(const std::string& value, const VirtualPath& file, const std::string& path) {
+    return parseEnum<ShaderPropertyType>(value,
+                                         {{"Float", ShaderPropertyType::Float},
+                                          {"Range", ShaderPropertyType::Range},
+                                          {"Vec2", ShaderPropertyType::Vec2},
+                                          {"Vec3", ShaderPropertyType::Vec3},
+                                          {"Vec4", ShaderPropertyType::Vec4},
+                                          {"Vector", ShaderPropertyType::Vec4},
+                                          {"Color", ShaderPropertyType::Color},
+                                          {"Texture2D", ShaderPropertyType::Texture2D},
+                                          {"Bool", ShaderPropertyType::Boolean}},
+                                         file,
+                                         path);
 }
 
-ShaderValueType interfaceValueType(const std::string& value,
-                                   const VirtualPath& file,
-                                   const std::string& path) {
-    return parseEnum<ShaderValueType>(
-        value,
-        {{"Float", ShaderValueType::Float}, {"Vec2", ShaderValueType::Vec2},
-         {"Vec3", ShaderValueType::Vec3}, {"Vec4", ShaderValueType::Vec4}},
-        file, path);
+ShaderValueType
+interfaceValueType(const std::string& value, const VirtualPath& file, const std::string& path) {
+    return parseEnum<ShaderValueType>(value,
+                                      {{"Float", ShaderValueType::Float},
+                                       {"Vec2", ShaderValueType::Vec2},
+                                       {"Vec3", ShaderValueType::Vec3},
+                                       {"Vec4", ShaderValueType::Vec4}},
+                                      file,
+                                      path);
 }
 
-ShaderInterpolation interpolation(const std::string& value,
-                                  const VirtualPath& file,
-                                  const std::string& path) {
-    return parseEnum<ShaderInterpolation>(
-        value,
-        {{"Smooth", ShaderInterpolation::Smooth}, {"Flat", ShaderInterpolation::Flat},
-         {"NoPerspective", ShaderInterpolation::NoPerspective}},
-        file, path);
+ShaderInterpolation
+interpolation(const std::string& value, const VirtualPath& file, const std::string& path) {
+    return parseEnum<ShaderInterpolation>(value,
+                                          {{"Smooth", ShaderInterpolation::Smooth},
+                                           {"Flat", ShaderInterpolation::Flat},
+                                           {"NoPerspective", ShaderInterpolation::NoPerspective}},
+                                          file,
+                                          path);
 }
 
 bool validIdentifier(const std::string& value) {
@@ -237,9 +225,12 @@ bool validIdentifier(const std::string& value) {
            std::ranges::all_of(value, identifierCharacter);
 }
 
-std::vector<ShaderInterfaceVariable> parseInterfaceVariables(
-    const Json& pass, const char* key, bool requireSemantic, bool allowInterpolation,
-    const VirtualPath& file, const std::string& passPath) {
+std::vector<ShaderInterfaceVariable> parseInterfaceVariables(const Json& pass,
+                                                             const char* key,
+                                                             bool requireSemantic,
+                                                             bool allowInterpolation,
+                                                             const VirtualPath& file,
+                                                             const std::string& passPath) {
     if (!pass.contains(key)) {
         return {};
     }
@@ -274,14 +265,15 @@ std::vector<ShaderInterfaceVariable> parseInterfaceVariables(
                 fail(file, at + ".semantic", "must not be empty");
             }
             if (!semantics.insert(variable.semantic).second) {
-                fail(file, at + ".semantic",
+                fail(file,
+                     at + ".semantic",
                      "duplicate vertex semantic '" + variable.semantic + "'");
             }
         } else {
             variable.semantic = json.value("semantic", std::string{});
         }
-        variable.type = interfaceValueType(
-            required<std::string>(json, "type", file, at), file, at + ".type");
+        variable.type =
+            interfaceValueType(required<std::string>(json, "type", file, at), file, at + ".type");
         if (!json.contains("location") || !json.at("location").is_number_integer()) {
             fail(file, at + ".location", "must be a non-negative integer");
         }
@@ -291,41 +283,38 @@ std::vector<ShaderInterfaceVariable> parseInterfaceVariables(
         }
         variable.location = static_cast<std::uint32_t>(location);
         if (!locations.insert(variable.location).second) {
-            fail(file, at + ".location",
+            fail(file,
+                 at + ".location",
                  "duplicate interface location " + std::to_string(variable.location));
         }
         if (json.contains("interpolation")) {
             if (!allowInterpolation) {
-                fail(file, at + ".interpolation",
-                     "interpolation is only valid for varyings");
+                fail(file, at + ".interpolation", "interpolation is only valid for varyings");
             }
-            variable.interpolation = interpolation(
-                required<std::string>(json, "interpolation", file, at), file,
-                at + ".interpolation");
+            variable.interpolation =
+                interpolation(required<std::string>(json, "interpolation", file, at),
+                              file,
+                              at + ".interpolation");
         }
         result.push_back(std::move(variable));
     }
     return result;
 }
 
-ShaderValue parseValue(const Json& value, ShaderPropertyType type,
-                       const VirtualPath& file, const std::string& path) {
+ShaderValue parseValue(const Json& value,
+                       ShaderPropertyType type,
+                       const VirtualPath& file,
+                       const std::string& path) {
     try {
         switch (type) {
         case ShaderPropertyType::Float:
-        case ShaderPropertyType::Range:
-            return value.get<float>();
-        case ShaderPropertyType::Boolean:
-            return value.get<bool>();
-        case ShaderPropertyType::Vec2:
-            return vectorValue<2, math::Vec2>(value, file, path);
-        case ShaderPropertyType::Vec3:
-            return vectorValue<3, math::Vec3>(value, file, path);
+        case ShaderPropertyType::Range: return value.get<float>();
+        case ShaderPropertyType::Boolean: return value.get<bool>();
+        case ShaderPropertyType::Vec2: return vectorValue<2, math::Vec2>(value, file, path);
+        case ShaderPropertyType::Vec3: return vectorValue<3, math::Vec3>(value, file, path);
         case ShaderPropertyType::Vec4:
-        case ShaderPropertyType::Color:
-            return vectorValue<4, math::Vec4>(value, file, path);
-        case ShaderPropertyType::Texture2D:
-            return value.get<std::string>();
+        case ShaderPropertyType::Color: return vectorValue<4, math::Vec4>(value, file, path);
+        case ShaderPropertyType::Texture2D: return value.get<std::string>();
         }
     } catch (const Json::exception&) {
         fail(file, path, "value does not match property type");
@@ -333,8 +322,8 @@ ShaderValue parseValue(const Json& value, ShaderPropertyType type,
     fail(file, path, "unsupported property type");
 }
 
-ShaderValue parseMaterialValue(const Json& value, const VirtualPath& file,
-                               const std::string& path) {
+ShaderValue
+parseMaterialValue(const Json& value, const VirtualPath& file, const std::string& path) {
     try {
         if (value.is_number()) {
             return value.get<float>();
@@ -347,14 +336,10 @@ ShaderValue parseMaterialValue(const Json& value, const VirtualPath& file,
         }
         if (value.is_array()) {
             switch (value.size()) {
-            case 2:
-                return vectorValue<2, math::Vec2>(value, file, path);
-            case 3:
-                return vectorValue<3, math::Vec3>(value, file, path);
-            case 4:
-                return vectorValue<4, math::Vec4>(value, file, path);
-            default:
-                break;
+            case 2: return vectorValue<2, math::Vec2>(value, file, path);
+            case 3: return vectorValue<3, math::Vec3>(value, file, path);
+            case 4: return vectorValue<4, math::Vec4>(value, file, path);
+            default: break;
             }
         }
     } catch (const Json::exception&) {
@@ -366,61 +351,69 @@ ShaderValue parseMaterialValue(const Json& value, const VirtualPath& file,
 bool valueMatchesProperty(const ShaderValue& value, ShaderPropertyType type) {
     switch (type) {
     case ShaderPropertyType::Float:
-    case ShaderPropertyType::Range:
-        return std::holds_alternative<float>(value);
-    case ShaderPropertyType::Boolean:
-        return std::holds_alternative<bool>(value);
-    case ShaderPropertyType::Vec2:
-        return std::holds_alternative<math::Vec2>(value);
-    case ShaderPropertyType::Vec3:
-        return std::holds_alternative<math::Vec3>(value);
+    case ShaderPropertyType::Range: return std::holds_alternative<float>(value);
+    case ShaderPropertyType::Boolean: return std::holds_alternative<bool>(value);
+    case ShaderPropertyType::Vec2: return std::holds_alternative<math::Vec2>(value);
+    case ShaderPropertyType::Vec3: return std::holds_alternative<math::Vec3>(value);
     case ShaderPropertyType::Vec4:
-    case ShaderPropertyType::Color:
-        return std::holds_alternative<math::Vec4>(value);
-    case ShaderPropertyType::Texture2D:
-        return std::holds_alternative<std::string>(value);
+    case ShaderPropertyType::Color: return std::holds_alternative<math::Vec4>(value);
+    case ShaderPropertyType::Texture2D: return std::holds_alternative<std::string>(value);
     }
     return false;
 }
 
-RenderStateDesc parseState(const Json& value, const VirtualPath& file,
-                           const std::string& path) {
+RenderStateDesc parseState(const Json& value, const VirtualPath& file, const std::string& path) {
     RenderStateDesc state;
     if (value.contains("cull")) {
-        state.cull = parseEnum<CullMode>(value.at("cull").get<std::string>(),
+        state.cull = parseEnum<CullMode>(
+            value.at("cull").get<std::string>(),
             {{"Off", CullMode::Off}, {"Front", CullMode::Front}, {"Back", CullMode::Back}},
-            file, path + ".cull");
+            file,
+            path + ".cull");
     }
     if (value.contains("frontFace")) {
-        state.frontFace = parseEnum<FrontFace>(value.at("frontFace").get<std::string>(),
-            {{"CW", FrontFace::Clockwise}, {"CCW", FrontFace::CounterClockwise}}, file,
+        state.frontFace = parseEnum<FrontFace>(
+            value.at("frontFace").get<std::string>(),
+            {{"CW", FrontFace::Clockwise}, {"CCW", FrontFace::CounterClockwise}},
+            file,
             path + ".frontFace");
     }
     if (value.contains("fill")) {
-        state.fill = parseEnum<FillMode>(value.at("fill").get<std::string>(),
-            {{"Solid", FillMode::Solid}, {"Wireframe", FillMode::Wireframe}}, file,
-            path + ".fill");
+        state.fill =
+            parseEnum<FillMode>(value.at("fill").get<std::string>(),
+                                {{"Solid", FillMode::Solid}, {"Wireframe", FillMode::Wireframe}},
+                                file,
+                                path + ".fill");
     }
     if (value.contains("topology")) {
-        state.topology = parseEnum<PrimitiveTopology>(value.at("topology").get<std::string>(),
-            {{"TriangleList", PrimitiveTopology::TriangleList},
-             {"LineList", PrimitiveTopology::LineList}}, file, path + ".topology");
+        state.topology =
+            parseEnum<PrimitiveTopology>(value.at("topology").get<std::string>(),
+                                         {{"TriangleList", PrimitiveTopology::TriangleList},
+                                          {"LineList", PrimitiveTopology::LineList}},
+                                         file,
+                                         path + ".topology");
     }
     state.depthWrite = value.value("depthWrite", state.depthWrite);
     if (value.contains("depthTest")) {
         state.depthTest = parseEnum<DepthCompare>(value.at("depthTest").get<std::string>(),
-            {{"Never", DepthCompare::Never}, {"Less", DepthCompare::Less},
-             {"LessEqual", DepthCompare::LessEqual}, {"Equal", DepthCompare::Equal},
-             {"Greater", DepthCompare::Greater},
-             {"GreaterEqual", DepthCompare::GreaterEqual}, {"Always", DepthCompare::Always}},
-            file, path + ".depthTest");
+                                                  {{"Never", DepthCompare::Never},
+                                                   {"Less", DepthCompare::Less},
+                                                   {"LessEqual", DepthCompare::LessEqual},
+                                                   {"Equal", DepthCompare::Equal},
+                                                   {"Greater", DepthCompare::Greater},
+                                                   {"GreaterEqual", DepthCompare::GreaterEqual},
+                                                   {"Always", DepthCompare::Always}},
+                                                  file,
+                                                  path + ".depthTest");
     }
     if (value.contains("blend")) {
         state.blend = parseEnum<BlendMode>(value.at("blend").get<std::string>(),
-            {{"Off", BlendMode::Off}, {"Alpha", BlendMode::Alpha},
-             {"Additive", BlendMode::Additive},
-             {"PremultipliedAlpha", BlendMode::PremultipliedAlpha}}, file,
-            path + ".blend");
+                                           {{"Off", BlendMode::Off},
+                                            {"Alpha", BlendMode::Alpha},
+                                            {"Additive", BlendMode::Additive},
+                                            {"PremultipliedAlpha", BlendMode::PremultipliedAlpha}},
+                                           file,
+                                           path + ".blend");
     }
     state.colorMask = value.value("colorMask", state.colorMask);
     if (state.colorMask.find_first_not_of("RGBA") != std::string::npos) {
@@ -437,8 +430,10 @@ int parseQueue(const Json& tags, const VirtualPath& file) {
         return tags.at("queue").get<int>();
     }
     const std::string value = tags.at("queue").get<std::string>();
-    const std::unordered_map<std::string, int> queues{{"Background", 1000}, {"Opaque", 2000},
-                                                      {"AlphaTest", 2450}, {"Transparent", 3000},
+    const std::unordered_map<std::string, int> queues{{"Background", 1000},
+                                                      {"Opaque", 2000},
+                                                      {"AlphaTest", 2450},
+                                                      {"Transparent", 3000},
                                                       {"Overlay", 4000}};
     const auto plus = value.find('+');
     const std::string base = value.substr(0, plus);
@@ -461,8 +456,7 @@ int parseQueue(const Json& tags, const VirtualPath& file) {
 ShaderKeywordSchema::ShaderKeywordSchema(std::vector<std::string> keywords)
     : keywords_(std::move(keywords)) {
     std::ranges::sort(keywords_);
-    keywords_.erase(std::unique(keywords_.begin(), keywords_.end()),
-                    keywords_.end());
+    keywords_.erase(std::unique(keywords_.begin(), keywords_.end()), keywords_.end());
     if (keywords_.size() > 64) {
         Log::fatal("ShaderKeywordSchema", "A pass cannot declare more than 64 keywords");
     }
@@ -472,29 +466,25 @@ bool ShaderKeywordSchema::declares(std::string_view keyword) const {
     return std::ranges::binary_search(keywords_, keyword);
 }
 
-ShaderVariantKey ShaderKeywordSchema::makeKey(
-    std::span<const std::string> enabledKeywords,
-    std::uint32_t meshFeatureBits,
-    std::uint32_t platformFeatureBits) const {
+ShaderVariantKey ShaderKeywordSchema::makeKey(std::span<const std::string> enabledKeywords,
+                                              std::uint32_t meshFeatureBits,
+                                              std::uint32_t platformFeatureBits) const {
     ShaderVariantKey result{0, meshFeatureBits, platformFeatureBits};
     for (const std::string& keyword : enabledKeywords) {
         const auto found = std::ranges::lower_bound(keywords_, keyword);
         if (found == keywords_.end() || *found != keyword) {
-            Log::warn("ShaderKeywordSchema", "Keyword is not declared: %s",
-                      keyword.c_str());
+            Log::warn("ShaderKeywordSchema", "Keyword is not declared: %s", keyword.c_str());
             continue;
         }
-        const std::size_t bit =
-            static_cast<std::size_t>(std::distance(keywords_.begin(), found));
+        const std::size_t bit = static_cast<std::size_t>(std::distance(keywords_.begin(), found));
         result.keywordBits |= std::uint64_t{1} << bit;
     }
     return result;
 }
 
 const ShaderPassDesc& SubShaderDesc::requirePass(ShaderPassType type) const {
-    const auto found = std::ranges::find_if(passes, [type](const ShaderPassAsset& asset) {
-        return asset.pass.type == type;
-    });
+    const auto found = std::ranges::find_if(
+        passes, [type](const ShaderPassAsset& asset) { return asset.pass.type == type; });
     if (found == passes.end()) {
         Log::fatal("ShaderAsset", "SubShader has no required pass");
     }
@@ -502,22 +492,21 @@ const ShaderPassDesc& SubShaderDesc::requirePass(ShaderPassType type) const {
 }
 
 const ShaderPropertyDesc* ShaderAsset::findProperty(const std::string& name) const {
-    const auto found = std::ranges::find_if(properties, [&name](const ShaderPropertyDesc& property) {
-        return property.name == name;
-    });
+    const auto found = std::ranges::find_if(
+        properties, [&name](const ShaderPropertyDesc& property) { return property.name == name; });
     return found == properties.end() ? nullptr : &*found;
 }
 
-ShaderAsset parseShaderAssetValue(const VirtualPath& path,
-                                  std::string_view source) {
+ShaderAsset parseShaderAssetValue(const VirtualPath& path, std::string_view source) {
     const Json root = readJson(path, source);
     if (!root.is_object()) {
         fail(path, "$", "shader asset root must be an object");
     }
     const int schemaVersion = required<int>(root, "$schemaVersion", path, "$");
     if (schemaVersion != 1) {
-        fail(path, "$.$schemaVersion", "unsupported schema version " +
-                                             std::to_string(schemaVersion));
+        fail(path,
+             "$.$schemaVersion",
+             "unsupported schema version " + std::to_string(schemaVersion));
     }
     ShaderAsset asset;
     asset.setAssetPath(path);
@@ -532,22 +521,23 @@ ShaderAsset parseShaderAssetValue(const VirtualPath& path,
         ShaderPropertyDesc property;
         property.name = required<std::string>(json, "name", path, at);
         property.displayName = json.value("displayName", property.name);
-        property.type = propertyType(required<std::string>(json, "type", path, at), path,
-                                     at + ".type");
+        property.type =
+            propertyType(required<std::string>(json, "type", path, at), path, at + ".type");
         if (!propertyNames.insert(property.name).second) {
             fail(path, at + ".name", "duplicate property '" + property.name + "'");
         }
         if (!json.contains("default")) {
             fail(path, at, "missing required field 'default'");
         }
-        property.defaultValue = parseValue(json.at("default"), property.type, path, at + ".default");
+        property.defaultValue =
+            parseValue(json.at("default"), property.type, path, at + ".default");
         if (property.type == ShaderPropertyType::Range) {
             if (!json.contains("range") || !json.at("range").is_array() ||
                 json.at("range").size() != 2) {
                 fail(path, at + ".range", "Range property requires [min, max]");
             }
-            property.range = math::Vec2{json.at("range")[0].get<float>(),
-                                        json.at("range")[1].get<float>()};
+            property.range =
+                math::Vec2{json.at("range")[0].get<float>(), json.at("range")[1].get<float>()};
         }
         property.attributes = json.value("attributes", std::vector<std::string>{});
         asset.properties.push_back(std::move(property));
@@ -564,18 +554,15 @@ ShaderAsset parseShaderAssetValue(const VirtualPath& path,
     if (subShaders.empty()) {
         fail(path, "$.subShaders", "at least one SubShader is required");
     }
-    for (std::size_t subShaderIndex = 0; subShaderIndex < subShaders.size();
-         ++subShaderIndex) {
+    for (std::size_t subShaderIndex = 0; subShaderIndex < subShaders.size(); ++subShaderIndex) {
         const Json& subShaderJson = subShaders[subShaderIndex];
-        const std::string subShaderAt =
-            "$.subShaders[" + std::to_string(subShaderIndex) + "]";
+        const std::string subShaderAt = "$.subShaders[" + std::to_string(subShaderIndex) + "]";
         if (!subShaderJson.is_object()) {
             fail(path, subShaderAt, "must be an object");
         }
         SubShaderDesc subShader;
         const Json tags = subShaderJson.value("tags", rootTags);
-        subShader.renderPipeline =
-            tags.value("renderPipeline", subShader.renderPipeline);
+        subShader.renderPipeline = tags.value("renderPipeline", subShader.renderPipeline);
         subShader.renderType = tags.value("renderType", subShader.renderType);
         subShader.renderQueue = parseQueue(tags, path);
         const Json passes = subShaderJson.value("passes", Json::array());
@@ -584,40 +571,42 @@ ShaderAsset parseShaderAssetValue(const VirtualPath& path,
         }
         std::set<std::string> passNames;
         for (std::size_t i = 0; i < passes.size(); ++i) {
-        const Json& json = passes[i];
-        const std::string at = subShaderAt + ".passes[" + std::to_string(i) + "]";
-        ShaderPassAsset passAsset;
-        ShaderPassDesc& pass = passAsset.pass;
-        pass.name = required<std::string>(json, "name", path, at);
-        if (!passNames.insert(pass.name).second) {
-            fail(path, at + ".name", "duplicate pass '" + pass.name + "'");
-        }
-        pass.type = parseEnum<ShaderPassType>(required<std::string>(json, "lightMode", path, at),
-            {{"Forward", ShaderPassType::Forward}, {"DepthOnly", ShaderPassType::DepthOnly},
-             {"ShadowCaster", ShaderPassType::ShadowCaster}}, path, at + ".lightMode");
-        if (!json.contains("program") || !json.at("program").is_object()) {
-            fail(path, at + ".program", "must be an object");
-        }
-        const Json& program = json.at("program");
-        pass.program.vertexSource = path.parent().joined(
-            required<std::string>(program, "vertex", path, at + ".program"));
-        pass.program.fragmentSource = path.parent().joined(
-            required<std::string>(program, "frag", path, at + ".program"));
-        if (pass.program.vertexSource.extension() != ".vert") {
-            fail(path, at + ".program.vertex", "must reference a .vert source file");
-        }
-        if (pass.program.fragmentSource.extension() != ".frag") {
-            fail(path, at + ".program.frag", "must reference a .frag source file");
-        }
-        pass.vertexInput =
-            parseInterfaceVariables(json, "vertexInput", true, false, path, at);
-        pass.varyings =
-            parseInterfaceVariables(json, "varyings", false, true, path, at);
-        pass.fragmentOutputs =
-            parseInterfaceVariables(json, "fragmentOutputs", false, false, path, at);
-        passAsset.renderState =
-            parseState(json.value("state", Json::object()), path, at + ".state");
-        pass.features = json.value("features", std::vector<std::string>{});
+            const Json& json = passes[i];
+            const std::string at = subShaderAt + ".passes[" + std::to_string(i) + "]";
+            ShaderPassAsset passAsset;
+            ShaderPassDesc& pass = passAsset.pass;
+            pass.name = required<std::string>(json, "name", path, at);
+            if (!passNames.insert(pass.name).second) {
+                fail(path, at + ".name", "duplicate pass '" + pass.name + "'");
+            }
+            pass.type =
+                parseEnum<ShaderPassType>(required<std::string>(json, "lightMode", path, at),
+                                          {{"Forward", ShaderPassType::Forward},
+                                           {"DepthOnly", ShaderPassType::DepthOnly},
+                                           {"ShadowCaster", ShaderPassType::ShadowCaster}},
+                                          path,
+                                          at + ".lightMode");
+            if (!json.contains("program") || !json.at("program").is_object()) {
+                fail(path, at + ".program", "must be an object");
+            }
+            const Json& program = json.at("program");
+            pass.program.vertexSource = path.parent().joined(
+                required<std::string>(program, "vertex", path, at + ".program"));
+            pass.program.fragmentSource =
+                path.parent().joined(required<std::string>(program, "frag", path, at + ".program"));
+            if (pass.program.vertexSource.extension() != ".vert") {
+                fail(path, at + ".program.vertex", "must reference a .vert source file");
+            }
+            if (pass.program.fragmentSource.extension() != ".frag") {
+                fail(path, at + ".program.frag", "must reference a .frag source file");
+            }
+            pass.vertexInput = parseInterfaceVariables(json, "vertexInput", true, false, path, at);
+            pass.varyings = parseInterfaceVariables(json, "varyings", false, true, path, at);
+            pass.fragmentOutputs =
+                parseInterfaceVariables(json, "fragmentOutputs", false, false, path, at);
+            passAsset.renderState =
+                parseState(json.value("state", Json::object()), path, at + ".state");
+            pass.features = json.value("features", std::vector<std::string>{});
             subShader.passes.push_back(std::move(passAsset));
         }
         asset.subShaders.push_back(std::move(subShader));
@@ -625,16 +614,16 @@ ShaderAsset parseShaderAssetValue(const VirtualPath& path,
     return asset;
 }
 
-MaterialAsset parseMaterialAssetValue(const VirtualPath& path,
-                                      std::string_view source) {
+MaterialAsset parseMaterialAssetValue(const VirtualPath& path, std::string_view source) {
     const Json root = readJson(path, source);
     if (!root.is_object()) {
         fail(path, "$", "material asset root must be an object");
     }
     const int schemaVersion = required<int>(root, "$schemaVersion", path, "$");
     if (schemaVersion != 1) {
-        fail(path, "$.$schemaVersion", "unsupported schema version " +
-                                             std::to_string(schemaVersion));
+        fail(path,
+             "$.$schemaVersion",
+             "unsupported schema version " + std::to_string(schemaVersion));
     }
     MaterialAsset material;
     material.setAssetPath(path);
@@ -659,34 +648,32 @@ MaterialAsset parseMaterialAssetValue(const VirtualPath& path,
     }
     const Json values = root.value("properties", Json::object());
     for (const auto& [name, value] : values.items()) {
-        material.properties.emplace(
-            name, parseMaterialValue(value, path, "$.properties." + name));
+        material.properties.emplace(name, parseMaterialValue(value, path, "$.properties." + name));
     }
     return material;
 }
 
-std::shared_ptr<ShaderAsset> detail::parseShaderAsset(
-    const VirtualPath& path, std::string_view source) {
+std::shared_ptr<ShaderAsset> detail::parseShaderAsset(const VirtualPath& path,
+                                                      std::string_view source) {
     try {
         return std::make_shared<ShaderAsset>(parseShaderAssetValue(path, source));
     } catch (const AssetParseFailure&) {
         return {};
     } catch (const Json::exception& error) {
-        Log::error("ShaderAsset", "%s: JSON value error: %s",
-                   path.string().c_str(), error.what());
+        Log::error("ShaderAsset", "%s: JSON value error: %s", path.string().c_str(), error.what());
         return {};
     }
 }
 
-std::shared_ptr<MaterialAsset> detail::parseMaterialAsset(
-    const VirtualPath& path, std::string_view source) {
+std::shared_ptr<MaterialAsset> detail::parseMaterialAsset(const VirtualPath& path,
+                                                          std::string_view source) {
     try {
         return std::make_shared<MaterialAsset>(parseMaterialAssetValue(path, source));
     } catch (const AssetParseFailure&) {
         return {};
     } catch (const Json::exception& error) {
-        Log::error("MaterialAsset", "%s: JSON value error: %s",
-                   path.string().c_str(), error.what());
+        Log::error(
+            "MaterialAsset", "%s: JSON value error: %s", path.string().c_str(), error.what());
         return {};
     }
 }
@@ -697,8 +684,11 @@ bool validateMaterialAsset(const MaterialAsset& material,
     bool valid = true;
     const auto report = [&](const std::string& path, const std::string& message) {
         valid = false;
-        Log::error("MaterialAsset", "%s: %s: %s", materialPath.string().c_str(),
-                   path.c_str(), message.c_str());
+        Log::error("MaterialAsset",
+                   "%s: %s: %s",
+                   materialPath.string().c_str(),
+                   path.c_str(),
+                   message.c_str());
     };
     std::set<std::string> declaredKeywords;
     for (const SubShaderDesc& subShader : shader.subShaders) {
@@ -709,15 +699,15 @@ bool validateMaterialAsset(const MaterialAsset& material,
     }
     for (const std::string& keyword : material.keywords) {
         if (!declaredKeywords.contains(keyword)) {
-            report("$.keywords", "keyword '" + keyword +
-                                   "' is not declared by shader '" + shader.name + "'");
+            report("$.keywords",
+                   "keyword '" + keyword + "' is not declared by shader '" + shader.name + "'");
         }
     }
     for (const auto& [name, value] : material.properties) {
         const ShaderPropertyDesc* property = shader.findProperty(name);
         if (!property) {
             report("$.properties." + name,
-                 "property is not declared by shader '" + shader.name + "'");
+                   "property is not declared by shader '" + shader.name + "'");
             continue;
         }
         if (!valueMatchesProperty(value, property->type)) {
@@ -741,15 +731,11 @@ Std140TypeLayout std140TypeLayout(ShaderPropertyType type) {
     switch (type) {
     case ShaderPropertyType::Float:
     case ShaderPropertyType::Range:
-    case ShaderPropertyType::Boolean:
-        return {4, 4};
-    case ShaderPropertyType::Vec2:
-        return {8, 8};
-    case ShaderPropertyType::Vec3:
-        return {16, 16};
+    case ShaderPropertyType::Boolean: return {4, 4};
+    case ShaderPropertyType::Vec2: return {8, 8};
+    case ShaderPropertyType::Vec3: return {16, 16};
     case ShaderPropertyType::Vec4:
-    case ShaderPropertyType::Color:
-        return {16, 16};
+    case ShaderPropertyType::Color: return {16, 16};
     case ShaderPropertyType::Texture2D:
         assert(false && "Texture2D is a descriptor, not a uniform member");
     }
@@ -773,21 +759,18 @@ const UniformMemberLayout* UniformBlockLayout::findMember(std::string_view name)
     return member == members.end() ? nullptr : &*member;
 }
 
-const UniformMemberLayout& UniformBlockLayout::requireMember(
-    std::string_view name) const {
+const UniformMemberLayout& UniformBlockLayout::requireMember(std::string_view name) const {
     if (const UniformMemberLayout* member = findMember(name)) {
         return *member;
     }
-    Log::fatal("ShaderLayout", "Material uniform member does not exist: " +
-                                   std::string{name});
+    Log::fatal("ShaderLayout", "Material uniform member does not exist: " + std::string{name});
 }
 
 bool isUniformProperty(ShaderPropertyType type) {
     return type != ShaderPropertyType::Texture2D;
 }
 
-UniformBlockLayout
-buildUniformBlockLayout(std::span<const ShaderPropertyDesc> properties) {
+UniformBlockLayout buildUniformBlockLayout(std::span<const ShaderPropertyDesc> properties) {
     UniformBlockLayout result;
     std::uint32_t cursor = 0;
     for (const ShaderPropertyDesc& property : properties) {
@@ -807,29 +790,19 @@ buildUniformBlockLayout(std::span<const ShaderPropertyDesc> properties) {
     return result;
 }
 
-ShaderPass::ShaderPass(const ShaderPassDesc& desc,
-                       const RenderStateDesc& renderState)
-    : name_(desc.name),
-      type_(desc.type),
-      program_(desc.program),
-      vertexInput_(desc.vertexInput),
-      varyings_(desc.varyings),
-      fragmentOutputs_(desc.fragmentOutputs),
-      renderState_(renderState),
-      features_(desc.features),
-      keywordSchema_(desc.features) {}
+ShaderPass::ShaderPass(const ShaderPassDesc& desc, const RenderStateDesc& renderState)
+    : name_(desc.name), type_(desc.type), program_(desc.program), vertexInput_(desc.vertexInput),
+      varyings_(desc.varyings), fragmentOutputs_(desc.fragmentOutputs), renderState_(renderState),
+      features_(desc.features), keywordSchema_(desc.features) {}
 
-ShaderVariantKey ShaderPass::variantKey(
-    std::span<const std::string> materialKeywords,
-    std::uint32_t meshFeatureBits,
-    std::uint32_t platformFeatureBits) const {
-    return keywordSchema_.makeKey(materialKeywords, meshFeatureBits,
-                                  platformFeatureBits);
+ShaderVariantKey ShaderPass::variantKey(std::span<const std::string> materialKeywords,
+                                        std::uint32_t meshFeatureBits,
+                                        std::uint32_t platformFeatureBits) const {
+    return keywordSchema_.makeKey(materialKeywords, meshFeatureBits, platformFeatureBits);
 }
 
 SubShader::SubShader(const SubShaderDesc& desc)
-    : renderPipeline_(desc.renderPipeline),
-      renderType_(desc.renderType),
+    : renderPipeline_(desc.renderPipeline), renderType_(desc.renderType),
       renderQueue_(desc.renderQueue) {
     passes_.reserve(desc.passes.size());
     for (const ShaderPassAsset& asset : desc.passes) {
@@ -855,9 +828,7 @@ bool SubShader::supports(std::string_view renderPipeline) const {
 }
 
 Shader::Shader(const ShaderAsset& asset)
-    : assetPath_(asset.assetPath()),
-      name_(asset.name),
-      properties_(asset.properties),
+    : assetPath_(asset.assetPath()), name_(asset.name), properties_(asset.properties),
       uniformBlockLayout_(buildUniformBlockLayout(properties_)) {
     subShaders_.reserve(asset.subShaders.size());
     for (const SubShaderDesc& subShader : asset.subShaders) {
@@ -870,8 +841,8 @@ Shader ShaderAsset::instantiate() const {
 }
 
 const SubShader* Shader::selectSubShader(std::string_view renderPipeline) const {
-    const auto found = std::ranges::find_if(
-        subShaders_, [renderPipeline](const SubShader& subShader) {
+    const auto found =
+        std::ranges::find_if(subShaders_, [renderPipeline](const SubShader& subShader) {
             return subShader.supports(renderPipeline);
         });
     return found == subShaders_.end() ? nullptr : &*found;
@@ -881,8 +852,10 @@ const SubShader& Shader::requireSubShader(std::string_view renderPipeline) const
     if (const SubShader* subShader = selectSubShader(renderPipeline)) {
         return *subShader;
     }
-    Log::fatal("Shader", "No compatible SubShader for render pipeline: %.*s",
-               static_cast<int>(renderPipeline.size()), renderPipeline.data());
+    Log::fatal("Shader",
+               "No compatible SubShader for render pipeline: %.*s",
+               static_cast<int>(renderPipeline.size()),
+               renderPipeline.data());
 }
 
 const SubShader& Shader::defaultSubShader() const {
@@ -894,18 +867,15 @@ const SubShader& Shader::defaultSubShader() const {
 
 bool Shader::declaresKeyword(std::string_view keyword) const {
     return std::ranges::any_of(subShaders_, [keyword](const SubShader& subShader) {
-        return std::ranges::any_of(
-            subShader.passes(), [keyword](const ShaderPass& pass) {
-                return std::ranges::find(pass.features(), keyword) !=
-                       pass.features().end();
-            });
+        return std::ranges::any_of(subShader.passes(), [keyword](const ShaderPass& pass) {
+            return std::ranges::find(pass.features(), keyword) != pass.features().end();
+        });
     });
 }
 
 namespace {
 
-ShaderValueType reflectValueType(const spirv_cross::SPIRType& type,
-                                 const VirtualPath& path) {
+ShaderValueType reflectValueType(const spirv_cross::SPIRType& type, const VirtualPath& path) {
     if (type.basetype == spirv_cross::SPIRType::Float) {
         switch (type.vecsize) {
         case 1: return ShaderValueType::Float;
@@ -915,8 +885,7 @@ ShaderValueType reflectValueType(const spirv_cross::SPIRType& type,
         default: break;
         }
     }
-    reflectionFail("Unsupported interface type in: %s",
-                   path.string().c_str());
+    reflectionFail("Unsupported interface type in: %s", path.string().c_str());
 }
 
 std::string resourceName(const spirv_cross::Compiler& compiler,
@@ -924,10 +893,10 @@ std::string resourceName(const spirv_cross::Compiler& compiler,
     return resource.name.empty() ? compiler.get_name(resource.id) : resource.name;
 }
 
-const ShaderStageVariable* findStageVariable(
-    const std::vector<ShaderStageVariable>& variables, std::uint32_t location) {
-    const auto found = std::ranges::find_if(
-        variables, [location](const ShaderStageVariable& variable) {
+const ShaderStageVariable* findStageVariable(const std::vector<ShaderStageVariable>& variables,
+                                             std::uint32_t location) {
+    const auto found =
+        std::ranges::find_if(variables, [location](const ShaderStageVariable& variable) {
             return variable.location == location;
         });
     return found == variables.end() ? nullptr : &*found;
@@ -939,27 +908,26 @@ void validateInterface(const std::vector<ShaderInterfaceVariable>& expected,
                        std::string_view interfaceName) {
     if (expected.size() != reflected.size()) {
         reflectionFail("%s %.*s count does not match ShaderLab declaration",
-                       path.string().c_str(), static_cast<int>(interfaceName.size()),
+                       path.string().c_str(),
+                       static_cast<int>(interfaceName.size()),
                        interfaceName.data());
     }
     for (const ShaderInterfaceVariable& declared : expected) {
-        const ShaderStageVariable* actual =
-            findStageVariable(reflected, declared.location);
+        const ShaderStageVariable* actual = findStageVariable(reflected, declared.location);
         if (!actual || actual->type != declared.type) {
-            reflectionFail(
-                "%s %.*s location %u does not match ShaderLab declaration",
-                path.string().c_str(), static_cast<int>(interfaceName.size()),
-                interfaceName.data(), declared.location);
+            reflectionFail("%s %.*s location %u does not match ShaderLab declaration",
+                           path.string().c_str(),
+                           static_cast<int>(interfaceName.size()),
+                           interfaceName.data(),
+                           declared.location);
         }
     }
 }
 
-const ShaderDescriptorBinding* findDescriptor(
-    const SpirvReflection& reflection, std::uint32_t set,
-    std::uint32_t binding) {
+const ShaderDescriptorBinding*
+findDescriptor(const SpirvReflection& reflection, std::uint32_t set, std::uint32_t binding) {
     const auto found = std::ranges::find_if(
-        reflection.descriptors,
-        [set, binding](const ShaderDescriptorBinding& descriptor) {
+        reflection.descriptors, [set, binding](const ShaderDescriptorBinding& descriptor) {
             return descriptor.set == set && descriptor.binding == binding;
         });
     return found == reflection.descriptors.end() ? nullptr : &*found;
@@ -977,17 +945,17 @@ bool validateMaterialBlock(const ShaderAsset& shader,
         return false;
     }
     if (block->type != ShaderDescriptorType::UniformBuffer) {
-        reflectionFail("%s set 1 binding 0 is not a uniform block",
-                       path.string().c_str());
+        reflectionFail("%s set 1 binding 0 is not a uniform block", path.string().c_str());
     }
     for (const UniformMemberLayout& expected : layout.members) {
-        const auto member = std::ranges::find_if(
-            block->members, [&expected](const ShaderUniformMember& actual) {
+        const auto member =
+            std::ranges::find_if(block->members, [&expected](const ShaderUniformMember& actual) {
                 return actual.name == expected.name;
             });
         if (member == block->members.end() || member->offset != expected.offset) {
             reflectionFail("%s uniform member %s has an unexpected offset",
-                           path.string().c_str(), expected.name.c_str());
+                           path.string().c_str(),
+                           expected.name.c_str());
         }
     }
     return true;
@@ -1005,11 +973,10 @@ void validateTextureBindings(const ShaderAsset& shader,
         if (!descriptor) {
             descriptor = findDescriptor(vertex, 1, binding);
         }
-        if (!descriptor ||
-            descriptor->type != ShaderDescriptorType::CombinedImageSampler) {
-            reflectionFail(
-                "Texture property %s is missing descriptor set 1 binding %u",
-                property.name.c_str(), binding);
+        if (!descriptor || descriptor->type != ShaderDescriptorType::CombinedImageSampler) {
+            reflectionFail("Texture property %s is missing descriptor set 1 binding %u",
+                           property.name.c_str(),
+                           binding);
         }
         ++binding;
     }
@@ -1039,97 +1006,78 @@ SpirvReflection reflectSpirvValue(const VirtualPath& path) {
         switch (compiler.get_execution_model()) {
         case spv::ExecutionModelVertex: result.stage = ShaderStage::Vertex; break;
         case spv::ExecutionModelFragment: result.stage = ShaderStage::Fragment; break;
-        default:
-            reflectionFail("Unsupported shader stage: %s", path.string().c_str());
+        default: reflectionFail("Unsupported shader stage: %s", path.string().c_str());
         }
 
-        const auto reflectInterface =
-            [&compiler, &path](const auto& stageResources) {
-                std::vector<ShaderStageVariable> variables;
-                variables.reserve(stageResources.size());
-                for (const spirv_cross::Resource& resource : stageResources) {
-                    if (compiler.has_decoration(resource.id, spv::DecorationBuiltIn) ||
-                        !compiler.has_decoration(resource.id, spv::DecorationLocation)) {
-                        continue;
-                    }
-                    variables.push_back(
-                        {resourceName(compiler, resource),
-                         reflectValueType(compiler.get_type(resource.type_id), path),
-                         compiler.get_decoration(resource.id, spv::DecorationLocation)});
+        const auto reflectInterface = [&compiler, &path](const auto& stageResources) {
+            std::vector<ShaderStageVariable> variables;
+            variables.reserve(stageResources.size());
+            for (const spirv_cross::Resource& resource : stageResources) {
+                if (compiler.has_decoration(resource.id, spv::DecorationBuiltIn) ||
+                    !compiler.has_decoration(resource.id, spv::DecorationLocation)) {
+                    continue;
                 }
-                std::ranges::sort(
-                    variables, [](const ShaderStageVariable& left,
-                                  const ShaderStageVariable& right) {
-                        return left.location < right.location;
-                    });
-                return variables;
-            };
+                variables.push_back(
+                    {resourceName(compiler, resource),
+                     reflectValueType(compiler.get_type(resource.type_id), path),
+                     compiler.get_decoration(resource.id, spv::DecorationLocation)});
+            }
+            std::ranges::sort(
+                variables, [](const ShaderStageVariable& left, const ShaderStageVariable& right) {
+                    return left.location < right.location;
+                });
+            return variables;
+        };
         result.inputs = reflectInterface(resources.stage_inputs);
         result.outputs = reflectInterface(resources.stage_outputs);
 
-        const auto reflectDescriptors =
-            [&compiler, &result](const auto& shaderResources,
-                                 ShaderDescriptorType descriptorType,
-                                 bool reflectMembers = false) {
-                for (const spirv_cross::Resource& resource : shaderResources) {
-                    if (!compiler.has_decoration(resource.id,
-                                                 spv::DecorationDescriptorSet) ||
-                        !compiler.has_decoration(resource.id,
-                                                 spv::DecorationBinding)) {
-                        continue;
-                    }
-                    ShaderDescriptorBinding descriptor;
-                    descriptor.name = resourceName(compiler, resource);
-                    descriptor.type = descriptorType;
-                    descriptor.set = compiler.get_decoration(
-                        resource.id, spv::DecorationDescriptorSet);
-                    descriptor.binding = compiler.get_decoration(
-                        resource.id, spv::DecorationBinding);
-                    if (reflectMembers) {
-                        const spirv_cross::SPIRType& blockType =
-                            compiler.get_type(resource.base_type_id);
-                        descriptor.members.reserve(blockType.member_types.size());
-                        for (std::uint32_t member = 0;
-                             member < blockType.member_types.size(); ++member) {
-                            descriptor.members.push_back(
-                                {compiler.get_member_name(resource.base_type_id, member),
-                                 compiler.type_struct_member_offset(blockType, member)});
-                        }
-                    }
-                    result.descriptors.push_back(std::move(descriptor));
+        const auto reflectDescriptors = [&compiler, &result](const auto& shaderResources,
+                                                             ShaderDescriptorType descriptorType,
+                                                             bool reflectMembers = false) {
+            for (const spirv_cross::Resource& resource : shaderResources) {
+                if (!compiler.has_decoration(resource.id, spv::DecorationDescriptorSet) ||
+                    !compiler.has_decoration(resource.id, spv::DecorationBinding)) {
+                    continue;
                 }
-            };
+                ShaderDescriptorBinding descriptor;
+                descriptor.name = resourceName(compiler, resource);
+                descriptor.type = descriptorType;
+                descriptor.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+                descriptor.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
+                if (reflectMembers) {
+                    const spirv_cross::SPIRType& blockType =
+                        compiler.get_type(resource.base_type_id);
+                    descriptor.members.reserve(blockType.member_types.size());
+                    for (std::uint32_t member = 0; member < blockType.member_types.size();
+                         ++member) {
+                        descriptor.members.push_back(
+                            {compiler.get_member_name(resource.base_type_id, member),
+                             compiler.type_struct_member_offset(blockType, member)});
+                    }
+                }
+                result.descriptors.push_back(std::move(descriptor));
+            }
+        };
 
-        reflectDescriptors(resources.uniform_buffers,
-                           ShaderDescriptorType::UniformBuffer, true);
-        reflectDescriptors(resources.storage_buffers,
-                           ShaderDescriptorType::StorageBuffer, true);
-        reflectDescriptors(resources.sampled_images,
-                           ShaderDescriptorType::CombinedImageSampler);
-        reflectDescriptors(resources.separate_images,
-                           ShaderDescriptorType::SampledImage);
-        reflectDescriptors(resources.storage_images,
-                           ShaderDescriptorType::SampledImage);
-        reflectDescriptors(resources.subpass_inputs,
-                           ShaderDescriptorType::SampledImage);
-        reflectDescriptors(resources.separate_samplers,
-                           ShaderDescriptorType::Sampler);
+        reflectDescriptors(resources.uniform_buffers, ShaderDescriptorType::UniformBuffer, true);
+        reflectDescriptors(resources.storage_buffers, ShaderDescriptorType::StorageBuffer, true);
+        reflectDescriptors(resources.sampled_images, ShaderDescriptorType::CombinedImageSampler);
+        reflectDescriptors(resources.separate_images, ShaderDescriptorType::SampledImage);
+        reflectDescriptors(resources.storage_images, ShaderDescriptorType::SampledImage);
+        reflectDescriptors(resources.subpass_inputs, ShaderDescriptorType::SampledImage);
+        reflectDescriptors(resources.separate_samplers, ShaderDescriptorType::Sampler);
         std::ranges::sort(
             result.descriptors,
-            [](const ShaderDescriptorBinding& left,
-               const ShaderDescriptorBinding& right) {
-                return std::tie(left.set, left.binding) <
-                       std::tie(right.set, right.binding);
+            [](const ShaderDescriptorBinding& left, const ShaderDescriptorBinding& right) {
+                return std::tie(left.set, left.binding) < std::tie(right.set, right.binding);
             });
         return result;
     } catch (const spirv_cross::CompilerError& error) {
-        reflectionFail("Cannot reflect %s: %s", path.string().c_str(),
-                       error.what());
+        reflectionFail("Cannot reflect %s: %s", path.string().c_str(), error.what());
     }
 }
 
-std::shared_ptr<SpirvReflection> reflectSpirv(
-    const VirtualPath& path) {
+std::shared_ptr<SpirvReflection> reflectSpirv(const VirtualPath& path) {
     try {
         return std::make_shared<SpirvReflection>(reflectSpirvValue(path));
     } catch (const ReflectionFailure&) {
@@ -1143,37 +1091,34 @@ bool validateSpirvReflection(const ShaderAsset& shader,
                              const VirtualPath& fragmentSpirv) {
     const std::shared_ptr<SpirvReflection> vertexResult = reflectSpirv(vertexSpirv);
     const std::shared_ptr<SpirvReflection> fragmentResult = reflectSpirv(fragmentSpirv);
-    if (!vertexResult || !fragmentResult) return false;
+    if (!vertexResult || !fragmentResult)
+        return false;
     const SpirvReflection& vertex = *vertexResult;
     const SpirvReflection& fragment = *fragmentResult;
     try {
-    if (vertex.stage != ShaderStage::Vertex ||
-        fragment.stage != ShaderStage::Fragment) {
-        reflectionFail("SPIR-V stage does not match pass declaration");
-    }
-    validateInterface(pass.vertexInput, vertex.inputs, vertexSpirv, "vertex input");
-    validateInterface(pass.varyings, vertex.outputs, vertexSpirv, "stage output");
-    validateInterface(pass.varyings, fragment.inputs, fragmentSpirv, "stage input");
-    validateInterface(pass.fragmentOutputs, fragment.outputs, fragmentSpirv,
-                      "fragment output");
-    const bool vertexHasMaterialBlock =
-        validateMaterialBlock(shader, vertex, vertexSpirv);
-    const bool fragmentHasMaterialBlock =
-        validateMaterialBlock(shader, fragment, fragmentSpirv);
-    if (!vertexHasMaterialBlock && !fragmentHasMaterialBlock &&
-        !buildUniformBlockLayout(shader.properties).members.empty()) {
-        reflectionFail("Material uniform block is absent from both shader stages");
-    }
-    validateTextureBindings(shader, vertex, fragment);
-
-    for (const ShaderDescriptorBinding& descriptor : vertex.descriptors) {
-        if (const ShaderDescriptorBinding* other =
-                findDescriptor(fragment, descriptor.set, descriptor.binding);
-            other && other->type != descriptor.type) {
-            reflectionFail(
-                "Descriptor type differs between vertex and fragment stages");
+        if (vertex.stage != ShaderStage::Vertex || fragment.stage != ShaderStage::Fragment) {
+            reflectionFail("SPIR-V stage does not match pass declaration");
         }
-    }
+        validateInterface(pass.vertexInput, vertex.inputs, vertexSpirv, "vertex input");
+        validateInterface(pass.varyings, vertex.outputs, vertexSpirv, "stage output");
+        validateInterface(pass.varyings, fragment.inputs, fragmentSpirv, "stage input");
+        validateInterface(pass.fragmentOutputs, fragment.outputs, fragmentSpirv, "fragment output");
+        const bool vertexHasMaterialBlock = validateMaterialBlock(shader, vertex, vertexSpirv);
+        const bool fragmentHasMaterialBlock =
+            validateMaterialBlock(shader, fragment, fragmentSpirv);
+        if (!vertexHasMaterialBlock && !fragmentHasMaterialBlock &&
+            !buildUniformBlockLayout(shader.properties).members.empty()) {
+            reflectionFail("Material uniform block is absent from both shader stages");
+        }
+        validateTextureBindings(shader, vertex, fragment);
+
+        for (const ShaderDescriptorBinding& descriptor : vertex.descriptors) {
+            if (const ShaderDescriptorBinding* other =
+                    findDescriptor(fragment, descriptor.set, descriptor.binding);
+                other && other->type != descriptor.type) {
+                reflectionFail("Descriptor type differs between vertex and fragment stages");
+            }
+        }
     } catch (const ReflectionFailure&) {
         return false;
     }

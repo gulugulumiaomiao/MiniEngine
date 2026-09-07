@@ -4,17 +4,16 @@
 
 namespace engine {
 
-AssetImportResult AssetImportResult::failed(AssetType type,
-                                            std::string error) {
+AssetImportResult AssetImportResult::failed(AssetType type, std::string error) {
     AssetImportResult result;
     result.type = type;
     result.error = std::move(error);
     return result;
 }
 
-AssetImportResult AssetImportResult::succeeded(
-    AssetType type, VirtualPath artifactPath,
-    std::vector<VirtualPath> dependencies) {
+AssetImportResult AssetImportResult::succeeded(AssetType type,
+                                               VirtualPath artifactPath,
+                                               std::vector<VirtualPath> dependencies) {
     AssetImportResult result;
     result.success = true;
     result.type = type;

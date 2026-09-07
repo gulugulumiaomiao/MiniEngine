@@ -19,7 +19,7 @@ struct SwapchainDesc {
 };
 
 class ISwapchain {
-    public:
+public:
     virtual ~ISwapchain() = default;
 
     [[nodiscard]] virtual FrameStatus beginFrame() = 0;

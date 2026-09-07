@@ -36,14 +36,14 @@ public:
 
 namespace detail {
 
-[[nodiscard]] std::shared_ptr<MaterialAsset> parseMaterialAsset(
-    const VirtualPath& path, std::string_view source);
+[[nodiscard]] std::shared_ptr<MaterialAsset> parseMaterialAsset(const VirtualPath& path,
+                                                                std::string_view source);
 
 } // namespace detail
 
-[[nodiscard]] bool validateMaterialAsset(
-    const MaterialAsset& material, const ShaderAsset& shader,
-    const VirtualPath& materialPath);
+[[nodiscard]] bool validateMaterialAsset(const MaterialAsset& material,
+                                         const ShaderAsset& shader,
+                                         const VirtualPath& materialPath);
 
 class Material final {
 public:
@@ -81,7 +81,8 @@ public:
 private:
     friend class MaterialManager;
     friend class MaterialAsset;
-    void initialize(VirtualPath assetPath, std::string materialName,
+    void initialize(VirtualPath assetPath,
+                    std::string materialName,
                     ShaderHandle shader,
                     std::optional<int> renderQueueOverride);
     void rebuildForShader(ShaderHandle shader, bool preserveValues);
@@ -101,8 +102,7 @@ private:
 class MaterialManager final : public Singleton<MaterialManager>,
                               public InstanceManager<Material, MaterialHandle> {
 public:
-    [[nodiscard]] MaterialHandle load(
-        const VirtualPath& materialAssetPath) override;
+    [[nodiscard]] MaterialHandle load(const VirtualPath& materialAssetPath) override;
     void setShader(MaterialHandle handle, const VirtualPath& shaderPath);
     void refreshShader(const VirtualPath& shaderPath);
 
@@ -110,8 +110,7 @@ private:
     friend class Singleton<MaterialManager>;
     MaterialManager() = default;
 
-    [[nodiscard]] const VirtualPath& pathOf(
-        const Material& material) const override {
+    [[nodiscard]] const VirtualPath& pathOf(const Material& material) const override {
         return material.assetPath();
     }
     [[nodiscard]] bool validate(const Material& material) const override;

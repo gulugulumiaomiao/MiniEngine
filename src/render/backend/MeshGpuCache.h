@@ -13,7 +13,7 @@ class IDevice;
 }
 
 class MeshGpuCache final {
-    public:
+public:
     explicit MeshGpuCache(rhi::IDevice& device) : device_(device) {}
     ~MeshGpuCache();
 
@@ -22,7 +22,7 @@ class MeshGpuCache final {
     void clear();
     [[nodiscard]] std::size_t size() const { return entries_.size(); }
 
-    private:
+private:
     struct Entry {
         MeshDrawInfo drawInfo;
         std::uint64_t meshVersion{};
