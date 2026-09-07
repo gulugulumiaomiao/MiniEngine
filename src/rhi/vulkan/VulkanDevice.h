@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/base/HandlePool.h"
 #include "rhi/RhiFactory.h"
 #include "rhi/api/Device.h"
 #include "rhi/vulkan/VulkanCommandEncoder.h"
@@ -9,11 +10,9 @@
 
 #include <cstdint>
 #include <memory>
-#include <vector>
 
 namespace engine {
 
-class GpuAllocator;
 class DescriptorAllocator;
 class DescriptorSetLayout;
 
@@ -23,7 +22,7 @@ class VulkanGraphicsPipeline;
 class VulkanBuffer;
 class VulkanShaderModule;
 
-class VulkanDevice final : public IDevice, public IVulkanResourceResolver {
+class VulkanDevice final : public IDevice {
 public:
     explicit VulkanDevice(const SurfaceSource& surface);
     ~VulkanDevice() override;
@@ -71,6 +70,11 @@ public:
     [[nodiscard]] ResolvedPipeline resolvePipeline(GraphicsPipelineHandle handle) const override;
     [[nodiscard]] VkDescriptorSet resolveBindGroup(BindGroupHandle handle) const override;
 
+    [[nodiscard]] TextureHandle registerExternalTexture(VkImage image);
+    void unregisterExternalTexture(TextureHandle handle);
+    [[nodiscard]] TextureViewHandle registerExternalTextureView(VkImageView view);
+    void unregisterExternalTextureView(TextureViewHandle handle);
+
 private:
     struct QueueFamilies {
         std::uint32_t graphics{};
@@ -80,32 +84,37 @@ private:
         [[nodiscard]] bool complete() const { return hasGraphics && hasPresent; }
     };
 
-    struct BufferSlot {
+    struct BufferResource {
         std::unique_ptr<VulkanBuffer> resource;
         MemoryUsage memoryUsage{MemoryUsage::DeviceLocal};
-        std::uint32_t generation{1};
     };
 
-    struct ShaderSlot {
+    struct ShaderResource {
         std::unique_ptr<VulkanShaderModule> resource;
-        std::uint32_t generation{1};
     };
 
-    struct PipelineSlot {
+    struct PipelineResource {
         std::unique_ptr<VulkanGraphicsPipeline> resource;
-        std::uint32_t generation{1};
     };
 
-    struct BindGroupLayoutSlot {
+    struct BindGroupLayoutResource {
         std::unique_ptr<::engine::DescriptorSetLayout> resource;
-        std::uint32_t generation{1};
     };
 
-    struct BindGroupSlot {
+    struct BindGroupResource {
         VkDescriptorSet resource{VK_NULL_HANDLE};
-        std::uint32_t generation{1};
     };
 
+    struct TextureResource {
+        VkImage resource{VK_NULL_HANDLE};
+    };
+
+    struct TextureViewResource {
+        VkImageView resource{VK_NULL_HANDLE};
+    };
+
+    [[nodiscard]] BufferResource& requireBufferResource(BufferHandle handle);
+    [[nodiscard]] const BufferResource& requireBufferResource(BufferHandle handle) const;
     [[nodiscard]] VulkanBuffer& requireBuffer(BufferHandle handle);
     [[nodiscard]] const VulkanBuffer& requireBuffer(BufferHandle handle) const;
     void createInstance();
@@ -115,6 +124,7 @@ private:
     [[nodiscard]] bool isDeviceSuitable(VkPhysicalDevice device) const;
     void selectPhysicalDevice();
     void createLogicalDevice();
+    void createAllocator();
     void createCommandPool();
     void clear();
 
@@ -123,17 +133,19 @@ private:
     VkSurfaceKHR surface_{VK_NULL_HANDLE};
     VkPhysicalDevice physicalDevice_{VK_NULL_HANDLE};
     VkDevice device_{VK_NULL_HANDLE};
-    std::unique_ptr<::engine::GpuAllocator> allocator_;
+    VmaAllocator allocator_{VK_NULL_HANDLE};
     VkQueue graphicsQueue_{VK_NULL_HANDLE};
     VkQueue presentQueue_{VK_NULL_HANDLE};
     VkCommandPool commandPool_{VK_NULL_HANDLE};
     std::uint32_t graphicsQueueFamily_{};
     std::uint32_t presentQueueFamily_{};
-    std::vector<BufferSlot> buffers_;
-    std::vector<ShaderSlot> shaders_;
-    std::vector<PipelineSlot> pipelines_;
-    std::vector<BindGroupLayoutSlot> bindGroupLayouts_;
-    std::vector<BindGroupSlot> bindGroups_;
+    HandlePool<BufferResource, BufferHandle> buffers_;
+    HandlePool<ShaderResource, ShaderHandle> shaders_;
+    HandlePool<PipelineResource, GraphicsPipelineHandle> pipelines_;
+    HandlePool<BindGroupLayoutResource, BindGroupLayoutHandle> bindGroupLayouts_;
+    HandlePool<BindGroupResource, BindGroupHandle> bindGroups_;
+    HandlePool<TextureResource, TextureHandle> textures_;
+    HandlePool<TextureViewResource, TextureViewHandle> textureViews_;
     std::unique_ptr<::engine::DescriptorAllocator> descriptorAllocator_;
 };
 

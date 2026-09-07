@@ -2,7 +2,6 @@
 
 #include "core/logging/Log.h"
 #include "rhi/vulkan/DescriptorAllocator.h"
-#include "rhi/vulkan/GpuAllocator.h"
 #include "rhi/vulkan/VulkanBuffer.h"
 #include "rhi/vulkan/VulkanGraphicsPipeline.h"
 #include "rhi/vulkan/VulkanShaderModule.h"
@@ -13,7 +12,6 @@
 #if defined(MINI_DEBUG)
 #include <iostream>
 #endif
-#include <iterator>
 #include <set>
 #include <string>
 #include <utility>
@@ -104,15 +102,6 @@ std::pair<VmaMemoryUsage, VmaAllocationCreateFlags> toVulkan(MemoryUsage usage) 
     return {VMA_MEMORY_USAGE_AUTO, 0};
 }
 
-template <typename Slots> auto reusableSlot(Slots& slots) {
-    auto found = std::ranges::find_if(slots, [](const auto& slot) { return !slot.resource; });
-    if (found == slots.end()) {
-        slots.emplace_back();
-        found = std::prev(slots.end());
-    }
-    return found;
-}
-
 } // namespace
 
 VulkanDevice::VulkanDevice(const SurfaceSource& surface) {
@@ -121,7 +110,7 @@ VulkanDevice::VulkanDevice(const SurfaceSource& surface) {
     createSurface(surface);
     selectPhysicalDevice();
     createLogicalDevice();
-    allocator_ = std::make_unique<::engine::GpuAllocator>(instance_, physicalDevice_, device_);
+    createAllocator();
     descriptorAllocator_ = std::make_unique<::engine::DescriptorAllocator>(device_, 256);
     createCommandPool();
 }
@@ -129,7 +118,10 @@ VulkanDevice::VulkanDevice(const SurfaceSource& surface) {
 VulkanDevice::~VulkanDevice() {
     waitIdle();
     clear();
-    allocator_.reset();
+    if (allocator_ != VK_NULL_HANDLE) {
+        vmaDestroyAllocator(allocator_);
+        allocator_ = VK_NULL_HANDLE;
+    }
     vkDestroyCommandPool(device_, commandPool_, nullptr);
     vkDestroyDevice(device_, nullptr);
     vkDestroySurfaceKHR(instance_, surface_, nullptr);
@@ -311,30 +303,33 @@ void VulkanDevice::createCommandPool() {
     check(vkCreateCommandPool(device_, &poolInfo, nullptr, &commandPool_), "vkCreateCommandPool");
 }
 
+void VulkanDevice::createAllocator() {
+    VmaAllocatorCreateInfo createInfo{};
+    createInfo.instance = instance_;
+    createInfo.physicalDevice = physicalDevice_;
+    createInfo.device = device_;
+    createInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+    check(vmaCreateAllocator(&createInfo, &allocator_), "vmaCreateAllocator");
+}
+
 VmaAllocator VulkanDevice::allocator() const {
-    return allocator_->handle();
+    return allocator_;
 }
 
 BufferHandle VulkanDevice::createBuffer(const BufferDesc& desc) {
     if (desc.size == 0 || desc.usage == BufferUsage::None) {
         Log::fatal("VulkanDevice", "Invalid buffer description");
     }
-    auto slot = reusableSlot(buffers_);
     const auto [memoryUsage, allocationFlags] = toVulkan(desc.memoryUsage);
-    slot->resource = std::make_unique<VulkanBuffer>(
-        allocator_->handle(), desc.size, toVulkan(desc.usage), memoryUsage, allocationFlags);
-    slot->memoryUsage = desc.memoryUsage;
-    return {static_cast<std::uint32_t>(std::distance(buffers_.begin(), slot)), slot->generation};
+    return buffers_.insert(BufferResource{
+        std::make_unique<VulkanBuffer>(
+            allocator_, desc.size, toVulkan(desc.usage), memoryUsage, allocationFlags),
+        desc.memoryUsage,
+    });
 }
 
 void VulkanDevice::destroyBuffer(BufferHandle handle) {
-    if (handle.index >= buffers_.size())
-        return;
-    BufferSlot& slot = buffers_[handle.index];
-    if (!slot.resource || slot.generation != handle.generation)
-        return;
-    slot.resource.reset();
-    ++slot.generation;
+    (void)buffers_.release(handle);
 }
 
 void VulkanDevice::uploadBuffer(BufferHandle destination,
@@ -345,12 +340,12 @@ void VulkanDevice::uploadBuffer(BufferHandle destination,
         Log::fatal("VulkanDevice", "Invalid buffer upload range");
     }
 
-    if (buffers_[destination.index].memoryUsage == MemoryUsage::Upload) {
+    if (requireBufferResource(destination).memoryUsage == MemoryUsage::Upload) {
         target.upload(data, offset);
         return;
     }
 
-    VulkanBuffer staging{allocator_->handle(),
+    VulkanBuffer staging{allocator_,
                          data.size_bytes(),
                          VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                          VMA_MEMORY_USAGE_AUTO,
@@ -384,20 +379,12 @@ ShaderHandle VulkanDevice::createShader(const ShaderDesc& desc) {
     if (desc.bytecode.empty()) {
         Log::fatal("VulkanDevice", "Cannot create an empty shader");
     }
-    auto slot = reusableSlot(shaders_);
-    slot->resource =
-        std::make_unique<VulkanShaderModule>(device_, desc.stage, desc.bytecode, desc.debugName);
-    return {static_cast<std::uint32_t>(std::distance(shaders_.begin(), slot)), slot->generation};
+    return shaders_.insert(ShaderResource{std::make_unique<VulkanShaderModule>(
+        device_, desc.stage, desc.bytecode, desc.debugName)});
 }
 
 void VulkanDevice::destroyShader(ShaderHandle handle) {
-    if (handle.index >= shaders_.size())
-        return;
-    ShaderSlot& slot = shaders_[handle.index];
-    if (!slot.resource || slot.generation != handle.generation)
-        return;
-    slot.resource.reset();
-    ++slot.generation;
+    (void)shaders_.release(handle);
 }
 
 GraphicsPipelineHandle VulkanDevice::createGraphicsPipeline(const GraphicsPipelineDesc& desc) {
@@ -409,23 +396,16 @@ GraphicsPipelineHandle VulkanDevice::createGraphicsPipeline(const GraphicsPipeli
     for (BindGroupLayoutHandle layout : desc.bindGroupLayouts) {
         layouts.push_back(resolveBindGroupLayout(layout));
     }
-    auto slot = reusableSlot(pipelines_);
-    slot->resource = std::make_unique<VulkanGraphicsPipeline>(device_,
-                                                              desc,
-                                                              resolveShader(desc.vertexShader),
-                                                              resolveShader(desc.fragmentShader),
-                                                              layouts);
-    return {static_cast<std::uint32_t>(std::distance(pipelines_.begin(), slot)), slot->generation};
+    return pipelines_.insert(PipelineResource{std::make_unique<VulkanGraphicsPipeline>(
+        device_,
+        desc,
+        resolveShader(desc.vertexShader),
+        resolveShader(desc.fragmentShader),
+        layouts)});
 }
 
 void VulkanDevice::destroyGraphicsPipeline(GraphicsPipelineHandle handle) {
-    if (handle.index >= pipelines_.size())
-        return;
-    PipelineSlot& slot = pipelines_[handle.index];
-    if (!slot.resource || slot.generation != handle.generation)
-        return;
-    slot.resource.reset();
-    ++slot.generation;
+    (void)pipelines_.release(handle);
 }
 
 BindGroupLayoutHandle VulkanDevice::createBindGroupLayout(const BindGroupLayoutDesc& desc) {
@@ -441,20 +421,12 @@ BindGroupLayoutHandle VulkanDevice::createBindGroupLayout(const BindGroupLayoutD
         bindings.push_back(
             {entry.binding, toVulkan(entry.type), 1, toVulkan(entry.visibility), nullptr});
     }
-    auto slot = reusableSlot(bindGroupLayouts_);
-    slot->resource = std::make_unique<::engine::DescriptorSetLayout>(device_, bindings);
-    return {static_cast<std::uint32_t>(std::distance(bindGroupLayouts_.begin(), slot)),
-            slot->generation};
+    return bindGroupLayouts_.insert(BindGroupLayoutResource{
+        std::make_unique<::engine::DescriptorSetLayout>(device_, bindings)});
 }
 
 void VulkanDevice::destroyBindGroupLayout(BindGroupLayoutHandle handle) {
-    if (handle.index >= bindGroupLayouts_.size())
-        return;
-    BindGroupLayoutSlot& slot = bindGroupLayouts_[handle.index];
-    if (!slot.resource || slot.generation != handle.generation)
-        return;
-    slot.resource.reset();
-    ++slot.generation;
+    (void)bindGroupLayouts_.release(handle);
 }
 
 BindGroupHandle VulkanDevice::createBindGroup(const BindGroupDesc& desc) {
@@ -484,20 +456,15 @@ BindGroupHandle VulkanDevice::createBindGroup(const BindGroupDesc& desc) {
     }
     vkUpdateDescriptorSets(
         device_, static_cast<std::uint32_t>(writes.size()), writes.data(), 0, nullptr);
-    auto slot = reusableSlot(bindGroups_);
-    slot->resource = descriptor;
-    return {static_cast<std::uint32_t>(std::distance(bindGroups_.begin(), slot)), slot->generation};
+    return bindGroups_.insert(BindGroupResource{descriptor});
 }
 
 void VulkanDevice::destroyBindGroup(BindGroupHandle handle) {
-    if (handle.index >= bindGroups_.size())
+    BindGroupResource* resource = bindGroups_.find(handle);
+    if (!resource)
         return;
-    BindGroupSlot& slot = bindGroups_[handle.index];
-    if (slot.resource == VK_NULL_HANDLE || slot.generation != handle.generation)
-        return;
-    descriptorAllocator_->free(slot.resource);
-    slot.resource = VK_NULL_HANDLE;
-    ++slot.generation;
+    descriptorAllocator_->free(resource->resource);
+    (void)bindGroups_.release(handle);
 }
 
 void VulkanDevice::waitIdle() {
@@ -510,75 +477,103 @@ VulkanBuffer& VulkanDevice::requireBuffer(BufferHandle handle) {
     return const_cast<VulkanBuffer&>(std::as_const(*this).requireBuffer(handle));
 }
 
+VulkanDevice::BufferResource& VulkanDevice::requireBufferResource(BufferHandle handle) {
+    return const_cast<BufferResource&>(std::as_const(*this).requireBufferResource(handle));
+}
+
+const VulkanDevice::BufferResource&
+VulkanDevice::requireBufferResource(BufferHandle handle) const {
+    const BufferResource* resource = buffers_.find(handle);
+    if (!resource) {
+        Log::fatal("VulkanDevice", "Invalid or stale RHI buffer handle");
+    }
+    return *resource;
+}
+
 const VulkanBuffer& VulkanDevice::requireBuffer(BufferHandle handle) const {
-    if (handle.index >= buffers_.size()) {
-        Log::fatal("VulkanDevice", "Invalid RHI buffer handle");
-    }
-    const BufferSlot& slot = buffers_[handle.index];
-    if (!slot.resource || slot.generation != handle.generation) {
-        Log::fatal("VulkanDevice", "Stale RHI buffer handle");
-    }
-    return *slot.resource;
+    return *requireBufferResource(handle).resource;
 }
 
 VkBuffer VulkanDevice::resolveBuffer(BufferHandle handle) const {
     return requireBuffer(handle).handle();
 }
 
-VkImage VulkanDevice::resolveTexture(TextureHandle) const {
-    Log::fatal("VulkanDevice", "Texture handle is not owned by this device resolver");
+VkImage VulkanDevice::resolveTexture(TextureHandle handle) const {
+    const TextureResource* resource = textures_.find(handle);
+    if (!resource) {
+        Log::fatal("VulkanDevice", "Invalid or stale RHI texture handle");
+    }
+    return resource->resource;
 }
 
-VkImageView VulkanDevice::resolveTextureView(TextureViewHandle) const {
-    Log::fatal("VulkanDevice", "Texture view handle is not owned by this device resolver");
+VkImageView VulkanDevice::resolveTextureView(TextureViewHandle handle) const {
+    const TextureViewResource* resource = textureViews_.find(handle);
+    if (!resource) {
+        Log::fatal("VulkanDevice", "Invalid or stale RHI texture view handle");
+    }
+    return resource->resource;
 }
 
 VkShaderModule VulkanDevice::resolveShader(ShaderHandle handle) const {
-    if (handle.index >= shaders_.size()) {
-        Log::fatal("VulkanDevice", "Invalid RHI shader handle");
+    const ShaderResource* resource = shaders_.find(handle);
+    if (!resource) {
+        Log::fatal("VulkanDevice", "Invalid or stale RHI shader handle");
     }
-    const ShaderSlot& slot = shaders_[handle.index];
-    if (!slot.resource || slot.generation != handle.generation) {
-        Log::fatal("VulkanDevice", "Stale RHI shader handle");
-    }
-    return slot.resource->handle();
+    return resource->resource->handle();
 }
 
 VkDescriptorSetLayout VulkanDevice::resolveBindGroupLayout(BindGroupLayoutHandle handle) const {
-    if (handle.index >= bindGroupLayouts_.size()) {
-        Log::fatal("VulkanDevice", "Invalid RHI bind group layout handle");
+    const BindGroupLayoutResource* resource = bindGroupLayouts_.find(handle);
+    if (!resource) {
+        Log::fatal("VulkanDevice", "Invalid or stale RHI bind group layout handle");
     }
-    const BindGroupLayoutSlot& slot = bindGroupLayouts_[handle.index];
-    if (!slot.resource || slot.generation != handle.generation) {
-        Log::fatal("VulkanDevice", "Stale RHI bind group layout handle");
-    }
-    return slot.resource->handle();
+    return resource->resource->handle();
 }
 
 ResolvedPipeline VulkanDevice::resolvePipeline(GraphicsPipelineHandle handle) const {
-    if (handle.index >= pipelines_.size()) {
-        Log::fatal("VulkanDevice", "Invalid RHI graphics pipeline handle");
+    const PipelineResource* resource = pipelines_.find(handle);
+    if (!resource) {
+        Log::fatal("VulkanDevice", "Invalid or stale RHI graphics pipeline handle");
     }
-    const PipelineSlot& slot = pipelines_[handle.index];
-    if (!slot.resource || slot.generation != handle.generation) {
-        Log::fatal("VulkanDevice", "Stale RHI graphics pipeline handle");
-    }
-    return {slot.resource->handle(), slot.resource->layout()};
+    return {resource->resource->handle(), resource->resource->layout()};
 }
 
 VkDescriptorSet VulkanDevice::resolveBindGroup(BindGroupHandle handle) const {
-    if (handle.index >= bindGroups_.size()) {
-        Log::fatal("VulkanDevice", "Invalid RHI bind group handle");
+    const BindGroupResource* resource = bindGroups_.find(handle);
+    if (!resource) {
+        Log::fatal("VulkanDevice", "Invalid or stale RHI bind group handle");
     }
-    const BindGroupSlot& slot = bindGroups_[handle.index];
-    if (slot.resource == VK_NULL_HANDLE || slot.generation != handle.generation) {
-        Log::fatal("VulkanDevice", "Stale RHI bind group handle");
+    return resource->resource;
+}
+
+TextureHandle VulkanDevice::registerExternalTexture(VkImage image) {
+    if (image == VK_NULL_HANDLE) {
+        Log::fatal("VulkanDevice", "Cannot register a null Vulkan image");
     }
-    return slot.resource;
+    return textures_.insert(TextureResource{image});
+}
+
+void VulkanDevice::unregisterExternalTexture(TextureHandle handle) {
+    (void)textures_.release(handle);
+}
+
+TextureViewHandle VulkanDevice::registerExternalTextureView(VkImageView view) {
+    if (view == VK_NULL_HANDLE) {
+        Log::fatal("VulkanDevice", "Cannot register a null Vulkan image view");
+    }
+    return textureViews_.insert(TextureViewResource{view});
+}
+
+void VulkanDevice::unregisterExternalTextureView(TextureViewHandle handle) {
+    (void)textureViews_.release(handle);
 }
 
 void VulkanDevice::clear() {
+    textureViews_.clear();
+    textures_.clear();
     pipelines_.clear();
+    bindGroups_.forEach(
+        [this](const BindGroupResource& resource) { descriptorAllocator_->free(resource.resource); });
     bindGroups_.clear();
     descriptorAllocator_.reset();
     bindGroupLayouts_.clear();

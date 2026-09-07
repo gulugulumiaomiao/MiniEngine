@@ -336,7 +336,6 @@ add_executable(MiniVulkanEngine
     src/render/shader/ShaderGenerator.cpp
     src/rhi/vulkan/VulkanBuffer.cpp
     src/rhi/vulkan/DescriptorAllocator.cpp
-    src/rhi/vulkan/GpuAllocator.cpp
     src/rhi/vulkan/VulkanGraphicsPipeline.cpp
     src/rhi/vulkan/VulkanDevice.cpp
     src/rhi/vulkan/VulkanFactory.cpp
@@ -565,7 +564,7 @@ if(BUILD_TESTING)
         src/render/shader/Shader.cpp
         src/render/shader/ShaderManager.cpp
     )
-    target_link_libraries(MeshTest PRIVATE MiniAssetImporters MiniSpirvCrossCore)
+    target_link_libraries(MeshTest PRIVATE MiniAssetImporters MiniSpirvCrossCore Vulkan::Vulkan)
     target_include_directories(MeshTest SYSTEM PRIVATE
         third_party/glm/include
         third_party/nlohmann/include

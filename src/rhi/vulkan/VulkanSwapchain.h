@@ -14,7 +14,7 @@ namespace engine::rhi::vulkan {
 
 class VulkanDevice;
 
-class VulkanSwapchain final : public ISwapchain, private IVulkanResourceResolver {
+class VulkanSwapchain final : public ISwapchain {
 public:
     VulkanSwapchain(VulkanDevice& device, const SwapchainDesc& desc);
     ~VulkanSwapchain() override;
@@ -54,12 +54,7 @@ private:
     void destroy();
     void createFrameResources();
 
-    [[nodiscard]] VkDevice device() const override;
-    [[nodiscard]] VkBuffer resolveBuffer(BufferHandle handle) const override;
-    [[nodiscard]] VkImage resolveTexture(TextureHandle handle) const override;
-    [[nodiscard]] VkImageView resolveTextureView(TextureViewHandle handle) const override;
-    [[nodiscard]] ResolvedPipeline resolvePipeline(GraphicsPipelineHandle handle) const override;
-    [[nodiscard]] VkDescriptorSet resolveBindGroup(BindGroupHandle handle) const override;
+    [[nodiscard]] VkDevice device() const;
 
     VulkanDevice& device_;
     SwapchainDesc desc_;
@@ -68,13 +63,14 @@ private:
     VkExtent2D extent_{};
     std::vector<VkImage> images_;
     std::vector<VkImageView> imageViews_;
+    std::vector<TextureHandle> textureHandles_;
+    std::vector<TextureViewHandle> textureViewHandles_;
     std::vector<bool> imageInitialized_;
     std::vector<VkSemaphore> renderFinished_;
     std::array<Frame, kFramesInFlight> frames_{};
     std::unique_ptr<VulkanGraphicsCommandEncoder> encoder_;
     std::uint32_t currentFrame_{};
     std::uint32_t imageIndex_{};
-    std::uint32_t generation_{1};
     bool frameOpen_{};
 };
 

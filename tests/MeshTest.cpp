@@ -62,6 +62,19 @@ public:
         return {};
     }
     void destroyBindGroup(engine::rhi::BindGroupHandle) override {}
+    VkDevice device() const override { return VK_NULL_HANDLE; }
+    VkBuffer resolveBuffer(engine::rhi::BufferHandle) const override { return VK_NULL_HANDLE; }
+    VkImage resolveTexture(engine::rhi::TextureHandle) const override { return VK_NULL_HANDLE; }
+    VkImageView resolveTextureView(engine::rhi::TextureViewHandle) const override {
+        return VK_NULL_HANDLE;
+    }
+    engine::rhi::ResolvedPipeline
+    resolvePipeline(engine::rhi::GraphicsPipelineHandle) const override {
+        return {};
+    }
+    VkDescriptorSet resolveBindGroup(engine::rhi::BindGroupHandle) const override {
+        return VK_NULL_HANDLE;
+    }
     void waitIdle() override { ++waits; }
 
     std::vector<BufferRecord> buffers;

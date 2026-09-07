@@ -1,13 +1,13 @@
 #pragma once
 
 #include "core/math/Math.h"
+#include "core/serialization/Transferable.h"
 
 #include <cstdint>
+#include <utility>
 #include <variant>
 
 namespace engine {
-
-class Transfer;
 
 enum class MeshPrimitiveType : std::uint8_t {
     Plane = 1,
@@ -23,29 +23,59 @@ enum class PrimitiveVertexLayout : std::uint8_t {
     PositionNormalTangentUv,
 };
 
-struct PlaneGeometry {
+struct PlaneGeometry final : public Transferable {
+    PlaneGeometry() = default;
+    PlaneGeometry(math::Vec2 size, std::uint32_t segmentsX, std::uint32_t segmentsZ)
+        : size(size), segmentsX(segmentsX), segmentsZ(segmentsZ) {}
+
     math::Vec2 size{1.0F};
     std::uint32_t segmentsX{1};
     std::uint32_t segmentsZ{1};
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct BoxGeometry {
+struct BoxGeometry final : public Transferable {
+    BoxGeometry() = default;
+    BoxGeometry(math::Vec3 size,
+                std::uint32_t segmentsX,
+                std::uint32_t segmentsY,
+                std::uint32_t segmentsZ)
+        : size(size), segmentsX(segmentsX), segmentsY(segmentsY), segmentsZ(segmentsZ) {}
+
     math::Vec3 size{1.0F};
     std::uint32_t segmentsX{1};
     std::uint32_t segmentsY{1};
     std::uint32_t segmentsZ{1};
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct UvSphereGeometry {
+struct UvSphereGeometry final : public Transferable {
+    UvSphereGeometry() = default;
+    UvSphereGeometry(float radius,
+                     std::uint32_t longitudeSegments,
+                     std::uint32_t latitudeSegments)
+        : radius(radius), longitudeSegments(longitudeSegments),
+          latitudeSegments(latitudeSegments) {}
+
     float radius{0.5F};
     std::uint32_t longitudeSegments{32};
     std::uint32_t latitudeSegments{16};
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct CylinderGeometry {
+struct CylinderGeometry final : public Transferable {
+    CylinderGeometry() = default;
+    CylinderGeometry(float bottomRadius,
+                     float topRadius,
+                     float height,
+                     std::uint32_t radialSegments,
+                     std::uint32_t heightSegments,
+                     bool capBottom,
+                     bool capTop)
+        : bottomRadius(bottomRadius), topRadius(topRadius), height(height),
+          radialSegments(radialSegments), heightSegments(heightSegments), capBottom(capBottom),
+          capTop(capTop) {}
+
     float bottomRadius{0.5F};
     float topRadius{0.5F};
     float height{1.0F};
@@ -53,10 +83,10 @@ struct CylinderGeometry {
     std::uint32_t heightSegments{1};
     bool capBottom{true};
     bool capTop{true};
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct MeshPrimitive {
+struct MeshPrimitive final : public Transferable {
     using Value = std::variant<PlaneGeometry, BoxGeometry, UvSphereGeometry, CylinderGeometry>;
 
     Value value{PlaneGeometry{}};
@@ -68,17 +98,26 @@ struct MeshPrimitive {
     MeshPrimitive(CylinderGeometry geometry) : value(geometry) {}
 
     [[nodiscard]] MeshPrimitiveType type() const;
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct MeshPrimitivePart {
+struct MeshPrimitivePart final : public Transferable {
+    MeshPrimitivePart() = default;
+    MeshPrimitivePart(MeshPrimitive primitive,
+                      math::Vec3 translation = math::Vec3{0.0F},
+                      math::Quat rotation = math::Quat{1.0F, 0.0F, 0.0F, 0.0F},
+                      math::Vec3 scale = math::Vec3{1.0F},
+                      std::uint32_t materialSlot = 0)
+        : primitive(std::move(primitive)), translation(translation), rotation(rotation),
+          scale(scale), materialSlot(materialSlot) {}
+
     MeshPrimitive primitive;
     math::Vec3 translation{0.0F};
     math::Quat rotation{1.0F, 0.0F, 0.0F, 0.0F};
     math::Vec3 scale{1.0F};
     std::uint32_t materialSlot{};
 
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
 } // namespace engine

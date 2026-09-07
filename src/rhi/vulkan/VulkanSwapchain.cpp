@@ -122,9 +122,16 @@ void VulkanSwapchain::create() {
     vkGetSwapchainImagesKHR(device(), swapchain_, &imageCount, nullptr);
     images_.resize(imageCount);
     vkGetSwapchainImagesKHR(device(), swapchain_, &imageCount, images_.data());
+    textureHandles_.clear();
+    textureHandles_.reserve(images_.size());
+    for (VkImage image : images_) {
+        textureHandles_.push_back(device_.registerExternalTexture(image));
+    }
     format_ = surfaceFormat.format;
     imageInitialized_.assign(imageCount, false);
     imageViews_.resize(imageCount);
+    textureViewHandles_.clear();
+    textureViewHandles_.reserve(imageCount);
     renderFinished_.resize(imageCount);
     VkSemaphoreCreateInfo semaphoreInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     for (std::size_t i = 0; i < images_.size(); ++i) {
@@ -137,6 +144,7 @@ void VulkanSwapchain::create() {
         viewInfo.subresourceRange.layerCount = 1;
         check(vkCreateImageView(device(), &viewInfo, nullptr, &imageViews_[i]),
               "vkCreateImageView");
+        textureViewHandles_.push_back(device_.registerExternalTextureView(imageViews_[i]));
         check(vkCreateSemaphore(device(), &semaphoreInfo, nullptr, &renderFinished_[i]),
               "vkCreateSemaphore(renderFinished)");
     }
@@ -147,15 +155,22 @@ void VulkanSwapchain::destroy() {
         vkDestroySemaphore(device(), semaphore, nullptr);
     }
     renderFinished_.clear();
+    for (TextureViewHandle handle : textureViewHandles_) {
+        device_.unregisterExternalTextureView(handle);
+    }
+    textureViewHandles_.clear();
     for (VkImageView view : imageViews_)
         vkDestroyImageView(device(), view, nullptr);
     imageViews_.clear();
+    for (TextureHandle handle : textureHandles_) {
+        device_.unregisterExternalTexture(handle);
+    }
+    textureHandles_.clear();
     images_.clear();
     imageInitialized_.clear();
     if (swapchain_ != VK_NULL_HANDLE)
         vkDestroySwapchainKHR(device(), swapchain_, nullptr);
     swapchain_ = VK_NULL_HANDLE;
-    ++generation_;
 }
 
 void VulkanSwapchain::createFrameResources() {
@@ -194,8 +209,7 @@ FrameStatus VulkanSwapchain::beginFrame() {
     VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     check(vkBeginCommandBuffer(frame.commandBuffer, &beginInfo), "vkBeginCommandBuffer");
-    encoder_ = std::make_unique<VulkanGraphicsCommandEncoder>(
-        frame.commandBuffer, static_cast<const IVulkanResourceResolver&>(*this));
+    encoder_ = std::make_unique<VulkanGraphicsCommandEncoder>(frame.commandBuffer, device_);
     frameOpen_ = true;
     return FrameStatus::Ready;
 }
@@ -251,10 +265,10 @@ IGraphicsCommandEncoder& VulkanSwapchain::encoder() {
 }
 
 TextureHandle VulkanSwapchain::currentTexture() const {
-    return {imageIndex_, generation_};
+    return textureHandles_[imageIndex_];
 }
 TextureViewHandle VulkanSwapchain::currentTextureView() const {
-    return {imageIndex_, generation_};
+    return textureViewHandles_[imageIndex_];
 }
 ResourceState VulkanSwapchain::currentTextureState() const {
     return imageInitialized_[imageIndex_] ? ResourceState::Present : ResourceState::Undefined;
@@ -264,27 +278,6 @@ TextureFormat VulkanSwapchain::format() const {
 }
 VkDevice VulkanSwapchain::device() const {
     return device_.device();
-}
-VkBuffer VulkanSwapchain::resolveBuffer(BufferHandle handle) const {
-    return device_.resolveBuffer(handle);
-}
-VkImage VulkanSwapchain::resolveTexture(TextureHandle handle) const {
-    if (handle.generation != generation_ || handle.index >= images_.size()) {
-        Log::fatal("VulkanSwapchain", "Invalid or stale swapchain texture handle");
-    }
-    return images_[handle.index];
-}
-VkImageView VulkanSwapchain::resolveTextureView(TextureViewHandle handle) const {
-    if (handle.generation != generation_ || handle.index >= imageViews_.size()) {
-        Log::fatal("VulkanSwapchain", "Invalid or stale swapchain texture view handle");
-    }
-    return imageViews_[handle.index];
-}
-ResolvedPipeline VulkanSwapchain::resolvePipeline(GraphicsPipelineHandle handle) const {
-    return device_.resolvePipeline(handle);
-}
-VkDescriptorSet VulkanSwapchain::resolveBindGroup(BindGroupHandle handle) const {
-    return device_.resolveBindGroup(handle);
 }
 
 } // namespace engine::rhi::vulkan

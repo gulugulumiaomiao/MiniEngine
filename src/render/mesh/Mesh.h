@@ -4,6 +4,7 @@
 #include "core/base/InstanceManager.h"
 #include "core/base/Singleton.h"
 #include "core/math/Math.h"
+#include "core/serialization/Transferable.h"
 #include "render/mesh/MeshPrimitive.h"
 #include "render/renderer/RenderResources.h"
 
@@ -29,12 +30,22 @@ enum class VertexSemanticType {
     Custom,
 };
 
-struct VertexSemantic {
+struct VertexSemantic final : public Transferable {
+    VertexSemantic() = default;
+    VertexSemantic(VertexSemanticType type, std::uint8_t index) : type(type), index(index) {}
+
     VertexSemanticType type{VertexSemanticType::Position};
     std::uint8_t index{};
 
-    auto operator<=>(const VertexSemantic&) const = default;
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] auto operator<=>(const VertexSemantic& other) const {
+        if (const auto order = type <=> other.type; order != 0)
+            return order;
+        return index <=> other.index;
+    }
+    bool operator==(const VertexSemantic& other) const {
+        return type == other.type && index == other.index;
+    }
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
 enum class VertexFormat {
@@ -51,7 +62,7 @@ enum class IndexType { UInt16, UInt32 };
 enum class MeshUsage { Static, Dynamic, Stream };
 enum class MeshTopology { TriangleList, LineList };
 
-struct MeshBuildRecipe {
+struct MeshBuildRecipe final : public Transferable {
     std::string name;
     std::vector<MeshPrimitivePart> parts;
     PrimitiveVertexLayout vertexLayout{PrimitiveVertexLayout::PositionNormalTangentUv};
@@ -59,19 +70,31 @@ struct MeshBuildRecipe {
     MeshUsage usage{MeshUsage::Static};
     bool keepCpuCopy{};
 
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct VertexBinding {
+struct VertexBinding final : public Transferable {
+    VertexBinding() = default;
+    VertexBinding(std::uint32_t binding, std::uint32_t stride, VertexInputRate inputRate)
+        : binding(binding), stride(stride), inputRate(inputRate) {}
+
     std::uint32_t binding{};
     std::uint32_t stride{};
     VertexInputRate inputRate{VertexInputRate::Vertex};
 
     bool operator==(const VertexBinding&) const = default;
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct VertexAttribute {
+struct VertexAttribute final : public Transferable {
+    VertexAttribute() = default;
+    VertexAttribute(VertexSemantic semantic,
+                    VertexFormat format,
+                    std::uint32_t location,
+                    std::uint32_t binding,
+                    std::uint32_t offset)
+        : semantic(semantic), format(format), location(location), binding(binding), offset(offset) {}
+
     VertexSemantic semantic;
     VertexFormat format{VertexFormat::Vec3Float32};
     std::uint32_t location{};
@@ -79,10 +102,10 @@ struct VertexAttribute {
     std::uint32_t offset{};
 
     bool operator==(const VertexAttribute&) const = default;
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct VertexLayout {
+struct VertexLayout final : public Transferable {
     std::vector<VertexBinding> bindings;
     std::vector<VertexAttribute> attributes;
 
@@ -92,10 +115,13 @@ struct VertexLayout {
     [[nodiscard]] const VertexAttribute* find(VertexSemantic semantic) const;
     [[nodiscard]] bool validate() const;
     [[nodiscard]] std::uint64_t hash() const;
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct Aabb {
+struct Aabb final : public Transferable {
+    Aabb() = default;
+    Aabb(math::Vec3 minimum, math::Vec3 maximum) : minimum(minimum), maximum(maximum) {}
+
     math::Vec3 minimum{0.0F};
     math::Vec3 maximum{0.0F};
 
@@ -103,26 +129,42 @@ struct Aabb {
     [[nodiscard]] math::Vec3 extent() const { return (maximum - minimum) * 0.5F; }
 
     bool operator==(const Aabb&) const = default;
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct BoundingSphere {
+struct BoundingSphere final : public Transferable {
+    BoundingSphere() = default;
+    BoundingSphere(math::Vec3 center, float radius) : center(center), radius(radius) {}
+
     math::Vec3 center{0.0F};
     float radius{};
 
     bool operator==(const BoundingSphere&) const = default;
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct MeshBounds {
+struct MeshBounds final : public Transferable {
+    MeshBounds() = default;
+    MeshBounds(Aabb aabb, BoundingSphere sphere)
+        : aabb(std::move(aabb)), sphere(std::move(sphere)) {}
+
     Aabb aabb;
     BoundingSphere sphere;
 
     bool operator==(const MeshBounds&) const = default;
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct SubMesh {
+struct SubMesh final : public Transferable {
+    SubMesh() = default;
+    SubMesh(std::uint32_t firstIndex,
+            std::uint32_t indexCount,
+            std::int32_t vertexOffset,
+            std::uint32_t materialSlot,
+            MeshBounds bounds)
+        : firstIndex(firstIndex), indexCount(indexCount), vertexOffset(vertexOffset),
+          materialSlot(materialSlot), bounds(std::move(bounds)) {}
+
     std::uint32_t firstIndex{};
     std::uint32_t indexCount{};
     std::int32_t vertexOffset{};
@@ -130,10 +172,10 @@ struct SubMesh {
     MeshBounds bounds;
 
     bool operator==(const SubMesh&) const = default;
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct MeshDesc {
+struct MeshDesc final : public Transferable {
     std::string debugName;
     VertexLayout vertexLayout;
     IndexType indexType{IndexType::UInt32};
@@ -143,19 +185,19 @@ struct MeshDesc {
     MeshBounds bounds;
     bool keepCpuCopy{};
 
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct VertexStream {
+struct VertexStream final : public Transferable {
     std::uint32_t binding{};
     std::uint32_t vertexCount{};
     std::vector<std::byte> bytes;
 
     bool operator==(const VertexStream&) const = default;
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct MeshData {
+struct MeshData final : public Transferable {
     std::vector<VertexStream> vertexStreams;
     std::vector<std::byte> indices;
     std::uint32_t indexCount{};
@@ -167,7 +209,7 @@ struct MeshData {
                        std::uint32_t vertexCount,
                        std::span<const std::byte> source);
     bool setIndexData(std::uint32_t count, std::span<const std::byte> source);
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 
     template <typename Vertex, std::size_t Extent>
         requires std::is_trivially_copyable_v<std::remove_cv_t<Vertex>>

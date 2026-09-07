@@ -4,11 +4,18 @@
 #include "rhi/api/ResourceDesc.h"
 #include "rhi/api/RhiTypes.h"
 
+#include <vulkan/vulkan.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <span>
 
 namespace engine::rhi {
+
+struct ResolvedPipeline {
+    VkPipeline pipeline{VK_NULL_HANDLE};
+    VkPipelineLayout layout{VK_NULL_HANDLE};
+};
 
 class IDevice {
 public:
@@ -32,6 +39,14 @@ public:
     virtual void destroyBindGroupLayout(BindGroupLayoutHandle handle) = 0;
     [[nodiscard]] virtual BindGroupHandle createBindGroup(const BindGroupDesc& desc) = 0;
     virtual void destroyBindGroup(BindGroupHandle handle) = 0;
+
+    [[nodiscard]] virtual VkDevice device() const = 0;
+    [[nodiscard]] virtual VkBuffer resolveBuffer(BufferHandle handle) const = 0;
+    [[nodiscard]] virtual VkImage resolveTexture(TextureHandle handle) const = 0;
+    [[nodiscard]] virtual VkImageView resolveTextureView(TextureViewHandle handle) const = 0;
+    [[nodiscard]] virtual ResolvedPipeline
+    resolvePipeline(GraphicsPipelineHandle handle) const = 0;
+    [[nodiscard]] virtual VkDescriptorSet resolveBindGroup(BindGroupHandle handle) const = 0;
 
     virtual void waitIdle() = 0;
 };

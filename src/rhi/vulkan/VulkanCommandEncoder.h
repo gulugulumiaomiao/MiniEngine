@@ -1,31 +1,15 @@
 #pragma once
 
 #include "rhi/api/CommandEncoder.h"
+#include "rhi/api/Device.h"
 
 #include <vulkan/vulkan.h>
 
 namespace engine::rhi::vulkan {
 
-struct ResolvedPipeline {
-    VkPipeline pipeline{VK_NULL_HANDLE};
-    VkPipelineLayout layout{VK_NULL_HANDLE};
-};
-
-class IVulkanResourceResolver {
-public:
-    virtual ~IVulkanResourceResolver() = default;
-    [[nodiscard]] virtual VkDevice device() const = 0;
-    [[nodiscard]] virtual VkBuffer resolveBuffer(BufferHandle handle) const = 0;
-    [[nodiscard]] virtual VkImage resolveTexture(TextureHandle handle) const = 0;
-    [[nodiscard]] virtual VkImageView resolveTextureView(TextureViewHandle handle) const = 0;
-    [[nodiscard]] virtual ResolvedPipeline resolvePipeline(GraphicsPipelineHandle handle) const = 0;
-    [[nodiscard]] virtual VkDescriptorSet resolveBindGroup(BindGroupHandle handle) const = 0;
-};
-
 class VulkanGraphicsCommandEncoder final : public IGraphicsCommandEncoder {
 public:
-    VulkanGraphicsCommandEncoder(VkCommandBuffer commandBuffer,
-                                 const IVulkanResourceResolver& resources);
+    VulkanGraphicsCommandEncoder(VkCommandBuffer commandBuffer, const IDevice& device);
 
     void resourceBarriers(std::span<const TextureBarrier> barriers) override;
     void beginRendering(const RenderingInfo& info) override;
@@ -45,19 +29,18 @@ public:
 
 private:
     VkCommandBuffer commandBuffer_{VK_NULL_HANDLE};
-    const IVulkanResourceResolver& resources_;
+    const IDevice& device_;
     VkPipelineLayout boundPipelineLayout_{VK_NULL_HANDLE};
 };
 
 class VulkanTransferCommandEncoder final : public ITransferCommandEncoder {
 public:
-    VulkanTransferCommandEncoder(VkCommandBuffer commandBuffer,
-                                 const IVulkanResourceResolver& resources);
+    VulkanTransferCommandEncoder(VkCommandBuffer commandBuffer, const IDevice& device);
     void copyBuffer(const BufferCopy& copy) override;
 
 private:
     VkCommandBuffer commandBuffer_{VK_NULL_HANDLE};
-    const IVulkanResourceResolver& resources_;
+    const IDevice& device_;
 };
 
 } // namespace engine::rhi::vulkan

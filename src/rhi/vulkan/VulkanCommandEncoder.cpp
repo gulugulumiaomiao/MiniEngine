@@ -66,8 +66,8 @@ VkAttachmentStoreOp mapStoreOp(StoreOp operation) {
 } // namespace
 
 VulkanGraphicsCommandEncoder::VulkanGraphicsCommandEncoder(VkCommandBuffer commandBuffer,
-                                                           const IVulkanResourceResolver& resources)
-    : commandBuffer_(commandBuffer), resources_(resources) {}
+                                                           const IDevice& device)
+    : commandBuffer_(commandBuffer), device_(device) {}
 
 void VulkanGraphicsCommandEncoder::resourceBarriers(std::span<const TextureBarrier> barriers) {
     if (barriers.empty()) {
@@ -87,7 +87,7 @@ void VulkanGraphicsCommandEncoder::resourceBarriers(std::span<const TextureBarri
         native.newLayout = after.layout;
         native.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         native.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        native.image = resources_.resolveTexture(barrier.texture);
+        native.image = device_.resolveTexture(barrier.texture);
         native.subresourceRange.aspectMask = barrier.aspect == TextureAspect::Color
                                                  ? VK_IMAGE_ASPECT_COLOR_BIT
                                                  : VK_IMAGE_ASPECT_DEPTH_BIT;
@@ -114,7 +114,7 @@ void VulkanGraphicsCommandEncoder::beginRendering(const RenderingInfo& info) {
     colors.reserve(info.colorAttachments.size());
     for (const ColorAttachment& attachment : info.colorAttachments) {
         VkRenderingAttachmentInfo native{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
-        native.imageView = resources_.resolveTextureView(attachment.view);
+        native.imageView = device_.resolveTextureView(attachment.view);
         native.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         native.loadOp = mapLoadOp(attachment.loadOp);
         native.storeOp = mapStoreOp(attachment.storeOp);
@@ -128,7 +128,7 @@ void VulkanGraphicsCommandEncoder::beginRendering(const RenderingInfo& info) {
     depths.reserve(info.depthAttachments.size());
     for (const DepthAttachment& attachment : info.depthAttachments) {
         VkRenderingAttachmentInfo native{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
-        native.imageView = resources_.resolveTextureView(attachment.view);
+        native.imageView = device_.resolveTextureView(attachment.view);
         native.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         native.loadOp = mapLoadOp(attachment.loadOp);
         native.storeOp = mapStoreOp(attachment.storeOp);
@@ -168,7 +168,7 @@ void VulkanGraphicsCommandEncoder::setScissor(const Rect& scissor) {
 }
 
 void VulkanGraphicsCommandEncoder::bindPipeline(GraphicsPipelineHandle pipeline) {
-    const ResolvedPipeline native = resources_.resolvePipeline(pipeline);
+    const ResolvedPipeline native = device_.resolvePipeline(pipeline);
     boundPipelineLayout_ = native.layout;
     vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, native.pipeline);
 }
@@ -176,7 +176,7 @@ void VulkanGraphicsCommandEncoder::bindPipeline(GraphicsPipelineHandle pipeline)
 void VulkanGraphicsCommandEncoder::bindVertexBuffer(std::uint32_t slot,
                                                     BufferHandle buffer,
                                                     std::uint64_t offset) {
-    const VkBuffer native = resources_.resolveBuffer(buffer);
+    const VkBuffer native = device_.resolveBuffer(buffer);
     const VkDeviceSize nativeOffset = offset;
     vkCmdBindVertexBuffers(commandBuffer_, slot, 1, &native, &nativeOffset);
 }
@@ -185,7 +185,7 @@ void VulkanGraphicsCommandEncoder::bindIndexBuffer(BufferHandle buffer,
                                                    std::uint64_t offset,
                                                    IndexFormat format) {
     vkCmdBindIndexBuffer(commandBuffer_,
-                         resources_.resolveBuffer(buffer),
+                         device_.resolveBuffer(buffer),
                          offset,
                          format == IndexFormat::UInt16 ? VK_INDEX_TYPE_UINT16
                                                        : VK_INDEX_TYPE_UINT32);
@@ -197,7 +197,7 @@ void VulkanGraphicsCommandEncoder::bindGroup(std::uint32_t set,
     if (boundPipelineLayout_ == VK_NULL_HANDLE) {
         Log::fatal("VulkanCommandEncoder", "bindGroup requires a bound graphics pipeline");
     }
-    const VkDescriptorSet descriptor = resources_.resolveBindGroup(group);
+    const VkDescriptorSet descriptor = device_.resolveBindGroup(group);
     vkCmdBindDescriptorSets(commandBuffer_,
                             VK_PIPELINE_BIND_POINT_GRAPHICS,
                             boundPipelineLayout_,
@@ -228,7 +228,7 @@ void VulkanGraphicsCommandEncoder::drawIndexed(const DrawIndexedArguments& argum
 void VulkanGraphicsCommandEncoder::beginDebugLabel(std::string_view name, const math::Vec4& color) {
 #if defined(MINI_DEBUG)
     const auto begin = reinterpret_cast<PFN_vkCmdBeginDebugUtilsLabelEXT>(
-        vkGetDeviceProcAddr(resources_.device(), "vkCmdBeginDebugUtilsLabelEXT"));
+        vkGetDeviceProcAddr(device_.device(), "vkCmdBeginDebugUtilsLabelEXT"));
     if (begin) {
         const std::string ownedName{name};
         VkDebugUtilsLabelEXT label{VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT};
@@ -248,7 +248,7 @@ void VulkanGraphicsCommandEncoder::beginDebugLabel(std::string_view name, const 
 void VulkanGraphicsCommandEncoder::endDebugLabel() {
 #if defined(MINI_DEBUG)
     const auto end = reinterpret_cast<PFN_vkCmdEndDebugUtilsLabelEXT>(
-        vkGetDeviceProcAddr(resources_.device(), "vkCmdEndDebugUtilsLabelEXT"));
+        vkGetDeviceProcAddr(device_.device(), "vkCmdEndDebugUtilsLabelEXT"));
     if (end) {
         end(commandBuffer_);
     }
@@ -256,14 +256,14 @@ void VulkanGraphicsCommandEncoder::endDebugLabel() {
 }
 
 VulkanTransferCommandEncoder::VulkanTransferCommandEncoder(VkCommandBuffer commandBuffer,
-                                                           const IVulkanResourceResolver& resources)
-    : commandBuffer_(commandBuffer), resources_(resources) {}
+                                                           const IDevice& device)
+    : commandBuffer_(commandBuffer), device_(device) {}
 
 void VulkanTransferCommandEncoder::copyBuffer(const BufferCopy& copy) {
     const VkBufferCopy native{copy.sourceOffset, copy.destinationOffset, copy.size};
     vkCmdCopyBuffer(commandBuffer_,
-                    resources_.resolveBuffer(copy.source),
-                    resources_.resolveBuffer(copy.destination),
+                    device_.resolveBuffer(copy.source),
+                    device_.resolveBuffer(copy.destination),
                     1,
                     &native);
 }
