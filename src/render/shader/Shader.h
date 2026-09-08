@@ -204,10 +204,6 @@ struct SpirvReflection {
 };
 
 [[nodiscard]] std::shared_ptr<SpirvReflection> reflectSpirv(const VirtualPath& path);
-[[nodiscard]] bool validateSpirvReflection(const ShaderAsset& shader,
-                                           const ShaderPassDesc& pass,
-                                           const VirtualPath& vertexSpirv,
-                                           const VirtualPath& fragmentSpirv);
 
 class ShaderPass final {
 public:
@@ -271,6 +267,7 @@ public:
     [[nodiscard]] const UniformBlockLayout& uniformBlockLayout() const {
         return uniformBlockLayout_;
     }
+    [[nodiscard]] const std::vector<SubShader>& subShaders() const { return subShaders_; }
     [[nodiscard]] const SubShader* selectSubShader(std::string_view renderPipeline) const;
     [[nodiscard]] const SubShader& requireSubShader(std::string_view renderPipeline) const;
     [[nodiscard]] const SubShader& defaultSubShader() const;
@@ -286,6 +283,11 @@ private:
     std::vector<SubShader> subShaders_;
     std::uint64_t revision_{1};
 };
+
+[[nodiscard]] bool validateSpirvReflection(const Shader& shader,
+                                           const ShaderPass& pass,
+                                           const VirtualPath& vertexSpirv,
+                                           const VirtualPath& fragmentSpirv);
 
 class ShaderManager final : public Singleton<ShaderManager>,
                             public InstanceManager<Shader, ShaderHandle> {

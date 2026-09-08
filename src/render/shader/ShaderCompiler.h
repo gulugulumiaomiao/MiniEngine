@@ -1,10 +1,10 @@
 #pragma once
 
+#include "core/filesystem/FileDependencyGraph.h"
 #include "render/shader/Shader.h"
 
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -12,8 +12,6 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <unordered_set>
-#include <utility>
 #include <vector>
 
 namespace engine {
@@ -23,36 +21,56 @@ using CompiledShaderId = ShaderHash;
 using ShaderProgramId = ShaderHash;
 using ShaderProgramLayoutId = ShaderHash;
 
-enum class ShaderBinaryFormat { Spirv };
-enum class ShaderTargetApi { Vulkan };
+enum class ShaderCompileMode { DevelopmentRuntime, OfflineTool, PackagedRuntime };
+enum class ShaderOptimization { Debug, Release };
 
 struct ShaderDefine {
     std::string name;
     std::string value{"1"};
 };
 
-struct ShaderCompileRequest {
-    VirtualPath source;
-    std::string entryPoint{"main"};
+struct ShaderStageSource {
+    VirtualPath sourcePath;
     ShaderStage stage{ShaderStage::Vertex};
+    std::string entryPoint{"main"};
+    std::string source;
+};
+
+struct ShaderPreprocessorConfig {
+    std::vector<VirtualPath> includeSearchPaths;
+};
+
+struct ShaderPreprocessRequest {
+    ShaderStageSource source;
     std::vector<ShaderDefine> defines;
-    const ShaderAsset* shaderAsset{};
-    const ShaderPassDesc* shaderPass{};
-    ShaderTargetApi target{ShaderTargetApi::Vulkan};
-    std::string compilerVersion;
-    std::string options;
 };
 
 struct PreprocessedShader {
+    VirtualPath sourcePath;
+    VirtualPath cachePath;
+    ShaderStage stage{ShaderStage::Vertex};
+    std::string entryPoint{"main"};
     std::string source;
     std::vector<VirtualPath> dependencies;
     ShaderHash sourceHash{};
 };
 
+struct ShaderCompilerOptions {
+    ShaderOptimization optimization{ShaderOptimization::Debug};
+    std::string compilerVersion;
+    std::string arguments;
+};
+
+struct SpirvBinary {
+    VirtualPath path;
+    ShaderStage stage{ShaderStage::Vertex};
+    std::string entryPoint{"main"};
+    std::vector<std::byte> bytecode;
+};
+
 struct CompiledShaderHandle {
     std::uint32_t index{std::numeric_limits<std::uint32_t>::max()};
     std::uint32_t generation{};
-
     [[nodiscard]] explicit operator bool() const {
         return index != std::numeric_limits<std::uint32_t>::max();
     }
@@ -62,11 +80,10 @@ struct CompiledShaderHandle {
 struct CompiledShader {
     CompiledShaderId id{};
     ShaderStage stage{ShaderStage::Vertex};
-    ShaderBinaryFormat format{ShaderBinaryFormat::Spirv};
     std::string entryPoint{"main"};
     std::vector<std::byte> bytecode;
     SpirvReflection reflection;
-    std::vector<VirtualPath> dependencies;
+    VirtualPath binaryPath;
 };
 
 struct ShaderProgramLayout {
@@ -79,7 +96,6 @@ struct ShaderProgramLayout {
 struct ShaderProgramHandle {
     std::uint32_t index{std::numeric_limits<std::uint32_t>::max()};
     std::uint32_t generation{};
-
     [[nodiscard]] explicit operator bool() const {
         return index != std::numeric_limits<std::uint32_t>::max();
     }
@@ -96,25 +112,12 @@ struct ShaderProgram {
     ShaderProgramLayout layout;
 };
 
-struct ShaderCookedVariant {
-    ShaderVariantKey key;
-    CompiledShaderId vertex{};
-    CompiledShaderId fragment{};
-    ShaderProgramLayoutId layout{};
-};
-
-struct ShaderCookedPass {
-    std::string name;
-    ShaderPassType type{ShaderPassType::Forward};
-    RenderStateDesc renderState;
-    std::vector<ShaderCookedVariant> variants;
-};
-
-struct ShaderCookedAsset {
-    std::string name;
-    std::vector<ShaderPropertyDesc> properties;
-    UniformBlockLayout materialLayout;
-    std::vector<ShaderCookedPass> passes;
+struct ShaderCompilePipelineConfig {
+    ShaderCompileMode mode{ShaderCompileMode::DevelopmentRuntime};
+    ShaderPreprocessorConfig preprocessorConfig;
+    ShaderCompilerOptions compilerOptions;
+    VirtualPath intermediateRoot{"shader://runtime"};
+    VirtualPath packagedRoot{"shader://compiled"};
 };
 
 [[nodiscard]] ShaderHash hashBytes(std::span<const std::byte> bytes,
@@ -124,56 +127,57 @@ struct ShaderCookedAsset {
 
 class ShaderPreprocessor final {
 public:
+    explicit ShaderPreprocessor(ShaderPreprocessorConfig config = {},
+                                FileDependencyGraph& dependencies = FILE_DEPENDENCY_GRAPH);
     [[nodiscard]] std::shared_ptr<PreprocessedShader>
-    process(const ShaderCompileRequest& request) const;
-};
-
-class ShaderDependencyGraph final {
-public:
-    void track(CompiledShaderId shader, std::span<const VirtualPath> dependencies);
-    [[nodiscard]] std::vector<CompiledShaderId> affectedBy(const VirtualPath& dependency) const;
-    void remove(CompiledShaderId shader);
+    process(const ShaderPreprocessRequest& request);
+    void invalidate(std::span<const VirtualPath> paths);
     void clear();
 
 private:
-    std::unordered_map<std::string, std::unordered_set<CompiledShaderId>> edges_;
+    ShaderPreprocessorConfig config_;
+    FileDependencyGraph& dependencies_;
+    bool configValid_{true};
+    std::unordered_map<ShaderHash, std::shared_ptr<PreprocessedShader>> cache_;
+};
+
+class ShaderCompiler final {
+public:
+    ShaderCompiler(VirtualPath outputRoot,
+                   FileDependencyGraph& dependencies = FILE_DEPENDENCY_GRAPH);
+    [[nodiscard]] std::shared_ptr<SpirvBinary> compile(const PreprocessedShader& shader,
+                                                       const ShaderCompilerOptions& options);
+    void invalidate(std::span<const VirtualPath> paths);
+    void clear();
+
+private:
+    VirtualPath outputRoot_;
+    FileDependencyGraph& dependencies_;
+    std::unordered_map<ShaderHash, std::shared_ptr<SpirvBinary>> cache_;
 };
 
 class CompiledShaderCache final {
 public:
-    [[nodiscard]] CompiledShaderHandle getOrLoad(const VirtualPath& binaryPath,
-                                                 ShaderStage stage,
-                                                 std::string_view entryPoint,
-                                                 const ShaderVariantKey& variant = {});
+    [[nodiscard]] std::optional<CompiledShaderHandle> find(CompiledShaderId id) const;
+    [[nodiscard]] CompiledShaderHandle insert(CompiledShader shader);
     [[nodiscard]] const CompiledShader& resolve(CompiledShaderHandle handle) const;
-    [[nodiscard]] std::vector<CompiledShaderId> invalidateDependency(const VirtualPath& dependency);
-    [[nodiscard]] std::vector<CompiledShaderId> invalidateChanged();
+    [[nodiscard]] std::vector<CompiledShaderId> invalidatePaths(std::span<const VirtualPath> paths);
     void clear();
 
 private:
     struct Slot {
         std::optional<CompiledShader> shader;
-        std::filesystem::file_time_type timestamp{};
         std::uint32_t generation{1};
     };
-
-    [[nodiscard]] static CompiledShaderId makeId(std::span<const std::byte> bytecode,
-                                                 ShaderStage stage,
-                                                 std::string_view entryPoint,
-                                                 const ShaderVariantKey& variant);
     void removeId(CompiledShaderId id, std::vector<CompiledShaderId>& removed);
-
     std::unordered_map<CompiledShaderId, std::uint32_t> entries_;
     std::vector<Slot> slots_;
-    ShaderDependencyGraph dependencies_;
 };
 
 class ShaderProgramCache final {
 public:
-    explicit ShaderProgramCache(CompiledShaderCache& shaders);
-
-    [[nodiscard]] ShaderProgramHandle
-    getOrCreate(const Shader& shader, const ShaderPass& pass, const ShaderVariantKey& variant = {});
+    [[nodiscard]] std::optional<ShaderProgramHandle> find(ShaderProgramId id) const;
+    [[nodiscard]] ShaderProgramHandle insert(ShaderProgram program);
     [[nodiscard]] const ShaderProgram& resolve(ShaderProgramHandle handle) const;
     void invalidate(std::span<const CompiledShaderId> shaders);
     void clear();
@@ -183,22 +187,50 @@ private:
         std::optional<ShaderProgram> program;
         std::uint32_t generation{1};
     };
-
-    [[nodiscard]] static std::optional<ShaderProgramLayout>
-    mergeLayout(const CompiledShader& vertex, const CompiledShader& fragment);
-    [[nodiscard]] CompiledShaderHandle compileStage(const Shader& shader,
-                                                    const ShaderPass& pass,
-                                                    ShaderStage stage,
-                                                    const ShaderVariantKey& variant,
-                                                    VirtualPath& binaryPath);
-
-    CompiledShaderCache& shaders_;
     std::unordered_map<ShaderProgramId, std::uint32_t> entries_;
     std::vector<Slot> slots_;
 };
 
-[[nodiscard]] ShaderCookedAsset
-buildCookedShaderAsset(const ShaderAsset& asset,
-                       std::span<const std::pair<const ShaderPass*, ShaderProgram>> programs);
+class ShaderCompilePipeline final {
+public:
+    explicit ShaderCompilePipeline(ShaderCompilePipelineConfig config = {},
+                                   FileDependencyGraph& dependencies = FILE_DEPENDENCY_GRAPH);
+    [[nodiscard]] ShaderProgramHandle
+    getOrCreate(const Shader& shader, const ShaderPass& pass, const ShaderVariantKey& variant = {});
+    [[nodiscard]] const ShaderProgram& resolve(ShaderProgramHandle handle) const;
+    [[nodiscard]] const CompiledShader& resolve(CompiledShaderHandle handle) const;
+    [[nodiscard]] CompiledShaderCache& compiledShaders() { return compiledShaders_; }
+    [[nodiscard]] std::vector<CompiledShaderId> invalidate(const VirtualPath& changedFile);
+    [[nodiscard]] std::vector<CompiledShaderId> invalidateChanged();
+    void clear();
+
+private:
+    struct GeneratedSource {
+        VirtualPath cachePath;
+        std::shared_ptr<std::string> source;
+    };
+    struct CompiledStage {
+        CompiledShaderHandle handle;
+        VirtualPath binaryPath;
+    };
+    [[nodiscard]] std::optional<CompiledStage> compileStage(const Shader& shader,
+                                                            const ShaderPass& pass,
+                                                            ShaderStage stage,
+                                                            const ShaderVariantKey& variant);
+    [[nodiscard]] CompiledShaderHandle loadCompiledShader(const VirtualPath& binaryPath,
+                                                          ShaderStage stage,
+                                                          std::string_view entryPoint,
+                                                          const ShaderVariantKey& variant);
+    [[nodiscard]] static std::optional<ShaderProgramLayout>
+    mergeLayout(const CompiledShader& vertex, const CompiledShader& fragment);
+    void invalidateGeneratedSources(std::span<const VirtualPath> paths);
+    ShaderCompilePipelineConfig config_;
+    FileDependencyGraph& dependencies_;
+    ShaderPreprocessor preprocessor_;
+    ShaderCompiler compiler_;
+    std::unordered_map<ShaderHash, GeneratedSource> generatedSources_;
+    CompiledShaderCache compiledShaders_;
+    ShaderProgramCache programs_;
+};
 
 } // namespace engine

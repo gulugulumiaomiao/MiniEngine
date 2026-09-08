@@ -1,4 +1,5 @@
 #include "core/filesystem/FileSystem.h"
+#include "core/filesystem/FileDependencyGraph.h"
 #include "core/filesystem/DirectoryMount.h"
 #include "core/filesystem/VirtualPath.h"
 
@@ -98,7 +99,22 @@ int main() {
         return 14;
     }
 
+    FileDependencyGraph& graph = FILE_DEPENDENCY_GRAPH;
+    const VirtualPath generated{"test://generated/output.spv"};
+    const VirtualPath intermediate{"test://generated/preprocessed.glsl"};
+    const std::array sourceDependencies{textPath};
+    const std::array intermediateDependencies{intermediate};
+    graph.replaceDependencies(intermediate, sourceDependencies);
+    graph.replaceDependencies(generated, intermediateDependencies);
+    const std::vector<VirtualPath> dependents = graph.transitiveDependentsOf(textPath);
+    if (dependents.size() != 2 || std::ranges::find(dependents, intermediate) == dependents.end() ||
+        std::ranges::find(dependents, generated) == dependents.end()) {
+        return 15;
+    }
+    graph.remove(generated);
+    graph.remove(intermediate);
+
     (void)fileSystem.unmount("test");
     std::filesystem::remove_all(root, error);
-    return error ? 15 : 0;
+    return error ? 16 : 0;
 }

@@ -1,5 +1,7 @@
 # ShaderLab Properties GLSL 代码生成
 
+> 编译入口已统一为 `ShaderCompilePipeline`，当前运行时、离线、打包和 include 搜索规则参见 [ShaderCompilePipeline.md](ShaderCompilePipeline.md)。本文其余内容主要保留代码生成规则与历史实现背景。
+
 ## 目标
 
 这一阶段把 ShaderLab `properties` 转换为确定性的 GLSL 声明，让 CPU 端 `Material` 与 GPU 端 uniform block 使用同一份 `UniformBlockLayout`，避免手写两套字段、类型和 offset。
@@ -63,28 +65,24 @@ layout(std140, set = 1, binding = 0) uniform MaterialProperties
 工具使用方式：
 
 ```powershell
-./build/clang-debug/MiniShaderCompiler.exe properties `
-  assets/shaders/vertex_color.shader.json `
-  build/clang-debug/generated-shaders/vertex_color.material.glsl
+./build/clang-debug/MiniShaderCompiler.exe compile `
+  assets/shaders/vertex_color.shader.json Forward `
+  build/clang-debug/generated-shaders
 ```
 
 生成某个 Pass 的两个完整 GLSL 阶段：
 
 ```powershell
-./build/clang-debug/MiniShaderCompiler.exe stages `
-  assets/shaders/vertex_color.shader.json Forward `
-  build/clang-debug/generated-shaders/vertex_color.Forward.vert.glsl `
-  build/clang-debug/generated-shaders/vertex_color.Forward.frag.glsl
+cmake --build --preset clang-debug --target MiniShaderPackagedShaders
 ```
 
-CMake 的 `MiniShaderLabGeneratedSources` 和 `MiniShaderLabCompiledShaders` 保留为显式离线验证目标，不再是 `MiniVulkanEngine` 的构建依赖。引擎加载 Shader 时只解析并缓存 `ShaderAsset`；第一次绘制对应 Pass/Variant 时才执行生成和 `glslc` 编译：
+CMake 只保留 `MiniShaderPackagedShaders` 离线目标，并通过 `MiniShaderCompiler compile` 调用统一管线。开发运行时第一次绘制 Pass/Variant 时按需编译；打包运行时只加载该目标生成的 SPIR-V：
 
 ```text
-build/<preset>/generated-shaders/vertex_color.material.glsl
-build/<preset>/generated-shaders/vertex_color.Forward.vert.glsl
-build/<preset>/generated-shaders/vertex_color.Forward.frag.glsl
-build/<preset>/generated-shaders/vertex_color.Forward.vert.spv
-build/<preset>/generated-shaders/vertex_color.Forward.frag.spv
+build/<preset>/generated-shaders/runtime/<compile-hash>.vert.spv
+build/<preset>/generated-shaders/runtime/<compile-hash>.frag.spv
+build/<preset>/generated-shaders/compiled/<package-hash>.vert.spv
+build/<preset>/generated-shaders/compiled/<package-hash>.frag.spv
 ```
 
 输出目录属于构建产物，不应手工修改，也不作为源资产提交。
@@ -96,10 +94,10 @@ build/<preset>/generated-shaders/vertex_color.Forward.frag.spv
 - Release 及其他非 Debug 配置使用 `-O`；
 - 顶点、片元阶段分别指定 `-fshader-stage=vert/frag`，不依赖文件的最后一个扩展名猜测阶段。
 
-可以只构建 ShaderLab 离线产物：
+可以只构建当前离线 Shader 产物：
 
 ```powershell
-cmake --build build/clang-debug --target MiniShaderLabCompiledShaders
+cmake --build --preset clang-debug --target MiniShaderPackagedShaders
 ```
 
 ## 校验与测试
@@ -111,7 +109,7 @@ cmake --build build/clang-debug --target MiniShaderLabCompiledShaders
 - descriptor set/binding 没有溢出；
 - 输出文件能够被创建和完整写入。
 
-`ShaderGeneratorTest` 使用 golden file 对完整输出做逐字节比较，并覆盖自定义 set/binding 以及布局不匹配的失败路径。这样字段顺序、空行或 binding 发生变化时，测试会明确暴露生成格式变化。
+`ShaderGeneratorTest` 使用运行时 `Shader` API 和 golden file 对完整阶段输出做逐字节比较。材质 set/binding 是渲染约定，不再暴露未使用的生成配置接口。
 
 ## Pass 接口与入口包装
 
@@ -171,6 +169,6 @@ void FragmentMain(MiniVaryings inValue, out MiniFragmentOutput outValue)
 
 ## 统一预处理流程
 
-`ShaderGenerator` 已并入 renderer 模块，并由 `ShaderPreprocessor::process()` 统一调度。调用方传入 `ShaderAsset`、`ShaderPassDesc` 和当前阶段后，处理顺序为：读取用户 `.vert/.frag`、生成 Properties/接口/入口包装、展开 `#include`、注入变体宏、计算源码哈希。离线工具不再自行读取源码并直接调用双阶段生成器。
+`ShaderGenerator` 由 `ShaderCompilePipeline` 调度。它只接收运行时 `Shader`、`ShaderPass`、当前阶段和用户源码，生成 Properties、接口与入口包装；随后预处理器展开 `#include`、注入变体宏并计算源码哈希。
 
 Shader JSON、阶段源码、include 依赖、生成后的 SPIR-V 和反射输入均使用 `VirtualPath`。资产源码通常位于 `asset://`，按需生成的 GLSL/SPIR-V 位于 `shader://runtime/<source-hash>.*`；只有文件系统挂载层负责映射到物理路径。

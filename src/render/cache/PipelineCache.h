@@ -23,8 +23,7 @@ public:
     PipelineCache(rhi::IDevice& device,
                   rhi::BindGroupLayoutHandle sceneLayout,
                   rhi::BindGroupLayoutHandle materialLayout,
-                  CompiledShaderCache& compiledShaders,
-                  ShaderProgramCache& programs,
+                  ShaderCompilePipeline& compilePipeline,
                   RhiShaderCache& shaders);
 
     [[nodiscard]] rhi::GraphicsPipelineHandle getOrCreate(const Shader& shader,
@@ -71,8 +70,7 @@ private:
     rhi::IDevice& device_;
     rhi::BindGroupLayoutHandle sceneLayout_;
     rhi::BindGroupLayoutHandle materialLayout_;
-    CompiledShaderCache& compiledShaders_;
-    ShaderProgramCache& programs_;
+    ShaderCompilePipeline& compilePipeline_;
     RhiShaderCache& shaders_;
     std::unordered_map<std::uint64_t, std::uint32_t> entries_;
     std::unordered_map<std::uint64_t, std::uint32_t> fallbackEntries_;

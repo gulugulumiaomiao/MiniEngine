@@ -66,11 +66,10 @@ rhi::ColorWriteMask toRhiColorMask(std::string_view mask) {
 PipelineCache::PipelineCache(rhi::IDevice& device,
                              rhi::BindGroupLayoutHandle sceneLayout,
                              rhi::BindGroupLayoutHandle materialLayout,
-                             CompiledShaderCache& compiledShaders,
-                             ShaderProgramCache& programs,
+                             ShaderCompilePipeline& compilePipeline,
                              RhiShaderCache& shaders)
     : device_(device), sceneLayout_(sceneLayout), materialLayout_(materialLayout),
-      compiledShaders_(compiledShaders), programs_(programs), shaders_(shaders) {}
+      compilePipeline_(compilePipeline), shaders_(shaders) {}
 
 std::uint64_t PipelineCache::makeKey(const ShaderProgram& program,
                                      const ShaderPass& pass,
@@ -197,7 +196,7 @@ rhi::GraphicsPipelineHandle PipelineCache::getOrCreate(const Shader& shader,
                                                        rhi::TextureFormat colorFormat) {
     const std::uint64_t fallbackKey =
         makeFallbackKey(shader, pass, variant, vertexLayout, colorFormat);
-    const ShaderProgramHandle programHandle = programs_.getOrCreate(shader, pass, variant);
+    const ShaderProgramHandle programHandle = compilePipeline_.getOrCreate(shader, pass, variant);
     if (!programHandle) {
         if (const auto previous = fallbackEntries_.find(fallbackKey);
             previous != fallbackEntries_.end()) {
@@ -216,7 +215,7 @@ rhi::GraphicsPipelineHandle PipelineCache::getOrCreate(const Shader& shader,
         return {};
     }
 
-    const ShaderProgram& program = programs_.resolve(programHandle);
+    const ShaderProgram& program = compilePipeline_.resolve(programHandle);
     const std::uint64_t key = makeKey(program, pass, vertexLayout, colorFormat);
     if (const auto found = entries_.find(key); found != entries_.end()) {
         const Slot& slot = slots_[found->second];
@@ -230,8 +229,8 @@ rhi::GraphicsPipelineHandle PipelineCache::getOrCreate(const Shader& shader,
         slot = std::prev(slots_.end());
     }
     const std::uint32_t index = static_cast<std::uint32_t>(std::distance(slots_.begin(), slot));
-    const CompiledShader& vertex = compiledShaders_.resolve(program.vertex);
-    const CompiledShader& fragment = compiledShaders_.resolve(program.fragment);
+    const CompiledShader& vertex = compilePipeline_.resolve(program.vertex);
+    const CompiledShader& fragment = compilePipeline_.resolve(program.fragment);
     const rhi::ShaderHandle vertexHandle = shaders_.getOrCreate(program.vertex);
     const rhi::ShaderHandle fragmentHandle = shaders_.getOrCreate(program.fragment);
     slot->pipeline = device_.createGraphicsPipeline(makeDesc(pass,

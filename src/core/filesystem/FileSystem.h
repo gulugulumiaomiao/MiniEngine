@@ -21,6 +21,7 @@ public:
                                       const std::filesystem::path& directory,
                                       bool readOnly = false);
     [[nodiscard]] bool unmount(std::string_view scheme);
+    [[nodiscard]] bool isMounted(std::string_view scheme) const;
 
     [[nodiscard]] bool exists(const VirtualPath& path) const;
     [[nodiscard]] bool isFile(const VirtualPath& path) const;

@@ -1,5 +1,7 @@
 #include "asset/importer/AssetImportPipeline.h"
 
+#include "core/filesystem/FileDependencyGraph.h"
+
 #include "asset/derived_data/AssetArtifact.h"
 #include "asset/base/AssetMeta.h"
 #include "asset/importer/FileWatcher.h"
@@ -254,13 +256,14 @@ void AssetImportPipeline::processFileEvents() {
         if (!cascaded.insert(dependency.string()).second)
             return;
         for (const VirtualPath& dependent : ASSET_DATABASE.dependentsOf(dependency)) {
-            if (importAssetInternal(dependent, true)) {
-                reimportDependents(dependent);
-            }
+            if (isSourceAsset(dependent))
+                (void)importAssetInternal(dependent, true);
+            reimportDependents(dependent);
         }
     };
     const auto consume = [this, &sourceForMeta, &reimportDependents](const VirtualPath& path,
                                                                      FileChangeType type) {
+        FILE_DEPENDENCY_GRAPH.notifyChanged(path);
         if (isSourceAsset(path)) {
             if (type == FileChangeType::Removed) {
                 reimportDependents(path);

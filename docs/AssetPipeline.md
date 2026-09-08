@@ -1,5 +1,7 @@
 # 资产导入、实例化与热重载管线
 
+> Shader importer 现在只负责 JSON 与 Artifact 转换，不再解析 GLSL include。Shader 源码、include 和 SPIR-V 的依赖统一由 [ShaderCompilePipeline.md](ShaderCompilePipeline.md) 描述的 `FileDependencyGraph` 维护。
+
 本文记录统一更新计划第 26–66 步的实现。当前只支持 Shader 和 Material 两种正式资产；GLSL 文件是 Shader 的依赖，不单独生成 Meta 或运行时 Asset。
 
 ## 总体数据流

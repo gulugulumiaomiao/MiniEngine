@@ -1,5 +1,7 @@
 # Shader 与材质运行时管线
 
+> 本文保留早期材质/RHI 分层记录；Shader 编译、缓存、依赖和打包流程已经重构，当前实现以 [ShaderCompilePipeline.md](ShaderCompilePipeline.md) 为准。
+
 本文记录 Shader/Material 重构后的第一版完整框架。目标是把“资产描述、离线编译、运行时程序、RHI 对象、Pipeline、材质 GPU 数据”分层，避免上层直接操作 Vulkan 或以文件路径作为运行时缓存键。
 
 ## 总体数据流
@@ -105,7 +107,7 @@ ShadowCaster → DepthOnly → Forward
 - 每帧首次请求 Pipeline 时轮询已加载依赖的时间戳。
 - 变化按 `CompiledShader → ShaderProgram → RHI Shader → Pipeline` 传播失效。
 - 已提交给 GPU 的旧 `VkPipeline` 和 `VkShaderModule` 进入 retirement 队列，至少经过 frames-in-flight 后才析构。
-- `ShaderCookedAsset` 保存 properties、`UniformBlockLayout`、Pass render state、Variant、CompileID 和 LayoutID，作为以后打包工具输出二进制资产的稳定运行时模型。
+- 打包产物是由 `ShaderCompilePipeline` 输出到 `shader://compiled` 的稳定 SPIR-V；未被加载流程消费的旧 `ShaderCooked*` 元数据模型已经删除。
 
 ## 关键缓存键
 

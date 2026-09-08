@@ -52,6 +52,12 @@ bool FileSystem::unmount(std::string_view scheme) {
     return mounts_.erase(normalized) != 0;
 }
 
+bool FileSystem::isMounted(std::string_view scheme) const {
+    const std::string normalized = normalizeScheme(scheme);
+    std::scoped_lock lock{mutex_};
+    return !normalized.empty() && mounts_.contains(normalized);
+}
+
 std::optional<FileSystem::MountLookup> FileSystem::lookup(const VirtualPath& path,
                                                           bool reportFailure) const {
     if (!path.valid()) {

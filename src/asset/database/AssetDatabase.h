@@ -71,7 +71,6 @@ private:
     mutable std::mutex mutex_;
     std::unordered_map<AssetId, AssetRecord> records_;
     std::unordered_map<std::string, AssetId> pathIndex_;
-    std::unordered_map<std::string, std::vector<VirtualPath>> reverseDependencies_;
     bool initialized_{};
 };
 

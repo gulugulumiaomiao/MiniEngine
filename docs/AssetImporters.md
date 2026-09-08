@@ -31,7 +31,9 @@ AssetImportResult
 
 ## Shader 导入
 
-Shader Importer 解析并验证 ShaderLab JSON，遍历 SubShader/Pass，收集 vertex、fragment 文件和递归 `#include`。`ShaderIncludeResolver` 被 Importer 和 ShaderPreprocessor 共同使用：普通 Include 相对于当前文件解析，带有 `scheme://` 的 Include 按完整虚拟路径解析。
+Shader Importer 只解析并验证 ShaderLab JSON、生成 Shader Artifact，不扫描 include，
+也不运行 glslc。阶段源码和递归 include 由 `ShaderPreprocessor` 在实际编译时读取并记录到
+全局 `FileDependencyGraph`。
 
 依赖收集器分别维护 `visiting` 和 `visited`：前者检测当前递归栈中的循环，后者用于去重。格式错误、文件缺失、循环 include 或写 Artifact 失败都会记录 `Log::error` 并返回失败，不会调用 fatal。
 

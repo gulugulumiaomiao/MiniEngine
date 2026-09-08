@@ -54,17 +54,29 @@ Renderer::Renderer(Window& window, rhi::Context context)
         Log::fatal(
             "Renderer", "Cannot mount generated Shader directory: %s", MINI_GENERATED_SHADER_DIR);
     }
-    compiledShaderCache_ = std::make_unique<CompiledShaderCache>();
-    shaderProgramCache_ = std::make_unique<ShaderProgramCache>(*compiledShaderCache_);
-    rhiShaderCache_ = std::make_unique<RhiShaderCache>(*device_, *compiledShaderCache_);
+    ShaderCompilePipelineConfig shaderConfig;
+#if defined(MINI_RELEASE)
+    shaderConfig.mode = ShaderCompileMode::PackagedRuntime;
+#else
+    shaderConfig.mode = ShaderCompileMode::DevelopmentRuntime;
+#endif
+    shaderConfig.preprocessorConfig.includeSearchPaths = {VirtualPath{"asset://shaders/include"}};
+    shaderConfig.compilerOptions.compilerVersion = MINI_GLSLC_EXECUTABLE;
+#if defined(MINI_DEBUG) || !defined(NDEBUG)
+    shaderConfig.compilerOptions.optimization = ShaderOptimization::Debug;
+#else
+    shaderConfig.compilerOptions.optimization = ShaderOptimization::Release;
+#endif
+    shaderCompilePipeline_ = std::make_unique<ShaderCompilePipeline>(std::move(shaderConfig));
+    rhiShaderCache_ =
+        std::make_unique<RhiShaderCache>(*device_, shaderCompilePipeline_->compiledShaders());
     materialGpuCache_ =
         std::make_unique<MaterialGpuCache>(*device_, materialBindGroupLayout_, kFramesInFlight);
     meshGpuCache_ = std::make_unique<MeshGpuCache>(*device_);
     pipelineCache_ = std::make_unique<PipelineCache>(*device_,
                                                      sceneBindGroupLayout_,
                                                      materialBindGroupLayout_,
-                                                     *compiledShaderCache_,
-                                                     *shaderProgramCache_,
+                                                     *shaderCompilePipeline_,
                                                      *rhiShaderCache_);
 }
 
@@ -80,10 +92,8 @@ Renderer::~Renderer() {
     meshGpuCache_.reset();
     rhiShaderCache_->clear();
     rhiShaderCache_.reset();
-    shaderProgramCache_->clear();
-    shaderProgramCache_.reset();
-    compiledShaderCache_->clear();
-    compiledShaderCache_.reset();
+    shaderCompilePipeline_->clear();
+    shaderCompilePipeline_.reset();
     destroyFrameResources();
     device_->destroyBindGroupLayout(sceneBindGroupLayout_);
     device_->destroyBindGroupLayout(materialBindGroupLayout_);
@@ -357,13 +367,12 @@ void Renderer::refreshShaderCaches() {
     if (lastShaderPollSerial_ == frameSerial_)
         return;
     lastShaderPollSerial_ = frameSerial_;
-    const std::vector<CompiledShaderId> changed = compiledShaderCache_->invalidateChanged();
+    const std::vector<CompiledShaderId> changed = shaderCompilePipeline_->invalidateChanged();
     if (changed.empty())
         return;
     const std::uint64_t retireSerial = frameSerial_ + kFramesInFlight;
     pipelineCache_->invalidate(changed, retireSerial);
     rhiShaderCache_->invalidate(changed, retireSerial);
-    shaderProgramCache_->invalidate(changed);
     Log::info("Renderer", "Reloaded %zu changed shader stages", changed.size());
 }
 

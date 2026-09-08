@@ -36,6 +36,7 @@ add_library(MiniCore STATIC
     src/core/serialization/BinaryTransfer.cpp
     src/core/filesystem/VirtualPath.cpp
     src/core/filesystem/DirectoryMount.cpp
+    src/core/filesystem/FileDependencyGraph.cpp
     src/core/filesystem/FileSystem.cpp
     src/core/serialization/JsonTransfer.cpp
     src/core/serialization/Transfer.cpp
@@ -134,6 +135,11 @@ target_include_directories(MiniShaderCompiler SYSTEM PRIVATE
     third_party/glm/include
     third_party/nlohmann/include
 )
+target_compile_definitions(MiniShaderCompiler PRIVATE
+    MINI_GLSLC_EXECUTABLE="${GLSLC_EXECUTABLE}"
+    $<$<CONFIG:Debug>:MINI_DEBUG=1>
+    $<$<NOT:$<CONFIG:Debug>>:MINI_SHADER_RELEASE=1>
+)
 if(MSVC)
     target_compile_options(MiniShaderCompiler PRIVATE /W4 /permissive- /utf-8)
 else()
@@ -175,151 +181,32 @@ if(MINGW)
 endif()
 
 set(GENERATED_SHADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-shaders")
-set(GENERATED_MATERIAL_DECLARATIONS
-    "${GENERATED_SHADER_DIR}/vertex_color.material.glsl"
-)
-set(GENERATED_VERTEX_STAGE
-    "${GENERATED_SHADER_DIR}/vertex_color.Forward.vert.glsl"
-)
-set(GENERATED_FRAGMENT_STAGE
-    "${GENERATED_SHADER_DIR}/vertex_color.Forward.frag.glsl"
-)
-set(GENERATED_VERTEX_SPIRV
-    "${GENERATED_SHADER_DIR}/vertex_color.Forward.vert.spv"
-)
-set(GENERATED_FRAGMENT_SPIRV
-    "${GENERATED_SHADER_DIR}/vertex_color.Forward.frag.spv"
-)
+set(SHADER_PIPELINE_STAMP "${GENERATED_SHADER_DIR}/compiled/pipeline.stamp")
 add_custom_command(
-    OUTPUT
-        "${GENERATED_MATERIAL_DECLARATIONS}"
-        "${GENERATED_VERTEX_STAGE}"
-        "${GENERATED_FRAGMENT_STAGE}"
-    COMMAND "${CMAKE_COMMAND}" -E make_directory "${GENERATED_SHADER_DIR}"
-    COMMAND "$<TARGET_FILE:MiniShaderCompiler>" properties
-            "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/vertex_color.shader.json"
-            "${GENERATED_MATERIAL_DECLARATIONS}"
-    COMMAND "$<TARGET_FILE:MiniShaderCompiler>" stages
+    OUTPUT "${SHADER_PIPELINE_STAMP}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${GENERATED_SHADER_DIR}/compiled"
+    COMMAND "$<TARGET_FILE:MiniShaderCompiler>" compile
             "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/vertex_color.shader.json"
             Forward
-            "${GENERATED_VERTEX_STAGE}"
-            "${GENERATED_FRAGMENT_STAGE}"
+            "${GENERATED_SHADER_DIR}"
+    COMMAND "$<TARGET_FILE:MiniShaderCompiler>" compile
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/blinn_phong.shader.json"
+            Forward
+            "${GENERATED_SHADER_DIR}"
+    COMMAND "${CMAKE_COMMAND}" -E touch "${SHADER_PIPELINE_STAMP}"
     DEPENDS
         MiniShaderCompiler
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/vertex_color.shader.json"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/vertex_color.Forward.vert"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/vertex_color.Forward.frag"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/blinn_phong.shader.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/blinn_phong.Forward.vert"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/blinn_phong.Forward.frag"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/include/scene.glsl"
-    COMMENT "Generating ShaderLab material and pass GLSL"
+    COMMENT "Compiling packaged shaders through ShaderCompilePipeline"
     VERBATIM
 )
-add_custom_target(MiniShaderLabGeneratedSources
-    DEPENDS
-        "${GENERATED_MATERIAL_DECLARATIONS}"
-        "${GENERATED_VERTEX_STAGE}"
-        "${GENERATED_FRAGMENT_STAGE}"
-)
-
-set(SHADERLAB_GLSLC_OPTIONS
-    --target-env=vulkan1.3
-    "$<$<CONFIG:Debug>:-O0>"
-    "$<$<CONFIG:Debug>:-g>"
-    "$<$<NOT:$<CONFIG:Debug>>:-O>"
-)
-set(GENERATED_VERTEX_REFLECTION_SPIRV
-    "${GENERATED_SHADER_DIR}/vertex_color.Forward.vert.reflection.spv"
-)
-set(GENERATED_FRAGMENT_REFLECTION_SPIRV
-    "${GENERATED_SHADER_DIR}/vertex_color.Forward.frag.reflection.spv"
-)
-add_custom_command(
-    OUTPUT "${GENERATED_VERTEX_SPIRV}"
-    COMMAND "${GLSLC_EXECUTABLE}"
-            ${SHADERLAB_GLSLC_OPTIONS}
-            -fshader-stage=vert
-            "${GENERATED_VERTEX_STAGE}"
-            -o "${GENERATED_VERTEX_SPIRV}"
-    DEPENDS
-        MiniShaderLabGeneratedSources
-        "${GENERATED_VERTEX_STAGE}"
-    COMMENT "Compiling ShaderLab vertex_color/Forward vertex stage"
-    COMMAND_EXPAND_LISTS
-    VERBATIM
-)
-add_custom_command(
-    OUTPUT "${GENERATED_FRAGMENT_SPIRV}"
-    COMMAND "${GLSLC_EXECUTABLE}"
-            ${SHADERLAB_GLSLC_OPTIONS}
-            -fshader-stage=frag
-            "${GENERATED_FRAGMENT_STAGE}"
-            -o "${GENERATED_FRAGMENT_SPIRV}"
-    DEPENDS
-        MiniShaderLabGeneratedSources
-        "${GENERATED_FRAGMENT_STAGE}"
-    COMMENT "Compiling ShaderLab vertex_color/Forward fragment stage"
-    COMMAND_EXPAND_LISTS
-    VERBATIM
-)
-add_custom_command(
-    OUTPUT "${GENERATED_VERTEX_REFLECTION_SPIRV}"
-    COMMAND "${GLSLC_EXECUTABLE}"
-            --target-env=vulkan1.3
-            -O0
-            -g
-            -fshader-stage=vert
-            "${GENERATED_VERTEX_STAGE}"
-            -o "${GENERATED_VERTEX_REFLECTION_SPIRV}"
-    DEPENDS
-        MiniShaderLabGeneratedSources
-        "${GENERATED_VERTEX_STAGE}"
-    COMMENT "Compiling reflection-friendly ShaderLab vertex stage"
-    VERBATIM
-)
-add_custom_command(
-    OUTPUT "${GENERATED_FRAGMENT_REFLECTION_SPIRV}"
-    COMMAND "${GLSLC_EXECUTABLE}"
-            --target-env=vulkan1.3
-            -O0
-            -g
-            -fshader-stage=frag
-            "${GENERATED_FRAGMENT_STAGE}"
-            -o "${GENERATED_FRAGMENT_REFLECTION_SPIRV}"
-    DEPENDS
-        MiniShaderLabGeneratedSources
-        "${GENERATED_FRAGMENT_STAGE}"
-    COMMENT "Compiling reflection-friendly ShaderLab fragment stage"
-    VERBATIM
-)
-add_custom_target(MiniShaderLabCompiledShaders
-    DEPENDS
-        "${GENERATED_VERTEX_SPIRV}"
-        "${GENERATED_FRAGMENT_SPIRV}"
-        "${GENERATED_VERTEX_REFLECTION_SPIRV}"
-        "${GENERATED_FRAGMENT_REFLECTION_SPIRV}"
-)
-
-set(SHADER_REFLECTION_STAMP
-    "${GENERATED_SHADER_DIR}/vertex_color.Forward.reflection.validated"
-)
-add_custom_command(
-    OUTPUT "${SHADER_REFLECTION_STAMP}"
-    COMMAND "$<TARGET_FILE:MiniShaderCompiler>" reflect
-            "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/vertex_color.shader.json"
-            Forward
-            "${GENERATED_VERTEX_REFLECTION_SPIRV}"
-            "${GENERATED_FRAGMENT_REFLECTION_SPIRV}"
-    COMMAND "${CMAKE_COMMAND}" -E touch "${SHADER_REFLECTION_STAMP}"
-    DEPENDS
-        MiniShaderCompiler
-        "${GENERATED_VERTEX_REFLECTION_SPIRV}"
-        "${GENERATED_FRAGMENT_REFLECTION_SPIRV}"
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/vertex_color.shader.json"
-    COMMENT "Validating ShaderLab declarations against SPIR-V reflection"
-    VERBATIM
-)
-add_custom_target(MiniShaderLabReflection
-    DEPENDS "${SHADER_REFLECTION_STAMP}"
-)
+add_custom_target(MiniShaderPackagedShaders DEPENDS "${SHADER_PIPELINE_STAMP}")
 
 add_executable(MiniVulkanEngine
     src/runtime/main.cpp
@@ -376,7 +263,7 @@ add_custom_command(TARGET MiniVulkanEngine POST_BUILD
             "${CMAKE_CURRENT_BINARY_DIR}/library"
     COMMENT "Copying JSON shader and material assets"
 )
-add_dependencies(MiniVulkanEngine MiniAssetCooker)
+add_dependencies(MiniVulkanEngine MiniAssetCooker MiniShaderPackagedShaders)
 target_link_libraries(MiniVulkanEngine PRIVATE
     MiniAssetImporters
     MiniScene
@@ -434,7 +321,7 @@ if(BUILD_TESTING)
         MINI_TEST_GENERATED_SHADER_DIR="${GENERATED_SHADER_DIR}"
         MINI_GLSLC_EXECUTABLE="${GLSLC_EXECUTABLE}"
     )
-    add_dependencies(ShaderCompilerTest MiniShaderLabReflection)
+    add_dependencies(ShaderCompilerTest MiniShaderPackagedShaders)
     if(MSVC)
         target_compile_options(ShaderCompilerTest PRIVATE /W4 /permissive- /utf-8)
     else()
@@ -679,9 +566,7 @@ if(BUILD_TESTING)
     target_compile_definitions(ShaderAssetTest PRIVATE
         MINI_TEST_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets"
         MINI_TEST_SHADER_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/assets"
-        MINI_TEST_GENERATED_SHADER_DIR="${GENERATED_SHADER_DIR}"
     )
-    add_dependencies(ShaderAssetTest MiniShaderLabReflection)
     if(MSVC)
         target_compile_options(ShaderAssetTest PRIVATE /W4 /permissive- /utf-8)
     else()

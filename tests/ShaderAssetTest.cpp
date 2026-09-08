@@ -55,41 +55,6 @@ int main() {
         return 2;
     }
 
-    const std::filesystem::path generatedVertex =
-        std::filesystem::path{MINI_TEST_GENERATED_SHADER_DIR} /
-        "vertex_color.Forward.vert.reflection.spv";
-    const std::filesystem::path generatedFragment =
-        std::filesystem::path{MINI_TEST_GENERATED_SHADER_DIR} /
-        "vertex_color.Forward.frag.reflection.spv";
-    const auto vertexReflectionResult = reflectSpirv(VirtualPath::fromNative(generatedVertex));
-    const auto fragmentReflectionResult = reflectSpirv(VirtualPath::fromNative(generatedFragment));
-    if (!vertexReflectionResult || !fragmentReflectionResult) {
-        return 3;
-    }
-    const SpirvReflection& vertexReflection = *vertexReflectionResult;
-    const SpirvReflection& fragmentReflection = *fragmentReflectionResult;
-    const auto materialBlock = std::ranges::find_if(
-        fragmentReflection.descriptors, [](const ShaderDescriptorBinding& descriptor) {
-            return descriptor.set == 1 && descriptor.binding == 0;
-        });
-    if (vertexReflection.stage != ShaderStage::Vertex ||
-        fragmentReflection.stage != ShaderStage::Fragment || vertexReflection.inputs.size() != 2 ||
-        vertexReflection.outputs.size() != 1 || fragmentReflection.inputs.size() != 1 ||
-        fragmentReflection.outputs.size() != 1 ||
-        materialBlock == fragmentReflection.descriptors.end() ||
-        materialBlock->type != ShaderDescriptorType::UniformBuffer ||
-        materialBlock->members.size() != 4 || materialBlock->members[0].offset != 0 ||
-        materialBlock->members[1].offset != 16 || materialBlock->members[2].offset != 32 ||
-        materialBlock->members[3].offset != 48) {
-        return 3;
-    }
-    if (!validateSpirvReflection(vertexColor,
-                                 vertexColorPass,
-                                 VirtualPath::fromNative(generatedVertex),
-                                 VirtualPath::fromNative(generatedFragment))) {
-        return 4;
-    }
-
     const RenderStateDesc& defaults = generated.subShaders.front().passes.front().renderState;
     if (defaults.cull != CullMode::Back || defaults.frontFace != FrontFace::Clockwise ||
         defaults.fill != FillMode::Solid || defaults.topology != PrimitiveTopology::TriangleList ||

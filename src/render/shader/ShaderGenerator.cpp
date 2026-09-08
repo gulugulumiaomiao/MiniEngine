@@ -145,8 +145,7 @@ void writeUserSource(std::ostringstream& output,
 
 std::shared_ptr<std::string> generateVertexStage(const ShaderPassDesc& pass,
                                                  std::string_view materialDeclarations,
-                                                 std::string_view userSource,
-                                                 const ShaderGenerationOptions&) {
+                                                 std::string_view userSource) {
     std::ostringstream output;
     output << "#version 450\n"
               "#extension GL_GOOGLE_cpp_style_line_directive : enable\n"
@@ -175,8 +174,7 @@ std::shared_ptr<std::string> generateVertexStage(const ShaderPassDesc& pass,
 
 std::shared_ptr<std::string> generateFragmentStage(const ShaderPassDesc& pass,
                                                    std::string_view materialDeclarations,
-                                                   std::string_view userSource,
-                                                   const ShaderGenerationOptions&) {
+                                                   std::string_view userSource) {
     std::ostringstream output;
     output << "#version 450\n"
               "#extension GL_GOOGLE_cpp_style_line_directive : enable\n"
@@ -203,9 +201,10 @@ std::shared_ptr<std::string> generateFragmentStage(const ShaderPassDesc& pass,
     return std::make_shared<std::string>(std::move(output).str());
 }
 
-bool validateLayout(const ShaderAsset& shader, const UniformBlockLayout& layout) {
+bool validateLayout(std::span<const ShaderPropertyDesc> properties,
+                    const UniformBlockLayout& layout) {
     std::size_t uniformIndex = 0;
-    for (const ShaderPropertyDesc& property : shader.properties) {
+    for (const ShaderPropertyDesc& property : properties) {
         if (!validIdentifier(property.name)) {
             Log::error("ShaderGenerator",
                        "Shader property is not a valid GLSL identifier: %s",
@@ -236,51 +235,16 @@ bool validateLayout(const ShaderAsset& shader, const UniformBlockLayout& layout)
     return true;
 }
 
-} // namespace
-
-std::shared_ptr<std::string> generateShaderStage(const ShaderAsset& shader,
-                                                 const ShaderPassDesc& pass,
-                                                 const UniformBlockLayout& layout,
-                                                 ShaderStage stage,
-                                                 std::string_view source,
-                                                 const ShaderGenerationOptions& options) {
-    if (!pass.program.hasSourceProgram() || source.empty()) {
-        Log::error("ShaderGenerator", "Pass source is missing: %s", pass.name.c_str());
-        return {};
-    }
-    if (!validateInterface(pass.vertexInput, "vertexInput") ||
-        !validateInterface(pass.varyings, "varyings") ||
-        !validateInterface(pass.fragmentOutputs, "fragmentOutputs")) {
-        return {};
-    }
-    const auto declarations = generateMaterialDeclarations(shader, layout, options);
-    if (!declarations)
-        return {};
-    return stage == ShaderStage::Vertex
-               ? generateVertexStage(pass, declarations->glsl, source, options)
-               : generateFragmentStage(pass, declarations->glsl, source, options);
-}
-
-std::shared_ptr<GeneratedMaterialDeclarations>
-generateMaterialDeclarations(const ShaderAsset& shader,
-                             const UniformBlockLayout& layout,
-                             const ShaderGenerationOptions& options) {
-    if (!validIdentifier(options.uniformBlockName) ||
-        !validIdentifier(options.uniformInstanceName)) {
-        Log::error("ShaderGenerator", "Generated uniform block names must be GLSL identifiers");
-        return {};
-    }
-    if (!validateLayout(shader, layout))
+std::shared_ptr<std::string>
+generateMaterialDeclarations(std::span<const ShaderPropertyDesc> properties,
+                             const UniformBlockLayout& layout) {
+    if (!validateLayout(properties, layout))
         return {};
 
-    auto result = std::make_shared<GeneratedMaterialDeclarations>();
-    result->uniformBlockSize = layout.byteSize;
     std::ostringstream output;
     output << "// Generated from ShaderLab properties. Do not edit.\n";
     if (!layout.members.empty()) {
-        output << "layout(std140, set = " << options.materialSet
-               << ", binding = " << options.uniformBinding << ") uniform "
-               << options.uniformBlockName << "\n{\n";
+        output << "layout(std140, set = 1, binding = 0) uniform MaterialProperties\n{\n";
         for (const UniformMemberLayout& member : layout.members) {
             const char* type = glslType(member.type);
             if (!type)
@@ -288,59 +252,50 @@ generateMaterialDeclarations(const ShaderAsset& shader,
             output << "    layout(offset = " << member.offset << ") " << type << ' ' << member.name
                    << ";\n";
         }
-        output << "} " << options.uniformInstanceName << ";\n";
+        output << "} Material;\n";
     }
 
-    std::uint32_t textureBinding = options.firstTextureBinding;
-    for (const ShaderPropertyDesc& property : shader.properties) {
-        if (property.type != ShaderPropertyType::Texture2D) {
+    std::uint32_t textureBinding = 1;
+    for (const ShaderPropertyDesc& property : properties) {
+        if (property.type != ShaderPropertyType::Texture2D)
             continue;
-        }
-        if (!result->textures.empty() || !layout.members.empty()) {
+        if (textureBinding != 1 || !layout.members.empty())
             output << '\n';
-        }
-        output << "layout(set = " << options.materialSet << ", binding = " << textureBinding
-               << ") uniform sampler2D " << property.name << ";\n";
-        result->textures.push_back({property.name, options.materialSet, textureBinding});
+        output << "layout(set = 1, binding = " << textureBinding << ") uniform sampler2D "
+               << property.name << ";\n";
         if (textureBinding == std::numeric_limits<std::uint32_t>::max()) {
             Log::error("ShaderGenerator", "Generated texture binding overflow");
             return {};
         }
         ++textureBinding;
     }
-    result->glsl = std::move(output).str();
-    return result;
+    return std::make_shared<std::string>(std::move(output).str());
 }
 
-std::shared_ptr<GeneratedPassStages> generatePassStages(const ShaderAsset& shader,
-                                                        const ShaderPassDesc& pass,
-                                                        const UniformBlockLayout& layout,
-                                                        std::string_view vertexSource,
-                                                        std::string_view fragmentSource,
-                                                        const ShaderGenerationOptions& options) {
-    if (!pass.program.hasSourceProgram()) {
-        Log::error(
-            "ShaderGenerator", "Pass does not declare a source program: %s", pass.name.c_str());
+} // namespace
+
+std::shared_ptr<std::string> generateShaderStage(const Shader& shader,
+                                                 const ShaderPass& pass,
+                                                 ShaderStage stage,
+                                                 std::string_view source) {
+    ShaderPassDesc desc;
+    desc.name = pass.name();
+    desc.type = pass.type();
+    desc.program = pass.program();
+    desc.vertexInput = pass.vertexInput();
+    desc.varyings = pass.varyings();
+    desc.fragmentOutputs = pass.fragmentOutputs();
+    desc.features = pass.features();
+    const auto declarations =
+        generateMaterialDeclarations(shader.properties(), shader.uniformBlockLayout());
+    if (!declarations || !desc.program.hasSourceProgram() || source.empty() ||
+        !validateInterface(desc.vertexInput, "vertexInput") ||
+        !validateInterface(desc.varyings, "varyings") ||
+        !validateInterface(desc.fragmentOutputs, "fragmentOutputs")) {
         return {};
     }
-    if (vertexSource.empty() || fragmentSource.empty()) {
-        Log::error("ShaderGenerator",
-                   "Vertex and fragment source must not be empty: %s",
-                   pass.name.c_str());
-        return {};
-    }
-    if (!validateInterface(pass.vertexInput, "vertexInput") ||
-        !validateInterface(pass.varyings, "varyings") ||
-        !validateInterface(pass.fragmentOutputs, "fragmentOutputs"))
-        return {};
-    const auto declarations = generateMaterialDeclarations(shader, layout, options);
-    if (!declarations)
-        return {};
-    const auto vertex = generateVertexStage(pass, declarations->glsl, vertexSource, options);
-    const auto fragment = generateFragmentStage(pass, declarations->glsl, fragmentSource, options);
-    if (!vertex || !fragment)
-        return {};
-    return std::make_shared<GeneratedPassStages>(GeneratedPassStages{*vertex, *fragment});
+    return stage == ShaderStage::Vertex ? generateVertexStage(desc, *declarations, source)
+                                        : generateFragmentStage(desc, *declarations, source);
 }
 
 } // namespace engine::shader_compiler

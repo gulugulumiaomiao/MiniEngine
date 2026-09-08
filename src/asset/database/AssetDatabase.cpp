@@ -1,5 +1,6 @@
 #include "asset/database/AssetDatabase.h"
 
+#include "core/filesystem/FileDependencyGraph.h"
 #include "core/logging/Log.h"
 #include "core/filesystem/FileSystem.h"
 
@@ -179,14 +180,11 @@ std::optional<VirtualPath> AssetDatabase::pathFromAssetId(AssetId id) const {
 }
 
 std::vector<VirtualPath> AssetDatabase::dependenciesOf(const VirtualPath& path) const {
-    const auto record = findByPath(path);
-    return record ? record->dependencies : std::vector<VirtualPath>{};
+    return FILE_DEPENDENCY_GRAPH.dependenciesOf(path);
 }
 
 std::vector<VirtualPath> AssetDatabase::dependentsOf(const VirtualPath& path) const {
-    std::scoped_lock lock{mutex_};
-    const auto found = reverseDependencies_.find(path.string());
-    return found == reverseDependencies_.end() ? std::vector<VirtualPath>{} : found->second;
+    return FILE_DEPENDENCY_GRAPH.directDependentsOf(path);
 }
 
 std::vector<AssetRecord> AssetDatabase::records() const {
@@ -220,6 +218,7 @@ bool AssetDatabase::addOrUpdate(AssetRecord record) {
     }
     const auto old = records_.find(record.id);
     if (old != records_.end() && old->second.sourcePath.string() != record.sourcePath.string()) {
+        FILE_DEPENDENCY_GRAPH.remove(old->second.sourcePath);
         pathIndex_.erase(old->second.sourcePath.string());
     }
     records_[record.id] = std::move(record);
@@ -233,16 +232,21 @@ bool AssetDatabase::remove(const VirtualPath& path) {
     if (indexed == pathIndex_.end()) {
         return false;
     }
+    const VirtualPath sourcePath = records_.at(indexed->second).sourcePath;
     records_.erase(indexed->second);
+    FILE_DEPENDENCY_GRAPH.remove(sourcePath);
     rebuildIndexesLocked();
     return true;
 }
 
 void AssetDatabase::clear() {
     std::scoped_lock lock{mutex_};
+    for (const auto& [id, record] : records_) {
+        (void)id;
+        FILE_DEPENDENCY_GRAPH.remove(record.sourcePath);
+    }
     records_.clear();
     pathIndex_.clear();
-    reverseDependencies_.clear();
 }
 
 bool AssetDatabase::load() {
@@ -324,16 +328,9 @@ bool AssetDatabase::prepareArtifactDirectory(AssetId id) const {
 
 void AssetDatabase::rebuildIndexesLocked() {
     pathIndex_.clear();
-    reverseDependencies_.clear();
     for (const auto& [id, record] : records_) {
         pathIndex_[record.sourcePath.string()] = id;
-        for (const VirtualPath& dependency : record.dependencies) {
-            reverseDependencies_[dependency.string()].push_back(record.sourcePath);
-        }
-    }
-    for (auto& [path, dependents] : reverseDependencies_) {
-        (void)path;
-        std::ranges::sort(dependents, {}, &VirtualPath::string);
+        FILE_DEPENDENCY_GRAPH.replaceDependencies(record.sourcePath, record.dependencies);
     }
 }
 

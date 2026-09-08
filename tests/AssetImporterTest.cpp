@@ -73,19 +73,8 @@ int main() {
     const AssetImportContext context{meta, shaderPath, assetMetaPath(shaderPath), artifactPath};
     const AssetImportResult result = registry.find(AssetType::Shader)->import(context);
     if (!result.success || result.type != AssetType::Shader ||
-        result.artifactPath.string() != artifactPath.string() || result.dependencies.size() != 4) {
+        result.artifactPath.string() != artifactPath.string() || !result.dependencies.empty()) {
         return 4;
-    }
-
-    const auto contains = [&result](const VirtualPath& expected) {
-        return std::ranges::find_if(result.dependencies,
-                                    [&expected](const VirtualPath& dependency) {
-                                        return dependency.string() == expected.string();
-                                    }) != result.dependencies.end();
-    };
-    if (!contains(vertexPath) || !contains(fragmentPath) || !contains(commonPath) ||
-        !contains(nestedPath)) {
-        return 5;
     }
 
     const auto artifact = loadAssetArtifact(artifactPath);

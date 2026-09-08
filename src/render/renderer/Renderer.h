@@ -15,7 +15,6 @@
 
 namespace engine {
 
-class CompiledShaderCache;
 class MaterialGpuCache;
 class Mesh;
 class MeshGpuCache;
@@ -23,7 +22,7 @@ class PipelineCache;
 class RenderScene;
 class RhiShaderCache;
 class ShaderPass;
-class ShaderProgramCache;
+class ShaderCompilePipeline;
 struct MeshData;
 struct MeshDesc;
 struct MeshBuildRecipe;
@@ -87,8 +86,7 @@ private:
     rhi::BindGroupLayoutHandle materialBindGroupLayout_;
     std::array<FrameResources, kFramesInFlight> frames_{};
     std::unique_ptr<MeshGpuCache> meshGpuCache_;
-    std::unique_ptr<CompiledShaderCache> compiledShaderCache_;
-    std::unique_ptr<ShaderProgramCache> shaderProgramCache_;
+    std::unique_ptr<ShaderCompilePipeline> shaderCompilePipeline_;
     std::unique_ptr<RhiShaderCache> rhiShaderCache_;
     std::unique_ptr<MaterialGpuCache> materialGpuCache_;
     std::unique_ptr<PipelineCache> pipelineCache_;

@@ -933,10 +933,10 @@ findDescriptor(const SpirvReflection& reflection, std::uint32_t set, std::uint32
     return found == reflection.descriptors.end() ? nullptr : &*found;
 }
 
-bool validateMaterialBlock(const ShaderAsset& shader,
+bool validateMaterialBlock(std::span<const ShaderPropertyDesc> properties,
                            const SpirvReflection& reflection,
                            const VirtualPath& path) {
-    const UniformBlockLayout layout = buildUniformBlockLayout(shader.properties);
+    const UniformBlockLayout layout = buildUniformBlockLayout(properties);
     if (layout.members.empty()) {
         return true;
     }
@@ -961,11 +961,11 @@ bool validateMaterialBlock(const ShaderAsset& shader,
     return true;
 }
 
-void validateTextureBindings(const ShaderAsset& shader,
+void validateTextureBindings(std::span<const ShaderPropertyDesc> properties,
                              const SpirvReflection& vertex,
                              const SpirvReflection& fragment) {
     std::uint32_t binding = 1;
-    for (const ShaderPropertyDesc& property : shader.properties) {
+    for (const ShaderPropertyDesc& property : properties) {
         if (property.type != ShaderPropertyType::Texture2D) {
             continue;
         }
@@ -1085,8 +1085,8 @@ std::shared_ptr<SpirvReflection> reflectSpirv(const VirtualPath& path) {
     }
 }
 
-bool validateSpirvReflection(const ShaderAsset& shader,
-                             const ShaderPassDesc& pass,
+bool validateSpirvReflection(const Shader& shader,
+                             const ShaderPass& pass,
                              const VirtualPath& vertexSpirv,
                              const VirtualPath& fragmentSpirv) {
     const std::shared_ptr<SpirvReflection> vertexResult = reflectSpirv(vertexSpirv);
@@ -1096,22 +1096,22 @@ bool validateSpirvReflection(const ShaderAsset& shader,
     const SpirvReflection& vertex = *vertexResult;
     const SpirvReflection& fragment = *fragmentResult;
     try {
-        if (vertex.stage != ShaderStage::Vertex || fragment.stage != ShaderStage::Fragment) {
+        if (vertex.stage != ShaderStage::Vertex || fragment.stage != ShaderStage::Fragment)
             reflectionFail("SPIR-V stage does not match pass declaration");
-        }
-        validateInterface(pass.vertexInput, vertex.inputs, vertexSpirv, "vertex input");
-        validateInterface(pass.varyings, vertex.outputs, vertexSpirv, "stage output");
-        validateInterface(pass.varyings, fragment.inputs, fragmentSpirv, "stage input");
-        validateInterface(pass.fragmentOutputs, fragment.outputs, fragmentSpirv, "fragment output");
-        const bool vertexHasMaterialBlock = validateMaterialBlock(shader, vertex, vertexSpirv);
+        validateInterface(pass.vertexInput(), vertex.inputs, vertexSpirv, "vertex input");
+        validateInterface(pass.varyings(), vertex.outputs, vertexSpirv, "stage output");
+        validateInterface(pass.varyings(), fragment.inputs, fragmentSpirv, "stage input");
+        validateInterface(
+            pass.fragmentOutputs(), fragment.outputs, fragmentSpirv, "fragment output");
+        const bool vertexHasMaterialBlock =
+            validateMaterialBlock(shader.properties(), vertex, vertexSpirv);
         const bool fragmentHasMaterialBlock =
-            validateMaterialBlock(shader, fragment, fragmentSpirv);
+            validateMaterialBlock(shader.properties(), fragment, fragmentSpirv);
         if (!vertexHasMaterialBlock && !fragmentHasMaterialBlock &&
-            !buildUniformBlockLayout(shader.properties).members.empty()) {
+            !shader.uniformBlockLayout().members.empty()) {
             reflectionFail("Material uniform block is absent from both shader stages");
         }
-        validateTextureBindings(shader, vertex, fragment);
-
+        validateTextureBindings(shader.properties(), vertex, fragment);
         for (const ShaderDescriptorBinding& descriptor : vertex.descriptors) {
             if (const ShaderDescriptorBinding* other =
                     findDescriptor(fragment, descriptor.set, descriptor.binding);
