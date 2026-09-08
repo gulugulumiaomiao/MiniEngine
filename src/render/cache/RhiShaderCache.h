@@ -1,6 +1,6 @@
 #pragma once
 
-#include "render/shader/ShaderCompiler.h"
+#include "render/shader/ShaderCompilePipeline.h"
 #include "rhi/api/RhiTypes.h"
 
 #include <cstdint>
@@ -16,7 +16,7 @@ class IDevice;
 
 class RhiShaderCache final {
 public:
-    RhiShaderCache(rhi::IDevice& device, CompiledShaderCache& compiledShaders);
+    RhiShaderCache(rhi::IDevice& device, ShaderCompilePipeline& compilePipeline);
     ~RhiShaderCache();
 
     [[nodiscard]] rhi::ShaderHandle getOrCreate(CompiledShaderHandle shader);
@@ -35,7 +35,7 @@ private:
     };
 
     rhi::IDevice& device_;
-    CompiledShaderCache& compiledShaders_;
+    ShaderCompilePipeline& compilePipeline_;
     std::unordered_map<CompiledShaderId, std::uint32_t> entries_;
     std::vector<Slot> slots_;
     std::vector<RetiredModule> retired_;

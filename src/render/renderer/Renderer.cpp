@@ -7,11 +7,13 @@
 #include "render/cache/MeshGpuCache.h"
 #include "render/cache/PipelineCache.h"
 #include "render/cache/RhiShaderCache.h"
+#include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
 #include "render/mesh/MeshBuilder.h"
+#include "render/mesh/MeshManager.h"
 #include "render/render_graph/RenderGraph.h"
 #include "render/renderer/RenderScene.h"
-#include "render/shader/ShaderCompiler.h"
+#include "render/shader/ShaderCompilePipeline.h"
 #include "runtime/window/Window.h"
 
 #include <algorithm>
@@ -68,8 +70,7 @@ Renderer::Renderer(Window& window, rhi::Context context)
     shaderConfig.compilerOptions.optimization = ShaderOptimization::Release;
 #endif
     shaderCompilePipeline_ = std::make_unique<ShaderCompilePipeline>(std::move(shaderConfig));
-    rhiShaderCache_ =
-        std::make_unique<RhiShaderCache>(*device_, shaderCompilePipeline_->compiledShaders());
+    rhiShaderCache_ = std::make_unique<RhiShaderCache>(*device_, *shaderCompilePipeline_);
     materialGpuCache_ =
         std::make_unique<MaterialGpuCache>(*device_, materialBindGroupLayout_, kFramesInFlight);
     meshGpuCache_ = std::make_unique<MeshGpuCache>(*device_);

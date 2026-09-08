@@ -42,7 +42,8 @@ int main() {
         return 5;
     const Shader shader{*shaderOwner};
     const ShaderPass& materialPass = shader.defaultSubShader().requirePass(ShaderPassType::Forward);
-    const auto generated = shader_compiler::generateShaderStage(
+    ShaderGenerator generator;
+    const auto generated = generator.generateStage(
         shader,
         materialPass,
         ShaderStage::Vertex,
@@ -59,16 +60,16 @@ int main() {
     const Shader interfaceShader{*interfaceShaderOwner};
     const ShaderPass& interfacePass =
         interfaceShader.defaultSubShader().requirePass(ShaderPassType::Forward);
-    const auto vertex = shader_compiler::generateShaderStage(
-        interfaceShader,
-        interfacePass,
-        ShaderStage::Vertex,
-        *FILE_SYSTEM.readText(interfacePass.program().vertexSource));
-    const auto fragment = shader_compiler::generateShaderStage(
-        interfaceShader,
-        interfacePass,
-        ShaderStage::Fragment,
-        *FILE_SYSTEM.readText(interfacePass.program().fragmentSource));
+    const auto vertex =
+        generator.generateStage(interfaceShader,
+                                interfacePass,
+                                ShaderStage::Vertex,
+                                *FILE_SYSTEM.readText(interfacePass.program().vertexSource));
+    const auto fragment =
+        generator.generateStage(interfaceShader,
+                                interfacePass,
+                                ShaderStage::Fragment,
+                                *FILE_SYSTEM.readText(interfacePass.program().fragmentSource));
     std::string expectedVertex = readFile(sourceFixtures / "shader_interface.expected.vert.glsl");
     std::string expectedFragment = readFile(sourceFixtures / "shader_interface.expected.frag.glsl");
     expectedVertex.replace(expectedVertex.find("generated_interface.vert"),

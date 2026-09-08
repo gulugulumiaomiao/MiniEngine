@@ -1,7 +1,8 @@
 #include "asset/manager/AssetManager.h"
 #include "render/shader/Shader.h"
-#include "render/shader/ShaderCompiler.h"
+#include "render/shader/ShaderCompilePipeline.h"
 #include "render/shader/ShaderGenerator.h"
+#include "render/shader/ShaderPreprocessor.h"
 #include "core/filesystem/FileSystem.h"
 #include "TestAssetEnvironment.h"
 
@@ -84,11 +85,12 @@ int main() {
     ShaderPreprocessRequest generatedRequest;
     generatedRequest.source.sourcePath = assetPass.program.vertexSource;
     generatedRequest.source.stage = ShaderStage::Vertex;
-    generatedRequest.source.source = *shader_compiler::generateShaderStage(
-        runtimeShader,
-        pass,
-        ShaderStage::Vertex,
-        *FILE_SYSTEM.readText(assetPass.program.vertexSource));
+    ShaderGenerator generator;
+    generatedRequest.source.source =
+        *generator.generateStage(runtimeShader,
+                                 pass,
+                                 ShaderStage::Vertex,
+                                 *FILE_SYSTEM.readText(assetPass.program.vertexSource));
     const auto generated = preprocessor.process(generatedRequest);
     if (!generated || generated->dependencies.empty() ||
         generated->source.find("struct MiniVertexInput") == std::string::npos ||

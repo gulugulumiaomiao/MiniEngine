@@ -1,4 +1,6 @@
 #include "render/material/Material.h"
+#include "render/material/MaterialManager.h"
+#include "render/shader/ShaderManager.h"
 #include "asset/manager/AssetManager.h"
 #include "asset/importer/FileWatcher.h"
 #include "TestAssetEnvironment.h"

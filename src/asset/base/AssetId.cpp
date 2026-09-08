@@ -1,5 +1,7 @@
 #include "asset/base/AssetId.h"
 
+#include "core/hash.h"
+
 #include <array>
 #include <atomic>
 #include <charconv>
@@ -15,20 +17,14 @@ namespace {
     return result.ec == std::errc{} && result.ptr == text.data() + text.size();
 }
 
-[[nodiscard]] std::uint64_t mix(std::uint64_t value) {
-    value = (value ^ (value >> 30U)) * 0xbf58476d1ce4e5b9ULL;
-    value = (value ^ (value >> 27U)) * 0x94d049bb133111ebULL;
-    return value ^ (value >> 31U);
-}
-
 } // namespace
 
 AssetId AssetId::generate() {
     static std::atomic_uint64_t sequence{static_cast<std::uint64_t>(
         std::chrono::high_resolution_clock::now().time_since_epoch().count())};
     const std::uint64_t seed = sequence.fetch_add(0x9e3779b97f4a7c15ULL, std::memory_order_relaxed);
-    std::uint64_t high = mix(seed);
-    std::uint64_t low = mix(seed + 0x9e3779b97f4a7c15ULL);
+    std::uint64_t high = mixHash64(seed);
+    std::uint64_t low = mixHash64(seed + 0x9e3779b97f4a7c15ULL);
 
     // RFC 4122 variant and version-four bits make the textual form familiar,
     // while AssetId itself remains an engine-owned opaque identifier.

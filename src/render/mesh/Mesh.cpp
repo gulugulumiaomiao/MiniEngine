@@ -1,6 +1,6 @@
 #include "render/mesh/Mesh.h"
 
-#include "asset/manager/AssetManager.h"
+#include "core/hash.h"
 #include "core/logging/Log.h"
 #include "core/serialization/Transfer.h"
 
@@ -41,14 +41,6 @@ bool valid(MeshUsage value) {
 
 bool valid(MeshTopology value) {
     return value == MeshTopology::TriangleList || value == MeshTopology::LineList;
-}
-
-template <typename Value> void appendHash(std::uint64_t& hash, Value value) {
-    const auto bytes = std::as_bytes(std::span{&value, 1});
-    for (const std::byte byte : bytes) {
-        hash ^= std::to_integer<std::uint8_t>(byte);
-        hash *= 1099511628211ULL;
-    }
 }
 
 } // namespace
@@ -213,21 +205,21 @@ bool VertexLayout::validate() const {
 }
 
 std::uint64_t VertexLayout::hash() const {
-    std::uint64_t result = 1469598103934665603ULL;
-    appendHash(result, static_cast<std::uint32_t>(bindings.size()));
+    Hash64 result = kFnv1a64OffsetBasis;
+    hashAppend(result, static_cast<std::uint32_t>(bindings.size()));
     for (const VertexBinding& binding : bindings) {
-        appendHash(result, binding.binding);
-        appendHash(result, binding.stride);
-        appendHash(result, binding.inputRate);
+        hashAppend(result, binding.binding);
+        hashAppend(result, binding.stride);
+        hashAppend(result, binding.inputRate);
     }
-    appendHash(result, static_cast<std::uint32_t>(attributes.size()));
+    hashAppend(result, static_cast<std::uint32_t>(attributes.size()));
     for (const VertexAttribute& attribute : attributes) {
-        appendHash(result, attribute.semantic.type);
-        appendHash(result, attribute.semantic.index);
-        appendHash(result, attribute.format);
-        appendHash(result, attribute.location);
-        appendHash(result, attribute.binding);
-        appendHash(result, attribute.offset);
+        hashAppend(result, attribute.semantic.type);
+        hashAppend(result, attribute.semantic.index);
+        hashAppend(result, attribute.format);
+        hashAppend(result, attribute.location);
+        hashAppend(result, attribute.binding);
+        hashAppend(result, attribute.offset);
     }
     return result;
 }
@@ -436,51 +428,6 @@ void Mesh::markChanged() {
     }
     ++version_;
     dirty_ = true;
-}
-
-MeshHandle MeshManager::load(const VirtualPath& meshPath) {
-    if (!meshPath.valid()) {
-        Log::error("MeshManager", "Invalid Mesh path: %s", meshPath.string().c_str());
-        return {};
-    }
-    if (const MeshHandle existing = handleFor(meshPath); existing) {
-        return existing;
-    }
-    const std::shared_ptr<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
-    return asset ? insert(asset->instantiate()) : MeshHandle{};
-}
-
-bool MeshManager::replace(MeshHandle handle, Mesh mesh) {
-    Mesh* current = find(handle);
-    if (!current) {
-        Log::error("MeshManager", "Cannot replace an invalid MeshHandle");
-        return false;
-    }
-    if (current->assetPath() != mesh.assetPath() || !validate(mesh)) {
-        Log::error(
-            "MeshManager", "Replacement Mesh is invalid: %s", mesh.assetPath().string().c_str());
-        return false;
-    }
-    if (current->version_ == std::numeric_limits<std::uint64_t>::max()) {
-        Log::error("MeshManager", "Mesh version overflow");
-        return false;
-    }
-    mesh.version_ = current->version_ + 1;
-    mesh.dirty_ = true;
-    *current = std::move(mesh);
-    return true;
-}
-
-bool MeshManager::replace(const VirtualPath& meshPath) {
-    const MeshHandle handle = handleFor(meshPath);
-    if (!handle)
-        return true;
-    const std::shared_ptr<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
-    return asset && replace(handle, asset->instantiate());
-}
-
-bool MeshManager::validate(const Mesh& mesh) const {
-    return validateMesh(mesh.desc(), mesh.data());
 }
 
 } // namespace engine

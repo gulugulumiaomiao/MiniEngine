@@ -8,8 +8,11 @@
 #include "core/serialization/BinaryTransfer.h"
 #include "core/filesystem/FileSystem.h"
 #include "render/material/Material.h"
+#include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
+#include "render/mesh/MeshManager.h"
 #include "render/shader/Shader.h"
+#include "render/shader/ShaderManager.h"
 #include "scene/scene/SceneAsset.h"
 
 namespace engine {

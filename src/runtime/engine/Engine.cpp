@@ -6,9 +6,12 @@
 #include "asset/manager/AssetManager.h"
 #include "asset/importer/AssetImportPipeline.h"
 #include "render/material/Material.h"
+#include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
+#include "render/mesh/MeshManager.h"
 #include "render/renderer/Renderer.h"
 #include "render/shader/Shader.h"
+#include "render/shader/ShaderManager.h"
 #include "rhi/RhiFactory.h"
 #include "scene/scene/SceneAsset.h"
 

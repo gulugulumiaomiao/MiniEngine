@@ -8,15 +8,15 @@
 
 namespace engine {
 
-RhiShaderCache::RhiShaderCache(rhi::IDevice& device, CompiledShaderCache& compiledShaders)
-    : device_(device), compiledShaders_(compiledShaders) {}
+RhiShaderCache::RhiShaderCache(rhi::IDevice& device, ShaderCompilePipeline& compilePipeline)
+    : device_(device), compilePipeline_(compilePipeline) {}
 
 RhiShaderCache::~RhiShaderCache() {
     clear();
 }
 
 rhi::ShaderHandle RhiShaderCache::getOrCreate(CompiledShaderHandle handle) {
-    const CompiledShader& shader = compiledShaders_.resolve(handle);
+    const CompiledShader& shader = compilePipeline_.resolve(handle);
     if (const auto found = entries_.find(shader.id); found != entries_.end()) {
         return slots_[found->second].shader;
     }

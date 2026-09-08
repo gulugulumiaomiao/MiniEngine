@@ -1,6 +1,7 @@
 #include "asset/importer/AssetImportPipeline.h"
 
 #include "core/filesystem/FileDependencyGraph.h"
+#include "core/hash.h"
 
 #include "asset/derived_data/AssetArtifact.h"
 #include "asset/base/AssetMeta.h"
@@ -18,20 +19,6 @@
 
 namespace engine {
 namespace {
-
-[[nodiscard]] std::uint64_t hashContent(std::span<const std::byte> bytes) {
-    std::uint64_t value = 1469598103934665603ULL;
-    for (const std::byte byte : bytes) {
-        value ^= static_cast<std::uint8_t>(byte);
-        value *= 1099511628211ULL;
-    }
-    return value;
-}
-
-[[nodiscard]] std::optional<std::uint64_t> hashFile(const VirtualPath& path) {
-    const auto bytes = FILE_SYSTEM.readBinary(path);
-    return bytes ? std::optional<std::uint64_t>{hashContent(*bytes)} : std::nullopt;
-}
 
 [[nodiscard]] bool isSourceAsset(const VirtualPath& path) {
     return inferAssetType(path) != AssetType::Unknown;

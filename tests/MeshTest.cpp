@@ -1,4 +1,5 @@
 #include "render/mesh/Mesh.h"
+#include "render/mesh/MeshManager.h"
 #include "core/serialization/BinaryTransfer.h"
 #include "core/serialization/JsonTransfer.h"
 #include "render/cache/MeshGpuCache.h"

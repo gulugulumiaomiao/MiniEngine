@@ -1,8 +1,6 @@
 #pragma once
 
 #include "asset/base/Asset.h"
-#include "core/base/InstanceManager.h"
-#include "core/base/Singleton.h"
 #include "core/math/Math.h"
 #include "core/serialization/Transferable.h"
 #include "render/mesh/MeshPrimitive.h"
@@ -18,6 +16,8 @@
 #include <vector>
 
 namespace engine {
+
+class MeshManager;
 
 enum class VertexSemanticType {
     Position,
@@ -93,7 +93,8 @@ struct VertexAttribute final : public Transferable {
                     std::uint32_t location,
                     std::uint32_t binding,
                     std::uint32_t offset)
-        : semantic(semantic), format(format), location(location), binding(binding), offset(offset) {}
+        : semantic(semantic), format(format), location(location), binding(binding), offset(offset) {
+    }
 
     VertexSemantic semantic;
     VertexFormat format{VertexFormat::Vec3Float32};
@@ -270,27 +271,9 @@ public:
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-class MeshManager final : public Singleton<MeshManager>, public InstanceManager<Mesh, MeshHandle> {
-public:
-    [[nodiscard]] MeshHandle load(const VirtualPath& meshPath) override;
-    [[nodiscard]] bool replace(MeshHandle handle, Mesh mesh);
-    [[nodiscard]] bool replace(const VirtualPath& meshPath);
-
-private:
-    friend class Singleton<MeshManager>;
-    MeshManager() = default;
-
-    [[nodiscard]] const VirtualPath& pathOf(const Mesh& mesh) const override {
-        return mesh.assetPath();
-    }
-    [[nodiscard]] bool validate(const Mesh& mesh) const override;
-};
-
 [[nodiscard]] std::uint32_t vertexFormatSize(VertexFormat format);
 [[nodiscard]] std::uint32_t indexTypeSize(IndexType type);
 [[nodiscard]] MeshBounds calculateBounds(std::span<const math::Vec3> positions);
 [[nodiscard]] bool validateMesh(const MeshDesc& desc, const MeshData& data);
 
 } // namespace engine
-
-#define MESH_MANAGER (::engine::MeshManager::instance())

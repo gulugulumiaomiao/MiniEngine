@@ -7,10 +7,9 @@
 #include <limits>
 #include <sstream>
 
-namespace engine::shader_compiler {
-namespace {
+namespace engine {
 
-bool validIdentifier(const std::string& value) {
+bool ShaderGenerator::validIdentifier(const std::string& value) {
     if (value.empty()) {
         return false;
     }
@@ -24,7 +23,7 @@ bool validIdentifier(const std::string& value) {
     });
 }
 
-const char* glslType(ShaderPropertyType type) {
+const char* ShaderGenerator::glslType(ShaderPropertyType type) {
     switch (type) {
     case ShaderPropertyType::Float:
     case ShaderPropertyType::Range: return "float";
@@ -39,7 +38,7 @@ const char* glslType(ShaderPropertyType type) {
     return nullptr;
 }
 
-const char* glslType(ShaderValueType type) {
+const char* ShaderGenerator::glslType(ShaderValueType type) {
     switch (type) {
     case ShaderValueType::Float: return "float";
     case ShaderValueType::Vec2: return "vec2";
@@ -50,7 +49,7 @@ const char* glslType(ShaderValueType type) {
     return nullptr;
 }
 
-const char* interpolationQualifier(ShaderInterpolation interpolation) {
+const char* ShaderGenerator::interpolationQualifier(ShaderInterpolation interpolation) {
     switch (interpolation) {
     case ShaderInterpolation::Smooth: return "smooth";
     case ShaderInterpolation::Flat: return "flat";
@@ -60,8 +59,8 @@ const char* interpolationQualifier(ShaderInterpolation interpolation) {
     return nullptr;
 }
 
-bool validateInterface(const std::vector<ShaderInterfaceVariable>& variables,
-                       const char* interfaceName) {
+bool ShaderGenerator::validateInterface(const std::vector<ShaderInterfaceVariable>& variables,
+                                        const char* interfaceName) {
     for (const ShaderInterfaceVariable& variable : variables) {
         if (!validIdentifier(variable.name)) {
             Log::error("ShaderGenerator",
@@ -74,9 +73,9 @@ bool validateInterface(const std::vector<ShaderInterfaceVariable>& variables,
     return true;
 }
 
-bool writeStruct(std::ostringstream& output,
-                 const char* name,
-                 const std::vector<ShaderInterfaceVariable>& variables) {
+bool ShaderGenerator::writeStruct(std::ostringstream& output,
+                                  const char* name,
+                                  const std::vector<ShaderInterfaceVariable>& variables) {
     output << "struct " << name << "\n{\n";
     if (variables.empty()) {
         output << "    uint _unused;\n";
@@ -92,11 +91,12 @@ bool writeStruct(std::ostringstream& output,
     return true;
 }
 
-bool writeLocationDeclarations(std::ostringstream& output,
-                               const char* direction,
-                               const char* prefix,
-                               const std::vector<ShaderInterfaceVariable>& variables,
-                               bool includeInterpolation) {
+bool ShaderGenerator::writeLocationDeclarations(
+    std::ostringstream& output,
+    const char* direction,
+    const char* prefix,
+    const std::vector<ShaderInterfaceVariable>& variables,
+    bool includeInterpolation) {
     for (const ShaderInterfaceVariable& variable : variables) {
         output << "layout(location = " << variable.location << ") ";
         if (includeInterpolation) {
@@ -116,7 +116,7 @@ bool writeLocationDeclarations(std::ostringstream& output,
     return true;
 }
 
-std::string lineDirectiveName(const std::string& value) {
+std::string ShaderGenerator::lineDirectiveName(const std::string& value) {
     std::string escaped;
     escaped.reserve(value.size());
     for (const char character : value) {
@@ -128,11 +128,11 @@ std::string lineDirectiveName(const std::string& value) {
     return escaped;
 }
 
-void writeUserSource(std::ostringstream& output,
-                     const ShaderPassDesc& pass,
-                     const VirtualPath& sourcePath,
-                     std::string_view stageName,
-                     std::string_view userSource) {
+void ShaderGenerator::writeUserSource(std::ostringstream& output,
+                                      const ShaderPassDesc& pass,
+                                      const VirtualPath& sourcePath,
+                                      std::string_view stageName,
+                                      std::string_view userSource) {
     const std::string sourceName = lineDirectiveName(sourcePath.string());
     const std::string wrapperName = lineDirectiveName("MiniShaderCompiler/" + pass.name + "/" +
                                                       std::string{stageName} + "-wrapper");
@@ -143,9 +143,10 @@ void writeUserSource(std::ostringstream& output,
     output << "#line 1 \"" << wrapperName << "\"\n\n";
 }
 
-std::shared_ptr<std::string> generateVertexStage(const ShaderPassDesc& pass,
-                                                 std::string_view materialDeclarations,
-                                                 std::string_view userSource) {
+std::shared_ptr<std::string>
+ShaderGenerator::generateVertexStage(const ShaderPassDesc& pass,
+                                     std::string_view materialDeclarations,
+                                     std::string_view userSource) {
     std::ostringstream output;
     output << "#version 450\n"
               "#extension GL_GOOGLE_cpp_style_line_directive : enable\n"
@@ -172,9 +173,10 @@ std::shared_ptr<std::string> generateVertexStage(const ShaderPassDesc& pass,
     return std::make_shared<std::string>(std::move(output).str());
 }
 
-std::shared_ptr<std::string> generateFragmentStage(const ShaderPassDesc& pass,
-                                                   std::string_view materialDeclarations,
-                                                   std::string_view userSource) {
+std::shared_ptr<std::string>
+ShaderGenerator::generateFragmentStage(const ShaderPassDesc& pass,
+                                       std::string_view materialDeclarations,
+                                       std::string_view userSource) {
     std::ostringstream output;
     output << "#version 450\n"
               "#extension GL_GOOGLE_cpp_style_line_directive : enable\n"
@@ -201,8 +203,8 @@ std::shared_ptr<std::string> generateFragmentStage(const ShaderPassDesc& pass,
     return std::make_shared<std::string>(std::move(output).str());
 }
 
-bool validateLayout(std::span<const ShaderPropertyDesc> properties,
-                    const UniformBlockLayout& layout) {
+bool ShaderGenerator::validateLayout(std::span<const ShaderPropertyDesc> properties,
+                                     const UniformBlockLayout& layout) {
     std::size_t uniformIndex = 0;
     for (const ShaderPropertyDesc& property : properties) {
         if (!validIdentifier(property.name)) {
@@ -236,8 +238,8 @@ bool validateLayout(std::span<const ShaderPropertyDesc> properties,
 }
 
 std::shared_ptr<std::string>
-generateMaterialDeclarations(std::span<const ShaderPropertyDesc> properties,
-                             const UniformBlockLayout& layout) {
+ShaderGenerator::generateMaterialDeclarations(std::span<const ShaderPropertyDesc> properties,
+                                              const UniformBlockLayout& layout) {
     if (!validateLayout(properties, layout))
         return {};
 
@@ -272,12 +274,10 @@ generateMaterialDeclarations(std::span<const ShaderPropertyDesc> properties,
     return std::make_shared<std::string>(std::move(output).str());
 }
 
-} // namespace
-
-std::shared_ptr<std::string> generateShaderStage(const Shader& shader,
-                                                 const ShaderPass& pass,
-                                                 ShaderStage stage,
-                                                 std::string_view source) {
+std::shared_ptr<std::string> ShaderGenerator::generateStage(const Shader& shader,
+                                                            const ShaderPass& pass,
+                                                            ShaderStage stage,
+                                                            std::string_view source) const {
     ShaderPassDesc desc;
     desc.name = pass.name();
     desc.type = pass.type();
@@ -298,4 +298,4 @@ std::shared_ptr<std::string> generateShaderStage(const Shader& shader,
                                         : generateFragmentStage(desc, *declarations, source);
 }
 
-} // namespace engine::shader_compiler
+} // namespace engine

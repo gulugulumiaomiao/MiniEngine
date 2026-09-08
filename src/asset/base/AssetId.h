@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/hash.h"
+
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -32,8 +34,6 @@ private:
 
 template <> struct std::hash<engine::AssetId> {
     [[nodiscard]] std::size_t operator()(const engine::AssetId& id) const noexcept {
-        const std::size_t high = std::hash<std::uint64_t>{}(id.high());
-        const std::size_t low = std::hash<std::uint64_t>{}(id.low());
-        return high ^ (low + 0x9e3779b97f4a7c15ULL + (high << 6U) + (high >> 2U));
+        return static_cast<std::size_t>(engine::combineHash(id.high(), id.low()));
     }
 };

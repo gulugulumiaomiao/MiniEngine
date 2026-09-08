@@ -1,0 +1,423 @@
+#include "render/shader/ShaderCompilePipeline.h"
+
+#include "core/filesystem/FileSystem.h"
+#include "core/hash.h"
+#include "core/logging/Log.h"
+
+#include <algorithm>
+#include <array>
+#include <iterator>
+#include <tuple>
+#include <utility>
+
+namespace engine {
+
+bool ShaderCompilePipeline::containsPath(std::span<const VirtualPath> paths,
+                                         const VirtualPath& candidate) {
+    return std::ranges::any_of(paths,
+                               [&candidate](const VirtualPath& path) { return path == candidate; });
+}
+
+ShaderProgramLayoutId ShaderCompilePipeline::makeLayoutId(const ShaderProgramLayout& layout) {
+    Hash64 hash = hashString("ShaderProgramLayout");
+    for (const ShaderDescriptorBinding& descriptor : layout.descriptors) {
+        hashAppend(hash, descriptor.set);
+        hashAppend(hash, descriptor.binding);
+        hashAppend(hash, descriptor.type);
+        hash = hashString(descriptor.name, hash);
+        for (const ShaderUniformMember& member : descriptor.members) {
+            hash = hashString(member.name, hash);
+            hashAppend(hash, member.offset);
+        }
+    }
+    for (const ShaderStageVariable& input : layout.vertexInputs) {
+        hashAppend(hash, input.location);
+        hashAppend(hash, input.type);
+    }
+    for (const ShaderStageVariable& output : layout.fragmentOutputs) {
+        hashAppend(hash, output.location);
+        hashAppend(hash, output.type);
+    }
+    return hash;
+}
+
+VirtualPath ShaderCompilePipeline::packagedBinaryPath(const ShaderCompilePipelineConfig& config,
+                                                      const Shader& shader,
+                                                      const ShaderPass& pass,
+                                                      ShaderStage stage,
+                                                      const ShaderVariantKey& variant) {
+    Hash64 hash = hashString(shader.assetPath().string());
+    hash = hashString(pass.name(), hash);
+    hashAppend(hash, pass.type());
+    hashAppend(hash, variant.keywordBits);
+    hashAppend(hash, variant.meshFeatureBits);
+    hashAppend(hash, variant.platformFeatureBits);
+    const std::string suffix = stage == ShaderStage::Vertex ? ".vert.spv" : ".frag.spv";
+    return config.packagedRoot.joined(hashToHex(hash) + suffix);
+}
+
+CompiledShaderId ShaderCompilePipeline::makeCompiledShaderId(std::span<const std::byte> bytecode,
+                                                             ShaderStage stage,
+                                                             std::string_view entryPoint,
+                                                             const ShaderVariantKey& variant) {
+    Hash64 hash = hashBytes(bytecode);
+    hashAppend(hash, stage);
+    hash = hashString(entryPoint, hash);
+    hashAppend(hash, variant.keywordBits);
+    hashAppend(hash, variant.meshFeatureBits);
+    hashAppend(hash, variant.platformFeatureBits);
+    return hash;
+}
+
+std::optional<CompiledShaderHandle>
+ShaderCompilePipeline::CompiledShaderCache::find(CompiledShaderId id) const {
+    if (const auto found = entries_.find(id); found != entries_.end()) {
+        const Slot& slot = slots_[found->second];
+        return CompiledShaderHandle{found->second, slot.generation};
+    }
+    return std::nullopt;
+}
+
+bool ShaderCompilePipeline::CompiledShaderCache::containsPath(std::span<const VirtualPath> paths,
+                                                              const VirtualPath& candidate) {
+    return std::ranges::any_of(paths,
+                               [&candidate](const VirtualPath& path) { return path == candidate; });
+}
+
+CompiledShaderHandle ShaderCompilePipeline::CompiledShaderCache::insert(CompiledShader shader) {
+    if (const auto existing = find(shader.id))
+        return *existing;
+    auto slot = std::ranges::find_if(slots_, [](const Slot& value) { return !value.shader; });
+    if (slot == slots_.end()) {
+        slots_.emplace_back();
+        slot = std::prev(slots_.end());
+    }
+    const std::uint32_t index = static_cast<std::uint32_t>(std::distance(slots_.begin(), slot));
+    const CompiledShaderId id = shader.id;
+    slot->shader = std::move(shader);
+    entries_.emplace(id, index);
+    return {index, slot->generation};
+}
+
+const CompiledShader&
+ShaderCompilePipeline::CompiledShaderCache::resolve(CompiledShaderHandle handle) const {
+    if (handle.index >= slots_.size() || !slots_[handle.index].shader ||
+        slots_[handle.index].generation != handle.generation) {
+        Log::fatal("CompiledShaderCache", "Invalid or stale compiled shader handle");
+    }
+    return *slots_[handle.index].shader;
+}
+
+void ShaderCompilePipeline::CompiledShaderCache::removeId(CompiledShaderId id,
+                                                          std::vector<CompiledShaderId>& removed) {
+    const auto found = entries_.find(id);
+    if (found == entries_.end())
+        return;
+    Slot& slot = slots_[found->second];
+    slot.shader.reset();
+    ++slot.generation;
+    entries_.erase(found);
+    removed.push_back(id);
+}
+
+std::vector<CompiledShaderId>
+ShaderCompilePipeline::CompiledShaderCache::invalidatePaths(std::span<const VirtualPath> paths) {
+    std::vector<CompiledShaderId> removed;
+    std::vector<CompiledShaderId> ids;
+    for (const Slot& slot : slots_) {
+        if (slot.shader && containsPath(paths, slot.shader->binaryPath))
+            ids.push_back(slot.shader->id);
+    }
+    for (CompiledShaderId id : ids)
+        removeId(id, removed);
+    return removed;
+}
+
+void ShaderCompilePipeline::CompiledShaderCache::clear() {
+    entries_.clear();
+    for (Slot& slot : slots_) {
+        if (slot.shader) {
+            slot.shader.reset();
+            ++slot.generation;
+        }
+    }
+}
+
+std::optional<ShaderProgramHandle>
+ShaderCompilePipeline::ShaderProgramCache::find(ShaderProgramId id) const {
+    if (const auto found = entries_.find(id); found != entries_.end()) {
+        const Slot& slot = slots_[found->second];
+        return ShaderProgramHandle{found->second, slot.generation};
+    }
+    return std::nullopt;
+}
+
+ShaderProgramHandle ShaderCompilePipeline::ShaderProgramCache::insert(ShaderProgram program) {
+    if (const auto existing = find(program.id))
+        return *existing;
+    auto slot = std::ranges::find_if(slots_, [](const Slot& value) { return !value.program; });
+    if (slot == slots_.end()) {
+        slots_.emplace_back();
+        slot = std::prev(slots_.end());
+    }
+    const std::uint32_t index = static_cast<std::uint32_t>(std::distance(slots_.begin(), slot));
+    const ShaderProgramId id = program.id;
+    slot->program = std::move(program);
+    entries_.emplace(id, index);
+    return {index, slot->generation};
+}
+
+const ShaderProgram&
+ShaderCompilePipeline::ShaderProgramCache::resolve(ShaderProgramHandle handle) const {
+    if (handle.index >= slots_.size() || !slots_[handle.index].program ||
+        slots_[handle.index].generation != handle.generation) {
+        Log::fatal("ShaderProgramCache", "Invalid or stale shader program handle");
+    }
+    return *slots_[handle.index].program;
+}
+
+void ShaderCompilePipeline::ShaderProgramCache::invalidate(
+    std::span<const CompiledShaderId> shaders) {
+    for (auto entry = entries_.begin(); entry != entries_.end();) {
+        Slot& slot = slots_[entry->second];
+        const bool affected =
+            slot.program && std::ranges::any_of(shaders, [&slot](auto id) {
+                return slot.program->vertexId == id || slot.program->fragmentId == id;
+            });
+        if (affected) {
+            slot.program.reset();
+            ++slot.generation;
+            entry = entries_.erase(entry);
+        } else {
+            ++entry;
+        }
+    }
+}
+
+void ShaderCompilePipeline::ShaderProgramCache::clear() {
+    entries_.clear();
+    for (Slot& slot : slots_) {
+        if (slot.program) {
+            slot.program.reset();
+            ++slot.generation;
+        }
+    }
+}
+
+ShaderCompilePipeline::ShaderCompilePipeline(ShaderCompilePipelineConfig config,
+                                             FileDependencyGraph& dependencies)
+    : config_(std::move(config)), dependencies_(dependencies),
+      preprocessor_(config_.preprocessorConfig, dependencies_),
+      compiler_(config_.intermediateRoot, dependencies_) {}
+
+CompiledShaderHandle ShaderCompilePipeline::loadCompiledShader(const VirtualPath& binaryPath,
+                                                               ShaderStage stage,
+                                                               std::string_view entryPoint,
+                                                               const ShaderVariantKey& variant) {
+    const auto bytes = FILE_SYSTEM.readBinary(binaryPath);
+    if (!bytes || bytes->empty() || bytes->size() % sizeof(std::uint32_t) != 0) {
+        Log::error(
+            "ShaderCompilePipeline", "Invalid or missing SPIR-V: %s", binaryPath.string().c_str());
+        return {};
+    }
+    const CompiledShaderId id = makeCompiledShaderId(*bytes, stage, entryPoint, variant);
+    if (const auto cached = compiledShaders_.find(id))
+        return *cached;
+    const auto reflection = reflectSpirv(binaryPath);
+    if (!reflection || reflection->stage != stage)
+        return {};
+    return compiledShaders_.insert(
+        {id, stage, std::string{entryPoint}, *bytes, *reflection, binaryPath});
+}
+
+std::optional<ShaderCompilePipeline::CompiledStage>
+ShaderCompilePipeline::compileStage(const Shader& shader,
+                                    const ShaderPass& pass,
+                                    ShaderStage stage,
+                                    const ShaderVariantKey& variant) {
+    const VirtualPath packaged = packagedBinaryPath(config_, shader, pass, stage, variant);
+    if (config_.mode == ShaderCompileMode::PackagedRuntime) {
+        if (!FILE_SYSTEM.isFile(packaged)) {
+            Log::error("ShaderCompilePipeline",
+                       "Packaged SPIR-V is missing: %s/%s (%s): %s",
+                       shader.name().c_str(),
+                       pass.name().c_str(),
+                       stage == ShaderStage::Vertex ? "vertex" : "fragment",
+                       packaged.string().c_str());
+            return std::nullopt;
+        }
+        const CompiledShaderHandle handle = loadCompiledShader(packaged, stage, "main", variant);
+        return handle ? std::optional<CompiledStage>{{handle, packaged}} : std::nullopt;
+    }
+
+    const VirtualPath sourcePath =
+        stage == ShaderStage::Vertex ? pass.program().vertexSource : pass.program().fragmentSource;
+    const auto userSource = FILE_SYSTEM.readText(sourcePath);
+    if (!userSource)
+        return std::nullopt;
+
+    ShaderHash generatedKey = hashString(shader.assetPath().string());
+    generatedKey = hashString(pass.name(), generatedKey);
+    generatedKey = hashString(sourcePath.string(), generatedKey);
+    generatedKey = hashString(*userSource, generatedKey);
+    hashAppend(generatedKey, shader.revision());
+    hashAppend(generatedKey, stage);
+    auto generatedEntry = generatedSources_.find(generatedKey);
+    if (generatedEntry == generatedSources_.end()) {
+        auto generated = generator_.generateStage(shader, pass, stage, *userSource);
+        if (!generated)
+            return std::nullopt;
+        GeneratedSource entry;
+        entry.cachePath = VirtualPath{"shader-generated://" + hashToHex(generatedKey) + ".glsl"};
+        entry.source = std::move(generated);
+        const std::array dependencies{shader.assetPath(), sourcePath};
+        dependencies_.replaceDependencies(entry.cachePath, dependencies);
+        generatedEntry = generatedSources_.emplace(generatedKey, std::move(entry)).first;
+    }
+
+    ShaderPreprocessRequest request;
+    request.source = {sourcePath, stage, "main", *generatedEntry->second.source};
+    const std::vector<std::string>& keywords = pass.keywordSchema().keywords();
+    for (std::size_t bit = 0; bit < keywords.size(); ++bit) {
+        if ((variant.keywordBits & (std::uint64_t{1} << bit)) != 0)
+            request.defines.push_back({keywords[bit], "1"});
+    }
+    request.defines.push_back({"MINI_MESH_FEATURE_BITS", std::to_string(variant.meshFeatureBits)});
+    request.defines.push_back(
+        {"MINI_PLATFORM_FEATURE_BITS", std::to_string(variant.platformFeatureBits)});
+    const auto processed = preprocessor_.process(request);
+    if (!processed)
+        return std::nullopt;
+    const auto spirv = compiler_.compile(*processed, config_.compilerOptions);
+    if (!spirv)
+        return std::nullopt;
+
+    VirtualPath binaryPath = spirv->path;
+    if (config_.mode == ShaderCompileMode::OfflineTool) {
+        if (!FILE_SYSTEM.createDirectories(config_.packagedRoot) ||
+            !FILE_SYSTEM.writeBinaryAtomic(packaged, spirv->bytecode)) {
+            Log::error("ShaderCompilePipeline",
+                       "Cannot write packaged SPIR-V: %s",
+                       packaged.string().c_str());
+            return std::nullopt;
+        }
+        const std::array dependency{spirv->path};
+        dependencies_.replaceDependencies(packaged, dependency);
+        binaryPath = packaged;
+    }
+    const CompiledShaderHandle handle =
+        loadCompiledShader(binaryPath, stage, processed->entryPoint, variant);
+    return handle ? std::optional<CompiledStage>{{handle, binaryPath}} : std::nullopt;
+}
+
+std::optional<ShaderProgramLayout>
+ShaderCompilePipeline::mergeLayout(const CompiledShader& vertex, const CompiledShader& fragment) {
+    ShaderProgramLayout layout;
+    layout.vertexInputs = vertex.reflection.inputs;
+    layout.fragmentOutputs = fragment.reflection.outputs;
+    layout.descriptors = vertex.reflection.descriptors;
+    for (const ShaderDescriptorBinding& descriptor : fragment.reflection.descriptors) {
+        const auto existing = std::ranges::find_if(
+            layout.descriptors, [&descriptor](const ShaderDescriptorBinding& value) {
+                return value.set == descriptor.set && value.binding == descriptor.binding;
+            });
+        if (existing == layout.descriptors.end())
+            layout.descriptors.push_back(descriptor);
+        else if (existing->type != descriptor.type)
+            return std::nullopt;
+        else if (existing->members.empty())
+            existing->members = descriptor.members;
+    }
+    std::ranges::sort(layout.descriptors, [](const auto& left, const auto& right) {
+        return std::tie(left.set, left.binding) < std::tie(right.set, right.binding);
+    });
+    layout.id = makeLayoutId(layout);
+    return layout;
+}
+
+ShaderProgramHandle ShaderCompilePipeline::getOrCreate(const Shader& shader,
+                                                       const ShaderPass& pass,
+                                                       const ShaderVariantKey& variant) {
+    const auto vertexStage = compileStage(shader, pass, ShaderStage::Vertex, variant);
+    if (!vertexStage)
+        return {};
+    const auto fragmentStage = compileStage(shader, pass, ShaderStage::Fragment, variant);
+    if (!fragmentStage)
+        return {};
+    const CompiledShader& vertex = compiledShaders_.resolve(vertexStage->handle);
+    const CompiledShader& fragment = compiledShaders_.resolve(fragmentStage->handle);
+    ShaderProgramId id = vertex.id;
+    hashAppend(id, fragment.id);
+    hashAppend(id, variant.keywordBits);
+    hashAppend(id, variant.meshFeatureBits);
+    hashAppend(id, variant.platformFeatureBits);
+    if (const auto cached = programs_.find(id))
+        return *cached;
+    if (!validateSpirvReflection(
+            shader, pass, vertexStage->binaryPath, fragmentStage->binaryPath)) {
+        return {};
+    }
+    auto layout = mergeLayout(vertex, fragment);
+    if (!layout)
+        return {};
+    return programs_.insert({id,
+                             variant,
+                             vertexStage->handle,
+                             fragmentStage->handle,
+                             vertex.id,
+                             fragment.id,
+                             std::move(*layout)});
+}
+
+const ShaderProgram& ShaderCompilePipeline::resolve(ShaderProgramHandle handle) const {
+    return programs_.resolve(handle);
+}
+
+const CompiledShader& ShaderCompilePipeline::resolve(CompiledShaderHandle handle) const {
+    return compiledShaders_.resolve(handle);
+}
+
+std::vector<CompiledShaderId> ShaderCompilePipeline::invalidate(const VirtualPath& changedFile) {
+    std::vector<VirtualPath> affected = dependencies_.transitiveDependentsOf(changedFile);
+    affected.push_back(changedFile);
+    invalidateGeneratedSources(affected);
+    preprocessor_.invalidate(affected);
+    compiler_.invalidate(affected);
+    std::vector<CompiledShaderId> removed = compiledShaders_.invalidatePaths(affected);
+    programs_.invalidate(removed);
+    return removed;
+}
+
+void ShaderCompilePipeline::invalidateGeneratedSources(std::span<const VirtualPath> paths) {
+    std::erase_if(generatedSources_, [&](const auto& entry) {
+        if (!containsPath(paths, entry.second.cachePath))
+            return false;
+        dependencies_.remove(entry.second.cachePath);
+        return true;
+    });
+}
+
+std::vector<CompiledShaderId> ShaderCompilePipeline::invalidateChanged() {
+    std::vector<CompiledShaderId> result;
+    for (const VirtualPath& path : dependencies_.consumeChangedFiles()) {
+        std::vector<CompiledShaderId> removed = invalidate(path);
+        result.insert(result.end(), removed.begin(), removed.end());
+    }
+    std::ranges::sort(result);
+    result.erase(std::unique(result.begin(), result.end()), result.end());
+    return result;
+}
+
+void ShaderCompilePipeline::clear() {
+    for (const auto& [hash, source] : generatedSources_) {
+        (void)hash;
+        dependencies_.remove(source.cachePath);
+    }
+    generatedSources_.clear();
+    programs_.clear();
+    compiledShaders_.clear();
+    compiler_.clear();
+    preprocessor_.clear();
+}
+
+} // namespace engine

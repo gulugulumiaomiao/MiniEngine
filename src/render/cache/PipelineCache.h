@@ -1,6 +1,6 @@
 #pragma once
 
-#include "render/shader/ShaderCompiler.h"
+#include "render/shader/ShaderCompilePipeline.h"
 #include "rhi/api/PipelineDesc.h"
 
 #include <cstdint>

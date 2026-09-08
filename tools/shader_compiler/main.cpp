@@ -2,7 +2,7 @@
 #include "core/filesystem/FileSystem.h"
 #include "core/logging/Log.h"
 #include "render/shader/Shader.h"
-#include "render/shader/ShaderCompiler.h"
+#include "render/shader/ShaderCompilePipeline.h"
 
 #include <filesystem>
 #include <iostream>

@@ -16,7 +16,7 @@ Shader
 
 当前 Renderer 使用 `MiniForward` 选择 SubShader，并根据 `RenderPhase::Forward` 选择 `ShaderPassType::Forward`。选中的 `ShaderPass` 作为帧内稳定引用写入 `DrawItem`；Material 持有运行时 Shader，且 DrawList 在 `renderFrame` 内同步消费，因此引用在本帧有效。
 
-Shader 资产加载阶段只读取 JSON 和缓存 `ShaderAsset`，不会生成 GLSL、编译 SPIR-V 或创建 Vulkan 对象。第一次为实际绘制请求某个 Pass/Variant 的 Pipeline 时，`ShaderProgramCache` 才执行预处理、ShaderGenerator、Variant define 注入、`glslc` 编译、SPIRV-Cross Reflection 校验，随后创建 ShaderModule 和 Pipeline。生成结果按处理后源码哈希缓存于 `shader://runtime/`。
+Shader 资产加载阶段只读取 JSON 和缓存 `ShaderAsset`，不会生成 GLSL、编译 SPIR-V 或创建 Vulkan 对象。第一次为实际绘制请求某个 Pass/Variant 的 Pipeline 时，`ShaderCompilePipeline` 调度 `ShaderGenerator`、`ShaderPreprocessor` 和 `ShaderCompiler`，随后执行 SPIRV-Cross Reflection 校验并创建 ShaderModule 和 Pipeline。生成结果按处理后源码哈希缓存于 `shader://runtime/`。
 
 Vulkan 后端已经接入第一版 `PipelineCache`。Renderer 为每个 DrawItem 选出 ShaderPass 后，通过 `pipelineForPass` 获取缓存 Pipeline；缓存键包含 Pass 程序与 RenderState、当前 VertexLayout 和颜色 RenderTarget 格式。Swapchain 格式变化时会清空缓存并递增句柄 generation。
 

@@ -36,7 +36,7 @@ Scene/Object buffer → set 0 ────────────────�
 
 ### 2. 明确编译输入、预处理结果和编译产物
 
-`ShaderCompiler.h` 定义了：
+Shader 编译流程按职责拆分到四组文件：
 
 - `ShaderVariantKey`：关键字位、Mesh 特征位、平台特征位。
 - `ShaderCompileRequest`：源文件、阶段、入口、宏、include 路径、目标 API、编译器版本和选项。
@@ -131,7 +131,10 @@ ShadowCaster → DepthOnly → Forward
 ## 主要源码位置
 
 - `src/render/shader/Shader.h/.cpp`：资产描述、运行时 Shader/SubShader/Pass、Reflection。
-- `src/render/shader/ShaderCompiler.h/.cpp`：预处理、CompiledShader、Program、依赖图和 Cooked 模型。
+- `src/render/shader/ShaderGenerator.h/.cpp`：根据运行时 Shader 生成完整阶段源码。
+- `src/render/shader/ShaderPreprocessor.h/.cpp`：define、include 展开及 include 依赖缓存。
+- `src/render/shader/ShaderCompiler.h/.cpp`：接收 `PreprocessedShader` 并编译 SPIR-V。
+- `src/render/shader/ShaderCompilePipeline.h/.cpp`：运行模式、CompiledShader、Program、缓存及流程编排。
 - `src/render/cache/RhiShaderCache.h/.cpp`：CompileID 到 RHI Shader handle，不依赖 Vulkan 类型。
 - `src/render/cache/PipelineCache.h/.cpp`：将 ShaderPass、RenderState 与 VertexLayout 转换为 RHI Pipeline 描述并缓存 handle。
 - `src/rhi/vulkan/VulkanGraphicsPipeline.h/.cpp`：将 RHI Pipeline 描述转换为 Vulkan graphics pipeline。

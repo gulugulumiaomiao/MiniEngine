@@ -13,6 +13,9 @@ shader.json -> ShaderAsset -> Shader -> ShaderCompilePipeline
 
 ## 阶段边界
 
+四个阶段类分别位于同名的 `.h/.cpp` 文件中；阶段相关的配置、请求和结果类型与其
+所有者放在同一个头文件中。
+
 - `ShaderGenerator` 根据运行时 `Shader` 和 `ShaderPass` 生成完整阶段 GLSL。
 - `ShaderPreprocessor` 注入排序后的 define、展开递归 include、检测循环并输出
   `PreprocessedShader`。它不接触 `ShaderAsset`，也不调用编译器。

@@ -1,5 +1,6 @@
 #include "render/cache/PipelineCache.h"
 
+#include "core/hash.h"
 #include "core/logging/Log.h"
 #include "render/cache/RhiShaderCache.h"
 #include "render/mesh/Mesh.h"
@@ -77,31 +78,28 @@ std::uint64_t PipelineCache::makeKey(const ShaderProgram& program,
                                      rhi::TextureFormat colorFormat) {
     const RenderStateDesc& state = pass.renderState();
     ShaderHash key = program.id;
-    auto append = [&key](const auto& value) {
-        key = hashBytes({reinterpret_cast<const std::byte*>(&value), sizeof(value)}, key);
-    };
-    append(program.layout.id);
-    append(colorFormat);
-    append(state.cull);
-    append(state.frontFace);
-    append(state.fill);
-    append(state.topology);
-    append(state.depthWrite);
-    append(state.depthTest);
-    append(state.blend);
+    hashAppend(key, program.layout.id);
+    hashAppend(key, colorFormat);
+    hashAppend(key, state.cull);
+    hashAppend(key, state.frontFace);
+    hashAppend(key, state.fill);
+    hashAppend(key, state.topology);
+    hashAppend(key, state.depthWrite);
+    hashAppend(key, state.depthTest);
+    hashAppend(key, state.blend);
     key = hashString(state.colorMask, key);
     for (const VertexBinding& binding : vertexLayout.bindings) {
-        append(binding.binding);
-        append(binding.stride);
-        append(binding.inputRate);
+        hashAppend(key, binding.binding);
+        hashAppend(key, binding.stride);
+        hashAppend(key, binding.inputRate);
     }
     for (const VertexAttribute& attribute : vertexLayout.attributes) {
-        append(attribute.location);
-        append(attribute.offset);
-        append(attribute.binding);
-        append(attribute.format);
-        append(attribute.semantic.type);
-        append(attribute.semantic.index);
+        hashAppend(key, attribute.location);
+        hashAppend(key, attribute.offset);
+        hashAppend(key, attribute.binding);
+        hashAppend(key, attribute.format);
+        hashAppend(key, attribute.semantic.type);
+        hashAppend(key, attribute.semantic.index);
     }
     return key;
 }
@@ -113,26 +111,23 @@ std::uint64_t PipelineCache::makeFallbackKey(const Shader& shader,
                                              rhi::TextureFormat colorFormat) {
     ShaderHash key = hashString(shader.assetPath().string());
     key = hashString(pass.name(), key);
-    auto append = [&key](const auto& value) {
-        key = hashBytes({reinterpret_cast<const std::byte*>(&value), sizeof(value)}, key);
-    };
-    append(pass.type());
-    append(variant.keywordBits);
-    append(variant.meshFeatureBits);
-    append(variant.platformFeatureBits);
-    append(colorFormat);
+    hashAppend(key, pass.type());
+    hashAppend(key, variant.keywordBits);
+    hashAppend(key, variant.meshFeatureBits);
+    hashAppend(key, variant.platformFeatureBits);
+    hashAppend(key, colorFormat);
     for (const VertexBinding& binding : vertexLayout.bindings) {
-        append(binding.binding);
-        append(binding.stride);
-        append(binding.inputRate);
+        hashAppend(key, binding.binding);
+        hashAppend(key, binding.stride);
+        hashAppend(key, binding.inputRate);
     }
     for (const VertexAttribute& attribute : vertexLayout.attributes) {
-        append(attribute.location);
-        append(attribute.offset);
-        append(attribute.binding);
-        append(attribute.format);
-        append(attribute.semantic.type);
-        append(attribute.semantic.index);
+        hashAppend(key, attribute.location);
+        hashAppend(key, attribute.offset);
+        hashAppend(key, attribute.binding);
+        hashAppend(key, attribute.format);
+        hashAppend(key, attribute.semantic.type);
+        hashAppend(key, attribute.semantic.index);
     }
     return key;
 }

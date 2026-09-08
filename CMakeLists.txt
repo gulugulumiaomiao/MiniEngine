@@ -32,6 +32,7 @@ find_program(GLSLC_EXECUTABLE
 )
 
 add_library(MiniCore STATIC
+    src/core/hash.cpp
     src/core/logging/Log.cpp
     src/core/serialization/BinaryTransfer.cpp
     src/core/filesystem/VirtualPath.cpp
@@ -77,6 +78,7 @@ add_library(MiniAssetImporters STATIC
     src/asset/importer/SceneAssetImporter.cpp
     src/asset/importer/BuiltinAssetImporters.cpp
     src/render/mesh/Mesh.cpp
+    src/render/mesh/MeshManager.cpp
     src/render/mesh/MeshPrimitive.cpp
     src/render/mesh/MeshBuilder.cpp
 )
@@ -119,9 +121,12 @@ add_executable(MiniShaderCompiler
     src/render/shader/ShaderGenerator.cpp
     src/asset/manager/AssetManager.cpp
     src/render/material/Material.cpp
+    src/render/material/MaterialManager.cpp
     src/render/shader/Shader.cpp
     src/render/shader/ShaderManager.cpp
     src/render/shader/ShaderCompiler.cpp
+    src/render/shader/ShaderPreprocessor.cpp
+    src/render/shader/ShaderCompilePipeline.cpp
 )
 target_link_libraries(MiniShaderCompiler PRIVATE
     MiniAssetImporters
@@ -156,6 +161,7 @@ add_executable(MiniAssetCooker
     tools/asset_cooker/main.cpp
     src/asset/manager/AssetManager.cpp
     src/render/material/Material.cpp
+    src/render/material/MaterialManager.cpp
     src/render/shader/Shader.cpp
     src/render/shader/ShaderManager.cpp
 )
@@ -215,11 +221,14 @@ add_executable(MiniVulkanEngine
     src/runtime/window/Window.cpp
     src/asset/manager/AssetManager.cpp
     src/render/material/Material.cpp
+    src/render/material/MaterialManager.cpp
     src/render/render_graph/RenderGraph.cpp
     src/render/renderer/Renderer.cpp
     src/render/shader/Shader.cpp
     src/render/shader/ShaderManager.cpp
     src/render/shader/ShaderCompiler.cpp
+    src/render/shader/ShaderPreprocessor.cpp
+    src/render/shader/ShaderCompilePipeline.cpp
     src/render/shader/ShaderGenerator.cpp
     src/rhi/vulkan/VulkanBuffer.cpp
     src/rhi/vulkan/VulkanDescriptorAllocator.cpp
@@ -301,13 +310,31 @@ endif()
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT MiniVulkanEngine)
 
 if(BUILD_TESTING)
+    add_executable(HashTest tests/HashTest.cpp)
+    target_link_libraries(HashTest PRIVATE MiniCore)
+    if(MSVC)
+        target_compile_options(HashTest PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(HashTest PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    if(MINGW)
+        target_link_libraries(HashTest PRIVATE
+            "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
+            "-Wl,--end-group,-Bdynamic"
+        )
+    endif()
+    add_test(NAME HashTest COMMAND HashTest)
+
     add_executable(ShaderCompilerTest
         tests/ShaderCompilerTest.cpp
         src/asset/manager/AssetManager.cpp
         src/render/material/Material.cpp
+        src/render/material/MaterialManager.cpp
         src/render/shader/Shader.cpp
         src/render/shader/ShaderManager.cpp
         src/render/shader/ShaderCompiler.cpp
+        src/render/shader/ShaderPreprocessor.cpp
+        src/render/shader/ShaderCompilePipeline.cpp
         src/render/shader/ShaderGenerator.cpp
     )
     target_include_directories(ShaderCompilerTest PRIVATE src)
@@ -371,6 +398,7 @@ if(BUILD_TESTING)
         tests/AssetImporterTest.cpp
         src/asset/manager/AssetManager.cpp
         src/render/material/Material.cpp
+        src/render/material/MaterialManager.cpp
         src/render/shader/Shader.cpp
         src/render/shader/ShaderManager.cpp
     )
@@ -448,6 +476,7 @@ if(BUILD_TESTING)
         src/asset/manager/AssetManager.cpp
         src/render/cache/MeshGpuCache.cpp
         src/render/material/Material.cpp
+        src/render/material/MaterialManager.cpp
         src/render/shader/Shader.cpp
         src/render/shader/ShaderManager.cpp
     )
@@ -525,6 +554,7 @@ if(BUILD_TESTING)
         tests/MaterialTest.cpp
         src/asset/manager/AssetManager.cpp
         src/render/material/Material.cpp
+        src/render/material/MaterialManager.cpp
         src/render/shader/Shader.cpp
         src/render/shader/ShaderManager.cpp
     )
@@ -555,6 +585,7 @@ if(BUILD_TESTING)
         tests/ShaderAssetTest.cpp
         src/asset/manager/AssetManager.cpp
         src/render/material/Material.cpp
+        src/render/material/MaterialManager.cpp
         src/render/shader/Shader.cpp
         src/render/shader/ShaderManager.cpp
     )
@@ -585,6 +616,7 @@ if(BUILD_TESTING)
         tests/ShaderLayoutTest.cpp
         src/asset/manager/AssetManager.cpp
         src/render/material/Material.cpp
+        src/render/material/MaterialManager.cpp
         src/render/shader/Shader.cpp
         src/render/shader/ShaderManager.cpp
     )
@@ -615,6 +647,7 @@ if(BUILD_TESTING)
         src/render/shader/ShaderGenerator.cpp
         src/asset/manager/AssetManager.cpp
         src/render/material/Material.cpp
+        src/render/material/MaterialManager.cpp
         src/render/shader/Shader.cpp
         src/render/shader/ShaderManager.cpp
     )
@@ -647,6 +680,7 @@ if(BUILD_TESTING)
         tests/AssetPipelineTest.cpp
         src/asset/manager/AssetManager.cpp
         src/render/material/Material.cpp
+        src/render/material/MaterialManager.cpp
         src/render/shader/Shader.cpp
         src/render/shader/ShaderManager.cpp
     )
@@ -676,6 +710,7 @@ if(BUILD_TESTING)
         tests/AssetReleaseTest.cpp
         src/asset/manager/AssetManager.cpp
         src/render/material/Material.cpp
+        src/render/material/MaterialManager.cpp
         src/render/shader/Shader.cpp
         src/render/shader/ShaderManager.cpp
     )
