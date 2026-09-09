@@ -1,6 +1,7 @@
 #pragma once
 
-#include "core/base/HandlePool.h"
+#include "core/base/Handle.h"
+#include "core/base/KeyedHandleRegistry.h"
 #include "core/hash.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderCompiler.h"
@@ -9,7 +10,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -26,14 +26,8 @@ using ShaderProgramLayoutId = ShaderHash;
 
 enum class ShaderCompileMode { DevelopmentRuntime, OfflineTool, PackagedRuntime };
 
-struct CompiledShaderHandle {
-    std::uint32_t index{std::numeric_limits<std::uint32_t>::max()};
-    std::uint32_t generation{};
-    [[nodiscard]] explicit operator bool() const {
-        return index != std::numeric_limits<std::uint32_t>::max();
-    }
-    bool operator==(const CompiledShaderHandle&) const = default;
-};
+struct CompiledShaderHandleTag;
+using CompiledShaderHandle = Handle<CompiledShaderHandleTag>;
 
 struct CompiledShader {
     CompiledShaderId id{};
@@ -51,14 +45,8 @@ struct ShaderProgramLayout {
     std::vector<ShaderStageVariable> fragmentOutputs;
 };
 
-struct ShaderProgramHandle {
-    std::uint32_t index{std::numeric_limits<std::uint32_t>::max()};
-    std::uint32_t generation{};
-    [[nodiscard]] explicit operator bool() const {
-        return index != std::numeric_limits<std::uint32_t>::max();
-    }
-    bool operator==(const ShaderProgramHandle&) const = default;
-};
+struct ShaderProgramHandleTag;
+using ShaderProgramHandle = Handle<ShaderProgramHandleTag>;
 
 struct ShaderProgram {
     ShaderProgramId id{};
@@ -94,36 +82,37 @@ private:
         VirtualPath cachePath;
         std::string source;
     };
-    class CompiledShaderCache final {
+    class CompiledShaderCache final
+        : public KeyedHandleRegistry<CompiledShader, CompiledShaderHandle, CompiledShaderId> {
     public:
-        [[nodiscard]] std::optional<CompiledShaderHandle> find(CompiledShaderId id) const;
         [[nodiscard]] std::optional<CompiledShaderHandle> findPath(ShaderHash pathKey) const;
         void rememberPath(ShaderHash pathKey, CompiledShaderHandle handle);
-        [[nodiscard]] CompiledShaderHandle insert(CompiledShader shader);
         [[nodiscard]] const CompiledShader& resolve(CompiledShaderHandle handle) const;
         [[nodiscard]] std::vector<CompiledShaderId>
         invalidatePaths(std::span<const VirtualPath> paths);
-        void clear();
+        void clear() override;
 
     private:
         [[nodiscard]] static bool containsPath(std::span<const VirtualPath> paths,
                                                const VirtualPath& candidate);
         void removeId(CompiledShaderId id, std::vector<CompiledShaderId>& removed);
-        std::unordered_map<CompiledShaderId, CompiledShaderHandle> entries_;
+        [[nodiscard]] CompiledShaderId keyOf(const CompiledShader& shader) const override {
+            return shader.id;
+        }
+
         std::unordered_map<ShaderHash, CompiledShaderHandle> pathEntries_;
-        HandlePool<CompiledShader, CompiledShaderHandle> pool_;
     };
-    class ShaderProgramCache final {
+    class ShaderProgramCache final
+        : public KeyedHandleRegistry<ShaderProgram, ShaderProgramHandle, ShaderProgramId> {
     public:
-        [[nodiscard]] std::optional<ShaderProgramHandle> find(ShaderProgramId id) const;
-        [[nodiscard]] ShaderProgramHandle insert(ShaderProgram program);
         [[nodiscard]] const ShaderProgram& resolve(ShaderProgramHandle handle) const;
         void invalidate(std::span<const CompiledShaderId> shaders);
-        void clear();
+        void clear() override;
 
     private:
-        std::unordered_map<ShaderProgramId, ShaderProgramHandle> entries_;
-        HandlePool<ShaderProgram, ShaderProgramHandle> pool_;
+        [[nodiscard]] ShaderProgramId keyOf(const ShaderProgram& program) const override {
+            return program.id;
+        }
     };
 
     [[nodiscard]] static bool containsPath(std::span<const VirtualPath> paths,

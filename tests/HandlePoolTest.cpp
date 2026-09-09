@@ -1,13 +1,29 @@
+#include "core/base/Handle.h"
 #include "core/base/HandlePool.h"
+#include "core/base/KeyedHandleRegistry.h"
 
-#include <cstdint>
-#include <limits>
+#include <string>
 
 namespace {
 
-struct TestHandle {
-    std::uint32_t index{std::numeric_limits<std::uint32_t>::max()};
-    std::uint32_t generation{};
+struct TestHandleTag;
+using TestHandle = engine::Handle<TestHandleTag>;
+
+struct TestResource {
+    std::string key;
+    int value{};
+};
+
+class TestRegistry final
+    : public engine::KeyedHandleRegistry<TestResource, TestHandle, std::string> {
+private:
+    [[nodiscard]] std::string keyOf(const TestResource& resource) const override {
+        return resource.key;
+    }
+
+    [[nodiscard]] bool validate(const TestResource& resource) const override {
+        return !resource.key.empty();
+    }
 };
 
 } // namespace
@@ -45,4 +61,30 @@ int main() {
         !pool.find(afterClear) || pool.release(first)) {
         return 6;
     }
+
+    TestRegistry registry;
+    const TestHandle alpha = registry.insert({"alpha", 10});
+    const TestHandle duplicate = registry.insert({"alpha", 20});
+    if (!alpha || duplicate != alpha || registry.size() != 1 ||
+        registry.findHandle("alpha") != alpha || registry.find("alpha")->value != 10) {
+        return 7;
+    }
+
+    if (!registry.destroy("alpha") || registry.find(alpha) || registry.find("alpha") ||
+        registry.findHandle("alpha")) {
+        return 8;
+    }
+
+    const TestHandle beta = registry.insert({"beta", 30});
+    if (beta.index != alpha.index || beta.generation == alpha.generation ||
+        registry.find(beta)->value != 30 || registry.destroy(alpha)) {
+        return 9;
+    }
+
+    if (registry.insert({"", 40}) || registry.size() != 1)
+        return 10;
+
+    registry.clear();
+    if (registry.size() != 0 || registry.find(beta) || registry.find("beta"))
+        return 11;
 }

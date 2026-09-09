@@ -20,7 +20,7 @@ Shader Pass、Vulkan Pipeline 和最终 Present 的完整链路。
 ```text
 src/
 ├── core/
-│   ├── base/              Handle、HandlePool、Singleton、InstanceManager
+│   ├── base/              Handle、HandlePool、KeyedHandleRegistry、Singleton
 │   ├── filesystem/        VirtualPath、挂载点和统一文件访问
 │   ├── logging/           五级彩色日志
 │   ├── math/              Vec、Mat、Quat 和常用数学运算
@@ -73,7 +73,7 @@ Core → RHI → Render → Asset / Scene → Runtime
 
 - 通用 `slot + generation` Handle，可识别销毁或槽位复用后的失效句柄。
 - `HandlePool` 使用 free list 进行 O(1) 槽位复用。
-- `InstanceManager` 统一运行时对象的 insert、load、find、destroy 和 clear。
+- `KeyedHandleRegistry` 组合 HandlePool 和可自定义的 Key → Handle 索引，统一运行时对象的 insert、find、destroy 和 clear；具体 Manager 自行实现 load。
 - RAII 管理 Vulkan Buffer、Image、Sampler、ShaderModule 和 Pipeline。
 - VMA 3.3.0 统一管理 GPU 内存。
 - `info/debug/warn/error/fatal` 五级线程安全彩色日志；fatal 记录后退出。

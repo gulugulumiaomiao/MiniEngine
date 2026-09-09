@@ -27,7 +27,7 @@ Texture 系统覆盖源文件导入、CPU 资产与运行时实例、GPU 延迟�
   -> Vulkan draw
 ```
 
-`TextureAsset` 是可序列化的 CPU 资产，保存 `TextureDesc` 和每一级 `TextureMipData`。`Texture` 是运行时实例，额外保存资产路径、`version` 和 `dirty`。`TextureManager` 继承 `InstanceManager`，负责路径去重、Handle generation、替换和销毁；`TextureGpuCache` 只保存键到 RHI 资源的映射，不拥有资产，也不执行 GPU 上传。
+`TextureAsset` 是可序列化的 CPU 资产，保存 `TextureDesc` 和每一级 `TextureMipData`。`Texture` 是运行时实例，额外保存资产路径、`version` 和 `dirty`。`TextureManager` 继承 `KeyedHandleRegistry`，负责路径去重、Handle generation、替换和销毁；`TextureGpuCache` 只保存键到 RHI 资源的映射，不拥有资产，也不执行 GPU 上传。
 
 ## 3. 导入与序列化
 

@@ -1,14 +1,16 @@
 #pragma once
 
-#include "core/base/InstanceManager.h"
+#include "core/base/KeyedHandleRegistry.h"
 #include "core/base/Singleton.h"
 #include "render/mesh/Mesh.h"
 
 namespace engine {
 
-class MeshManager final : public Singleton<MeshManager>, public InstanceManager<Mesh, MeshHandle> {
+class MeshManager final
+    : public Singleton<MeshManager>,
+      public KeyedHandleRegistry<Mesh, MeshHandle, VirtualPath, VirtualPathHash> {
 public:
-    [[nodiscard]] MeshHandle load(const VirtualPath& meshPath) override;
+    [[nodiscard]] MeshHandle load(const VirtualPath& meshPath);
     [[nodiscard]] bool replace(MeshHandle handle, Mesh mesh);
     [[nodiscard]] bool replace(const VirtualPath& meshPath);
 
@@ -16,7 +18,7 @@ private:
     friend class Singleton<MeshManager>;
     MeshManager() = default;
 
-    [[nodiscard]] const VirtualPath& pathOf(const Mesh& mesh) const override {
+    [[nodiscard]] VirtualPath keyOf(const Mesh& mesh) const override {
         return mesh.assetPath();
     }
     [[nodiscard]] bool validate(const Mesh& mesh) const override;

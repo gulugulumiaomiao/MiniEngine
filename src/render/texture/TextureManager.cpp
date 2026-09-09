@@ -14,7 +14,7 @@ TextureHandle TextureManager::load(const VirtualPath& texturePath) {
         Log::error("TextureManager", "Invalid Texture path: %s", texturePath.string().c_str());
         return {};
     }
-    if (const TextureHandle existing = handleFor(texturePath); existing)
+    if (const TextureHandle existing = findHandle(texturePath); existing)
         return existing;
     const std::shared_ptr<TextureAsset> asset = ASSET_MANAGER.loadAsset<TextureAsset>(texturePath);
     return asset ? insert(asset->instantiate()) : TextureHandle{};
@@ -109,7 +109,7 @@ bool TextureManager::replace(TextureHandle handle, Texture texture) {
 }
 
 bool TextureManager::replace(const VirtualPath& texturePath) {
-    const TextureHandle handle = handleFor(texturePath);
+    const TextureHandle handle = findHandle(texturePath);
     if (!handle)
         return true;
     const std::shared_ptr<TextureAsset> asset = ASSET_MANAGER.loadAsset<TextureAsset>(texturePath);
@@ -125,7 +125,7 @@ void TextureManager::clear() {
     defaultBlack_ = {};
     defaultNormal_ = {};
     errorTexture_ = {};
-    InstanceManager::clear();
+    KeyedHandleRegistry::clear();
 }
 
 } // namespace engine

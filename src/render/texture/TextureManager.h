@@ -1,15 +1,18 @@
 #pragma once
 
-#include "core/base/InstanceManager.h"
+#include "core/base/KeyedHandleRegistry.h"
 #include "core/base/Singleton.h"
 #include "render/texture/Texture.h"
 
 namespace engine {
 
 class TextureManager final : public Singleton<TextureManager>,
-                             public InstanceManager<Texture, TextureHandle> {
+                             public KeyedHandleRegistry<Texture,
+                                                        TextureHandle,
+                                                        VirtualPath,
+                                                        VirtualPathHash> {
 public:
-    [[nodiscard]] TextureHandle load(const VirtualPath& texturePath) override;
+    [[nodiscard]] TextureHandle load(const VirtualPath& texturePath);
     [[nodiscard]] TextureHandle defaultWhite();
     [[nodiscard]] TextureHandle defaultBlack();
     [[nodiscard]] TextureHandle defaultNormal();
@@ -22,7 +25,7 @@ private:
     friend class Singleton<TextureManager>;
     TextureManager() = default;
 
-    [[nodiscard]] const VirtualPath& pathOf(const Texture& texture) const override {
+    [[nodiscard]] VirtualPath keyOf(const Texture& texture) const override {
         return texture.assetPath();
     }
     [[nodiscard]] bool validate(const Texture& texture) const override;

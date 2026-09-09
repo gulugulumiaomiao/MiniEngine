@@ -11,7 +11,7 @@ MaterialHandle MaterialManager::load(const VirtualPath& materialPath) {
         Log::error("MaterialManager", "Invalid Material path: %s", materialPath.string().c_str());
         return {};
     }
-    if (const MaterialHandle existing = handleFor(materialPath); existing) {
+    if (const MaterialHandle existing = findHandle(materialPath); existing) {
         return existing;
     }
     Log::info("Material", "Loading material: %s", materialPath.string().c_str());

@@ -27,11 +27,11 @@ Material 虚拟路径
   -> ASSET_MANAGER.loadAsset<MaterialAsset>
   -> SHADER_MANAGER.load(materialAsset.shader)
   -> MaterialAsset::instantiate(ShaderHandle)
-  -> InstanceManager::insert(Material)
+  -> KeyedHandleRegistry::insert(Material)
   -> MaterialHandle(index, generation)
 ```
 
-MaterialManager 继承 InstanceManager，后者统一管理 HandlePool、虚拟路径索引、Slot、generation 和 free list。销毁后旧 Handle 失效，Slot 可安全复用。它不创建 VkPipeline、DescriptorSet 或 GPU Buffer。
+MaterialManager 继承 KeyedHandleRegistry，后者统一管理 HandlePool、可自定义的 Key → Handle 索引、Slot、generation 和 free list。销毁后旧 Handle 失效，Slot 可安全复用。它不创建 VkPipeline、DescriptorSet 或 GPU Buffer。
 
 ## Shader 切换
 

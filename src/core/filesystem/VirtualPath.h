@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <string_view>
 
@@ -31,6 +32,12 @@ private:
     std::string relativePath_;
     std::string string_;
     bool valid_{};
+};
+
+struct VirtualPathHash {
+    [[nodiscard]] std::size_t operator()(const VirtualPath& path) const {
+        return std::hash<std::string_view>{}(path.string());
+    }
 };
 
 } // namespace engine

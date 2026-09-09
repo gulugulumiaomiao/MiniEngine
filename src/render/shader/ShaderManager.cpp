@@ -13,7 +13,7 @@ ShaderHandle ShaderManager::load(const VirtualPath& shaderPath) {
         Log::error("ShaderManager", "Invalid Shader path: %s", shaderPath.string().c_str());
         return {};
     }
-    if (const ShaderHandle existing = handleFor(shaderPath); existing)
+    if (const ShaderHandle existing = findHandle(shaderPath); existing)
         return existing;
     const std::shared_ptr<ShaderAsset> asset = ASSET_MANAGER.loadAsset<ShaderAsset>(shaderPath);
     return asset ? insert(asset->instantiate()) : ShaderHandle{};
@@ -40,7 +40,7 @@ bool ShaderManager::replace(ShaderHandle handle, Shader shader) {
 }
 
 bool ShaderManager::replace(const VirtualPath& shaderPath) {
-    const ShaderHandle handle = handleFor(shaderPath);
+    const ShaderHandle handle = findHandle(shaderPath);
     if (!handle)
         return true;
     const std::shared_ptr<ShaderAsset> asset = ASSET_MANAGER.loadAsset<ShaderAsset>(shaderPath);

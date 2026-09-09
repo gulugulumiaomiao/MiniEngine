@@ -1,40 +1,30 @@
 #pragma once
 
+#include "core/base/Handle.h"
 #include "core/math/Math.h"
 
 #include <cstdint>
-#include <limits>
 #include <vector>
 
 namespace engine::rhi {
 
-inline constexpr std::uint32_t kInvalidHandleIndex = std::numeric_limits<std::uint32_t>::max();
+struct BufferHandleTag;
+struct TextureHandleTag;
+struct TextureViewHandleTag;
+struct GraphicsPipelineHandleTag;
+struct BindGroupHandleTag;
+struct ShaderHandleTag;
+struct BindGroupLayoutHandleTag;
+struct SamplerHandleTag;
 
-template <typename Tag> struct Handle {
-    std::uint32_t index{kInvalidHandleIndex};
-    std::uint32_t generation{};
-
-    [[nodiscard]] explicit operator bool() const { return index != kInvalidHandleIndex; }
-    bool operator==(const Handle&) const = default;
-};
-
-struct BufferTag;
-struct TextureTag;
-struct TextureViewTag;
-struct GraphicsPipelineTag;
-struct BindGroupTag;
-struct ShaderTag;
-struct BindGroupLayoutTag;
-struct SamplerTag;
-
-using BufferHandle = Handle<BufferTag>;
-using TextureHandle = Handle<TextureTag>;
-using TextureViewHandle = Handle<TextureViewTag>;
-using GraphicsPipelineHandle = Handle<GraphicsPipelineTag>;
-using BindGroupHandle = Handle<BindGroupTag>;
-using ShaderHandle = Handle<ShaderTag>;
-using BindGroupLayoutHandle = Handle<BindGroupLayoutTag>;
-using SamplerHandle = Handle<SamplerTag>;
+using BufferHandle = Handle<BufferHandleTag>;
+using TextureHandle = Handle<TextureHandleTag>;
+using TextureViewHandle = Handle<TextureViewHandleTag>;
+using GraphicsPipelineHandle = Handle<GraphicsPipelineHandleTag>;
+using BindGroupHandle = Handle<BindGroupHandleTag>;
+using ShaderHandle = Handle<ShaderHandleTag>;
+using BindGroupLayoutHandle = Handle<BindGroupLayoutHandleTag>;
+using SamplerHandle = Handle<SamplerHandleTag>;
 
 enum class IndexFormat { UInt16, UInt32 };
 enum class LoadOp { Load, Clear, DontCare };

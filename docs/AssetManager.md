@@ -53,10 +53,10 @@ Material 路径
   -> AssetManager::loadAsset<MaterialAsset>
   -> ShaderManager::load(materialAsset.shader)
   -> MaterialAsset::instantiate(ShaderHandle)
-  -> InstanceManager::insert(Material)
+  -> KeyedHandleRegistry::insert(Material)
 ```
 
-同一路径在各自 InstanceManager 中只对应一个活动 Handle。ShaderManager 和 MaterialManager 共同继承 InstanceManager，由它组合 HandlePool、free list 和虚拟路径索引。`Material` 只保存 `ShaderHandle`，不持有 `ShaderAsset` 或 `shared_ptr<Shader>`。
+同一路径在各自 KeyedHandleRegistry 中只对应一个活动 Handle。ShaderManager 和 MaterialManager 共同继承 KeyedHandleRegistry，由它组合 HandlePool、free list 和可自定义的 Key → Handle 索引。`Material` 只保存 `ShaderHandle`，不持有 `ShaderAsset` 或 `shared_ptr<Shader>`。
 
 ## 热重载
 

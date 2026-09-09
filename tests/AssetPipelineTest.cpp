@@ -40,13 +40,22 @@ static_assert(std::is_base_of_v<engine::Singleton<engine::ShaderManager>, engine
 static_assert(
     std::is_base_of_v<engine::Singleton<engine::MaterialManager>, engine::MaterialManager>);
 static_assert(std::is_base_of_v<engine::Singleton<engine::MeshManager>, engine::MeshManager>);
-static_assert(std::is_base_of_v<engine::InstanceManager<engine::Shader, engine::ShaderHandle>,
-                                engine::ShaderManager>);
-static_assert(std::is_base_of_v<engine::InstanceManager<engine::Material, engine::MaterialHandle>,
-                                engine::MaterialManager>);
-static_assert(std::is_base_of_v<engine::InstanceManager<engine::Mesh, engine::MeshHandle>,
-                                engine::MeshManager>);
-static_assert(std::is_abstract_v<engine::InstanceManager<engine::Shader, engine::ShaderHandle>>);
+using ShaderRegistry = engine::KeyedHandleRegistry<engine::Shader,
+                                                   engine::ShaderHandle,
+                                                   engine::VirtualPath,
+                                                   engine::VirtualPathHash>;
+using MaterialRegistry = engine::KeyedHandleRegistry<engine::Material,
+                                                     engine::MaterialHandle,
+                                                     engine::VirtualPath,
+                                                     engine::VirtualPathHash>;
+using MeshRegistry = engine::KeyedHandleRegistry<engine::Mesh,
+                                                 engine::MeshHandle,
+                                                 engine::VirtualPath,
+                                                 engine::VirtualPathHash>;
+static_assert(std::is_base_of_v<ShaderRegistry, engine::ShaderManager>);
+static_assert(std::is_base_of_v<MaterialRegistry, engine::MaterialManager>);
+static_assert(std::is_base_of_v<MeshRegistry, engine::MeshManager>);
+static_assert(std::is_abstract_v<ShaderRegistry>);
 
 struct TestWorkspace {
     std::filesystem::path root =

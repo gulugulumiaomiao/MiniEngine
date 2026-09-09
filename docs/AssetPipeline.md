@@ -14,7 +14,7 @@ asset:// 源文件
        -> AssetDatabase（记录、Hash、依赖、反向依赖、状态）
        -> library://artifacts/<AssetId>/asset.bin
   -> AssetManager（weak_ptr<Asset> 缓存）
-  -> ShaderManager / MaterialManager（InstanceManager + HandlePool）
+  -> ShaderManager / MaterialManager（KeyedHandleRegistry + HandlePool）
   -> Shader Process（首次绘制时预处理、编译 SPIR-V、Reflection）
   -> ShaderProgramCache -> ShaderGpuManager / GraphicsPipelineManager
 ```
@@ -52,7 +52,7 @@ Artifact 使用通用 `MART` 二进制信封保存身份和类型，内部 Paylo
 
 `Handle<Tag>` 是通用的 index + generation 句柄模板，当前别名包括 `MeshHandle`、`MaterialHandle` 和 `ShaderHandle`。销毁 Slot 时 generation 增加，旧 Handle 无法解析；复用 Slot 不会造成 use-after-free。
 
-`ShaderAsset::instantiate()` 只创建 CPU 运行时 Shader。ShaderManager 和 MaterialManager 继承 `InstanceManager<Resource, HandleType>`，公共的 `insert/load/destroy/find/clear` 语义由抽象层统一。同一路径多次 `load()` 返回同一个 Handle。
+`ShaderAsset::instantiate()` 只创建 CPU 运行时 Shader。ShaderManager 和 MaterialManager 继承 `KeyedHandleRegistry<Resource, HandleType, Key, KeyHash>`，公共的 `insert/destroy/find/clear` 和 Key → Handle 索引由抽象层统一，`load()` 由具体 Manager 实现。同一路径多次 `load()` 返回同一个 Handle。
 
 `MaterialAsset::instantiate(ShaderHandle)` 创建 Material。Material 只持有 ShaderHandle，可以实时切换 Shader；切换或 Shader revision 更新时，材质重建 UniformBlockLayout，保留同名且类型兼容的属性。
 

@@ -330,16 +330,9 @@ ShaderHash ShaderCompilePipeline::makeCompiledShaderPathKey(const VirtualPath& b
 }
 
 std::optional<CompiledShaderHandle>
-ShaderCompilePipeline::CompiledShaderCache::find(CompiledShaderId id) const {
-    if (const auto found = entries_.find(id); found != entries_.end() && pool_.find(found->second))
-        return found->second;
-    return std::nullopt;
-}
-
-std::optional<CompiledShaderHandle>
 ShaderCompilePipeline::CompiledShaderCache::findPath(ShaderHash pathKey) const {
     if (const auto found = pathEntries_.find(pathKey);
-        found != pathEntries_.end() && pool_.find(found->second)) {
+        found != pathEntries_.end() && find(found->second)) {
         return found->second;
     }
     return std::nullopt;
@@ -347,7 +340,7 @@ ShaderCompilePipeline::CompiledShaderCache::findPath(ShaderHash pathKey) const {
 
 void ShaderCompilePipeline::CompiledShaderCache::rememberPath(ShaderHash pathKey,
                                                               CompiledShaderHandle handle) {
-    if (pool_.find(handle))
+    if (find(handle))
         pathEntries_[pathKey] = handle;
 }
 
@@ -357,18 +350,9 @@ bool ShaderCompilePipeline::CompiledShaderCache::containsPath(std::span<const Vi
                                [&candidate](const VirtualPath& path) { return path == candidate; });
 }
 
-CompiledShaderHandle ShaderCompilePipeline::CompiledShaderCache::insert(CompiledShader shader) {
-    if (const auto existing = find(shader.id))
-        return *existing;
-    const CompiledShaderId id = shader.id;
-    const CompiledShaderHandle handle = pool_.insert(std::move(shader));
-    entries_.emplace(id, handle);
-    return handle;
-}
-
 const CompiledShader&
 ShaderCompilePipeline::CompiledShaderCache::resolve(CompiledShaderHandle handle) const {
-    const CompiledShader* shader = pool_.find(handle);
+    const CompiledShader* shader = find(handle);
     if (!shader)
         Log::fatal("CompiledShaderCache", "Invalid or stale compiled shader handle");
     return *shader;
@@ -376,26 +360,23 @@ ShaderCompilePipeline::CompiledShaderCache::resolve(CompiledShaderHandle handle)
 
 void ShaderCompilePipeline::CompiledShaderCache::removeId(CompiledShaderId id,
                                                           std::vector<CompiledShaderId>& removed) {
-    const auto found = entries_.find(id);
-    if (found == entries_.end())
+    const CompiledShaderHandle handle = findHandle(id);
+    if (!handle)
         return;
-    const CompiledShaderHandle handle = found->second;
     std::erase_if(pathEntries_,
                   [handle](const auto& entry) { return entry.second == handle; });
-    (void)pool_.release(handle);
-    entries_.erase(found);
-    removed.push_back(id);
+    if (destroy(handle))
+        removed.push_back(id);
 }
 
 std::vector<CompiledShaderId>
 ShaderCompilePipeline::CompiledShaderCache::invalidatePaths(std::span<const VirtualPath> paths) {
     std::vector<CompiledShaderId> removed;
     std::vector<CompiledShaderId> ids;
-    for (const auto& [id, handle] : entries_) {
-        const CompiledShader* shader = pool_.find(handle);
-        if (shader && containsPath(paths, shader->binaryPath))
-            ids.push_back(id);
-    }
+    forEach([&](const CompiledShader& shader) {
+        if (containsPath(paths, shader.binaryPath))
+            ids.push_back(shader.id);
+    });
     for (CompiledShaderId id : ids)
         removeId(id, removed);
     return removed;
@@ -403,29 +384,12 @@ ShaderCompilePipeline::CompiledShaderCache::invalidatePaths(std::span<const Virt
 
 void ShaderCompilePipeline::CompiledShaderCache::clear() {
     pathEntries_.clear();
-    entries_.clear();
-    pool_.clear();
-}
-
-std::optional<ShaderProgramHandle>
-ShaderCompilePipeline::ShaderProgramCache::find(ShaderProgramId id) const {
-    if (const auto found = entries_.find(id); found != entries_.end() && pool_.find(found->second))
-        return found->second;
-    return std::nullopt;
-}
-
-ShaderProgramHandle ShaderCompilePipeline::ShaderProgramCache::insert(ShaderProgram program) {
-    if (const auto existing = find(program.id))
-        return *existing;
-    const ShaderProgramId id = program.id;
-    const ShaderProgramHandle handle = pool_.insert(std::move(program));
-    entries_.emplace(id, handle);
-    return handle;
+    KeyedHandleRegistry::clear();
 }
 
 const ShaderProgram&
 ShaderCompilePipeline::ShaderProgramCache::resolve(ShaderProgramHandle handle) const {
-    const ShaderProgram* program = pool_.find(handle);
+    const ShaderProgram* program = find(handle);
     if (!program)
         Log::fatal("ShaderProgramCache", "Invalid or stale shader program handle");
     return *program;
@@ -433,23 +397,20 @@ ShaderCompilePipeline::ShaderProgramCache::resolve(ShaderProgramHandle handle) c
 
 void ShaderCompilePipeline::ShaderProgramCache::invalidate(
     std::span<const CompiledShaderId> shaders) {
-    for (auto entry = entries_.begin(); entry != entries_.end();) {
-        const ShaderProgram* program = pool_.find(entry->second);
-        const bool affected = program && std::ranges::any_of(shaders, [program](auto id) {
-                                  return program->vertexId == id || program->fragmentId == id;
-                              });
-        if (affected) {
-            (void)pool_.release(entry->second);
-            entry = entries_.erase(entry);
-        } else {
-            ++entry;
+    std::vector<ShaderProgramId> affected;
+    forEach([&](const ShaderProgram& program) {
+        if (std::ranges::any_of(shaders, [&program](auto id) {
+                return program.vertexId == id || program.fragmentId == id;
+            })) {
+            affected.push_back(program.id);
         }
-    }
+    });
+    for (ShaderProgramId id : affected)
+        (void)destroy(id);
 }
 
 void ShaderCompilePipeline::ShaderProgramCache::clear() {
-    entries_.clear();
-    pool_.clear();
+    KeyedHandleRegistry::clear();
 }
 
 ShaderCompilePipeline::ShaderCompilePipeline(ShaderCompilePipelineConfig config)
@@ -467,8 +428,8 @@ CompiledShaderHandle ShaderCompilePipeline::loadCompiledShader(const VirtualPath
         return {};
     }
     const CompiledShaderId id = makeCompiledShaderId(bytecode, stage, entryPoint, variant);
-    if (const auto cached = compiledShadersCache_.find(id))
-        return *cached;
+    if (const CompiledShaderHandle cached = compiledShadersCache_.findHandle(id); cached)
+        return cached;
     const auto reflection = reflectSpirv(bytecode, binaryPath);
     if (!reflection || reflection->stage != stage)
         return {};
@@ -623,8 +584,8 @@ ShaderProgramHandle ShaderCompilePipeline::getOrCreate(const Shader& shader,
     hashAppend(id, variant.keywordBits);
     hashAppend(id, variant.meshFeatureBits);
     hashAppend(id, variant.platformFeatureBits);
-    if (const auto cached = programsCache_.find(id))
-        return *cached;
+    if (const ShaderProgramHandle cached = programsCache_.findHandle(id); cached)
+        return cached;
     if (!validateSpirvReflection(shader,
                                  pass,
                                  vertex.reflection,
