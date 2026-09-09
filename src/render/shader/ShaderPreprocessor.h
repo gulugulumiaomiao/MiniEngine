@@ -1,6 +1,5 @@
 #pragma once
 
-#include "core/filesystem/FileDependencyGraph.h"
 #include "core/hash.h"
 #include "render/shader/Shader.h"
 
@@ -24,7 +23,7 @@ struct ShaderStageSource {
     VirtualPath sourcePath;
     ShaderStage stage{ShaderStage::Vertex};
     std::string entryPoint{"main"};
-    std::string source;
+    std::string_view source;
 };
 
 struct ShaderPreprocessorConfig {
@@ -48,8 +47,7 @@ struct PreprocessedShader {
 
 class ShaderPreprocessor final {
 public:
-    explicit ShaderPreprocessor(ShaderPreprocessorConfig config = {},
-                                FileDependencyGraph& dependencies = FILE_DEPENDENCY_GRAPH);
+    explicit ShaderPreprocessor(ShaderPreprocessorConfig config = {});
     [[nodiscard]] std::shared_ptr<PreprocessedShader>
     process(const ShaderPreprocessRequest& request);
     void invalidate(std::span<const VirtualPath> paths);
@@ -71,7 +69,6 @@ private:
                                                PreprocessedShader& result);
 
     ShaderPreprocessorConfig config_;
-    FileDependencyGraph& dependencies_;
     bool configValid_{true};
     std::unordered_map<Hash64, std::shared_ptr<PreprocessedShader>> cache_;
 };

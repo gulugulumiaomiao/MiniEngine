@@ -144,7 +144,7 @@ void ShaderGenerator::writeUserSource(std::ostringstream& output,
     output << "#line 1 \"" << wrapperName << "\"\n\n";
 }
 
-std::shared_ptr<std::string>
+std::optional<std::string>
 ShaderGenerator::generateVertexStage(const ShaderPassDesc& pass,
                                      std::string_view materialDeclarations,
                                      std::string_view userSource) {
@@ -171,10 +171,10 @@ ShaderGenerator::generateVertexStage(const ShaderPassDesc& pass,
         output << "    _MiniOut_" << variable.name << " = outputValue." << variable.name << ";\n";
     }
     output << "}\n";
-    return std::make_shared<std::string>(std::move(output).str());
+    return output.str();
 }
 
-std::shared_ptr<std::string>
+std::optional<std::string>
 ShaderGenerator::generateFragmentStage(const ShaderPassDesc& pass,
                                        std::string_view materialDeclarations,
                                        std::string_view userSource) {
@@ -201,7 +201,7 @@ ShaderGenerator::generateFragmentStage(const ShaderPassDesc& pass,
         output << "    _MiniOut_" << variable.name << " = outputValue." << variable.name << ";\n";
     }
     output << "}\n";
-    return std::make_shared<std::string>(std::move(output).str());
+    return output.str();
 }
 
 bool ShaderGenerator::validateLayout(std::span<const ShaderPropertyDesc> properties,
@@ -238,7 +238,7 @@ bool ShaderGenerator::validateLayout(std::span<const ShaderPropertyDesc> propert
     return true;
 }
 
-std::shared_ptr<std::string>
+std::optional<std::string>
 ShaderGenerator::generateMaterialDeclarations(std::span<const ShaderPropertyDesc> properties,
                                               const UniformBlockLayout& layout) {
     if (!validateLayout(properties, layout))
@@ -274,13 +274,13 @@ ShaderGenerator::generateMaterialDeclarations(std::span<const ShaderPropertyDesc
                << property.name << ";\n";
         ++textureBinding;
     }
-    return std::make_shared<std::string>(std::move(output).str());
+    return output.str();
 }
 
-std::shared_ptr<std::string> ShaderGenerator::generateStage(const Shader& shader,
-                                                            const ShaderPass& pass,
-                                                            ShaderStage stage,
-                                                            std::string_view source) const {
+std::optional<std::string> ShaderGenerator::generateStage(const Shader& shader,
+                                                          const ShaderPass& pass,
+                                                          ShaderStage stage,
+                                                          std::string_view source) const {
     ShaderPassDesc desc;
     desc.name = pass.name();
     desc.type = pass.type();

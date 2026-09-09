@@ -2,7 +2,7 @@
 
 #include "render/shader/Shader.h"
 
-#include <memory>
+#include <optional>
 #include <span>
 #include <sstream>
 #include <string>
@@ -13,10 +13,10 @@ namespace engine {
 
 class ShaderGenerator final {
 public:
-    [[nodiscard]] std::shared_ptr<std::string> generateStage(const Shader& shader,
-                                                             const ShaderPass& pass,
-                                                             ShaderStage stage,
-                                                             std::string_view source) const;
+    [[nodiscard]] std::optional<std::string> generateStage(const Shader& shader,
+                                                           const ShaderPass& pass,
+                                                           ShaderStage stage,
+                                                           std::string_view source) const;
 
 private:
     [[nodiscard]] static bool validIdentifier(const std::string& value);
@@ -41,17 +41,17 @@ private:
                                 const VirtualPath& sourcePath,
                                 std::string_view stageName,
                                 std::string_view userSource);
-    [[nodiscard]] static std::shared_ptr<std::string>
+    [[nodiscard]] static std::optional<std::string>
     generateVertexStage(const ShaderPassDesc& pass,
                         std::string_view materialDeclarations,
                         std::string_view userSource);
-    [[nodiscard]] static std::shared_ptr<std::string>
+    [[nodiscard]] static std::optional<std::string>
     generateFragmentStage(const ShaderPassDesc& pass,
                           std::string_view materialDeclarations,
                           std::string_view userSource);
     [[nodiscard]] static bool validateLayout(std::span<const ShaderPropertyDesc> properties,
                                              const UniformBlockLayout& layout);
-    [[nodiscard]] static std::shared_ptr<std::string>
+    [[nodiscard]] static std::optional<std::string>
     generateMaterialDeclarations(std::span<const ShaderPropertyDesc> properties,
                                  const UniformBlockLayout& layout);
 };

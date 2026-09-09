@@ -1,5 +1,6 @@
 #include "render/shader/ShaderPreprocessor.h"
 
+#include "core/filesystem/FileDependencyGraph.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/hash.h"
 #include "core/logging/Log.h"
@@ -107,9 +108,8 @@ bool ShaderPreprocessor::preprocessSource(const VirtualPath& path,
     return true;
 }
 
-ShaderPreprocessor::ShaderPreprocessor(ShaderPreprocessorConfig config,
-                                       FileDependencyGraph& dependencies)
-    : config_(std::move(config)), dependencies_(dependencies) {
+ShaderPreprocessor::ShaderPreprocessor(ShaderPreprocessorConfig config)
+    : config_(std::move(config)) {
     for (const VirtualPath& root : config_.includeSearchPaths) {
         if (!root.valid() || !FILE_SYSTEM.isMounted(root.scheme()) ||
             !FILE_SYSTEM.isDirectory(root)) {
@@ -170,7 +170,7 @@ ShaderPreprocessor::process(const ShaderPreprocessRequest& request) {
     hashAppend(result->sourceHash, result->stage);
     result->cachePath =
         VirtualPath{"shader-preprocess://" + hashToHex(result->sourceHash) + ".glsl"};
-    dependencies_.replaceDependencies(result->cachePath, result->dependencies);
+    FILE_DEPENDENCY_GRAPH.replaceDependencies(result->cachePath, result->dependencies);
     cache_[requestHash] = result;
     return result;
 }
@@ -179,7 +179,7 @@ void ShaderPreprocessor::invalidate(std::span<const VirtualPath> paths) {
     std::erase_if(cache_, [&](const auto& entry) {
         if (!containsPath(paths, entry.second->cachePath))
             return false;
-        dependencies_.remove(entry.second->cachePath);
+        FILE_DEPENDENCY_GRAPH.remove(entry.second->cachePath);
         return true;
     });
 }
@@ -187,7 +187,7 @@ void ShaderPreprocessor::invalidate(std::span<const VirtualPath> paths) {
 void ShaderPreprocessor::clear() {
     for (const auto& [hash, shader] : cache_) {
         (void)hash;
-        dependencies_.remove(shader->cachePath);
+        FILE_DEPENDENCY_GRAPH.remove(shader->cachePath);
     }
     cache_.clear();
 }

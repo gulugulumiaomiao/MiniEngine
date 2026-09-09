@@ -1,6 +1,5 @@
 #pragma once
 
-#include "core/filesystem/FileDependencyGraph.h"
 #include "core/hash.h"
 #include "render/shader/ShaderPreprocessor.h"
 
@@ -30,8 +29,7 @@ struct SpirvBinary {
 
 class ShaderCompiler final {
 public:
-    ShaderCompiler(VirtualPath outputRoot,
-                   FileDependencyGraph& dependencies = FILE_DEPENDENCY_GRAPH);
+    explicit ShaderCompiler(VirtualPath outputRoot);
     [[nodiscard]] std::shared_ptr<SpirvBinary> compile(const PreprocessedShader& shader,
                                                        const ShaderCompilerOptions& options);
     void invalidate(std::span<const VirtualPath> paths);
@@ -45,7 +43,6 @@ private:
 #endif
 
     VirtualPath outputRoot_;
-    FileDependencyGraph& dependencies_;
     std::unordered_map<Hash64, std::shared_ptr<SpirvBinary>> cache_;
 };
 

@@ -1,5 +1,6 @@
 #include "render/shader/ShaderCompiler.h"
 
+#include "core/filesystem/FileDependencyGraph.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/hash.h"
 #include "core/logging/Log.h"
@@ -23,8 +24,7 @@ std::string ShaderCompiler::quotedPath(const std::filesystem::path& path) {
 }
 #endif
 
-ShaderCompiler::ShaderCompiler(VirtualPath outputRoot, FileDependencyGraph& dependencies)
-    : outputRoot_(std::move(outputRoot)), dependencies_(dependencies) {}
+ShaderCompiler::ShaderCompiler(VirtualPath outputRoot) : outputRoot_(std::move(outputRoot)) {}
 
 std::shared_ptr<SpirvBinary> ShaderCompiler::compile(const PreprocessedShader& shader,
                                                      const ShaderCompilerOptions& options) {
@@ -85,7 +85,7 @@ std::shared_ptr<SpirvBinary> ShaderCompiler::compile(const PreprocessedShader& s
 #if defined(MINI_GLSLC_EXECUTABLE)
     inputs.push_back(VirtualPath::fromNative(MINI_GLSLC_EXECUTABLE));
 #endif
-    dependencies_.replaceDependencies(binaryPath, inputs);
+    FILE_DEPENDENCY_GRAPH.replaceDependencies(binaryPath, inputs);
     cache_[key] = result;
     return result;
 }
@@ -94,7 +94,7 @@ void ShaderCompiler::invalidate(std::span<const VirtualPath> paths) {
     std::erase_if(cache_, [&](const auto& entry) {
         if (!containsPath(paths, entry.second->path))
             return false;
-        dependencies_.remove(entry.second->path);
+        FILE_DEPENDENCY_GRAPH.remove(entry.second->path);
         return true;
     });
 }
@@ -102,7 +102,7 @@ void ShaderCompiler::invalidate(std::span<const VirtualPath> paths) {
 void ShaderCompiler::clear() {
     for (const auto& [hash, shader] : cache_) {
         (void)hash;
-        dependencies_.remove(shader->path);
+        FILE_DEPENDENCY_GRAPH.remove(shader->path);
     }
     cache_.clear();
 }

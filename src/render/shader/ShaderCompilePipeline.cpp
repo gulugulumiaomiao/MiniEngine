@@ -1,12 +1,12 @@
 #include "render/shader/ShaderCompilePipeline.h"
 
+#include "core/filesystem/FileDependencyGraph.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/hash.h"
 #include "core/logging/Log.h"
 
 #include <algorithm>
 #include <array>
-#include <iterator>
 #include <tuple>
 #include <utility>
 
@@ -71,10 +71,8 @@ CompiledShaderId ShaderCompilePipeline::makeCompiledShaderId(std::span<const std
 
 std::optional<CompiledShaderHandle>
 ShaderCompilePipeline::CompiledShaderCache::find(CompiledShaderId id) const {
-    if (const auto found = entries_.find(id); found != entries_.end()) {
-        const Slot& slot = slots_[found->second];
-        return CompiledShaderHandle{found->second, slot.generation};
-    }
+    if (const auto found = entries_.find(id); found != entries_.end() && pool_.find(found->second))
+        return found->second;
     return std::nullopt;
 }
 
@@ -87,25 +85,18 @@ bool ShaderCompilePipeline::CompiledShaderCache::containsPath(std::span<const Vi
 CompiledShaderHandle ShaderCompilePipeline::CompiledShaderCache::insert(CompiledShader shader) {
     if (const auto existing = find(shader.id))
         return *existing;
-    auto slot = std::ranges::find_if(slots_, [](const Slot& value) { return !value.shader; });
-    if (slot == slots_.end()) {
-        slots_.emplace_back();
-        slot = std::prev(slots_.end());
-    }
-    const std::uint32_t index = static_cast<std::uint32_t>(std::distance(slots_.begin(), slot));
     const CompiledShaderId id = shader.id;
-    slot->shader = std::move(shader);
-    entries_.emplace(id, index);
-    return {index, slot->generation};
+    const CompiledShaderHandle handle = pool_.insert(std::move(shader));
+    entries_.emplace(id, handle);
+    return handle;
 }
 
 const CompiledShader&
 ShaderCompilePipeline::CompiledShaderCache::resolve(CompiledShaderHandle handle) const {
-    if (handle.index >= slots_.size() || !slots_[handle.index].shader ||
-        slots_[handle.index].generation != handle.generation) {
+    const CompiledShader* shader = pool_.find(handle);
+    if (!shader)
         Log::fatal("CompiledShaderCache", "Invalid or stale compiled shader handle");
-    }
-    return *slots_[handle.index].shader;
+    return *shader;
 }
 
 void ShaderCompilePipeline::CompiledShaderCache::removeId(CompiledShaderId id,
@@ -113,9 +104,7 @@ void ShaderCompilePipeline::CompiledShaderCache::removeId(CompiledShaderId id,
     const auto found = entries_.find(id);
     if (found == entries_.end())
         return;
-    Slot& slot = slots_[found->second];
-    slot.shader.reset();
-    ++slot.generation;
+    (void)pool_.release(found->second);
     entries_.erase(found);
     removed.push_back(id);
 }
@@ -124,9 +113,10 @@ std::vector<CompiledShaderId>
 ShaderCompilePipeline::CompiledShaderCache::invalidatePaths(std::span<const VirtualPath> paths) {
     std::vector<CompiledShaderId> removed;
     std::vector<CompiledShaderId> ids;
-    for (const Slot& slot : slots_) {
-        if (slot.shader && containsPath(paths, slot.shader->binaryPath))
-            ids.push_back(slot.shader->id);
+    for (const auto& [id, handle] : entries_) {
+        const CompiledShader* shader = pool_.find(handle);
+        if (shader && containsPath(paths, shader->binaryPath))
+            ids.push_back(id);
     }
     for (CompiledShaderId id : ids)
         removeId(id, removed);
@@ -135,58 +125,42 @@ ShaderCompilePipeline::CompiledShaderCache::invalidatePaths(std::span<const Virt
 
 void ShaderCompilePipeline::CompiledShaderCache::clear() {
     entries_.clear();
-    for (Slot& slot : slots_) {
-        if (slot.shader) {
-            slot.shader.reset();
-            ++slot.generation;
-        }
-    }
+    pool_.clear();
 }
 
 std::optional<ShaderProgramHandle>
 ShaderCompilePipeline::ShaderProgramCache::find(ShaderProgramId id) const {
-    if (const auto found = entries_.find(id); found != entries_.end()) {
-        const Slot& slot = slots_[found->second];
-        return ShaderProgramHandle{found->second, slot.generation};
-    }
+    if (const auto found = entries_.find(id); found != entries_.end() && pool_.find(found->second))
+        return found->second;
     return std::nullopt;
 }
 
 ShaderProgramHandle ShaderCompilePipeline::ShaderProgramCache::insert(ShaderProgram program) {
     if (const auto existing = find(program.id))
         return *existing;
-    auto slot = std::ranges::find_if(slots_, [](const Slot& value) { return !value.program; });
-    if (slot == slots_.end()) {
-        slots_.emplace_back();
-        slot = std::prev(slots_.end());
-    }
-    const std::uint32_t index = static_cast<std::uint32_t>(std::distance(slots_.begin(), slot));
     const ShaderProgramId id = program.id;
-    slot->program = std::move(program);
-    entries_.emplace(id, index);
-    return {index, slot->generation};
+    const ShaderProgramHandle handle = pool_.insert(std::move(program));
+    entries_.emplace(id, handle);
+    return handle;
 }
 
 const ShaderProgram&
 ShaderCompilePipeline::ShaderProgramCache::resolve(ShaderProgramHandle handle) const {
-    if (handle.index >= slots_.size() || !slots_[handle.index].program ||
-        slots_[handle.index].generation != handle.generation) {
+    const ShaderProgram* program = pool_.find(handle);
+    if (!program)
         Log::fatal("ShaderProgramCache", "Invalid or stale shader program handle");
-    }
-    return *slots_[handle.index].program;
+    return *program;
 }
 
 void ShaderCompilePipeline::ShaderProgramCache::invalidate(
     std::span<const CompiledShaderId> shaders) {
     for (auto entry = entries_.begin(); entry != entries_.end();) {
-        Slot& slot = slots_[entry->second];
-        const bool affected =
-            slot.program && std::ranges::any_of(shaders, [&slot](auto id) {
-                return slot.program->vertexId == id || slot.program->fragmentId == id;
-            });
+        const ShaderProgram* program = pool_.find(entry->second);
+        const bool affected = program && std::ranges::any_of(shaders, [program](auto id) {
+                                  return program->vertexId == id || program->fragmentId == id;
+                              });
         if (affected) {
-            slot.program.reset();
-            ++slot.generation;
+            (void)pool_.release(entry->second);
             entry = entries_.erase(entry);
         } else {
             ++entry;
@@ -196,19 +170,12 @@ void ShaderCompilePipeline::ShaderProgramCache::invalidate(
 
 void ShaderCompilePipeline::ShaderProgramCache::clear() {
     entries_.clear();
-    for (Slot& slot : slots_) {
-        if (slot.program) {
-            slot.program.reset();
-            ++slot.generation;
-        }
-    }
+    pool_.clear();
 }
 
-ShaderCompilePipeline::ShaderCompilePipeline(ShaderCompilePipelineConfig config,
-                                             FileDependencyGraph& dependencies)
-    : config_(std::move(config)), dependencies_(dependencies),
-      preprocessor_(config_.preprocessorConfig, dependencies_),
-      compiler_(config_.intermediateRoot, dependencies_) {}
+ShaderCompilePipeline::ShaderCompilePipeline(ShaderCompilePipelineConfig config)
+    : config_(std::move(config)), preprocessor_(config_.preprocessorConfig),
+      compiler_(config_.intermediateRoot) {}
 
 CompiledShaderHandle ShaderCompilePipeline::loadCompiledShader(const VirtualPath& binaryPath,
                                                                ShaderStage stage,
@@ -221,12 +188,12 @@ CompiledShaderHandle ShaderCompilePipeline::loadCompiledShader(const VirtualPath
         return {};
     }
     const CompiledShaderId id = makeCompiledShaderId(*bytes, stage, entryPoint, variant);
-    if (const auto cached = compiledShaders_.find(id))
+    if (const auto cached = compiledShadersCache_.find(id))
         return *cached;
     const auto reflection = reflectSpirv(binaryPath);
     if (!reflection || reflection->stage != stage)
         return {};
-    return compiledShaders_.insert(
+    return compiledShadersCache_.insert(
         {id, stage, std::string{entryPoint}, *bytes, *reflection, binaryPath});
 }
 
@@ -269,14 +236,14 @@ ShaderCompilePipeline::compileStage(const Shader& shader,
             return std::nullopt;
         GeneratedSource entry;
         entry.cachePath = VirtualPath{"shader-generated://" + hashToHex(generatedKey) + ".glsl"};
-        entry.source = std::move(generated);
+        entry.source = std::move(*generated);
         const std::array dependencies{shader.assetPath(), sourcePath};
-        dependencies_.replaceDependencies(entry.cachePath, dependencies);
+        FILE_DEPENDENCY_GRAPH.replaceDependencies(entry.cachePath, dependencies);
         generatedEntry = generatedSources_.emplace(generatedKey, std::move(entry)).first;
     }
 
     ShaderPreprocessRequest request;
-    request.source = {sourcePath, stage, "main", *generatedEntry->second.source};
+    request.source = {sourcePath, stage, "main", generatedEntry->second.source};
     const std::vector<std::string>& keywords = pass.keywordSchema().keywords();
     for (std::size_t bit = 0; bit < keywords.size(); ++bit) {
         if ((variant.keywordBits & (std::uint64_t{1} << bit)) != 0)
@@ -302,7 +269,7 @@ ShaderCompilePipeline::compileStage(const Shader& shader,
             return std::nullopt;
         }
         const std::array dependency{spirv->path};
-        dependencies_.replaceDependencies(packaged, dependency);
+        FILE_DEPENDENCY_GRAPH.replaceDependencies(packaged, dependency);
         binaryPath = packaged;
     }
     const CompiledShaderHandle handle =
@@ -344,14 +311,14 @@ ShaderProgramHandle ShaderCompilePipeline::getOrCreate(const Shader& shader,
     const auto fragmentStage = compileStage(shader, pass, ShaderStage::Fragment, variant);
     if (!fragmentStage)
         return {};
-    const CompiledShader& vertex = compiledShaders_.resolve(vertexStage->handle);
-    const CompiledShader& fragment = compiledShaders_.resolve(fragmentStage->handle);
+    const CompiledShader& vertex = compiledShadersCache_.resolve(vertexStage->handle);
+    const CompiledShader& fragment = compiledShadersCache_.resolve(fragmentStage->handle);
     ShaderProgramId id = vertex.id;
     hashAppend(id, fragment.id);
     hashAppend(id, variant.keywordBits);
     hashAppend(id, variant.meshFeatureBits);
     hashAppend(id, variant.platformFeatureBits);
-    if (const auto cached = programs_.find(id))
+    if (const auto cached = programsCache_.find(id))
         return *cached;
     if (!validateSpirvReflection(
             shader, pass, vertexStage->binaryPath, fragmentStage->binaryPath)) {
@@ -360,31 +327,32 @@ ShaderProgramHandle ShaderCompilePipeline::getOrCreate(const Shader& shader,
     auto layout = mergeLayout(vertex, fragment);
     if (!layout)
         return {};
-    return programs_.insert({id,
-                             variant,
-                             vertexStage->handle,
-                             fragmentStage->handle,
-                             vertex.id,
-                             fragment.id,
-                             std::move(*layout)});
+    return programsCache_.insert({id,
+                                  variant,
+                                  vertexStage->handle,
+                                  fragmentStage->handle,
+                                  vertex.id,
+                                  fragment.id,
+                                  std::move(*layout)});
 }
 
 const ShaderProgram& ShaderCompilePipeline::resolve(ShaderProgramHandle handle) const {
-    return programs_.resolve(handle);
+    return programsCache_.resolve(handle);
 }
 
 const CompiledShader& ShaderCompilePipeline::resolve(CompiledShaderHandle handle) const {
-    return compiledShaders_.resolve(handle);
+    return compiledShadersCache_.resolve(handle);
 }
 
 std::vector<CompiledShaderId> ShaderCompilePipeline::invalidate(const VirtualPath& changedFile) {
-    std::vector<VirtualPath> affected = dependencies_.transitiveDependentsOf(changedFile);
+    std::vector<VirtualPath> affected =
+        FILE_DEPENDENCY_GRAPH.transitiveDependentsOf(changedFile);
     affected.push_back(changedFile);
     invalidateGeneratedSources(affected);
     preprocessor_.invalidate(affected);
     compiler_.invalidate(affected);
-    std::vector<CompiledShaderId> removed = compiledShaders_.invalidatePaths(affected);
-    programs_.invalidate(removed);
+    std::vector<CompiledShaderId> removed = compiledShadersCache_.invalidatePaths(affected);
+    programsCache_.invalidate(removed);
     return removed;
 }
 
@@ -392,14 +360,14 @@ void ShaderCompilePipeline::invalidateGeneratedSources(std::span<const VirtualPa
     std::erase_if(generatedSources_, [&](const auto& entry) {
         if (!containsPath(paths, entry.second.cachePath))
             return false;
-        dependencies_.remove(entry.second.cachePath);
+        FILE_DEPENDENCY_GRAPH.remove(entry.second.cachePath);
         return true;
     });
 }
 
 std::vector<CompiledShaderId> ShaderCompilePipeline::invalidateChanged() {
     std::vector<CompiledShaderId> result;
-    for (const VirtualPath& path : dependencies_.consumeChangedFiles()) {
+    for (const VirtualPath& path : FILE_DEPENDENCY_GRAPH.consumeChangedFiles()) {
         std::vector<CompiledShaderId> removed = invalidate(path);
         result.insert(result.end(), removed.begin(), removed.end());
     }
@@ -411,11 +379,11 @@ std::vector<CompiledShaderId> ShaderCompilePipeline::invalidateChanged() {
 void ShaderCompilePipeline::clear() {
     for (const auto& [hash, source] : generatedSources_) {
         (void)hash;
-        dependencies_.remove(source.cachePath);
+        FILE_DEPENDENCY_GRAPH.remove(source.cachePath);
     }
     generatedSources_.clear();
-    programs_.clear();
-    compiledShaders_.clear();
+    programsCache_.clear();
+    compiledShadersCache_.clear();
     compiler_.clear();
     preprocessor_.clear();
 }

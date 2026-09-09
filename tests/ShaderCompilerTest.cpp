@@ -18,7 +18,10 @@ int main() {
     ShaderPreprocessRequest request;
     request.source.sourcePath = VirtualPath{"fixture://preprocess_root.glsl"};
     request.source.stage = ShaderStage::Fragment;
-    request.source.source = *FILE_SYSTEM.readText(request.source.sourcePath);
+    const auto rootSource = FILE_SYSTEM.readText(request.source.sourcePath);
+    if (!rootSource)
+        return 17;
+    request.source.source = *rootSource;
     request.defines.push_back({"TEST_VALUE", "0.5"});
     const auto processed = preprocessor.process(request);
     if (!processed || processed->dependencies.size() != 2 ||
@@ -32,7 +35,10 @@ int main() {
     ShaderPreprocessRequest searchRequest;
     searchRequest.source.sourcePath = VirtualPath{"fixture://preprocess_search_root.glsl"};
     searchRequest.source.stage = ShaderStage::Fragment;
-    searchRequest.source.source = *FILE_SYSTEM.readText(searchRequest.source.sourcePath);
+    const auto searchSource = FILE_SYSTEM.readText(searchRequest.source.sourcePath);
+    if (!searchSource)
+        return 18;
+    searchRequest.source.source = *searchSource;
     const auto searched = preprocessor.process(searchRequest);
     if (!searched || searched->dependencies.size() != 2 ||
         searched->source.find("BuildColor") == std::string::npos) {
@@ -86,20 +92,36 @@ int main() {
     generatedRequest.source.sourcePath = assetPass.program.vertexSource;
     generatedRequest.source.stage = ShaderStage::Vertex;
     ShaderGenerator generator;
-    generatedRequest.source.source =
-        *generator.generateStage(runtimeShader,
-                                 pass,
-                                 ShaderStage::Vertex,
-                                 *FILE_SYSTEM.readText(assetPass.program.vertexSource));
+    const auto generatedSource =
+        generator.generateStage(runtimeShader,
+                                pass,
+                                ShaderStage::Vertex,
+                                *FILE_SYSTEM.readText(assetPass.program.vertexSource));
+    if (!generatedSource)
+        return 19;
+    generatedRequest.source.source = *generatedSource;
     const auto generated = preprocessor.process(generatedRequest);
     if (!generated || generated->dependencies.empty() ||
         generated->source.find("struct MiniVertexInput") == std::string::npos ||
         generated->source.find("void main()") == std::string::npos) {
         return 9;
     }
-    const std::vector<CompiledShaderId> invalidated = pipeline.invalidate(vertex.binaryPath);
-    if (invalidated.size() != 1 || invalidated.front() != vertex.id) {
+    const VirtualPath vertexBinaryPath = vertex.binaryPath;
+    const CompiledShaderId vertexId = vertex.id;
+    const CompiledShaderHandle vertexHandle = program.vertex;
+    const std::vector<CompiledShaderId> invalidated = pipeline.invalidate(vertexBinaryPath);
+    if (invalidated.size() != 1 || invalidated.front() != vertexId) {
         return 6;
+    }
+    const ShaderProgramHandle rebuiltProgramHandle = pipeline.getOrCreate(runtimeShader, pass);
+    if (!rebuiltProgramHandle || rebuiltProgramHandle.index != programHandle.index ||
+        rebuiltProgramHandle.generation == programHandle.generation) {
+        return 15;
+    }
+    const CompiledShaderHandle rebuiltVertex = pipeline.resolve(rebuiltProgramHandle).vertex;
+    if (rebuiltVertex.index != vertexHandle.index ||
+        rebuiltVertex.generation == vertexHandle.generation) {
+        return 16;
     }
     test::shutdownAssetEnvironment();
     (void)FILE_SYSTEM.unmount("fixture");

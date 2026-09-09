@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/filesystem/FileDependencyGraph.h"
+#include "core/base/HandlePool.h"
 #include "core/hash.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderCompiler.h"
@@ -10,7 +10,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -81,8 +80,7 @@ struct ShaderCompilePipelineConfig {
 
 class ShaderCompilePipeline final {
 public:
-    explicit ShaderCompilePipeline(ShaderCompilePipelineConfig config = {},
-                                   FileDependencyGraph& dependencies = FILE_DEPENDENCY_GRAPH);
+    explicit ShaderCompilePipeline(ShaderCompilePipelineConfig config = {});
     [[nodiscard]] ShaderProgramHandle
     getOrCreate(const Shader& shader, const ShaderPass& pass, const ShaderVariantKey& variant = {});
     [[nodiscard]] const ShaderProgram& resolve(ShaderProgramHandle handle) const;
@@ -94,7 +92,7 @@ public:
 private:
     struct GeneratedSource {
         VirtualPath cachePath;
-        std::shared_ptr<std::string> source;
+        std::string source;
     };
     struct CompiledStage {
         CompiledShaderHandle handle;
@@ -110,15 +108,11 @@ private:
         void clear();
 
     private:
-        struct Slot {
-            std::optional<CompiledShader> shader;
-            std::uint32_t generation{1};
-        };
         [[nodiscard]] static bool containsPath(std::span<const VirtualPath> paths,
                                                const VirtualPath& candidate);
         void removeId(CompiledShaderId id, std::vector<CompiledShaderId>& removed);
-        std::unordered_map<CompiledShaderId, std::uint32_t> entries_;
-        std::vector<Slot> slots_;
+        std::unordered_map<CompiledShaderId, CompiledShaderHandle> entries_;
+        HandlePool<CompiledShader, CompiledShaderHandle> pool_;
     };
     class ShaderProgramCache final {
     public:
@@ -129,12 +123,8 @@ private:
         void clear();
 
     private:
-        struct Slot {
-            std::optional<ShaderProgram> program;
-            std::uint32_t generation{1};
-        };
-        std::unordered_map<ShaderProgramId, std::uint32_t> entries_;
-        std::vector<Slot> slots_;
+        std::unordered_map<ShaderProgramId, ShaderProgramHandle> entries_;
+        HandlePool<ShaderProgram, ShaderProgramHandle> pool_;
     };
 
     [[nodiscard]] static bool containsPath(std::span<const VirtualPath> paths,
@@ -162,13 +152,12 @@ private:
     void invalidateGeneratedSources(std::span<const VirtualPath> paths);
 
     ShaderCompilePipelineConfig config_;
-    FileDependencyGraph& dependencies_;
     ShaderGenerator generator_;
     ShaderPreprocessor preprocessor_;
     ShaderCompiler compiler_;
     std::unordered_map<ShaderHash, GeneratedSource> generatedSources_;
-    CompiledShaderCache compiledShaders_;
-    ShaderProgramCache programs_;
+    CompiledShaderCache compiledShadersCache_;
+    ShaderProgramCache programsCache_;
 };
 
 } // namespace engine
