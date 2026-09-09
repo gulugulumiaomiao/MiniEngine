@@ -197,11 +197,10 @@ CompiledShaderHandle ShaderCompilePipeline::loadCompiledShader(const VirtualPath
         {id, stage, std::string{entryPoint}, *bytes, *reflection, binaryPath});
 }
 
-std::optional<ShaderCompilePipeline::CompiledStage>
-ShaderCompilePipeline::compileStage(const Shader& shader,
-                                    const ShaderPass& pass,
-                                    ShaderStage stage,
-                                    const ShaderVariantKey& variant) {
+CompiledShaderHandle ShaderCompilePipeline::compileStage(const Shader& shader,
+                                                         const ShaderPass& pass,
+                                                         ShaderStage stage,
+                                                         const ShaderVariantKey& variant) {
     const VirtualPath packaged = packagedBinaryPath(config_, shader, pass, stage, variant);
     if (config_.mode == ShaderCompileMode::PackagedRuntime) {
         if (!FILE_SYSTEM.isFile(packaged)) {
@@ -211,17 +210,16 @@ ShaderCompilePipeline::compileStage(const Shader& shader,
                        pass.name().c_str(),
                        stage == ShaderStage::Vertex ? "vertex" : "fragment",
                        packaged.string().c_str());
-            return std::nullopt;
+            return {};
         }
-        const CompiledShaderHandle handle = loadCompiledShader(packaged, stage, "main", variant);
-        return handle ? std::optional<CompiledStage>{{handle, packaged}} : std::nullopt;
+        return loadCompiledShader(packaged, stage, "main", variant);
     }
 
     const VirtualPath sourcePath =
         stage == ShaderStage::Vertex ? pass.program().vertexSource : pass.program().fragmentSource;
     const auto userSource = FILE_SYSTEM.readText(sourcePath);
     if (!userSource)
-        return std::nullopt;
+        return {};
 
     ShaderHash generatedKey = hashString(shader.assetPath().string());
     generatedKey = hashString(pass.name(), generatedKey);
@@ -233,7 +231,7 @@ ShaderCompilePipeline::compileStage(const Shader& shader,
     if (generatedEntry == generatedSources_.end()) {
         auto generated = generator_.generateStage(shader, pass, stage, *userSource);
         if (!generated)
-            return std::nullopt;
+            return {};
         GeneratedSource entry;
         entry.cachePath = VirtualPath{"shader-generated://" + hashToHex(generatedKey) + ".glsl"};
         entry.source = std::move(*generated);
@@ -254,10 +252,10 @@ ShaderCompilePipeline::compileStage(const Shader& shader,
         {"MINI_PLATFORM_FEATURE_BITS", std::to_string(variant.platformFeatureBits)});
     const auto processed = preprocessor_.process(request);
     if (!processed)
-        return std::nullopt;
+        return {};
     const auto spirv = compiler_.compile(*processed, config_.compilerOptions);
     if (!spirv)
-        return std::nullopt;
+        return {};
 
     VirtualPath binaryPath = spirv->path;
     if (config_.mode == ShaderCompileMode::OfflineTool) {
@@ -266,15 +264,13 @@ ShaderCompilePipeline::compileStage(const Shader& shader,
             Log::error("ShaderCompilePipeline",
                        "Cannot write packaged SPIR-V: %s",
                        packaged.string().c_str());
-            return std::nullopt;
+            return {};
         }
         const std::array dependency{spirv->path};
         FILE_DEPENDENCY_GRAPH.replaceDependencies(packaged, dependency);
         binaryPath = packaged;
     }
-    const CompiledShaderHandle handle =
-        loadCompiledShader(binaryPath, stage, processed->entryPoint, variant);
-    return handle ? std::optional<CompiledStage>{{handle, binaryPath}} : std::nullopt;
+    return loadCompiledShader(binaryPath, stage, processed->entryPoint, variant);
 }
 
 std::optional<ShaderProgramLayout>
@@ -305,14 +301,16 @@ ShaderCompilePipeline::mergeLayout(const CompiledShader& vertex, const CompiledS
 ShaderProgramHandle ShaderCompilePipeline::getOrCreate(const Shader& shader,
                                                        const ShaderPass& pass,
                                                        const ShaderVariantKey& variant) {
-    const auto vertexStage = compileStage(shader, pass, ShaderStage::Vertex, variant);
-    if (!vertexStage)
+    const CompiledShaderHandle vertexHandle =
+        compileStage(shader, pass, ShaderStage::Vertex, variant);
+    if (!vertexHandle)
         return {};
-    const auto fragmentStage = compileStage(shader, pass, ShaderStage::Fragment, variant);
-    if (!fragmentStage)
+    const CompiledShaderHandle fragmentHandle =
+        compileStage(shader, pass, ShaderStage::Fragment, variant);
+    if (!fragmentHandle)
         return {};
-    const CompiledShader& vertex = compiledShadersCache_.resolve(vertexStage->handle);
-    const CompiledShader& fragment = compiledShadersCache_.resolve(fragmentStage->handle);
+    const CompiledShader& vertex = compiledShadersCache_.resolve(vertexHandle);
+    const CompiledShader& fragment = compiledShadersCache_.resolve(fragmentHandle);
     ShaderProgramId id = vertex.id;
     hashAppend(id, fragment.id);
     hashAppend(id, variant.keywordBits);
@@ -320,8 +318,7 @@ ShaderProgramHandle ShaderCompilePipeline::getOrCreate(const Shader& shader,
     hashAppend(id, variant.platformFeatureBits);
     if (const auto cached = programsCache_.find(id))
         return *cached;
-    if (!validateSpirvReflection(
-            shader, pass, vertexStage->binaryPath, fragmentStage->binaryPath)) {
+    if (!validateSpirvReflection(shader, pass, vertex.binaryPath, fragment.binaryPath)) {
         return {};
     }
     auto layout = mergeLayout(vertex, fragment);
@@ -329,8 +326,8 @@ ShaderProgramHandle ShaderCompilePipeline::getOrCreate(const Shader& shader,
         return {};
     return programsCache_.insert({id,
                                   variant,
-                                  vertexStage->handle,
-                                  fragmentStage->handle,
+                                  vertexHandle,
+                                  fragmentHandle,
                                   vertex.id,
                                   fragment.id,
                                   std::move(*layout)});

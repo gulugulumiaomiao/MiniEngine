@@ -94,10 +94,6 @@ private:
         VirtualPath cachePath;
         std::string source;
     };
-    struct CompiledStage {
-        CompiledShaderHandle handle;
-        VirtualPath binaryPath;
-    };
     class CompiledShaderCache final {
     public:
         [[nodiscard]] std::optional<CompiledShaderHandle> find(CompiledShaderId id) const;
@@ -139,10 +135,10 @@ private:
                                                                ShaderStage stage,
                                                                std::string_view entryPoint,
                                                                const ShaderVariantKey& variant);
-    [[nodiscard]] std::optional<CompiledStage> compileStage(const Shader& shader,
-                                                            const ShaderPass& pass,
-                                                            ShaderStage stage,
-                                                            const ShaderVariantKey& variant);
+    [[nodiscard]] CompiledShaderHandle compileStage(const Shader& shader,
+                                                    const ShaderPass& pass,
+                                                    ShaderStage stage,
+                                                    const ShaderVariantKey& variant);
     [[nodiscard]] CompiledShaderHandle loadCompiledShader(const VirtualPath& binaryPath,
                                                           ShaderStage stage,
                                                           std::string_view entryPoint,
