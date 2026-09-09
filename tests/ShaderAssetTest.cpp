@@ -67,8 +67,5 @@ int main() {
             VirtualPath{"asset://shader_interface_missing_entry.shader.json"})) {
         return 6;
     }
-    if (reflectSpirv(VirtualPath::fromNative(fixtureRoot / "missing.spv"))) {
-        return 7;
-    }
     test::shutdownAssetEnvironment();
 }

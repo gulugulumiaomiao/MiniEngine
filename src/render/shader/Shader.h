@@ -202,8 +202,6 @@ struct SpirvReflection {
     std::vector<ShaderDescriptorBinding> descriptors;
 };
 
-[[nodiscard]] std::shared_ptr<SpirvReflection> reflectSpirv(const VirtualPath& path);
-
 class ShaderPass final {
 public:
     ShaderPass(const ShaderPassDesc& desc, const RenderStateDesc& renderState);
@@ -282,10 +280,5 @@ private:
     std::vector<SubShader> subShaders_;
     std::uint64_t revision_{1};
 };
-
-[[nodiscard]] bool validateSpirvReflection(const Shader& shader,
-                                           const ShaderPass& pass,
-                                           const VirtualPath& vertexSpirv,
-                                           const VirtualPath& fragmentSpirv);
 
 } // namespace engine

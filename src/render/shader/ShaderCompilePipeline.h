@@ -97,6 +97,8 @@ private:
     class CompiledShaderCache final {
     public:
         [[nodiscard]] std::optional<CompiledShaderHandle> find(CompiledShaderId id) const;
+        [[nodiscard]] std::optional<CompiledShaderHandle> findPath(ShaderHash pathKey) const;
+        void rememberPath(ShaderHash pathKey, CompiledShaderHandle handle);
         [[nodiscard]] CompiledShaderHandle insert(CompiledShader shader);
         [[nodiscard]] const CompiledShader& resolve(CompiledShaderHandle handle) const;
         [[nodiscard]] std::vector<CompiledShaderId>
@@ -108,6 +110,7 @@ private:
                                                const VirtualPath& candidate);
         void removeId(CompiledShaderId id, std::vector<CompiledShaderId>& removed);
         std::unordered_map<CompiledShaderId, CompiledShaderHandle> entries_;
+        std::unordered_map<ShaderHash, CompiledShaderHandle> pathEntries_;
         HandlePool<CompiledShader, CompiledShaderHandle> pool_;
     };
     class ShaderProgramCache final {
@@ -135,11 +138,29 @@ private:
                                                                ShaderStage stage,
                                                                std::string_view entryPoint,
                                                                const ShaderVariantKey& variant);
+    [[nodiscard]] static ShaderHash makeCompiledShaderPathKey(
+        const VirtualPath& binaryPath,
+        ShaderStage stage,
+        std::string_view entryPoint,
+        const ShaderVariantKey& variant);
+    [[nodiscard]] static std::optional<SpirvReflection>
+    reflectSpirv(std::span<const std::byte> bytecode, const VirtualPath& sourcePath);
+    [[nodiscard]] static bool validateSpirvReflection(const Shader& shader,
+                                                      const ShaderPass& pass,
+                                                      const SpirvReflection& vertex,
+                                                      const SpirvReflection& fragment,
+                                                      const VirtualPath& vertexPath,
+                                                      const VirtualPath& fragmentPath);
     [[nodiscard]] CompiledShaderHandle compileStage(const Shader& shader,
                                                     const ShaderPass& pass,
                                                     ShaderStage stage,
                                                     const ShaderVariantKey& variant);
     [[nodiscard]] CompiledShaderHandle loadCompiledShader(const VirtualPath& binaryPath,
+                                                          ShaderStage stage,
+                                                          std::string_view entryPoint,
+                                                          const ShaderVariantKey& variant,
+                                                          std::span<const std::byte> bytecode);
+    [[nodiscard]] CompiledShaderHandle loadPackagedShader(const VirtualPath& binaryPath,
                                                           ShaderStage stage,
                                                           std::string_view entryPoint,
                                                           const ShaderVariantKey& variant);
