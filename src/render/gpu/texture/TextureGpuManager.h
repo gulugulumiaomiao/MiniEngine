@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/base/Singleton.h"
+#include "render/gpu/texture/TextureGpuCache.h"
 #include "render/texture/Texture.h"
 #include "rhi/api/ResourceDesc.h"
 
@@ -33,6 +34,7 @@ private:
     TextureGpuManager();
 
     rhi::IDevice* device_{};
+    TextureGpuCache cache_;
     std::unique_ptr<TextureGpuFactory> textureFactory_;
     std::unique_ptr<SamplerGpuFactory> samplerFactory_;
     rhi::SamplerHandle defaultSampler_;

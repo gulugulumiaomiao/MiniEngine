@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/base/Singleton.h"
+#include "render/gpu/mesh/MeshGpuCache.h"
 #include "render/mesh/Mesh.h"
 #include "render/renderer/DrawList.h"
 
@@ -29,6 +30,7 @@ private:
     MeshGpuManager();
 
     rhi::IDevice* device_{};
+    MeshGpuCache cache_;
     std::unique_ptr<MeshGpuFactory> factory_;
 };
 

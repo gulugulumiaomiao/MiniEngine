@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/base/Singleton.h"
+#include "render/gpu/material/MaterialBindingCache.h"
 #include "render/material/Material.h"
 #include "rhi/api/ResourceDesc.h"
 
@@ -19,7 +20,9 @@ class MaterialGpuManager final : public Singleton<MaterialGpuManager> {
 public:
     ~MaterialGpuManager();
 
-    [[nodiscard]] bool initialize(rhi::IDevice& device, rhi::BindGroupLayoutHandle materialLayout);
+    [[nodiscard]] bool initialize(rhi::IDevice& device,
+                                  rhi::BindGroupLayoutHandle materialLayout,
+                                  std::uint32_t frameCount);
     [[nodiscard]] rhi::BindGroupHandle resolve(MaterialHandle handle);
     void beginFrame(std::uint32_t frameIndex);
     void shutdown();
@@ -31,6 +34,7 @@ private:
 
     [[nodiscard]] static std::uint64_t cacheKey(MaterialHandle handle);
 
+    MaterialBindingCache cache_;
     std::unique_ptr<MaterialGpuFactory> factory_;
 };
 

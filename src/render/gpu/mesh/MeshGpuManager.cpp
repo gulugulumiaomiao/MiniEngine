@@ -1,7 +1,6 @@
 #include "render/gpu/mesh/MeshGpuManager.h"
 
 #include "core/logging/Log.h"
-#include "render/gpu/GpuCacheRegistry.h"
 #include "render/gpu/mesh/MeshGpuFactory.h"
 #include "render/mesh/MeshManager.h"
 #include "rhi/api/Device.h"
@@ -28,15 +27,14 @@ MeshDrawInfo MeshGpuManager::resolve(MeshHandle handle) {
     if (!initialized() || !mesh)
         return {};
 
-    MeshGpuCache& cache = GPU_CACHE.meshes();
     const MeshGpuCacheKey key = MeshGpuCache::key(handle, mesh->version());
-    if (const MeshGpuResource* cached = cache.find(key))
+    if (const MeshGpuResource* cached = cache_.find(key))
         return cached->drawInfo;
 
     MeshGpuResource created;
     if (!factory_->create({*mesh}, created))
         return {};
-    auto replaced = cache.extractIf([source = MeshGpuCache::sourceKey(handle)](
+    auto replaced = cache_.extractIf([source = MeshGpuCache::sourceKey(handle)](
                                         const MeshGpuCacheKey& candidate, const MeshGpuResource&) {
         return candidate.source == source;
     });
@@ -46,10 +44,10 @@ MeshDrawInfo MeshGpuManager::resolve(MeshHandle handle) {
         (void)unused;
         factory_->release(resource);
     }
-    if (auto duplicate = cache.put(key, std::move(created)))
+    if (auto duplicate = cache_.put(key, std::move(created)))
         factory_->release(*duplicate);
     mesh->markClean();
-    const MeshGpuResource* stored = cache.find(key);
+    const MeshGpuResource* stored = cache_.find(key);
     return stored ? stored->drawInfo : MeshDrawInfo{};
 }
 
@@ -57,8 +55,8 @@ void MeshGpuManager::invalidate(MeshHandle handle) {
     if (!initialized())
         return;
     auto removed =
-        GPU_CACHE.meshes().extractIf([source = MeshGpuCache::sourceKey(handle)](
-                                         const MeshGpuCacheKey& candidate, const MeshGpuResource&) {
+        cache_.extractIf([source = MeshGpuCache::sourceKey(handle)](
+                             const MeshGpuCacheKey& candidate, const MeshGpuResource&) {
             return candidate.source == source;
         });
     if (!removed.empty())
@@ -72,7 +70,7 @@ void MeshGpuManager::invalidate(MeshHandle handle) {
 void MeshGpuManager::shutdown() {
     if (!initialized())
         return;
-    for (auto& [unused, resource] : GPU_CACHE.meshes().extractAll()) {
+    for (auto& [unused, resource] : cache_.extractAll()) {
         (void)unused;
         factory_->release(resource);
     }

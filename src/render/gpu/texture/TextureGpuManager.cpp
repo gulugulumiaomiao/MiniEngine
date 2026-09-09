@@ -1,7 +1,6 @@
 #include "render/gpu/texture/TextureGpuManager.h"
 
 #include "core/logging/Log.h"
-#include "render/gpu/GpuCacheRegistry.h"
 #include "render/gpu/texture/SamplerGpuFactory.h"
 #include "render/gpu/texture/TextureGpuFactory.h"
 #include "render/texture/TextureManager.h"
@@ -41,16 +40,15 @@ std::optional<rhi::TextureBinding> TextureGpuManager::resolve(TextureHandle hand
     if (!initialized() || !texture)
         return std::nullopt;
 
-    TextureGpuCache& cache = GPU_CACHE.textures();
     const TextureGpuCacheKey key = TextureGpuCache::key(handle, texture->version());
-    if (const TextureGpuResource* cached = cache.find(key))
+    if (const TextureGpuResource* cached = cache_.find(key))
         return rhi::TextureBinding{cached->view, defaultSampler_};
 
     TextureGpuResource created;
     if (!textureFactory_->create({*texture}, created))
         return std::nullopt;
     auto replaced =
-        cache.extractIf([source = TextureGpuCache::sourceKey(handle)](
+        cache_.extractIf([source = TextureGpuCache::sourceKey(handle)](
                             const TextureGpuCacheKey& candidate, const TextureGpuResource&) {
             return candidate.source == source;
         });
@@ -60,10 +58,10 @@ std::optional<rhi::TextureBinding> TextureGpuManager::resolve(TextureHandle hand
         (void)unused;
         textureFactory_->release(resource);
     }
-    if (auto duplicate = cache.put(key, std::move(created)))
+    if (auto duplicate = cache_.put(key, std::move(created)))
         textureFactory_->release(*duplicate);
     texture->markClean();
-    const TextureGpuResource* stored = cache.find(key);
+    const TextureGpuResource* stored = cache_.find(key);
     return stored ? std::optional{rhi::TextureBinding{stored->view, defaultSampler_}}
                   : std::nullopt;
 }
@@ -92,7 +90,7 @@ std::optional<rhi::TextureBinding> TextureGpuManager::resolveReference(std::stri
 void TextureGpuManager::invalidate(TextureHandle handle) {
     if (!initialized())
         return;
-    auto removed = GPU_CACHE.textures().extractIf(
+    auto removed = cache_.extractIf(
         [source = TextureGpuCache::sourceKey(handle)](const TextureGpuCacheKey& candidate,
                                                       const TextureGpuResource&) {
             return candidate.source == source;
@@ -108,7 +106,7 @@ void TextureGpuManager::invalidate(TextureHandle handle) {
 void TextureGpuManager::shutdown() {
     if (!initialized())
         return;
-    for (auto& [unused, resource] : GPU_CACHE.textures().extractAll()) {
+    for (auto& [unused, resource] : cache_.extractAll()) {
         (void)unused;
         textureFactory_->release(resource);
     }

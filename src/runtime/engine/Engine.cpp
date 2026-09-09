@@ -5,7 +5,6 @@
 #include "core/base/BuildConfig.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/logging/Log.h"
-#include "render/gpu/GpuCacheRegistry.h"
 #include "render/gpu/frame/FrameGpuManager.h"
 #include "render/gpu/material/MaterialGpuManager.h"
 #include "render/gpu/mesh/MeshGpuManager.h"
@@ -95,10 +94,11 @@ bool Engine::initialize(const AppConfig& config, const rhi::IContextFactory& con
     });
     renderer_ = std::make_unique<Renderer>(*window_, std::move(context));
     if (!FRAME_GPU_MANAGER.initialize(renderer_->device()) ||
-        !GPU_CACHE.initialize(FrameGpuManager::kFramesInFlight) ||
         !MESH_GPU_MANAGER.initialize(renderer_->device()) ||
         !TEXTURE_GPU_MANAGER.initialize(renderer_->device()) ||
-        !MATERIAL_GPU_MANAGER.initialize(renderer_->device(), FRAME_GPU_MANAGER.materialLayout()) ||
+        !MATERIAL_GPU_MANAGER.initialize(renderer_->device(),
+                                         FRAME_GPU_MANAGER.materialLayout(),
+                                         FrameGpuManager::kFramesInFlight) ||
         !SHADER_GPU_MANAGER.initialize(renderer_->device()) ||
         !GRAPHICS_PIPELINE_MANAGER.initialize(renderer_->device(),
                                               FRAME_GPU_MANAGER.sceneLayout(),
@@ -151,8 +151,6 @@ void Engine::shutdown() {
     SHADER_GPU_MANAGER.shutdown();
     TEXTURE_GPU_MANAGER.shutdown();
     MESH_GPU_MANAGER.shutdown();
-    if (!GPU_CACHE.shutdown())
-        Log::error("Engine", "Render cache was not empty during shutdown");
     FRAME_GPU_MANAGER.shutdown();
     renderer_.reset();
     MESH_MANAGER.clear();

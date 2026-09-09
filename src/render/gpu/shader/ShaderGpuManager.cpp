@@ -2,7 +2,6 @@
 
 #include "core/base/BuildConfig.h"
 #include "core/logging/Log.h"
-#include "render/gpu/GpuCacheRegistry.h"
 #include "render/gpu/shader/ShaderModuleGpuFactory.h"
 #include "render/shader/Shader.h"
 
@@ -57,15 +56,14 @@ rhi::ShaderHandle ShaderGpuManager::resolve(CompiledShaderHandle handle) {
     if (!initialized())
         return {};
     const CompiledShader& shader = compilePipeline_->resolve(handle);
-    ShaderModuleCache& cache = GPU_CACHE.shaders();
-    if (const ShaderModuleGpuResource* cached = cache.find(shader.id))
+    if (const ShaderModuleGpuResource* cached = cache_.find(shader.id))
         return cached->shader;
     ShaderModuleGpuResource created;
     if (!factory_->create(shader, created))
         return {};
-    if (auto replaced = cache.put(shader.id, std::move(created)))
+    if (auto replaced = cache_.put(shader.id, std::move(created)))
         factory_->release(*replaced);
-    const ShaderModuleGpuResource* stored = cache.find(shader.id);
+    const ShaderModuleGpuResource* stored = cache_.find(shader.id);
     return stored ? stored->shader : rhi::ShaderHandle{};
 }
 
@@ -82,7 +80,7 @@ void ShaderGpuManager::invalidate(std::span<const CompiledShaderId> shaders,
     if (!initialized() || shaders.empty())
         return;
     auto modules =
-        GPU_CACHE.shaders().extractIf([&](CompiledShaderId id, const ShaderModuleGpuResource&) {
+        cache_.extractIf([&](CompiledShaderId id, const ShaderModuleGpuResource&) {
             return std::ranges::find(shaders, id) != shaders.end();
         });
     for (auto& [unused, resource] : modules) {
@@ -108,7 +106,7 @@ void ShaderGpuManager::shutdown() {
     for (RetiredShader& retired : retired_)
         factory_->release(retired.resource);
     retired_.clear();
-    for (auto& [unused, resource] : GPU_CACHE.shaders().extractAll()) {
+    for (auto& [unused, resource] : cache_.extractAll()) {
         (void)unused;
         factory_->release(resource);
     }

@@ -241,7 +241,6 @@ add_executable(MiniVulkanEngine
     src/rhi/vulkan/VulkanFactory.cpp
     src/rhi/vulkan/VulkanSwapchain.cpp
     src/rhi/vulkan/VulkanImage.cpp
-    src/render/gpu/GpuCacheRegistry.cpp
     src/render/gpu/frame/FrameGpuManager.cpp
     src/render/gpu/material/MaterialBindingCache.cpp
     src/render/gpu/material/MaterialGpuFactory.cpp
@@ -554,7 +553,6 @@ if(BUILD_TESTING)
 
     add_executable(RenderCacheTest
         tests/RenderCacheTest.cpp
-        src/render/gpu/GpuCacheRegistry.cpp
         src/render/gpu/material/MaterialBindingCache.cpp
         src/render/gpu/mesh/MeshGpuCache.cpp
         src/render/gpu/pipeline/GraphicsPipelineCache.cpp

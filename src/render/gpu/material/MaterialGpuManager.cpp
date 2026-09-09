@@ -1,7 +1,6 @@
 #include "render/gpu/material/MaterialGpuManager.h"
 
 #include "core/logging/Log.h"
-#include "render/gpu/GpuCacheRegistry.h"
 #include "render/gpu/material/MaterialGpuFactory.h"
 #include "render/gpu/texture/TextureGpuManager.h"
 #include "render/material/MaterialManager.h"
@@ -16,9 +15,14 @@ MaterialGpuManager::MaterialGpuManager() = default;
 MaterialGpuManager::~MaterialGpuManager() = default;
 
 bool MaterialGpuManager::initialize(rhi::IDevice& device,
-                                    rhi::BindGroupLayoutHandle materialLayout) {
+                                    rhi::BindGroupLayoutHandle materialLayout,
+                                    std::uint32_t frameCount) {
     if (initialized()) {
         Log::error("MaterialGpuManager", "Manager is already initialized");
+        return false;
+    }
+    if (!cache_.initialize(frameCount)) {
+        Log::error("MaterialGpuManager", "Cannot initialize Material binding cache");
         return false;
     }
     factory_ = std::make_unique<MaterialGpuFactory>(device, materialLayout);
@@ -34,7 +38,7 @@ rhi::BindGroupHandle MaterialGpuManager::resolve(MaterialHandle handle) {
     if (!initialized() || !material)
         return {};
 
-    MaterialBindingCacheSlot slot = GPU_CACHE.materials().acquire(cacheKey(handle));
+    MaterialBindingCacheSlot slot = cache_.acquire(cacheKey(handle));
     if (slot.cacheHit)
         return slot.resource->bindGroup;
 
@@ -59,14 +63,15 @@ rhi::BindGroupHandle MaterialGpuManager::resolve(MaterialHandle handle) {
 
 void MaterialGpuManager::beginFrame(std::uint32_t frameIndex) {
     if (initialized())
-        GPU_CACHE.materials().beginFrame(frameIndex);
+        cache_.beginFrame(frameIndex);
 }
 
 void MaterialGpuManager::shutdown() {
     if (!initialized())
         return;
-    for (MaterialGpuResource& resource : GPU_CACHE.materials().extractAll())
+    for (MaterialGpuResource& resource : cache_.extractAll())
         factory_->release(resource);
+    cache_.reset();
     factory_.reset();
 }
 

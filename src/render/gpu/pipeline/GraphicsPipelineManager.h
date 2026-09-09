@@ -68,6 +68,7 @@ private:
 
     rhi::BindGroupLayoutHandle sceneLayout_;
     rhi::BindGroupLayoutHandle materialLayout_;
+    GraphicsPipelineCache cache_;
     std::unique_ptr<GraphicsPipelineGpuFactory> factory_;
     std::unordered_map<std::uint64_t, GraphicsPipelineCacheKey> fallbackPipelines_;
     std::vector<RetiredPipeline> retired_;

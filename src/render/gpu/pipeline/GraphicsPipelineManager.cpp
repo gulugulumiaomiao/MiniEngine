@@ -2,7 +2,6 @@
 
 #include "core/hash.h"
 #include "core/logging/Log.h"
-#include "render/gpu/GpuCacheRegistry.h"
 #include "render/gpu/pipeline/GraphicsPipelineGpuFactory.h"
 #include "render/gpu/shader/ShaderGpuManager.h"
 
@@ -202,8 +201,7 @@ rhi::GraphicsPipelineHandle GraphicsPipelineManager::resolve(const Shader& shade
     if (!programHandle) {
         const auto previous = fallbackPipelines_.find(fallbackKey);
         if (previous != fallbackPipelines_.end()) {
-            if (const GraphicsPipelineGpuResource* cached =
-                    GPU_CACHE.pipelines().find(previous->second)) {
+            if (const GraphicsPipelineGpuResource* cached = cache_.find(previous->second)) {
                 Log::error("GraphicsPipelineManager",
                            "Keeping the previous pipeline after Shader reload failure: %s/%s",
                            shader.name().c_str(),
@@ -219,7 +217,7 @@ rhi::GraphicsPipelineHandle GraphicsPipelineManager::resolve(const Shader& shade
 
     const ShaderProgram& program = SHADER_GPU_MANAGER.resolveProgram(programHandle);
     const GraphicsPipelineCacheKey key = makeCacheKey(program, pass, vertexLayout, colorFormat);
-    if (const GraphicsPipelineGpuResource* cached = GPU_CACHE.pipelines().find(key)) {
+    if (const GraphicsPipelineGpuResource* cached = cache_.find(key)) {
         fallbackPipelines_.insert_or_assign(fallbackKey, key);
         return cached->pipeline;
     }
@@ -240,10 +238,10 @@ rhi::GraphicsPipelineHandle GraphicsPipelineManager::resolve(const Shader& shade
     created.program = program.id;
     created.vertex = program.vertexId;
     created.fragment = program.fragmentId;
-    if (auto replaced = GPU_CACHE.pipelines().put(key, std::move(created)))
+    if (auto replaced = cache_.put(key, std::move(created)))
         factory_->release(*replaced);
     fallbackPipelines_.insert_or_assign(fallbackKey, key);
-    const GraphicsPipelineGpuResource* stored = GPU_CACHE.pipelines().find(key);
+    const GraphicsPipelineGpuResource* stored = cache_.find(key);
     return stored ? stored->pipeline : rhi::GraphicsPipelineHandle{};
 }
 
@@ -262,7 +260,7 @@ void GraphicsPipelineManager::refreshShaders(std::uint64_t frameSerial,
 
 void GraphicsPipelineManager::invalidate(std::span<const CompiledShaderId> shaders,
                                          std::uint64_t retireSerial) {
-    auto pipelines = GPU_CACHE.pipelines().extractIf(
+    auto pipelines = cache_.extractIf(
         [&](GraphicsPipelineCacheKey, const GraphicsPipelineGpuResource& resource) {
             return std::ranges::find(shaders, resource.vertex) != shaders.end() ||
                    std::ranges::find(shaders, resource.fragment) != shaders.end();
@@ -289,7 +287,7 @@ void GraphicsPipelineManager::clear() {
     if (!initialized())
         return;
     fallbackPipelines_.clear();
-    for (auto& [unused, resource] : GPU_CACHE.pipelines().extractAll()) {
+    for (auto& [unused, resource] : cache_.extractAll()) {
         (void)unused;
         factory_->release(resource);
     }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/base/Singleton.h"
+#include "render/gpu/shader/ShaderModuleCache.h"
 #include "render/gpu/shader/ShaderModuleGpuResource.h"
 #include "render/shader/ShaderCompilePipeline.h"
 #include "rhi/api/ResourceDesc.h"
@@ -45,6 +46,7 @@ private:
     ShaderGpuManager();
 
     std::unique_ptr<ShaderCompilePipeline> compilePipeline_;
+    ShaderModuleCache cache_;
     std::unique_ptr<ShaderModuleGpuFactory> factory_;
     std::vector<RetiredShader> retired_;
 };
