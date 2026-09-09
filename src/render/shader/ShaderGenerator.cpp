@@ -1,5 +1,7 @@
 #include "render/shader/ShaderGenerator.h"
 
+#include "render/material/MaterialLimits.h"
+
 #include "core/logging/Log.h"
 
 #include <algorithm>

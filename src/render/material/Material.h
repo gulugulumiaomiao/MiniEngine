@@ -1,6 +1,6 @@
 #pragma once
 
-#include "render/renderer/RenderResources.h"
+#include "render/base/RenderHandle.h"
 #include "render/shader/Shader.h"
 
 #include <cstddef>

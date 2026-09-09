@@ -3,7 +3,7 @@
 #include "asset/base/Asset.h"
 #include "core/filesystem/VirtualPath.h"
 #include "core/math/Math.h"
-#include "render/renderer/RenderResources.h"
+#include "render/base/RenderHandle.h"
 
 #include <cstdint>
 #include <memory>

@@ -1,5 +1,5 @@
 #include "core/math/Math.h"
-#include "render/renderer/RenderScene.h"
+#include "render/scene/RenderScene.h"
 #include "scene/components/CameraComponent.h"
 #include "scene/components/LightComponent.h"
 #include "scene/components/MaterialComponent.h"

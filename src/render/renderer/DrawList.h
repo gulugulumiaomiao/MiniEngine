@@ -1,7 +1,7 @@
 #pragma once
 
 #include "rhi/api/RhiTypes.h"
-#include "render/renderer/RenderResources.h"
+#include "render/base/RenderHandle.h"
 
 #include <cstddef>
 #include <vector>

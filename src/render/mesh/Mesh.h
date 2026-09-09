@@ -4,7 +4,7 @@
 #include "core/math/Math.h"
 #include "core/serialization/Transferable.h"
 #include "render/mesh/MeshPrimitive.h"
-#include "render/renderer/RenderResources.h"
+#include "render/base/RenderHandle.h"
 
 #include <compare>
 #include <cstddef>

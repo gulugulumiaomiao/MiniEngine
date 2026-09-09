@@ -90,12 +90,11 @@ include -----------------------------> preprocessed node
 ```text
 ShaderCompilePipeline
   -> ShaderProgram + CompiledShader handles
-  -> RhiShaderCache
+  -> ShaderGpuManager -> ShaderModuleCache
   -> IDevice::createShader
-  -> PipelineCache
+  -> GraphicsPipelineCache
   -> IDevice::createGraphicsPipeline
   -> draw
 ```
 
-Renderer 只持有一个 `ShaderCompilePipeline`，不再自行组合预处理器、CompiledShaderCache
-和 ShaderProgramCache。
+单例 `ShaderGpuManager` 持有一个 `ShaderCompilePipeline`，Renderer 不拥有编译器、CompiledShaderCache 或 ShaderProgramCache。

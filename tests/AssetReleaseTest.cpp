@@ -5,7 +5,7 @@
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
 #include "render/mesh/MeshManager.h"
-#include "render/renderer/RenderScene.h"
+#include "render/scene/RenderScene.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderManager.h"
 #include "scene/scene/Scene.h"

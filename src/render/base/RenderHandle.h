@@ -16,6 +16,4 @@ using MaterialHandle = Handle<MaterialHandleTag>;
 using ShaderHandle = Handle<ShaderHandleTag>;
 using TextureHandle = Handle<TextureHandleTag>;
 
-inline constexpr std::uint32_t kMaxMaterialTextures = 16;
-
 } // namespace engine

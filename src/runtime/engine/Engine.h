@@ -3,7 +3,7 @@
 #include "runtime/application/Application.h"
 #include "core/base/Singleton.h"
 #include "core/filesystem/VirtualPath.h"
-#include "render/renderer/RenderScene.h"
+#include "render/scene/RenderScene.h"
 #include "scene/scene/Scene.h"
 
 #include <memory>

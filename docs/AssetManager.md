@@ -60,6 +60,6 @@ Material 路径
 
 ## 热重载
 
-成功重新导入后，AssetManager 清除对应弱缓存。已经实例化的 Shader 会由 ShaderManager 在原 Handle 上替换并增加 revision，MaterialManager 随后重建相关材质布局、迁移同名兼容属性。导入失败不会触碰旧运行时 Shader；Shader 编译失败时 PipelineCache 会继续返回上一条有效 Pipeline。
+成功重新导入后，AssetManager 清除对应弱缓存。已经实例化的 Shader 会由 ShaderManager 在原 Handle 上替换并增加 revision，MaterialManager 随后重建相关材质布局、迁移同名兼容属性。导入失败不会触碰旧运行时 Shader；Shader 编译失败时 GraphicsPipelineManager 会尝试返回上一条有效 GraphicsPipeline。
 
 关闭顺序为：MaterialManager → ShaderManager → AssetManager 缓存 → AssetImportPipeline → FileWatcher → AssetDatabase → FileSystem 挂载。

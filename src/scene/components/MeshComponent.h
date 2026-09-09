@@ -2,7 +2,7 @@
 
 #include "core/serialization/Transferable.h"
 #include "core/filesystem/VirtualPath.h"
-#include "render/renderer/RenderResources.h"
+#include "render/base/RenderHandle.h"
 #include "scene/components/Component.h"
 
 #include <cstdint>

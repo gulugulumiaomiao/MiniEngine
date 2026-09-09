@@ -241,11 +241,24 @@ add_executable(MiniVulkanEngine
     src/rhi/vulkan/VulkanFactory.cpp
     src/rhi/vulkan/VulkanSwapchain.cpp
     src/rhi/vulkan/VulkanImage.cpp
-    src/render/cache/MaterialGpuCache.cpp
-    src/render/cache/MeshGpuCache.cpp
-    src/render/cache/PipelineCache.cpp
-    src/render/cache/RhiShaderCache.cpp
-    src/render/cache/TextureGpuCache.cpp
+    src/render/gpu/GpuCacheRegistry.cpp
+    src/render/gpu/frame/FrameGpuManager.cpp
+    src/render/gpu/material/MaterialBindingCache.cpp
+    src/render/gpu/material/MaterialGpuFactory.cpp
+    src/render/gpu/material/MaterialGpuManager.cpp
+    src/render/gpu/mesh/MeshGpuCache.cpp
+    src/render/gpu/mesh/MeshGpuFactory.cpp
+    src/render/gpu/mesh/MeshGpuManager.cpp
+    src/render/gpu/pipeline/GraphicsPipelineCache.cpp
+    src/render/gpu/pipeline/GraphicsPipelineGpuFactory.cpp
+    src/render/gpu/pipeline/GraphicsPipelineManager.cpp
+    src/render/gpu/shader/ShaderGpuManager.cpp
+    src/render/gpu/shader/ShaderModuleCache.cpp
+    src/render/gpu/shader/ShaderModuleGpuFactory.cpp
+    src/render/gpu/texture/SamplerGpuFactory.cpp
+    src/render/gpu/texture/TextureGpuCache.cpp
+    src/render/gpu/texture/TextureGpuFactory.cpp
+    src/render/gpu/texture/TextureGpuManager.cpp
     src/rhi/vulkan/VulkanSampler.cpp
     src/rhi/vulkan/VulkanShaderModule.cpp
     src/rhi/vulkan/VmaImplementation.cpp
@@ -482,7 +495,8 @@ if(BUILD_TESTING)
     add_executable(MeshTest
         tests/MeshTest.cpp
         src/asset/manager/AssetManager.cpp
-        src/render/cache/MeshGpuCache.cpp
+        src/render/gpu/mesh/MeshGpuCache.cpp
+        src/render/gpu/mesh/MeshGpuFactory.cpp
         src/render/material/Material.cpp
         src/render/material/MaterialManager.cpp
         src/render/shader/Shader.cpp
@@ -509,7 +523,8 @@ if(BUILD_TESTING)
     add_executable(TextureTest
         tests/TextureTest.cpp
         src/asset/manager/AssetManager.cpp
-        src/render/cache/TextureGpuCache.cpp
+        src/render/gpu/texture/TextureGpuCache.cpp
+        src/render/gpu/texture/TextureGpuFactory.cpp
         src/render/material/Material.cpp
         src/render/material/MaterialManager.cpp
         src/render/shader/Shader.cpp
@@ -536,6 +551,30 @@ if(BUILD_TESTING)
         )
     endif()
     add_test(NAME TextureTest COMMAND TextureTest)
+
+    add_executable(RenderCacheTest
+        tests/RenderCacheTest.cpp
+        src/render/gpu/GpuCacheRegistry.cpp
+        src/render/gpu/material/MaterialBindingCache.cpp
+        src/render/gpu/mesh/MeshGpuCache.cpp
+        src/render/gpu/pipeline/GraphicsPipelineCache.cpp
+        src/render/gpu/shader/ShaderModuleCache.cpp
+        src/render/gpu/texture/TextureGpuCache.cpp
+    )
+    target_link_libraries(RenderCacheTest PRIVATE MiniCore)
+    target_include_directories(RenderCacheTest SYSTEM PRIVATE third_party/glm/include)
+    if(MSVC)
+        target_compile_options(RenderCacheTest PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(RenderCacheTest PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    if(MINGW)
+        target_link_libraries(RenderCacheTest PRIVATE
+            "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
+            "-Wl,--end-group,-Bdynamic"
+        )
+    endif()
+    add_test(NAME RenderCacheTest COMMAND RenderCacheTest)
 
     add_executable(SceneTest tests/SceneTest.cpp)
     target_link_libraries(SceneTest PRIVATE MiniScene)

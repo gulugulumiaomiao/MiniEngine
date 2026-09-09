@@ -2,7 +2,8 @@
 #include "render/mesh/MeshManager.h"
 #include "core/serialization/BinaryTransfer.h"
 #include "core/serialization/JsonTransfer.h"
-#include "render/cache/MeshGpuCache.h"
+#include "render/gpu/mesh/MeshGpuCache.h"
+#include "render/gpu/mesh/MeshGpuFactory.h"
 #include "render/mesh/MeshBuilder.h"
 #include "rhi/api/Device.h"
 
@@ -311,15 +312,22 @@ int main() {
     // The render-side cache is testable without Vulkan and uploads only when
     // the Mesh version changes.
     FakeDevice fakeDevice;
-    MeshGpuCache gpuCache{fakeDevice};
+    MeshGpuCache gpuCache;
+    MeshGpuFactory gpuFactory{fakeDevice};
     Mesh gpuMesh = source.instantiate();
     const MeshHandle gpuHandle{7, 1};
-    const MeshDrawInfo firstDraw = gpuCache.prepare(gpuHandle, gpuMesh);
+    MeshGpuResource firstResource;
+    if (!gpuFactory.create({gpuMesh}, firstResource))
+        return 19;
+    const MeshGpuCacheKey firstKey = MeshGpuCache::key(gpuHandle, gpuMesh.version());
+    (void)gpuCache.put(firstKey, std::move(firstResource));
+    gpuMesh.markClean();
+    const MeshDrawInfo firstDraw = gpuCache.find(firstKey)->drawInfo;
     if (firstDraw.vertexBuffers.size() != 2 || !firstDraw.indexBuffer ||
         fakeDevice.createdBuffers != 3 || fakeDevice.uploads != 3 || gpuMesh.dirty()) {
         return 19;
     }
-    const MeshDrawInfo cachedDraw = gpuCache.prepare(gpuHandle, gpuMesh);
+    const MeshDrawInfo cachedDraw = gpuCache.find(firstKey)->drawInfo;
     if (cachedDraw.indexBuffer != firstDraw.indexBuffer || fakeDevice.createdBuffers != 3 ||
         fakeDevice.uploads != 3) {
         return 19;
@@ -328,13 +336,33 @@ int main() {
     if (!gpuMesh.updateVertexData(0, 0, std::as_bytes(std::span{&gpuReplacement, 1}))) {
         return 19;
     }
-    const MeshDrawInfo rebuiltDraw = gpuCache.prepare(gpuHandle, gpuMesh);
+    MeshGpuResource rebuiltResource;
+    if (!gpuFactory.create({gpuMesh}, rebuiltResource))
+        return 19;
+    auto oldResources = gpuCache.extractIf([sourceKey = MeshGpuCache::sourceKey(gpuHandle)](
+                                               const MeshGpuCacheKey& key, const MeshGpuResource&) {
+        return key.source == sourceKey;
+    });
+    fakeDevice.waitIdle();
+    for (auto& [unused, resource] : oldResources) {
+        (void)unused;
+        gpuFactory.release(resource);
+    }
+    const MeshGpuCacheKey rebuiltKey = MeshGpuCache::key(gpuHandle, gpuMesh.version());
+    (void)gpuCache.put(rebuiltKey, std::move(rebuiltResource));
+    gpuMesh.markClean();
+    const MeshDrawInfo rebuiltDraw = gpuCache.find(rebuiltKey)->drawInfo;
     if (!rebuiltDraw.indexBuffer || rebuiltDraw.indexBuffer == firstDraw.indexBuffer ||
         fakeDevice.createdBuffers != 6 || fakeDevice.destroyedBuffers != 3 ||
         fakeDevice.uploads != 6 || fakeDevice.waits != 1 || gpuMesh.dirty()) {
         return 19;
     }
-    gpuCache.invalidate(gpuHandle);
+    auto removed = gpuCache.extractAll();
+    fakeDevice.waitIdle();
+    for (auto& [unused, resource] : removed) {
+        (void)unused;
+        gpuFactory.release(resource);
+    }
     if (fakeDevice.destroyedBuffers != 6 || fakeDevice.waits != 2 || gpuCache.size() != 0) {
         return 19;
     }

@@ -1,4 +1,5 @@
-#include "render/cache/TextureGpuCache.h"
+#include "render/gpu/texture/TextureGpuCache.h"
+#include "render/gpu/texture/TextureGpuFactory.h"
 
 #include "render/texture/Texture.h"
 #include "render/texture/TextureManager.h"
@@ -124,12 +125,19 @@ int main() {
 
     FakeDevice device;
     {
-        TextureGpuCache cache{device};
+        TextureGpuCache cache;
+        TextureGpuFactory factory{device};
         Texture* texture = TEXTURE_MANAGER.find(white);
-        const auto first = cache.prepare(white, *texture);
-        const auto cached = cache.prepare(white, *texture);
+        TextureGpuResource firstResource;
+        if (!factory.create({*texture}, firstResource))
+            return 2;
+        const TextureGpuCacheKey firstKey = TextureGpuCache::key(white, texture->version());
+        (void)cache.put(firstKey, std::move(firstResource));
+        texture->markClean();
+        const TextureGpuResource* first = cache.find(firstKey);
+        const TextureGpuResource* cached = cache.find(firstKey);
         if (!first || !cached || first->view != cached->view || cache.size() != 1 ||
-            device.createdSamplers != 1 || device.createdTextures != 1 ||
+            device.createdSamplers != 0 || device.createdTextures != 1 ||
             device.createdViews != 1 || device.textureUploads != 1 ||
             device.uploadedMipCounts[0] != 1 || device.uploadedByteCounts[0] != 4) {
             return 2;
@@ -143,19 +151,41 @@ int main() {
         if (!TEXTURE_MANAGER.replace(white, replacement.instantiate()))
             return 3;
         texture = TEXTURE_MANAGER.find(white);
-        const auto refreshed = cache.prepare(white, *texture);
-        if (!refreshed || refreshed->view == first->view || device.waits != 1 ||
+        const rhi::TextureViewHandle firstView = first->view;
+        TextureGpuResource refreshedResource;
+        if (!factory.create({*texture}, refreshedResource))
+            return 4;
+        auto oldResources =
+            cache.extractIf([sourceKey = TextureGpuCache::sourceKey(white)](
+                                const TextureGpuCacheKey& key, const TextureGpuResource&) {
+                return key.source == sourceKey;
+            });
+        device.waitIdle();
+        for (auto& [unused, resource] : oldResources) {
+            (void)unused;
+            factory.release(resource);
+        }
+        const TextureGpuCacheKey refreshedKey = TextureGpuCache::key(white, texture->version());
+        (void)cache.put(refreshedKey, std::move(refreshedResource));
+        texture->markClean();
+        const TextureGpuResource* refreshed = cache.find(refreshedKey);
+        if (!refreshed || refreshed->view == firstView || device.waits != 1 ||
             device.createdTextures != 2 || device.destroyedTextures != 1 ||
             device.destroyedViews != 1 || device.textureUploads != 2) {
             return 4;
         }
-        cache.invalidate(white);
+        auto removed = cache.extractAll();
+        device.waitIdle();
+        for (auto& [unused, resource] : removed) {
+            (void)unused;
+            factory.release(resource);
+        }
         if (cache.size() != 0 || device.waits != 2 || device.destroyedTextures != 2 ||
             device.destroyedViews != 2) {
             return 5;
         }
     }
-    if (device.destroyedSamplers != 1)
+    if (device.destroyedSamplers != 0)
         return 6;
     TEXTURE_MANAGER.clear();
     return 0;

@@ -1,8 +1,8 @@
 #pragma once
 
 #include "core/math/Math.h"
-#include "render/renderer/Lighting.h"
-#include "render/renderer/RenderResources.h"
+#include "render/base/RenderHandle.h"
+#include "render/scene/Lighting.h"
 
 #include <cstdint>
 #include <optional>

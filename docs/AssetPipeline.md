@@ -16,7 +16,7 @@ asset:// 源文件
   -> AssetManager（weak_ptr<Asset> 缓存）
   -> ShaderManager / MaterialManager（InstanceManager + HandlePool）
   -> Shader Process（首次绘制时预处理、编译 SPIR-V、Reflection）
-  -> ShaderProgramCache -> RHI Shader -> PipelineCache
+  -> ShaderProgramCache -> ShaderGpuManager / GraphicsPipelineManager
 ```
 
 ## Importer
@@ -67,7 +67,7 @@ FileWatcher 事件
   -> MaterialManager 刷新引用该 Handle 的材质
 ```
 
-JSON/导入失败时不 replace，旧 Shader 和 Material 保持不变。GLSL 在真正参与绘制时才编译；若新源码编译失败，PipelineCache 以 Shader 路径、Pass、Variant、VertexLayout 和 RenderTarget 格式查找上一条有效 Pipeline，保证失败不会立刻破坏当前画面。成功编译后才把回退入口更新为新 Pipeline。
+JSON/导入失败时不 replace，旧 Shader 和 Material 保持不变。GLSL 在真正参与绘制时才编译；若新源码编译失败，GraphicsPipelineManager 以 Shader 路径、Pass、Variant、VertexLayout 和 RenderTarget 格式查找上一条有效 Pipeline，保证失败不会立刻破坏当前画面。成功编译后才把回退入口更新为新 Pipeline。
 
 ## 开发与发布流程
 
@@ -92,7 +92,7 @@ cmake --build --preset clang-release
 
 ## 生命周期
 
-Renderer 停止并等待 GPU 空闲后，按以下顺序关闭：
+Engine 让 Renderer 等待 GPU 空闲后，先关闭 Material、GraphicsPipeline、Shader、Texture 和 Mesh GPU Resource Manager，再按以下顺序清理 CPU 资产：
 
 1. `MATERIAL_MANAGER.clear()`
 2. `SHADER_MANAGER.clear()`

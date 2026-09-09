@@ -1,10 +1,17 @@
 #include "runtime/engine/Engine.h"
 
-#include "core/logging/Log.h"
-#include "core/filesystem/FileSystem.h"
-#include "runtime/window/Window.h"
-#include "asset/manager/AssetManager.h"
 #include "asset/importer/AssetImportPipeline.h"
+#include "asset/manager/AssetManager.h"
+#include "core/base/BuildConfig.h"
+#include "core/filesystem/FileSystem.h"
+#include "core/logging/Log.h"
+#include "render/gpu/GpuCacheRegistry.h"
+#include "render/gpu/frame/FrameGpuManager.h"
+#include "render/gpu/material/MaterialGpuManager.h"
+#include "render/gpu/mesh/MeshGpuManager.h"
+#include "render/gpu/pipeline/GraphicsPipelineManager.h"
+#include "render/gpu/shader/ShaderGpuManager.h"
+#include "render/gpu/texture/TextureGpuManager.h"
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
@@ -14,6 +21,7 @@
 #include "render/shader/ShaderManager.h"
 #include "render/texture/TextureManager.h"
 #include "rhi/RhiFactory.h"
+#include "runtime/window/Window.h"
 #include "scene/scene/SceneAsset.h"
 
 #include <algorithm>
@@ -61,6 +69,7 @@ bool Engine::initialize(const AppConfig& config, const rhi::IContextFactory& con
     const std::filesystem::path assetRoot{MINI_ASSET_DIR};
     if (!FILE_SYSTEM.mountDirectory("asset", assetRoot, assetReadOnly) ||
         !FILE_SYSTEM.mountDirectory("library", assetRoot.parent_path() / "library", false) ||
+        !FILE_SYSTEM.mountDirectory("shader", MINI_GENERATED_SHADER_DIR, false) ||
         !ASSET_MANAGER.initialize()) {
         Log::error("Engine", "Cannot initialize asset system: %s", assetRoot.string().c_str());
         shutdown();
@@ -85,6 +94,19 @@ bool Engine::initialize(const AppConfig& config, const rhi::IContextFactory& con
         .swapchain = {.width = width, .height = height, .vsync = config_.vsync},
     });
     renderer_ = std::make_unique<Renderer>(*window_, std::move(context));
+    if (!FRAME_GPU_MANAGER.initialize(renderer_->device()) ||
+        !GPU_CACHE.initialize(FrameGpuManager::kFramesInFlight) ||
+        !MESH_GPU_MANAGER.initialize(renderer_->device()) ||
+        !TEXTURE_GPU_MANAGER.initialize(renderer_->device()) ||
+        !MATERIAL_GPU_MANAGER.initialize(renderer_->device(), FRAME_GPU_MANAGER.materialLayout()) ||
+        !SHADER_GPU_MANAGER.initialize(renderer_->device()) ||
+        !GRAPHICS_PIPELINE_MANAGER.initialize(renderer_->device(),
+                                              FRAME_GPU_MANAGER.sceneLayout(),
+                                              FRAME_GPU_MANAGER.materialLayout())) {
+        Log::error("Engine", "Cannot initialize GPU resource managers");
+        shutdown();
+        return false;
+    }
     running_ = true;
     return true;
 }
@@ -124,6 +146,14 @@ void Engine::shutdown() {
     renderScene_.clear();
     if (renderer_)
         renderer_->waitIdle();
+    MATERIAL_GPU_MANAGER.shutdown();
+    GRAPHICS_PIPELINE_MANAGER.shutdown();
+    SHADER_GPU_MANAGER.shutdown();
+    TEXTURE_GPU_MANAGER.shutdown();
+    MESH_GPU_MANAGER.shutdown();
+    if (!GPU_CACHE.shutdown())
+        Log::error("Engine", "Render cache was not empty during shutdown");
+    FRAME_GPU_MANAGER.shutdown();
     renderer_.reset();
     MESH_MANAGER.clear();
     MATERIAL_MANAGER.clear();

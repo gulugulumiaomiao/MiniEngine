@@ -2,7 +2,7 @@
 
 #include "core/serialization/Transferable.h"
 #include "core/math/Math.h"
-#include "render/renderer/Lighting.h"
+#include "render/scene/Lighting.h"
 #include "scene/components/Component.h"
 
 #include <cstdint>

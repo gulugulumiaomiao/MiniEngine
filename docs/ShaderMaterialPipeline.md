@@ -19,9 +19,9 @@ ShaderAsset ── ShaderCompileRequest ── PreprocessedShader
 Shader → SubShader → ShaderPass ───── ShaderProgram / ProgramLayout
                                                │ ProgramID + LayoutID
                                                ▼
-                                      RHIShaderHandle / PipelineCache
+                              ShaderModule / GraphicsPipeline Cache
                                                │
-Material → MaterialGpuCache → set 1 ───────────┤
+Material → MaterialBindingCache/Uploader → set 1 ┤
 Scene/Object buffer → set 0 ───────────────────┘
 ```
 
@@ -63,9 +63,9 @@ SPIRV-Cross 的反射结果保存在 `CompiledShader::reflection`，内容包括
 
 ### 6. RHI Shader 对象
 
-`RhiShaderCache` 把 `CompiledShaderHandle` 转成 `rhi::ShaderHandle`，内部创建并缓存 `VkShaderModule`。`ShaderModule` 只接收 SPIR-V 字节，不再打开文件，因此 RHI 不依赖资产路径和文件系统。
+`ShaderGpuManager` 先按 CompileID 查询 `ShaderModuleCache`；未命中时由 `ShaderModuleGpuFactory` 把 `CompiledShaderHandle` 转成 `rhi::ShaderHandle`。`ShaderModule` 只接收 SPIR-V 字节，不再打开文件，因此 RHI 不依赖资产路径和文件系统。
 
-### 7. 结构化 PipelineCache
+### 7. 结构化 GraphicsPipelineCache
 
 Pipeline key 包含：
 
@@ -76,7 +76,7 @@ Pipeline key 包含：
 
 `GraphicsPipeline` 接收 RHI Shader module 和两个 descriptor set layout，不再临时读取 `.spv`。Swapchain 重建时只清理受格式影响的 Pipeline，编译产物和 Shader module 仍可复用。
 
-### 8. MaterialGpuCache
+### 8. Material Binding
 
 固定的 descriptor 约定为：
 
@@ -84,9 +84,9 @@ Pipeline key 包含：
 - `set = 1, binding = 0`：材质 uniform buffer；
 - `set = 1, binding = 1..16`：按 Shader properties 声明顺序排列的 Texture2D。
 
-每个 in-flight frame 有独立的材质 uniform buffer 和 BindGroup。`MaterialGpuCache` 只通过
+每个 in-flight frame 有独立的材质 uniform buffer 和 BindGroup。`MaterialBindingCache` 只负责同帧查找和槽位复用，`MaterialGpuFactory` 通过
 `rhi::IDevice` 创建 Buffer 和 BindGroup，不接触 Vulkan descriptor。`Material::version()`
-负责标识 CPU 数据版本；同一帧内相同 `MaterialHandle` 只准备一次。纹理 resolver 返回
+负责标识 CPU 数据版本；同一帧内相同 `MaterialHandle` 只上传一次。纹理 resolver 返回
 RHI TextureView/Sampler handle，未安装 resolver 或纹理未就绪时只输出 warn。
 
 ### 9. Keyword、Variant 与多 Pass
@@ -116,9 +116,9 @@ ShadowCaster → DepthOnly → Forward
 | AssetManager | 规范化 `asset://` 路径 | `weak_ptr<Asset>`（当前为 ShaderAsset / MaterialAsset） |
 | CompiledShaderCache | SPIR-V 内容 + stage + entry + Variant | CompiledShader |
 | ShaderProgramCache | vertex CompileID + fragment CompileID + Variant | ShaderProgram |
-| RhiShaderCache | CompileID | RHI Shader handle |
-| PipelineCache | ProgramID + LayoutID + VertexLayout + RenderState + RT format | RHI Pipeline handle |
-| MaterialGpuCache | frame + MaterialHandle + material version | RHI uniform buffer + BindGroup |
+| ShaderModuleCache | CompileID | RHI Shader handle |
+| GraphicsPipelineCache | ProgramID + LayoutID + VertexLayout + RenderState + RT format | RHI Pipeline handle |
+| MaterialBindingCache | frame + MaterialHandle | RHI uniform buffer + BindGroup slot |
 
 ## 生命周期和修改规则
 
@@ -135,9 +135,11 @@ ShadowCaster → DepthOnly → Forward
 - `src/render/shader/ShaderPreprocessor.h/.cpp`：define、include 展开及 include 依赖缓存。
 - `src/render/shader/ShaderCompiler.h/.cpp`：接收 `PreprocessedShader` 并编译 SPIR-V。
 - `src/render/shader/ShaderCompilePipeline.h/.cpp`：运行模式、CompiledShader、Program、缓存及流程编排。
-- `src/render/cache/RhiShaderCache.h/.cpp`：CompileID 到 RHI Shader handle，不依赖 Vulkan 类型。
-- `src/render/cache/PipelineCache.h/.cpp`：将 ShaderPass、RenderState 与 VertexLayout 转换为 RHI Pipeline 描述并缓存 handle。
+- `src/render/gpu/shader/ShaderModuleCache.h/.cpp`：CompileID 到 RHI Shader handle 的纯缓存。
+- `src/render/gpu/pipeline/GraphicsPipelineCache.h/.cpp`：Pipeline key 到 RHI Pipeline handle 的纯缓存。
 - `src/rhi/vulkan/VulkanGraphicsPipeline.h/.cpp`：将 RHI Pipeline 描述转换为 Vulkan graphics pipeline。
-- `src/render/cache/MaterialGpuCache.h/.cpp`：每帧材质 GPU 数据与 RHI BindGroup。
-- `src/render/renderer/Renderer.cpp`：Variant 选择、多 Pass 场景提交、缓存组装、DrawList 录制和热重载边界。
+- `src/render/gpu/material/MaterialBindingCache.h/.cpp`：每帧材质 GPU 数据槽位缓存。
+- `src/render/gpu/<domain>/*GpuFactory.h/.cpp`：RHI 资源创建、必要的数据上传和释放实现。
+- `src/render/gpu/<domain>/*GpuManager.h/.cpp`：各类 GPU 缓存命中、资源创建和退役流程编排。
+- `src/render/renderer/Renderer.cpp`：Variant 选择、多 Pass 场景提交和 DrawList 录制；缓存组装与热重载由对应 GPU Manager 负责。
 - `src/rhi/vulkan/VulkanSwapchain.cpp`：acquire、命令缓冲、提交、同步与 present。

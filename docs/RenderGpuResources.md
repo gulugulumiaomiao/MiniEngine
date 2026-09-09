@@ -1,0 +1,60 @@
+# Render GPU 资源分层
+
+Render 层将 GPU 资源流程分为 GPU Resource Manager、Cache 和 Factory 三层：
+
+```text
+Renderer
+  -> *GpuManager                  各资源的命中、创建、替换、退役流程
+      -> GpuCacheRegistry         纯 CPU 单例缓存
+      -> IGpuResourceFactory      GPU 资源创建、必要的数据上传与释放
+          -> RHI IDevice
+```
+
+## 抽象接口
+
+`IGpuResourceFactory<CreateInfo, Resource>` 统一提供 `create()` 和 `release()`，并由基类持有 `IDevice&`。Mesh、Texture 和 Material 的 `create()` 包含必要的数据上传；ShaderModule、GraphicsPipeline 和 Sampler 的 `create()` 只创建对应 RHI 对象。
+
+`IGpuCache<Key, Resource>` 提供 `find()`、`put()`、`remove()`、`extractIf()` 和 `extractAll()`。Cache 不保存 `IDevice`，不调用 RHI，也不负责同步或销毁。替换和失效操作会将旧资源交还给对应 GPU Resource Manager，由 Manager 决定立即释放还是按 frame serial 延迟退役。
+
+## GPU Manager
+
+- `MeshGpuManager`：查询 CPU Mesh、处理版本缓存、创建和释放顶点/索引 Buffer。
+- `TextureGpuManager`：查询或加载 CPU Texture、管理纹理缓存和共享默认 Sampler。
+- `MaterialGpuManager`：按 in-flight frame 复用 Material binding，并依赖 TextureGpuManager 解析纹理。
+- `ShaderGpuManager`：持有 ShaderCompilePipeline，管理 SPIR-V 编译、ShaderModule 缓存和延迟退役。
+- `GraphicsPipelineManager`：管理 Pipeline 描述生成、缓存、编译失败回退和延迟退役。
+- `FrameGpuManager`：管理场景/对象 Buffer、BindGroupLayout 和每帧 BindGroup，并负责帧数据上传。
+
+这些 Manager 都是单例。Renderer 不拥有它们，也不提供 CPU/GPU 资产的创建、加载、修改或销毁 API。
+
+## Cache 与 Factory
+
+- `MeshGpuFactory` 创建并上传顶点、索引 Buffer；`MeshGpuCache` 使用 MeshHandle generation 和 Mesh version 组成缓存键。
+- `TextureGpuFactory` 创建 Texture、上传 mip 并创建 TextureView；`TextureGpuCache` 使用 TextureHandle generation 和 Texture version 组成缓存键。
+- `MaterialGpuFactory` 更新 uniform buffer 并创建 BindGroup；`MaterialBindingCache` 按 in-flight frame 复用资源槽位。
+- `ShaderModuleGpuFactory` 根据 `CompiledShader` 创建 RHI ShaderModule；`ShaderModuleCache` 按 `CompiledShaderId` 查询。
+- `GraphicsPipelineGpuFactory` 根据完整 RHI 描述创建 Pipeline；`GraphicsPipelineCache` 按 Program、布局、RenderState、VertexLayout 和目标格式生成的键查询。
+- `SamplerGpuFactory` 创建 TextureGpuManager 持有的共享默认 Sampler。
+
+## 初始化和关闭
+
+`GpuCacheRegistry` 是纯缓存单例，不持有 Device 或 GPU 对象的销毁能力。Engine 在 Renderer 建立 RHI Device 与 BindGroupLayout 后依次初始化 Registry 和各 GPU Manager。
+
+关闭时 Engine 先等待 Device 空闲，然后按以下顺序关闭：
+
+1. MaterialGpuManager
+2. GraphicsPipelineManager
+3. ShaderGpuManager
+4. TextureGpuManager
+5. MeshGpuManager
+6. GpuCacheRegistry
+7. FrameGpuManager
+8. Renderer 持有的 Swapchain 和 Device
+
+这保证 Material descriptor 先于 Texture/Sampler 释放，GraphicsPipeline 先于 ShaderModule 释放。
+
+## 更新与退役
+
+Mesh/Texture 版本不匹配时，对应 GPU Manager 先通过 Factory 创建新资源，再从 Cache 提取旧版本；当前采用 `waitIdle()` 后释放。ShaderModule 和 GraphicsPipeline 使用 frame serial 延迟退役。
+
+新增资源类型时，应增加对应 GPU Resource Manager，并用 `IGpuResourceFactory` 的具体实现完成 RHI 创建、必要的数据上传和释放；Cache 只保存键和值。
