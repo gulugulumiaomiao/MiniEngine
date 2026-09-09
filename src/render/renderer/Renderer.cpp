@@ -7,6 +7,7 @@
 #include "render/cache/MeshGpuCache.h"
 #include "render/cache/PipelineCache.h"
 #include "render/cache/RhiShaderCache.h"
+#include "render/cache/TextureGpuCache.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
 #include "render/mesh/MeshBuilder.h"
@@ -14,6 +15,7 @@
 #include "render/render_graph/RenderGraph.h"
 #include "render/renderer/RenderScene.h"
 #include "render/shader/ShaderCompilePipeline.h"
+#include "render/texture/TextureManager.h"
 #include "runtime/window/Window.h"
 
 #include <algorithm>
@@ -71,8 +73,11 @@ Renderer::Renderer(Window& window, rhi::Context context)
 #endif
     shaderCompilePipeline_ = std::make_unique<ShaderCompilePipeline>(std::move(shaderConfig));
     rhiShaderCache_ = std::make_unique<RhiShaderCache>(*device_, *shaderCompilePipeline_);
+    textureGpuCache_ = std::make_unique<TextureGpuCache>(*device_);
     materialGpuCache_ =
         std::make_unique<MaterialGpuCache>(*device_, materialBindGroupLayout_, kFramesInFlight);
+    materialGpuCache_->setTextureResolver(
+        [this](std::string_view reference) { return resolveTexture(reference); });
     meshGpuCache_ = std::make_unique<MeshGpuCache>(*device_);
     pipelineCache_ = std::make_unique<PipelineCache>(*device_,
                                                      sceneBindGroupLayout_,
@@ -89,6 +94,8 @@ Renderer::~Renderer() {
     pipelineCache_.reset();
     materialGpuCache_->clear();
     materialGpuCache_.reset();
+    textureGpuCache_->clear();
+    textureGpuCache_.reset();
     meshGpuCache_->clear();
     meshGpuCache_.reset();
     rhiShaderCache_->clear();
@@ -121,6 +128,10 @@ MaterialHandle Renderer::loadMaterial(const VirtualPath& materialPath) {
     return MATERIAL_MANAGER.load(materialPath);
 }
 
+TextureHandle Renderer::loadTexture(const VirtualPath& texturePath) {
+    return TEXTURE_MANAGER.load(texturePath);
+}
+
 void Renderer::destroyMesh(MeshHandle handle) {
     releaseMesh(handle);
     (void)MESH_MANAGER.destroy(handle);
@@ -128,6 +139,11 @@ void Renderer::destroyMesh(MeshHandle handle) {
 
 void Renderer::destroyMaterial(MaterialHandle handle) {
     MATERIAL_MANAGER.destroy(handle);
+}
+
+void Renderer::destroyTexture(TextureHandle handle) {
+    textureGpuCache_->invalidate(handle);
+    (void)TEXTURE_MANAGER.destroy(handle);
 }
 
 void Renderer::setMaterialFloat(MaterialHandle handle, std::string_view name, float value) {
@@ -297,7 +313,7 @@ void Renderer::createBindGroupLayouts() {
     sceneBindGroupLayout_ =
         device_->createBindGroupLayout({sceneBindings, "Scene bind group layout"});
 
-    std::array<rhi::BindGroupLayoutEntry, 17> materialBindings{};
+    std::array<rhi::BindGroupLayoutEntry, kMaxMaterialTextures + 1> materialBindings{};
     materialBindings[0] = {0, rhi::BindingType::UniformBuffer, allGraphics};
     for (std::uint32_t binding = 1; binding < materialBindings.size(); ++binding) {
         materialBindings[binding] = {binding, rhi::BindingType::SampledTexture, allGraphics};
@@ -354,6 +370,28 @@ MeshDrawInfo Renderer::prepareMesh(MeshHandle handle, Mesh& mesh) {
 
 void Renderer::releaseMesh(MeshHandle handle) {
     meshGpuCache_->invalidate(handle);
+}
+
+std::optional<rhi::TextureBinding> Renderer::resolveTexture(std::string_view textureReference) {
+    TextureHandle handle;
+    if (textureReference.empty()) {
+        handle = TEXTURE_MANAGER.defaultWhite();
+    } else {
+        VirtualPath path{textureReference};
+        if (!path.valid())
+            path = VirtualPath{"asset://" + std::string{textureReference}};
+        if (path.valid() && path.scheme() == "asset")
+            handle = TEXTURE_MANAGER.load(path);
+        if (!handle) {
+            Log::warn("Renderer",
+                      "Using the error Texture for unresolved reference: %.*s",
+                      static_cast<int>(textureReference.size()),
+                      textureReference.data());
+            handle = TEXTURE_MANAGER.errorTexture();
+        }
+    }
+    Texture* texture = TEXTURE_MANAGER.find(handle);
+    return texture ? textureGpuCache_->prepare(handle, *texture) : std::nullopt;
 }
 
 rhi::GraphicsPipelineHandle Renderer::pipelineForPass(const Shader& shader,

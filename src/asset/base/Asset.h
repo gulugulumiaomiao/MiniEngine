@@ -14,6 +14,7 @@ enum class AssetType {
     Material,
     Mesh,
     Scene,
+    Texture,
 };
 
 [[nodiscard]] constexpr const char* assetTypeName(AssetType type) {
@@ -21,6 +22,7 @@ enum class AssetType {
     case AssetType::Shader: return "Shader";
     case AssetType::Material: return "Material";
     case AssetType::Mesh: return "Mesh";
+    case AssetType::Texture: return "Texture";
     case AssetType::Scene: return "Scene";
     default: return "Unknown";
     }

@@ -2,6 +2,7 @@
   "$schemaVersion": 1,
   "name": "MiniEngine/BlinnPhong",
   "properties": [
+    { "name": "BaseMap", "displayName": "Base Map", "type": "Texture2D", "default": "" },
     { "name": "BaseColor", "displayName": "Base Color", "type": "Color", "default": [0.8, 0.8, 0.8, 1.0] },
     { "name": "SpecularColor", "displayName": "Specular Color", "type": "Color", "default": [1.0, 1.0, 1.0, 1.0] },
     { "name": "AmbientColor", "displayName": "Ambient Color", "type": "Color", "default": [0.04, 0.04, 0.04, 1.0] },
@@ -32,11 +33,13 @@
       },
       "vertexInput": [
         { "name": "position", "semantic": "POSITION", "type": "Vec3", "location": 0 },
-        { "name": "normal", "semantic": "NORMAL", "type": "Vec3", "location": 1 }
+        { "name": "normal", "semantic": "NORMAL", "type": "Vec3", "location": 1 },
+        { "name": "uv", "semantic": "TEXCOORD0", "type": "Vec2", "location": 3 }
       ],
       "varyings": [
         { "name": "worldPosition", "type": "Vec3", "location": 0 },
-        { "name": "worldNormal", "type": "Vec3", "location": 1 }
+        { "name": "worldNormal", "type": "Vec3", "location": 1 },
+        { "name": "uv", "type": "Vec2", "location": 2 }
       ],
       "fragmentOutputs": [
         { "name": "color", "type": "Vec4", "location": 0 }

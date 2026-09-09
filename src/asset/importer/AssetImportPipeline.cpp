@@ -104,7 +104,7 @@ bool AssetImportPipeline::reimportAsset(const VirtualPath& sourcePath) {
     return importAssetInternal(sourcePath, true);
 }
 
-bool AssetImportPipeline::ensureMaterialShaderImported(const VirtualPath& materialPath) {
+bool AssetImportPipeline::ensureMaterialDependenciesImported(const VirtualPath& materialPath) {
     const auto source = FILE_SYSTEM.readText(materialPath);
     if (!source)
         return false;
@@ -118,7 +118,34 @@ bool AssetImportPipeline::ensureMaterialShaderImported(const VirtualPath& materi
                    material->shader.string().c_str());
         return false;
     }
-    return importAssetInternal(material->shader, false);
+    if (!importAssetInternal(material->shader, false))
+        return false;
+    const auto shaderSource = FILE_SYSTEM.readText(material->shader);
+    const std::shared_ptr<ShaderAsset> shader =
+        shaderSource ? detail::parseShaderAsset(material->shader, *shaderSource) : nullptr;
+    if (!shader)
+        return false;
+    for (const ShaderPropertyDesc& property : shader->properties) {
+        if (property.type != ShaderPropertyType::Texture2D)
+            continue;
+        const auto override = material->properties.find(property.name);
+        const ShaderValue& value =
+            override == material->properties.end() ? property.defaultValue : override->second;
+        const std::string* textureReference = std::get_if<std::string>(&value);
+        if (!textureReference || textureReference->empty())
+            continue;
+        VirtualPath texturePath{*textureReference};
+        if (!texturePath.valid())
+            texturePath = VirtualPath{"asset://" + *textureReference};
+        if (!texturePath.valid() || inferAssetType(texturePath) != AssetType::Texture ||
+            !importAssetInternal(texturePath, false)) {
+            Log::error("AssetImportPipeline",
+                       "Material Texture path is invalid: %s",
+                       textureReference->c_str());
+            return false;
+        }
+    }
+    return true;
 }
 
 bool AssetImportPipeline::importAssetInternal(const VirtualPath& sourcePath, bool force) {
@@ -167,7 +194,7 @@ bool AssetImportPipeline::importAssetInternal(const VirtualPath& sourcePath, boo
 
     AssetImportContext context{*meta, sourcePath, metaPath, artifactPath};
     AssetImportResult result =
-        meta->assetType == AssetType::Material && !ensureMaterialShaderImported(sourcePath)
+        meta->assetType == AssetType::Material && !ensureMaterialDependenciesImported(sourcePath)
             ? AssetImportResult::failed(AssetType::Material,
                                         "Material Shader dependency import failed")
             : importer->import(context);

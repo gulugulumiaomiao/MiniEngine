@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rhi/api/PipelineDesc.h"
 #include "rhi/api/RhiTypes.h"
 
 #include <cstddef>
@@ -32,6 +33,50 @@ enum class MemoryUsage {
     DeviceLocal,
     Upload,
     Readback,
+};
+
+enum class TextureDimension { Texture2D };
+
+enum class TextureUsage : std::uint32_t {
+    None = 0,
+    Sampled = 1U << 0U,
+    TransferSource = 1U << 1U,
+    TransferDestination = 1U << 2U,
+};
+
+constexpr TextureUsage operator|(TextureUsage left, TextureUsage right) {
+    return static_cast<TextureUsage>(static_cast<std::uint32_t>(left) |
+                                     static_cast<std::uint32_t>(right));
+}
+
+constexpr bool hasFlag(TextureUsage value, TextureUsage flag) {
+    return (static_cast<std::uint32_t>(value) & static_cast<std::uint32_t>(flag)) != 0;
+}
+
+struct TextureDesc {
+    TextureDimension dimension{TextureDimension::Texture2D};
+    TextureFormat format{TextureFormat::Undefined};
+    std::uint32_t width{};
+    std::uint32_t height{};
+    std::uint32_t depth{1};
+    std::uint32_t mipCount{1};
+    TextureUsage usage{TextureUsage::None};
+    std::string debugName;
+};
+
+struct TextureUploadRegion {
+    std::uint32_t mipLevel{};
+    std::uint32_t arrayLayer{};
+    std::uint32_t width{};
+    std::uint32_t height{};
+    std::span<const std::byte> data;
+};
+
+struct TextureViewDesc {
+    TextureHandle texture;
+    TextureFormat format{TextureFormat::Undefined};
+    std::uint32_t baseMipLevel{};
+    std::uint32_t mipCount{1};
 };
 
 struct BufferDesc {

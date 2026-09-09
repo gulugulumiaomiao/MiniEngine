@@ -75,17 +75,21 @@ add_library(MiniAssetImporters STATIC
     src/asset/importer/ShaderAssetImporter.cpp
     src/asset/importer/MaterialAssetImporter.cpp
     src/asset/importer/MeshAssetImporter.cpp
+    src/asset/importer/TextureAssetImporter.cpp
     src/asset/importer/SceneAssetImporter.cpp
     src/asset/importer/BuiltinAssetImporters.cpp
     src/render/mesh/Mesh.cpp
     src/render/mesh/MeshManager.cpp
     src/render/mesh/MeshPrimitive.cpp
     src/render/mesh/MeshBuilder.cpp
+    src/render/texture/Texture.cpp
+    src/render/texture/TextureManager.cpp
 )
 target_include_directories(MiniAssetImporters PUBLIC src)
 target_include_directories(MiniAssetImporters SYSTEM PRIVATE
     third_party/glm/include
     third_party/nlohmann/include
+    third_party/stb
 )
 target_link_libraries(MiniAssetImporters PUBLIC MiniAsset)
 if(MSVC)
@@ -241,6 +245,7 @@ add_executable(MiniVulkanEngine
     src/render/cache/MeshGpuCache.cpp
     src/render/cache/PipelineCache.cpp
     src/render/cache/RhiShaderCache.cpp
+    src/render/cache/TextureGpuCache.cpp
     src/rhi/vulkan/VulkanSampler.cpp
     src/rhi/vulkan/VulkanShaderModule.cpp
     src/rhi/vulkan/VmaImplementation.cpp
@@ -411,6 +416,9 @@ if(BUILD_TESTING)
         MiniAssetImporters
         MiniSpirvCrossCore
     )
+    target_compile_definitions(AssetImporterTest PRIVATE
+        MINI_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    )
     if(MSVC)
         target_compile_options(AssetImporterTest PRIVATE /W4 /permissive- /utf-8)
     else()
@@ -497,6 +505,37 @@ if(BUILD_TESTING)
         )
     endif()
     add_test(NAME MeshTest COMMAND MeshTest)
+
+    add_executable(TextureTest
+        tests/TextureTest.cpp
+        src/asset/manager/AssetManager.cpp
+        src/render/cache/TextureGpuCache.cpp
+        src/render/material/Material.cpp
+        src/render/material/MaterialManager.cpp
+        src/render/shader/Shader.cpp
+        src/render/shader/ShaderManager.cpp
+    )
+    target_link_libraries(TextureTest PRIVATE
+        MiniAssetImporters
+        MiniSpirvCrossCore
+        Vulkan::Vulkan
+    )
+    target_include_directories(TextureTest SYSTEM PRIVATE
+        third_party/glm/include
+        third_party/nlohmann/include
+    )
+    if(MSVC)
+        target_compile_options(TextureTest PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(TextureTest PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    if(MINGW)
+        target_link_libraries(TextureTest PRIVATE
+            "-Wl,-Bstatic,--start-group" stdc++ gcc gcc_eh winpthread
+            "-Wl,--end-group,-Bdynamic"
+        )
+    endif()
+    add_test(NAME TextureTest COMMAND TextureTest)
 
     add_executable(SceneTest tests/SceneTest.cpp)
     target_link_libraries(SceneTest PRIVATE MiniScene)

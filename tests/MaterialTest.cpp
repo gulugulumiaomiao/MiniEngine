@@ -101,7 +101,7 @@ int main() {
         valueData.getVec3("Direction") != math::Vec3{4.0F, 5.0F, 6.0F} ||
         valueData.getVec4("Params") != math::Vec4{1.0F, 2.0F, 3.0F, 4.0F} ||
         valueData.getVec4("Tint") != math::Vec4{0.25F, 0.5F, 0.75F, 1.0F} ||
-        valueData.getTexture("MainTexture") != "black") {
+        valueData.getTexture("MainTexture") != "asset://textures/black.png") {
         return 5;
     }
     valueData.markClean();

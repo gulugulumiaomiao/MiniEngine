@@ -23,6 +23,10 @@ AssetType inferAssetType(const VirtualPath& sourcePath) {
     if (path.ends_with(".mesh.json")) {
         return AssetType::Mesh;
     }
+    if (path.ends_with(".png") || path.ends_with(".jpg") || path.ends_with(".jpeg") ||
+        path.ends_with(".ktx") || path.ends_with(".ktx2")) {
+        return AssetType::Texture;
+    }
     if (path.ends_with(".scene.json")) {
         return AssetType::Scene;
     }

@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -23,6 +24,7 @@ class RenderScene;
 class RhiShaderCache;
 class ShaderPass;
 class ShaderCompilePipeline;
+class TextureGpuCache;
 struct MeshData;
 struct MeshDesc;
 struct MeshBuildRecipe;
@@ -42,8 +44,10 @@ public:
     [[nodiscard]] MeshHandle createProceduralMesh(const MeshBuildRecipe& recipe);
     [[nodiscard]] MeshHandle loadMesh(const VirtualPath& meshPath);
     [[nodiscard]] MaterialHandle loadMaterial(const VirtualPath& materialPath);
+    [[nodiscard]] TextureHandle loadTexture(const VirtualPath& texturePath);
     void destroyMesh(MeshHandle handle);
     void destroyMaterial(MaterialHandle handle);
+    void destroyTexture(TextureHandle handle);
     void setMaterialFloat(MaterialHandle handle, std::string_view name, float value);
     void setMaterialVec2(MaterialHandle handle, std::string_view name, const math::Vec2& value);
     void setMaterialVec3(MaterialHandle handle, std::string_view name, const math::Vec3& value);
@@ -69,6 +73,8 @@ private:
     void destroyFrameResources();
     [[nodiscard]] MeshDrawInfo prepareMesh(MeshHandle handle, Mesh& mesh);
     void releaseMesh(MeshHandle handle);
+    [[nodiscard]] std::optional<rhi::TextureBinding>
+    resolveTexture(std::string_view textureReference);
     [[nodiscard]] rhi::GraphicsPipelineHandle pipelineForPass(const Shader& shader,
                                                               const ShaderPass& pass,
                                                               const ShaderVariantKey& variant,
@@ -89,6 +95,7 @@ private:
     std::unique_ptr<ShaderCompilePipeline> shaderCompilePipeline_;
     std::unique_ptr<RhiShaderCache> rhiShaderCache_;
     std::unique_ptr<MaterialGpuCache> materialGpuCache_;
+    std::unique_ptr<TextureGpuCache> textureGpuCache_;
     std::unique_ptr<PipelineCache> pipelineCache_;
     std::uint64_t frameSerial_{};
     std::uint64_t lastShaderPollSerial_{std::numeric_limits<std::uint64_t>::max()};

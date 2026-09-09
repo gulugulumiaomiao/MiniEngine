@@ -17,17 +17,16 @@ TextureFormat fromVulkan(VkFormat format) {
 } // namespace
 
 VulkanImage::VulkanImage(VmaAllocator allocator,
-                         VkDevice device,
                          VkExtent3D extent,
                          VkFormat format,
                          VkImageUsageFlags usage,
-                         VkImageAspectFlags aspectMask)
-    : allocator_(allocator), device_(device), nativeFormat_(format), format_(fromVulkan(format)),
-      extent_(extent) {
+                         std::uint32_t mipCount)
+    : allocator_(allocator), nativeFormat_(format), format_(fromVulkan(format)), extent_(extent),
+      mipCount_(mipCount) {
     VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
     imageInfo.extent = extent;
-    imageInfo.mipLevels = 1;
+    imageInfo.mipLevels = mipCount;
     imageInfo.arrayLayers = 1;
     imageInfo.format = format;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
@@ -42,24 +41,9 @@ VulkanImage::VulkanImage(VmaAllocator allocator,
         VK_SUCCESS) {
         Log::fatal("VulkanImage", "vmaCreateImage failed");
     }
-
-    VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-    viewInfo.image = image_;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = nativeFormat_;
-    viewInfo.subresourceRange.aspectMask = aspectMask;
-    viewInfo.subresourceRange.levelCount = 1;
-    viewInfo.subresourceRange.layerCount = 1;
-    if (vkCreateImageView(device_, &viewInfo, nullptr, &view_) != VK_SUCCESS) {
-        vmaDestroyImage(allocator_, image_, allocation_);
-        image_ = VK_NULL_HANDLE;
-        allocation_ = VK_NULL_HANDLE;
-        Log::fatal("VulkanImage", "vkCreateImageView failed");
-    }
 }
 
 VulkanImage::~VulkanImage() {
-    vkDestroyImageView(device_, view_, nullptr);
     if (image_ != VK_NULL_HANDLE) {
         vmaDestroyImage(allocator_, image_, allocation_);
     }

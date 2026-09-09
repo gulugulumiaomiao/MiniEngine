@@ -8,7 +8,7 @@ namespace engine::rhi::vulkan {
 
 class VulkanSampler final : public ISampler {
 public:
-    explicit VulkanSampler(VkDevice device, SamplerFilter filter = SamplerFilter::Linear);
+    VulkanSampler(VkDevice device, const SamplerDesc& desc);
     ~VulkanSampler() override;
 
     VulkanSampler(const VulkanSampler&) = delete;
@@ -17,12 +17,12 @@ public:
     VulkanSampler& operator=(VulkanSampler&&) = delete;
 
     [[nodiscard]] VkSampler handle() const { return sampler_; }
-    [[nodiscard]] SamplerFilter filter() const override { return filter_; }
+    [[nodiscard]] SamplerFilter filter() const override { return desc_.minFilter; }
 
 private:
     VkDevice device_{VK_NULL_HANDLE};
     VkSampler sampler_{VK_NULL_HANDLE};
-    SamplerFilter filter_{SamplerFilter::Linear};
+    SamplerDesc desc_;
 };
 
 } // namespace engine::rhi::vulkan

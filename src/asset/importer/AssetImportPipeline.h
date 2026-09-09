@@ -41,7 +41,7 @@ private:
     AssetImportPipeline() = default;
 
     [[nodiscard]] bool importAssetInternal(const VirtualPath& sourcePath, bool force);
-    [[nodiscard]] bool ensureMaterialShaderImported(const VirtualPath& materialPath);
+    [[nodiscard]] bool ensureMaterialDependenciesImported(const VirtualPath& materialPath);
     void notify(const AssetImportNotification& notification) const;
 
     AssetImporterRegistry registry_;

@@ -47,6 +47,21 @@ public:
         ++uploads;
     }
 
+    engine::rhi::TextureHandle createTexture(const engine::rhi::TextureDesc&) override {
+        return {};
+    }
+    void destroyTexture(engine::rhi::TextureHandle) override {}
+    void uploadTexture(engine::rhi::TextureHandle,
+                       std::span<const engine::rhi::TextureUploadRegion>) override {}
+    engine::rhi::TextureViewHandle createTextureView(const engine::rhi::TextureViewDesc&) override {
+        return {};
+    }
+    void destroyTextureView(engine::rhi::TextureViewHandle) override {}
+    engine::rhi::SamplerHandle createSampler(const engine::rhi::SamplerDesc&) override {
+        return {};
+    }
+    void destroySampler(engine::rhi::SamplerHandle) override {}
+
     engine::rhi::ShaderHandle createShader(const engine::rhi::ShaderDesc&) override { return {}; }
     void destroyShader(engine::rhi::ShaderHandle) override {}
     engine::rhi::GraphicsPipelineHandle

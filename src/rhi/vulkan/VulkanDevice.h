@@ -18,6 +18,8 @@ class VulkanBuffer;
 class VulkanShaderModule;
 class VulkanDescriptorAllocator;
 class VulkanDescriptorSetLayout;
+class VulkanImage;
+class VulkanSampler;
 
 class VulkanDevice final : public IDevice {
 public:
@@ -32,6 +34,15 @@ public:
     void uploadBuffer(BufferHandle destination,
                       std::span<const std::byte> data,
                       std::uint64_t offset = 0) override;
+
+    [[nodiscard]] TextureHandle createTexture(const TextureDesc& desc) override;
+    void destroyTexture(TextureHandle handle) override;
+    void uploadTexture(TextureHandle destination,
+                       std::span<const TextureUploadRegion> regions) override;
+    [[nodiscard]] TextureViewHandle createTextureView(const TextureViewDesc& desc) override;
+    void destroyTextureView(TextureViewHandle handle) override;
+    [[nodiscard]] SamplerHandle createSampler(const SamplerDesc& desc) override;
+    void destroySampler(SamplerHandle handle) override;
 
     [[nodiscard]] ShaderHandle createShader(const ShaderDesc& desc) override;
     void destroyShader(ShaderHandle handle) override;
@@ -62,6 +73,7 @@ public:
     [[nodiscard]] VkBuffer resolveBuffer(BufferHandle handle) const override;
     [[nodiscard]] VkImage resolveTexture(TextureHandle handle) const override;
     [[nodiscard]] VkImageView resolveTextureView(TextureViewHandle handle) const override;
+    [[nodiscard]] VkSampler resolveSampler(SamplerHandle handle) const;
     [[nodiscard]] VkShaderModule resolveShader(ShaderHandle handle) const;
     [[nodiscard]] VkDescriptorSetLayout resolveBindGroupLayout(BindGroupLayoutHandle handle) const;
     [[nodiscard]] ResolvedPipeline resolvePipeline(GraphicsPipelineHandle handle) const override;
@@ -103,11 +115,20 @@ private:
     };
 
     struct TextureResource {
-        VkImage resource{VK_NULL_HANDLE};
+        std::unique_ptr<VulkanImage> owned;
+        VkImage external{VK_NULL_HANDLE};
+        bool uploaded{};
+
+        [[nodiscard]] VkImage handle() const;
     };
 
     struct TextureViewResource {
         VkImageView resource{VK_NULL_HANDLE};
+        bool owned{};
+    };
+
+    struct SamplerResource {
+        std::unique_ptr<VulkanSampler> resource;
     };
 
     [[nodiscard]] BufferResource& requireBufferResource(BufferHandle handle);
@@ -143,6 +164,7 @@ private:
     HandlePool<BindGroupResource, BindGroupHandle> bindGroups_;
     HandlePool<TextureResource, TextureHandle> textures_;
     HandlePool<TextureViewResource, TextureViewHandle> textureViews_;
+    HandlePool<SamplerResource, SamplerHandle> samplers_;
     std::unique_ptr<VulkanDescriptorAllocator> descriptorAllocator_;
 };
 

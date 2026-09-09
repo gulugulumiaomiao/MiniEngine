@@ -8,6 +8,7 @@
 #include "render/material/Material.h"
 
 #include <utility>
+#include <algorithm>
 
 namespace engine {
 
@@ -48,6 +49,30 @@ AssetImportResult MaterialAssetImporter::import(const AssetImportContext& contex
     if (!validateMaterialAsset(*material, *shader, context.sourcePath)) {
         return fail("Material properties do not match Shader: " + context.sourcePath.string());
     }
+    std::vector<VirtualPath> dependencies{material->shader};
+    for (const ShaderPropertyDesc& property : shader->properties) {
+        if (property.type != ShaderPropertyType::Texture2D)
+            continue;
+        const auto override = material->properties.find(property.name);
+        const ShaderValue& value =
+            override == material->properties.end() ? property.defaultValue : override->second;
+        const std::string* reference = std::get_if<std::string>(&value);
+        if (!reference || reference->empty())
+            continue;
+        VirtualPath texturePath{*reference};
+        if (!texturePath.valid())
+            texturePath = VirtualPath{"asset://" + *reference};
+        const auto textureRecord = ASSET_DATABASE.findByPath(texturePath);
+        if (!texturePath.valid() || !textureRecord ||
+            textureRecord->status != AssetImportStatus::Imported ||
+            textureRecord->type != AssetType::Texture) {
+            return fail("Material Texture has not been imported: " + *reference);
+        }
+        if (override != material->properties.end())
+            override->second = texturePath.string();
+        if (std::ranges::find(dependencies, texturePath) == dependencies.end())
+            dependencies.push_back(std::move(texturePath));
+    }
     if (!FILE_SYSTEM.createDirectories(context.artifactPath.parent())) {
         return fail("Cannot prepare Material Artifact: " + context.artifactPath.string());
     }
@@ -61,7 +86,7 @@ AssetImportResult MaterialAssetImporter::import(const AssetImportContext& contex
         return fail("Cannot save Material Artifact: " + context.artifactPath.string());
     }
     return AssetImportResult::succeeded(
-        AssetType::Material, context.artifactPath, {material->shader});
+        AssetType::Material, context.artifactPath, std::move(dependencies));
 }
 
 } // namespace engine

@@ -6,6 +6,7 @@
 #include "core/serialization/BinaryTransfer.h"
 #include "render/mesh/Mesh.h"
 #include "render/shader/Shader.h"
+#include "render/texture/Texture.h"
 
 #include <algorithm>
 #include <array>
@@ -13,10 +14,31 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <nlohmann/json.hpp>
 #include <span>
 #include <string>
 #include <vector>
+
+namespace {
+
+std::vector<std::byte> readFixture(std::string_view name) {
+    const std::filesystem::path path =
+        std::filesystem::path{MINI_TEST_SOURCE_DIR} / "tests" / "data" / name;
+    std::ifstream stream{path, std::ios::binary | std::ios::ate};
+    std::vector<std::byte> result;
+    if (!stream || stream.tellg() <= 0)
+        return result;
+    result.resize(static_cast<std::size_t>(stream.tellg()));
+    stream.seekg(0);
+    stream.read(reinterpret_cast<char*>(result.data()),
+                static_cast<std::streamsize>(result.size()));
+    if (!stream)
+        result.clear();
+    return result;
+}
+
+} // namespace
 
 int main() {
     using namespace engine;
@@ -64,7 +86,8 @@ int main() {
     AssetImporterRegistry registry;
     if (!registerBuiltinAssetImporters(registry) || !registry.find(AssetType::Shader) ||
         !registry.find(AssetType::Material) || !registry.find(AssetType::Mesh) ||
-        !registry.find(AssetType::Scene) || registry.find(AssetType::Unknown)) {
+        !registry.find(AssetType::Texture) || !registry.find(AssetType::Scene) ||
+        registry.find(AssetType::Unknown)) {
         return 3;
     }
 
@@ -172,6 +195,85 @@ int main() {
         shader.subShaders.front().passes.size() != 1) {
         return 6;
     }
+
+    const VirtualPath texturePath{"asset://textures/import_test.ktx"};
+    std::vector<std::byte> ktx(84U);
+    constexpr std::array<std::uint8_t, 12> ktxIdentifier{
+        0xAB, 0x4B, 0x54, 0x58, 0x20, 0x31, 0x31, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A};
+    for (std::size_t index = 0; index < ktxIdentifier.size(); ++index)
+        ktx[index] = static_cast<std::byte>(ktxIdentifier[index]);
+    const auto writeU32 = [&ktx](std::size_t offset, std::uint32_t value) {
+        for (std::size_t byte = 0; byte < 4; ++byte)
+            ktx[offset + byte] = static_cast<std::byte>((value >> (byte * 8U)) & 0xffU);
+    };
+    writeU32(12, 0x04030201U);
+    writeU32(16, 0x1401U);
+    writeU32(20, 1U);
+    writeU32(24, 0x1908U);
+    writeU32(28, 0x8058U);
+    writeU32(32, 0x1908U);
+    writeU32(36, 2U);
+    writeU32(40, 2U);
+    writeU32(44, 0U);
+    writeU32(48, 0U);
+    writeU32(52, 1U);
+    writeU32(56, 1U);
+    writeU32(60, 0U);
+    writeU32(64, 16U);
+    for (std::size_t index = 68; index < ktx.size(); ++index)
+        ktx[index] = static_cast<std::byte>(index);
+    if (!FILE_SYSTEM.writeBinary(texturePath, ktx) ||
+        inferAssetType(VirtualPath{"asset://textures/color.png"}) != AssetType::Texture ||
+        inferAssetType(VirtualPath{"asset://textures/color.jpg"}) != AssetType::Texture ||
+        inferAssetType(VirtualPath{"asset://textures/color.ktx2"}) != AssetType::Texture) {
+        return 11;
+    }
+    const AssetMeta textureMeta{1, AssetId::generate(), AssetType::Texture};
+    const VirtualPath textureArtifactPath = ASSET_DATABASE.artifactPath(textureMeta.assetId);
+    const AssetImportContext textureContext{
+        textureMeta, texturePath, assetMetaPath(texturePath), textureArtifactPath};
+    const AssetImportResult textureResult =
+        registry.find(AssetType::Texture)->import(textureContext);
+    const auto textureArtifact = loadAssetArtifact(textureArtifactPath);
+    TextureAsset texture;
+    BinaryReader textureReader{textureArtifact ? textureArtifact->payload
+                                               : std::span<const std::byte>{}};
+    if (!textureResult.success || !textureArtifact ||
+        textureArtifact->assetType != AssetType::Texture || !texture.transfer(textureReader) ||
+        !textureReader.finished() || texture.desc.type != TextureType::Texture2D ||
+        texture.desc.format != TextureFormat::Rgba8Unorm || texture.desc.width != 2 ||
+        texture.desc.height != 2 || texture.desc.mipCount != 1 || texture.mipData.size() != 1 ||
+        texture.mipData.front().bytes.size() != 16) {
+        return 12;
+    }
+
+    const std::vector<std::byte> png = readFixture("texture-test.png");
+    const std::vector<std::byte> jpg = readFixture("texture-test.jpg");
+    if (png.empty())
+        return 15;
+    if (jpg.empty())
+        return 16;
+    const auto verifyImageImport = [&](const VirtualPath& sourcePath,
+                                       std::span<const std::byte> sourceBytes) {
+        if (sourceBytes.empty() || !FILE_SYSTEM.writeBinary(sourcePath, sourceBytes))
+            return false;
+        const AssetMeta meta{1, AssetId::generate(), AssetType::Texture};
+        const VirtualPath artifactPath = ASSET_DATABASE.artifactPath(meta.assetId);
+        const AssetImportContext context{meta, sourcePath, assetMetaPath(sourcePath), artifactPath};
+        const AssetImportResult result = registry.find(AssetType::Texture)->import(context);
+        const auto artifact = loadAssetArtifact(artifactPath);
+        TextureAsset asset;
+        BinaryReader reader{artifact ? artifact->payload : std::span<const std::byte>{}};
+        return result.success && artifact && asset.transfer(reader) && reader.finished() &&
+               asset.desc.width == 2 && asset.desc.height == 2 && asset.desc.mipCount == 2 &&
+               asset.desc.format == TextureFormat::Rgba8Srgb && asset.mipData.size() == 2 &&
+               asset.mipData[0].bytes.size() == 16 && asset.mipData[1].bytes.size() == 4;
+    };
+    if (!verifyImageImport(VirtualPath{"asset://textures/import_test.png"}, png)) {
+        return 13;
+    }
+    if (!verifyImageImport(VirtualPath{"asset://textures/import_test.jpg"}, jpg))
+        return 14;
 
     (void)FILE_SYSTEM.unmount("asset");
     (void)FILE_SYSTEM.unmount("library");

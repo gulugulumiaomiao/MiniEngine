@@ -3,6 +3,7 @@
 #include "rhi/api/PipelineDesc.h"
 #include "rhi/api/ResourceDesc.h"
 #include "rhi/api/RhiTypes.h"
+#include "rhi/api/Sampler.h"
 
 #include <vulkan/vulkan.h>
 
@@ -27,6 +28,15 @@ public:
                               std::span<const std::byte> data,
                               std::uint64_t offset = 0) = 0;
 
+    [[nodiscard]] virtual TextureHandle createTexture(const TextureDesc& desc) = 0;
+    virtual void destroyTexture(TextureHandle handle) = 0;
+    virtual void uploadTexture(TextureHandle destination,
+                               std::span<const TextureUploadRegion> regions) = 0;
+    [[nodiscard]] virtual TextureViewHandle createTextureView(const TextureViewDesc& desc) = 0;
+    virtual void destroyTextureView(TextureViewHandle handle) = 0;
+    [[nodiscard]] virtual SamplerHandle createSampler(const SamplerDesc& desc) = 0;
+    virtual void destroySampler(SamplerHandle handle) = 0;
+
     [[nodiscard]] virtual ShaderHandle createShader(const ShaderDesc& desc) = 0;
     virtual void destroyShader(ShaderHandle handle) = 0;
 
@@ -44,8 +54,7 @@ public:
     [[nodiscard]] virtual VkBuffer resolveBuffer(BufferHandle handle) const = 0;
     [[nodiscard]] virtual VkImage resolveTexture(TextureHandle handle) const = 0;
     [[nodiscard]] virtual VkImageView resolveTextureView(TextureViewHandle handle) const = 0;
-    [[nodiscard]] virtual ResolvedPipeline
-    resolvePipeline(GraphicsPipelineHandle handle) const = 0;
+    [[nodiscard]] virtual ResolvedPipeline resolvePipeline(GraphicsPipelineHandle handle) const = 0;
     [[nodiscard]] virtual VkDescriptorSet resolveBindGroup(BindGroupHandle handle) const = 0;
 
     virtual void waitIdle() = 0;

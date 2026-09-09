@@ -12,5 +12,6 @@ void VertexMain(MiniVertexInput inValue, out MiniVaryings outValue)
     outValue.worldPosition = worldPosition.xyz;
     outValue.worldNormal = normalize(transpose(inverse(mat3(model))) *
                                      inValue.normal);
+    outValue.uv = inValue.uv;
     gl_Position = Scene.viewProjection * worldPosition;
 }

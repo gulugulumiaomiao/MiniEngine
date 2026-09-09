@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <limits>
 #include <sstream>
 
 namespace engine {
@@ -261,14 +260,16 @@ ShaderGenerator::generateMaterialDeclarations(std::span<const ShaderPropertyDesc
     for (const ShaderPropertyDesc& property : properties) {
         if (property.type != ShaderPropertyType::Texture2D)
             continue;
+        if (textureBinding > kMaxMaterialTextures) {
+            Log::error("ShaderGenerator",
+                       "Shader declares more than %u material textures",
+                       kMaxMaterialTextures);
+            return {};
+        }
         if (textureBinding != 1 || !layout.members.empty())
             output << '\n';
         output << "layout(set = 1, binding = " << textureBinding << ") uniform sampler2D "
                << property.name << ";\n";
-        if (textureBinding == std::numeric_limits<std::uint32_t>::max()) {
-            Log::error("ShaderGenerator", "Generated texture binding overflow");
-            return {};
-        }
         ++textureBinding;
     }
     return std::make_shared<std::string>(std::move(output).str());

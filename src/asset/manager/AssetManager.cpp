@@ -13,6 +13,8 @@
 #include "render/mesh/MeshManager.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderManager.h"
+#include "render/texture/Texture.h"
+#include "render/texture/TextureManager.h"
 #include "scene/scene/SceneAsset.h"
 
 namespace engine {
@@ -49,6 +51,9 @@ bool AssetManager::initialize() {
         } else if (notification.type == AssetType::Mesh && !notification.removed &&
                    MESH_MANAGER.find(notification.path)) {
             (void)MESH_MANAGER.replace(notification.path);
+        } else if (notification.type == AssetType::Texture && !notification.removed &&
+                   TEXTURE_MANAGER.find(notification.path)) {
+            (void)TEXTURE_MANAGER.replace(notification.path);
         }
         if (changeListener_) {
             changeListener_(notification.path, notification.type, notification.removed);
@@ -115,6 +120,7 @@ std::shared_ptr<Asset> AssetManager::loadAsset(const VirtualPath& path) {
     case AssetType::Shader: asset = std::make_shared<ShaderAsset>(); break;
     case AssetType::Material: asset = std::make_shared<MaterialAsset>(); break;
     case AssetType::Mesh: asset = std::make_shared<MeshAsset>(); break;
+    case AssetType::Texture: asset = std::make_shared<TextureAsset>(); break;
     case AssetType::Scene: asset = std::make_shared<SceneAsset>(); break;
     default:
         Log::error("AssetManager", "Unsupported Asset type for: %s", path.string().c_str());

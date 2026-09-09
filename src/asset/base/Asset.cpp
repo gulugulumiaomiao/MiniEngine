@@ -12,6 +12,9 @@ AssetType assetTypeFromName(std::string_view name) {
     if (name == "Mesh") {
         return AssetType::Mesh;
     }
+    if (name == "Texture") {
+        return AssetType::Texture;
+    }
     if (name == "Scene") {
         return AssetType::Scene;
     }

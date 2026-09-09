@@ -13,6 +13,7 @@ public:
     [[nodiscard]] virtual std::uint32_t width() const = 0;
     [[nodiscard]] virtual std::uint32_t height() const = 0;
     [[nodiscard]] virtual std::uint32_t depth() const = 0;
+    [[nodiscard]] virtual std::uint32_t mipCount() const = 0;
     [[nodiscard]] virtual TextureFormat format() const = 0;
 };
 

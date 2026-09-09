@@ -7,6 +7,6 @@
     "Enabled": true,
     "Direction": [4.0, 5.0, 6.0],
     "Tint": [0.25, 0.5, 0.75, 1.0],
-    "MainTexture": "black"
+    "MainTexture": "textures/black.png"
   }
 }

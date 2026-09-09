@@ -12,6 +12,7 @@
 #include "render/renderer/Renderer.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderManager.h"
+#include "render/texture/TextureManager.h"
 #include "rhi/RhiFactory.h"
 #include "scene/scene/SceneAsset.h"
 
@@ -126,6 +127,7 @@ void Engine::shutdown() {
     renderer_.reset();
     MESH_MANAGER.clear();
     MATERIAL_MANAGER.clear();
+    TEXTURE_MANAGER.clear();
     SHADER_MANAGER.clear();
     ASSET_MANAGER.shutdown();
     (void)FILE_SYSTEM.unmount("shader");

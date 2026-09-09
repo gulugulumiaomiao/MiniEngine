@@ -5,6 +5,7 @@
 #include "asset/importer/MeshAssetImporter.h"
 #include "asset/importer/SceneAssetImporter.h"
 #include "asset/importer/ShaderAssetImporter.h"
+#include "asset/importer/TextureAssetImporter.h"
 
 #include <memory>
 
@@ -18,6 +19,9 @@ bool registerBuiltinAssetImporters(AssetImporterRegistry& registry) {
         return false;
     }
     if (!registry.registerImporter(std::make_unique<MeshAssetImporter>())) {
+        return false;
+    }
+    if (!registry.registerImporter(std::make_unique<TextureAssetImporter>())) {
         return false;
     }
     return registry.registerImporter(std::make_unique<SceneAssetImporter>());
