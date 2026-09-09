@@ -123,7 +123,7 @@ ShaderPreprocessor::ShaderPreprocessor(ShaderPreprocessorConfig config)
 
 std::shared_ptr<PreprocessedShader>
 ShaderPreprocessor::process(const ShaderPreprocessRequest& request) {
-    if (!configValid_ || !request.source.sourcePath.valid() || request.source.source.empty()) {
+    if (!configValid_ || !request.sourcePath.valid() || request.source.empty()) {
         Log::error("ShaderPreprocessor", "Shader stage source is missing");
         return {};
     }
@@ -131,9 +131,9 @@ ShaderPreprocessor::process(const ShaderPreprocessRequest& request) {
     std::ranges::sort(defines, [](const ShaderDefine& left, const ShaderDefine& right) {
         return std::tie(left.name, left.value) < std::tie(right.name, right.value);
     });
-    Hash64 requestHash = hashString(request.source.sourcePath.string());
-    requestHash = hashString(request.source.source, requestHash);
-    hashAppend(requestHash, request.source.stage);
+    Hash64 requestHash = hashString(request.sourcePath.string());
+    requestHash = hashString(request.source, requestHash);
+    hashAppend(requestHash, request.stage);
     for (const ShaderDefine& define : defines) {
         requestHash = hashString(define.name, requestHash);
         requestHash = hashString(define.value, requestHash);
@@ -144,12 +144,11 @@ ShaderPreprocessor::process(const ShaderPreprocessRequest& request) {
         return found->second;
 
     auto result = std::make_shared<PreprocessedShader>();
-    result->sourcePath = request.source.sourcePath;
-    result->stage = request.source.stage;
-    result->entryPoint = request.source.entryPoint;
+    result->sourcePath = request.sourcePath;
+    result->stage = request.stage;
     std::unordered_set<std::string> visiting;
-    if (!preprocessSource(request.source.sourcePath,
-                          request.source.source,
+    if (!preprocessSource(request.sourcePath,
+                          request.source,
                           config_.includeSearchPaths,
                           visiting,
                           *result)) {

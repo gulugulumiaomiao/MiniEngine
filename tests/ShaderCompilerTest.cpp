@@ -16,12 +16,12 @@ int main() {
         return 12;
     ShaderPreprocessor preprocessor{{{VirtualPath{"fixture://"}}}};
     ShaderPreprocessRequest request;
-    request.source.sourcePath = VirtualPath{"fixture://preprocess_root.glsl"};
-    request.source.stage = ShaderStage::Fragment;
-    const auto rootSource = FILE_SYSTEM.readText(request.source.sourcePath);
+    request.sourcePath = VirtualPath{"fixture://preprocess_root.glsl"};
+    request.stage = ShaderStage::Fragment;
+    const auto rootSource = FILE_SYSTEM.readText(request.sourcePath);
     if (!rootSource)
         return 17;
-    request.source.source = *rootSource;
+    request.source = *rootSource;
     request.defines.push_back({"TEST_VALUE", "0.5"});
     const auto processed = preprocessor.process(request);
     if (!processed || processed->dependencies.size() != 2 ||
@@ -33,12 +33,12 @@ int main() {
         return 7;
     }
     ShaderPreprocessRequest searchRequest;
-    searchRequest.source.sourcePath = VirtualPath{"fixture://preprocess_search_root.glsl"};
-    searchRequest.source.stage = ShaderStage::Fragment;
-    const auto searchSource = FILE_SYSTEM.readText(searchRequest.source.sourcePath);
+    searchRequest.sourcePath = VirtualPath{"fixture://preprocess_search_root.glsl"};
+    searchRequest.stage = ShaderStage::Fragment;
+    const auto searchSource = FILE_SYSTEM.readText(searchRequest.sourcePath);
     if (!searchSource)
         return 18;
-    searchRequest.source.source = *searchSource;
+    searchRequest.source = *searchSource;
     const auto searched = preprocessor.process(searchRequest);
     if (!searched || searched->dependencies.size() != 2 ||
         searched->source.find("BuildColor") == std::string::npos) {
@@ -89,8 +89,8 @@ int main() {
 
     const ShaderPassDesc& assetPass = asset.subShaders.front().requirePass(ShaderPassType::Forward);
     ShaderPreprocessRequest generatedRequest;
-    generatedRequest.source.sourcePath = assetPass.program.vertexSource;
-    generatedRequest.source.stage = ShaderStage::Vertex;
+    generatedRequest.sourcePath = assetPass.program.vertexSource;
+    generatedRequest.stage = ShaderStage::Vertex;
     ShaderGenerator generator;
     const auto generatedSource =
         generator.generateStage(runtimeShader,
@@ -99,7 +99,7 @@ int main() {
                                 *FILE_SYSTEM.readText(assetPass.program.vertexSource));
     if (!generatedSource)
         return 19;
-    generatedRequest.source.source = *generatedSource;
+    generatedRequest.source = *generatedSource;
     const auto generated = preprocessor.process(generatedRequest);
     if (!generated || generated->dependencies.empty() ||
         generated->source.find("struct MiniVertexInput") == std::string::npos ||

@@ -241,7 +241,9 @@ CompiledShaderHandle ShaderCompilePipeline::compileStage(const Shader& shader,
     }
 
     ShaderPreprocessRequest request;
-    request.source = {sourcePath, stage, "main", generatedEntry->second.source};
+    request.sourcePath = sourcePath;
+    request.stage = stage;
+    request.source = generatedEntry->second.source;
     const std::vector<std::string>& keywords = pass.keywordSchema().keywords();
     for (std::size_t bit = 0; bit < keywords.size(); ++bit) {
         if ((variant.keywordBits & (std::uint64_t{1} << bit)) != 0)

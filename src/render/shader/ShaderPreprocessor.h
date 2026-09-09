@@ -19,19 +19,14 @@ struct ShaderDefine {
     std::string value{"1"};
 };
 
-struct ShaderStageSource {
-    VirtualPath sourcePath;
-    ShaderStage stage{ShaderStage::Vertex};
-    std::string entryPoint{"main"};
-    std::string_view source;
-};
-
 struct ShaderPreprocessorConfig {
     std::vector<VirtualPath> includeSearchPaths;
 };
 
 struct ShaderPreprocessRequest {
-    ShaderStageSource source;
+    VirtualPath sourcePath;
+    ShaderStage stage{ShaderStage::Vertex};
+    std::string_view source;
     std::vector<ShaderDefine> defines;
 };
 
