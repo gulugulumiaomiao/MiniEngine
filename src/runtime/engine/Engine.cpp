@@ -27,7 +27,6 @@
 #include <filesystem>
 
 namespace engine {
-
 Engine::Engine() = default;
 Engine::~Engine() = default;
 

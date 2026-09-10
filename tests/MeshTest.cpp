@@ -225,6 +225,28 @@ int main() {
         return 11;
     }
 
+    const MeshHandle runtimePlane = MESH_MANAGER.createRuntime(planeRecipe);
+    const MeshHandle secondRuntimePlane = MESH_MANAGER.createRuntime(planeRecipe);
+    const Mesh* runtimePlaneMesh = MESH_MANAGER.find(runtimePlane);
+    if (!runtimePlane || !secondRuntimePlane || runtimePlane == secondRuntimePlane ||
+        !runtimePlaneMesh || runtimePlaneMesh->assetPath().valid() || MESH_MANAGER.size() != 2) {
+        return 20;
+    }
+    const std::uint64_t runtimeVersion = runtimePlaneMesh->version();
+    std::vector<MeshHandle> destroyedRuntimeMeshes;
+    MESH_MANAGER.setDestroyObserver(
+        [&destroyedRuntimeMeshes](MeshHandle handle) { destroyedRuntimeMeshes.push_back(handle); });
+    planeRecipe.parts[0].primitive = PlaneGeometry{{4.0F, 4.0F}, 2, 2};
+    if (!MESH_MANAGER.rebuildRuntime(runtimePlane, planeRecipe) ||
+        MESH_MANAGER.find(runtimePlane)->version() != runtimeVersion + 1 ||
+        MESH_MANAGER.find(runtimePlane)->data().indexCount != 24 ||
+        !MESH_MANAGER.destroyRuntime(runtimePlane) || MESH_MANAGER.find(runtimePlane) ||
+        !MESH_MANAGER.destroyRuntime(secondRuntimePlane) || MESH_MANAGER.size() != 0 ||
+        destroyedRuntimeMeshes != std::vector<MeshHandle>{runtimePlane, secondRuntimePlane}) {
+        return 21;
+    }
+    MESH_MANAGER.setDestroyObserver({});
+
     MeshBuildRecipe primitives;
     primitives.name = "PrimitiveAssembly";
     MeshPrimitivePart boxPart;

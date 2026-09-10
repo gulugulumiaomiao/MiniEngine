@@ -16,9 +16,11 @@ public:
     Component(Component&&) = delete;
     Component& operator=(Component&&) = delete;
 
-    [[nodiscard]] NodeHandle owner() const { return owner_; }
-    [[nodiscard]] Scene* scene() { return scene_; }
-    [[nodiscard]] const Scene* scene() const { return scene_; }
+    [[nodiscard]] NodeHandle owner() const;
+    [[nodiscard]] Node* node() { return node_; }
+    [[nodiscard]] const Node* node() const { return node_; }
+    [[nodiscard]] Scene* scene();
+    [[nodiscard]] const Scene* scene() const;
     [[nodiscard]] bool enabled() const { return enabled_; }
     [[nodiscard]] bool active() const { return active_; }
     void setEnabled(bool enabled);
@@ -35,13 +37,12 @@ protected:
 private:
     friend class Node;
 
-    void attach(Scene& scene, NodeHandle owner, bool ownerActive);
+    void attach(Node& node, bool ownerActive);
     void detach();
     void setOwnerActive(bool ownerActive);
     void update(float deltaTime);
 
-    Scene* scene_{};
-    NodeHandle owner_;
+    Node* node_{};
     bool enabled_{true};
     bool ownerActive_{};
     bool active_{};

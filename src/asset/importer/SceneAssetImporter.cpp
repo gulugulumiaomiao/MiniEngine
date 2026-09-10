@@ -37,7 +37,8 @@ AssetImportResult SceneAssetImporter::import(const AssetImportContext& context) 
                 [&dependencies](const auto& value) {
                     using T = std::decay_t<decltype(value)>;
                     if constexpr (std::is_same_v<T, MeshComponentAsset>) {
-                        dependencies.push_back(value.mesh);
+                        if (value.sourceType == MeshComponentSourceType::Asset)
+                            dependencies.push_back(value.mesh);
                     } else if constexpr (std::is_same_v<T, MaterialComponentAsset>) {
                         dependencies.insert(
                             dependencies.end(), value.materials.begin(), value.materials.end());

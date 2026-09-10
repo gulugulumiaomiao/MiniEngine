@@ -70,6 +70,7 @@ struct MeshBuildRecipe final : public Transferable {
     MeshUsage usage{MeshUsage::Static};
     bool keepCpuCopy{};
 
+    bool operator==(const MeshBuildRecipe&) const = default;
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 

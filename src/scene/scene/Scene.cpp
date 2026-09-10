@@ -130,9 +130,9 @@ void Scene::extractRenderNode(Node& node, RenderScene& output, float aspectRatio
 
     const MeshComponent* mesh = node.getComponent<MeshComponent>();
     const MaterialComponent* material = node.getComponent<MaterialComponent>();
-    if (mesh && material && mesh->active() && material->active() && mesh->visible && mesh->mesh) {
+    if (mesh && material && mesh->active() && material->active() && mesh->visible && mesh->mesh()) {
         output.submit({
-            .mesh = mesh->mesh,
+            .mesh = mesh->mesh(),
             .materials = material->materials(),
             .transform = world,
             .layerMask = mesh->layerMask,

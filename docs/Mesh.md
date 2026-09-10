@@ -51,8 +51,51 @@ recipe.parts.push_back(sphere);
 ```cpp
 auto result = MeshBuilder::build(recipe);       // MeshDesc + MeshData
 auto asset = MeshBuilder::buildAsset(recipe);   // 同时保留 recipe
-MeshHandle handle = renderer.createProceduralMesh(recipe);
+MeshHandle handle = MESH_MANAGER.createRuntime(recipe);
 ```
+
+### 3.1 运行时 Primitive MeshComponent
+
+`MeshComponent` 有两种互斥的来源模式：`Asset` 保存由 `.mesh.json` 加载的句柄且不拥有
+Mesh；`Primitive` 保存 `MeshBuildRecipe`、拥有运行时 Mesh，并在脱离 Scene 时释放它。
+
+```cpp
+MeshComponent* mesh = node.addComponent<MeshComponent>();
+mesh->setPrimitive(UvSphereGeometry{0.75F, 32, 16});
+
+if (MeshBuildRecipe* recipe = mesh->editPrimitiveRecipe()) {
+    auto& sphere = std::get<UvSphereGeometry>(recipe->parts[0].primitive.value);
+    sphere.radius = 1.25F;
+}
+```
+
+一次更新周期内的多次编辑只触发一次重建。重建保留 `MeshHandle` 并增加 Mesh version，
+因此 `MeshGpuManager` 会在下一次 resolve 时重新上传数据；构建失败时保留旧 Mesh。
+
+Scene JSON 保留原有的 `"mesh": "...mesh.json"` 资产写法，并新增运行时图元写法：
+
+```json
+{
+  "type": "Mesh",
+  "primitive": {
+    "type": "sphere",
+    "parameters": {
+      "radius": 0.75,
+      "longitude_segments": 32,
+      "latitude_segments": 16
+    }
+  }
+}
+```
+
+`primitive.type` 支持 `plane`、`box`/`cube`、`sphere`/`uv_sphere` 和
+`cylinder`；缺省参数使用对应 Geometry 默认值。资产路径和 primitive 配置不能同时出现。
+配方会随 `MeshComponentAsset` 序列化进 Scene Artifact，但不会加入资产依赖图。
+
+`MeshComponent` 直接通过单例 `MeshManager` 创建、重建和销毁运行时 Mesh。为避免
+Scene 依赖 GPU/RHI，`MeshManager` 在资源销毁时发送生命周期通知；`MeshGpuManager`
+注册观察者并立即清理对应 GPU 缓存。MeshManager 的资产路径加载实现位于
+`AssetManager.cpp`，因此 `MiniScene -> MiniMesh` 不会反向依赖 AssetImporter。
 
 默认 `PositionNormalTangentUv` 是 stride 48 的交错流：POSITION Vec3、NORMAL Vec3、TANGENT Vec4、TEXCOORD0 Vec2。也可选择 `Position`（stride 12）或 `PositionNormalUv`（stride 32）。
 

@@ -12,6 +12,7 @@
 #include "scene/scene/SceneAsset.h"
 #include "TestAssetEnvironment.h"
 
+#include <algorithm>
 #include <filesystem>
 
 int main() {
@@ -39,21 +40,25 @@ int main() {
 
     const auto showcase = ASSET_MANAGER.loadAsset<SceneAsset>(
         VirtualPath{"asset://scenes/blinn_phong_showcase.scene.json"});
-    if (!showcase || showcase->nodes.size() != 4)
+    if (!showcase || showcase->nodes.size() != 7)
         return 6;
     const SceneInstantiationContext context{
         .loadMesh = [](const VirtualPath& path) { return MESH_MANAGER.load(path); },
         .loadMaterial = [](const VirtualPath& path) { return MATERIAL_MANAGER.load(path); },
     };
-    const std::unique_ptr<Scene> scene = showcase->instantiate(context);
+    std::unique_ptr<Scene> scene = showcase->instantiate(context);
     if (!scene)
         return 6;
     RenderScene renderScene;
     scene->buildRenderScene(renderScene, 16.0F / 9.0F);
-    if (!renderScene.camera() || renderScene.objects().size() != 1 ||
-        renderScene.objects().front().materials.size() != 4 || renderScene.lights().size() != 2) {
+    if (!renderScene.camera() || renderScene.objects().size() != 4 ||
+        !std::ranges::all_of(
+            renderScene.objects(),
+            [](const RenderObject& object) { return object.materials.size() == 1; }) ||
+        renderScene.lights().size() != 2) {
         return 6;
     }
+    scene.reset();
     MESH_MANAGER.clear();
     MATERIAL_MANAGER.clear();
     SHADER_MANAGER.clear();

@@ -146,4 +146,23 @@ void AssetManager::clear() {
     cache_.clear();
 }
 
+MeshHandle MeshManager::load(const VirtualPath& meshPath) {
+    if (!meshPath.valid()) {
+        Log::error("MeshManager", "Invalid Mesh path: %s", meshPath.string().c_str());
+        return {};
+    }
+    if (const MeshHandle existing = findHandle(meshPath); existing)
+        return existing;
+    const std::shared_ptr<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
+    return asset ? insert(asset->instantiate()) : MeshHandle{};
+}
+
+bool MeshManager::replace(const VirtualPath& meshPath) {
+    const MeshHandle handle = findHandle(meshPath);
+    if (!handle)
+        return true;
+    const std::shared_ptr<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
+    return asset && replace(handle, asset->instantiate());
+}
+
 } // namespace engine

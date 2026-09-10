@@ -1,12 +1,26 @@
 #include "scene/components/Component.h"
 
+#include "scene/node/Node.h"
+
 namespace engine {
+
+NodeHandle Component::owner() const {
+    return node_ ? node_->handle() : NodeHandle{};
+}
+
+Scene* Component::scene() {
+    return node_ ? &node_->scene() : nullptr;
+}
+
+const Scene* Component::scene() const {
+    return node_ ? &node_->scene() : nullptr;
+}
 
 void Component::setEnabled(bool enabled) {
     if (enabled_ == enabled)
         return;
     enabled_ = enabled;
-    const bool next = enabled_ && scene_ && ownerActive_;
+    const bool next = enabled_ && node_ && ownerActive_;
     if (next == active_)
         return;
     active_ = next;
@@ -16,9 +30,8 @@ void Component::setEnabled(bool enabled) {
         onDisable();
 }
 
-void Component::attach(Scene& scene, NodeHandle owner, bool ownerActive) {
-    scene_ = &scene;
-    owner_ = owner;
+void Component::attach(Node& node, bool ownerActive) {
+    node_ = &node;
     ownerActive_ = ownerActive;
     onAttach();
     active_ = enabled_ && ownerActive_;
@@ -27,14 +40,13 @@ void Component::attach(Scene& scene, NodeHandle owner, bool ownerActive) {
 }
 
 void Component::detach() {
-    if (!scene_)
+    if (!node_)
         return;
     if (active_)
         onDisable();
     active_ = false;
     onDetach();
-    owner_ = {};
-    scene_ = nullptr;
+    node_ = nullptr;
     ownerActive_ = false;
 }
 

@@ -31,6 +31,7 @@ struct PlaneGeometry final : public Transferable {
     math::Vec2 size{1.0F};
     std::uint32_t segmentsX{1};
     std::uint32_t segmentsZ{1};
+    bool operator==(const PlaneGeometry&) const = default;
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
@@ -46,20 +47,20 @@ struct BoxGeometry final : public Transferable {
     std::uint32_t segmentsX{1};
     std::uint32_t segmentsY{1};
     std::uint32_t segmentsZ{1};
+    bool operator==(const BoxGeometry&) const = default;
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
 struct UvSphereGeometry final : public Transferable {
     UvSphereGeometry() = default;
-    UvSphereGeometry(float radius,
-                     std::uint32_t longitudeSegments,
-                     std::uint32_t latitudeSegments)
-        : radius(radius), longitudeSegments(longitudeSegments),
-          latitudeSegments(latitudeSegments) {}
+    UvSphereGeometry(float radius, std::uint32_t longitudeSegments, std::uint32_t latitudeSegments)
+        : radius(radius), longitudeSegments(longitudeSegments), latitudeSegments(latitudeSegments) {
+    }
 
     float radius{0.5F};
     std::uint32_t longitudeSegments{32};
     std::uint32_t latitudeSegments{16};
+    bool operator==(const UvSphereGeometry&) const = default;
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
@@ -83,6 +84,7 @@ struct CylinderGeometry final : public Transferable {
     std::uint32_t heightSegments{1};
     bool capBottom{true};
     bool capTop{true};
+    bool operator==(const CylinderGeometry&) const = default;
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
@@ -97,6 +99,7 @@ struct MeshPrimitive final : public Transferable {
     MeshPrimitive(UvSphereGeometry geometry) : value(geometry) {}
     MeshPrimitive(CylinderGeometry geometry) : value(geometry) {}
 
+    bool operator==(const MeshPrimitive&) const = default;
     [[nodiscard]] MeshPrimitiveType type() const;
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
@@ -117,6 +120,7 @@ struct MeshPrimitivePart final : public Transferable {
     math::Vec3 scale{1.0F};
     std::uint32_t materialSlot{};
 
+    bool operator==(const MeshPrimitivePart&) const = default;
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 

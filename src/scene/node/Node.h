@@ -63,6 +63,8 @@ public:
     ~Node() = default;
 
     [[nodiscard]] NodeHandle handle() const { return handle_; }
+    [[nodiscard]] Scene& scene() { return *scene_; }
+    [[nodiscard]] const Scene& scene() const { return *scene_; }
     [[nodiscard]] std::string_view name() const { return name_; }
     void setName(std::string name) { name_ = std::move(name); }
 
@@ -87,7 +89,7 @@ public:
         auto component = std::make_unique<T>(std::forward<Args>(args)...);
         T* result = component.get();
         components_.push_back(std::move(component));
-        result->attach(*scene_, handle_, activeInHierarchy_);
+        result->attach(*this, activeInHierarchy_);
         return result;
     }
 

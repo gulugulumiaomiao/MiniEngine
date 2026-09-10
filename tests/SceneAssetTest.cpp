@@ -1,6 +1,7 @@
 #include "asset/derived_data/AssetArtifact.h"
 #include "asset/base/AssetMeta.h"
 #include "core/serialization/BinaryTransfer.h"
+#include "render/mesh/MeshManager.h"
 #include "scene/scene/SceneAsset.h"
 #include "scene/components/MaterialComponent.h"
 #include "scene/components/MeshComponent.h"
@@ -74,6 +75,25 @@ constexpr std::string_view kSceneJson = R"json(
           "cast_shadow": true
         }
       ]
+    },
+    {
+      "id": 4,
+      "name": "Runtime Sphere",
+      "components": [
+        {"type": "Transform", "position": [2.0, 0.5, 0.0]},
+        {
+          "type": "Mesh",
+          "primitive": {
+            "type": "sphere",
+            "parameters": {
+              "radius": 0.75,
+              "longitude_segments": 24,
+              "latitude_segments": 12
+            }
+          },
+          "cast_shadow": false
+        }
+      ]
     }
   ]
 }
@@ -99,7 +119,7 @@ int main() {
     }
     std::shared_ptr<SceneAsset> asset = detail::parseSceneAsset(scenePath, kSceneJson);
     if (!asset || asset->type() != AssetType::Scene || asset->assetPath() != scenePath ||
-        asset->name != "Example Scene" || asset->nodes.size() != 3) {
+        asset->name != "Example Scene" || asset->nodes.size() != 4) {
         return 1;
     }
 
@@ -124,6 +144,17 @@ int main() {
         camera->priority != 10) {
         return 4;
     }
+    const auto* primitive = std::get_if<MeshComponentAsset>(&asset->nodes[3].components[1]);
+    if (!primitive || primitive->sourceType != MeshComponentSourceType::Primitive ||
+        primitive->mesh.valid() || primitive->primitiveRecipe.parts.size() != 1) {
+        return 15;
+    }
+    const auto* sphere =
+        std::get_if<UvSphereGeometry>(&primitive->primitiveRecipe.parts.front().primitive.value);
+    if (!sphere || sphere->radius != 0.75F || sphere->longitudeSegments != 24 ||
+        sphere->latitudeSegments != 12 || primitive->castShadow) {
+        return 16;
+    }
 
     BinaryWriter writer;
     if (!asset->transfer(writer))
@@ -140,6 +171,7 @@ int main() {
 
     std::vector<VirtualPath> loadedMeshes;
     std::vector<VirtualPath> loadedMaterials;
+    MESH_MANAGER.clear();
     const SceneInstantiationContext context{
         .loadMesh =
             [&loadedMeshes](const VirtualPath& path) {
@@ -153,8 +185,8 @@ int main() {
             },
     };
     std::unique_ptr<Scene> runtime = decoded.instantiate(context);
-    if (!runtime || runtime->name() != "Example Scene" || runtime->nodeCount() != 4 ||
-        loadedMeshes.size() != 1 || loadedMaterials.size() != 1 ||
+    if (!runtime || runtime->name() != "Example Scene" || runtime->nodeCount() != 5 ||
+        loadedMeshes.size() != 1 || loadedMaterials.size() != 1 || MESH_MANAGER.size() != 1 ||
         loadedMeshes.front() != VirtualPath{"asset://meshes/cube.mesh.json"} ||
         loadedMaterials.front() != VirtualPath{"asset://materials/default.material.json"}) {
         return 12;
@@ -163,7 +195,7 @@ int main() {
     if (!runtimeWorld || runtimeWorld->name() != "World" ||
         runtimeWorld->transform().localPosition() != math::Vec3{1.0F, 2.0F, 3.0F} ||
         !runtimeWorld->getComponent<MeshComponent>() ||
-        runtimeWorld->getComponent<MeshComponent>()->mesh != MeshHandle{7, 1} ||
+        runtimeWorld->getComponent<MeshComponent>()->mesh() != MeshHandle{7, 1} ||
         runtimeWorld->getComponent<MaterialComponent>()->material(0) != MaterialHandle{9, 1} ||
         runtimeWorld->children().size() != 1) {
         return 13;
@@ -172,6 +204,23 @@ int main() {
     if (!runtimeCamera || runtimeCamera->name() != "Main Camera" || runtimeCamera->activeSelf()) {
         return 14;
     }
+    const Node* runtimePrimitive{};
+    for (NodeHandle child : runtime->root().children()) {
+        const Node* candidate = runtime->findNode(child);
+        if (candidate && candidate->name() == "Runtime Sphere")
+            runtimePrimitive = candidate;
+    }
+    if (!runtimePrimitive || !runtimePrimitive->getComponent<MeshComponent>() ||
+        runtimePrimitive->getComponent<MeshComponent>()->sourceType() !=
+            MeshComponentSourceType::Primitive ||
+        !runtimePrimitive->getComponent<MeshComponent>()->mesh()) {
+        return 17;
+    }
+    const MeshHandle runtimePrimitiveHandle =
+        runtimePrimitive->getComponent<MeshComponent>()->mesh();
+    runtime.reset();
+    if (MESH_MANAGER.find(runtimePrimitiveHandle) || MESH_MANAGER.size() != 0)
+        return 18;
 
     const AssetArtifact artifact{1, AssetId{1, 2}, AssetType::Scene, scenePath, binary};
     const std::vector<std::byte> artifactBinary = serializeAssetArtifact(artifact);

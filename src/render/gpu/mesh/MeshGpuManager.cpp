@@ -19,6 +19,7 @@ bool MeshGpuManager::initialize(rhi::IDevice& device) {
     }
     device_ = &device;
     factory_ = std::make_unique<MeshGpuFactory>(device);
+    MESH_MANAGER.setDestroyObserver([this](MeshHandle handle) { invalidate(handle); });
     return true;
 }
 
@@ -35,7 +36,7 @@ MeshDrawInfo MeshGpuManager::resolve(MeshHandle handle) {
     if (!factory_->create({*mesh}, created))
         return {};
     auto replaced = cache_.extractIf([source = MeshGpuCache::sourceKey(handle)](
-                                        const MeshGpuCacheKey& candidate, const MeshGpuResource&) {
+                                         const MeshGpuCacheKey& candidate, const MeshGpuResource&) {
         return candidate.source == source;
     });
     if (!replaced.empty())
@@ -54,11 +55,10 @@ MeshDrawInfo MeshGpuManager::resolve(MeshHandle handle) {
 void MeshGpuManager::invalidate(MeshHandle handle) {
     if (!initialized())
         return;
-    auto removed =
-        cache_.extractIf([source = MeshGpuCache::sourceKey(handle)](
-                             const MeshGpuCacheKey& candidate, const MeshGpuResource&) {
-            return candidate.source == source;
-        });
+    auto removed = cache_.extractIf([source = MeshGpuCache::sourceKey(handle)](
+                                        const MeshGpuCacheKey& candidate, const MeshGpuResource&) {
+        return candidate.source == source;
+    });
     if (!removed.empty())
         device_->waitIdle();
     for (auto& [unused, resource] : removed) {
@@ -68,6 +68,7 @@ void MeshGpuManager::invalidate(MeshHandle handle) {
 }
 
 void MeshGpuManager::shutdown() {
+    MESH_MANAGER.setDestroyObserver({});
     if (!initialized())
         return;
     for (auto& [unused, resource] : cache_.extractAll()) {

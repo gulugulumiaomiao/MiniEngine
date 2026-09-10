@@ -69,6 +69,24 @@ else()
     target_compile_options(MiniAsset PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+add_library(MiniMesh STATIC
+    src/render/mesh/Mesh.cpp
+    src/render/mesh/MeshManager.cpp
+    src/render/mesh/MeshPrimitive.cpp
+    src/render/mesh/MeshBuilder.cpp
+)
+target_include_directories(MiniMesh PUBLIC src)
+target_include_directories(MiniMesh SYSTEM PRIVATE
+    third_party/glm/include
+    third_party/nlohmann/include
+)
+target_link_libraries(MiniMesh PUBLIC MiniAsset)
+if(MSVC)
+    target_compile_options(MiniMesh PRIVATE /W4 /permissive- /utf-8)
+else()
+    target_compile_options(MiniMesh PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 add_library(MiniAssetImporters STATIC
     src/asset/importer/AssetImportPipeline.cpp
     src/asset/importer/FileWatcher.cpp
@@ -78,10 +96,6 @@ add_library(MiniAssetImporters STATIC
     src/asset/importer/TextureAssetImporter.cpp
     src/asset/importer/SceneAssetImporter.cpp
     src/asset/importer/BuiltinAssetImporters.cpp
-    src/render/mesh/Mesh.cpp
-    src/render/mesh/MeshManager.cpp
-    src/render/mesh/MeshPrimitive.cpp
-    src/render/mesh/MeshBuilder.cpp
     src/render/texture/Texture.cpp
     src/render/texture/TextureManager.cpp
 )
@@ -91,7 +105,7 @@ target_include_directories(MiniAssetImporters SYSTEM PRIVATE
     third_party/nlohmann/include
     third_party/stb
 )
-target_link_libraries(MiniAssetImporters PUBLIC MiniAsset)
+target_link_libraries(MiniAssetImporters PUBLIC MiniAsset MiniMesh)
 if(MSVC)
     target_compile_options(MiniAssetImporters PRIVATE /W4 /permissive- /utf-8)
 else()
@@ -112,7 +126,7 @@ add_library(MiniScene STATIC
 target_include_directories(MiniScene PUBLIC src)
 target_include_directories(MiniScene SYSTEM PUBLIC third_party/glm/include)
 target_include_directories(MiniScene SYSTEM PRIVATE third_party/nlohmann/include)
-target_link_libraries(MiniScene PUBLIC MiniAsset)
+target_link_libraries(MiniScene PUBLIC MiniAsset MiniMesh)
 target_link_libraries(MiniAssetImporters PUBLIC MiniScene)
 if(MSVC)
     target_compile_options(MiniScene PRIVATE /W4 /permissive- /utf-8)

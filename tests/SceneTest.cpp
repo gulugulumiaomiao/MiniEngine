@@ -1,4 +1,5 @@
 #include "core/math/Math.h"
+#include "render/mesh/MeshManager.h"
 #include "render/scene/RenderScene.h"
 #include "scene/components/CameraComponent.h"
 #include "scene/components/LightComponent.h"
@@ -74,8 +75,9 @@ int main() {
 
     LifecycleCounts counts;
     ProbeComponent* probe = child->addComponent<ProbeComponent>(counts);
-    if (!probe || counts.attached != 1 || counts.enabled != 1 ||
-        child->addComponent<ProbeComponent>(counts) != probe) {
+    if (!probe || probe->node() != child || probe->scene() != &scene ||
+        probe->owner() != childHandle || &child->scene() != &scene || counts.attached != 1 ||
+        counts.enabled != 1 || child->addComponent<ProbeComponent>(counts) != probe) {
         return 5;
     }
     scene.update(1.0F / 60.0F);
@@ -102,10 +104,10 @@ int main() {
 
     MeshComponent* mesh = child->addComponent<MeshComponent>();
     MaterialComponent* material = child->addComponent<MaterialComponent>();
-    mesh->mesh = MeshHandle{7, 2};
+    mesh->setAssetMesh(MeshHandle{7, 2});
     material->setMaterial(0, MaterialHandle{3, 1});
     material->setMaterial(2, MaterialHandle{8, 4});
-    if (mesh->mesh != MeshHandle{7, 2} || material->material(1) != MaterialHandle{3, 1} ||
+    if (mesh->mesh() != MeshHandle{7, 2} || material->material(1) != MaterialHandle{3, 1} ||
         material->material(2) != MaterialHandle{8, 4} ||
         root->removeComponent<TransformComponent>()) {
         return 12;
@@ -160,5 +162,34 @@ int main() {
     if (scene.nodeCount() != 1 || !scene.findNode(sceneRootHandle) ||
         !scene.root().children().empty()) {
         return 16;
+    }
+
+    MESH_MANAGER.clear();
+    Scene primitiveScene{"Primitive Scene"};
+    const NodeHandle primitiveNodeHandle = primitiveScene.createNode("Sphere");
+    MeshComponent* primitiveMesh =
+        primitiveScene.findNode(primitiveNodeHandle)->addComponent<MeshComponent>();
+    primitiveMesh->setPrimitive(UvSphereGeometry{1.0F, 16, 8});
+    primitiveScene.update(0.0F);
+    const MeshHandle primitiveHandle = primitiveMesh->mesh();
+    const Mesh* firstPrimitive = MESH_MANAGER.find(primitiveHandle);
+    if (!primitiveHandle || !firstPrimitive ||
+        primitiveMesh->sourceType() != MeshComponentSourceType::Primitive ||
+        !primitiveMesh->primitiveRecipe()) {
+        return 20;
+    }
+    const std::uint64_t firstVersion = firstPrimitive->version();
+    MeshBuildRecipe* editedRecipe = primitiveMesh->editPrimitiveRecipe();
+    if (!editedRecipe)
+        return 21;
+    std::get<UvSphereGeometry>(editedRecipe->parts[0].primitive.value).radius = 2.0F;
+    editedRecipe = primitiveMesh->editPrimitiveRecipe();
+    std::get<UvSphereGeometry>(editedRecipe->parts[0].primitive.value).longitudeSegments = 24;
+    primitiveScene.update(0.0F);
+    const Mesh* rebuiltPrimitive = MESH_MANAGER.find(primitiveHandle);
+    if (!rebuiltPrimitive || primitiveMesh->mesh() != primitiveHandle ||
+        rebuiltPrimitive->version() != firstVersion + 1 ||
+        !primitiveScene.destroyNode(primitiveNodeHandle) || MESH_MANAGER.find(primitiveHandle)) {
+        return 21;
     }
 }

@@ -85,6 +85,14 @@ public:
         }
     }
 
+    template <typename Function> void forEachHandle(Function&& function) const {
+        for (std::uint32_t index = 0; index < slots_.size(); ++index) {
+            const Slot& slot = slots_[index];
+            if (slot.value)
+                function(HandleType{index, slot.generation}, *slot.value);
+        }
+    }
+
     [[nodiscard]] std::size_t size() const { return activeCount_; }
     [[nodiscard]] std::size_t capacity() const { return slots_.size(); }
     [[nodiscard]] std::size_t freeCount() const { return freeList_.size(); }

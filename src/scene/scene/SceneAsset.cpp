@@ -24,7 +24,7 @@ namespace {
 using Json = nlohmann::json;
 
 constexpr std::uint32_t kSceneMagic = 0x454e4353U;
-constexpr std::uint16_t kSceneBinaryVersion = 2;
+constexpr std::uint16_t kSceneBinaryVersion = 3;
 constexpr std::uint32_t kSceneJsonVersion = 1;
 constexpr std::uint32_t kMaxNodes = 1U << 20U;
 constexpr std::uint32_t kMaxComponentsPerNode = 32;
@@ -41,6 +41,9 @@ bool fail(const VirtualPath& path, std::string_view message) {
 
 bool finite(float value) {
     return std::isfinite(value);
+}
+bool finite(const math::Vec2& value) {
+    return finite(value.x) && finite(value.y);
 }
 bool finite(const math::Vec3& value) {
     return finite(value.x) && finite(value.y) && finite(value.z);
@@ -131,6 +134,103 @@ VirtualPath readAssetPath(const VirtualPath& owner, const std::string& value) {
     return owner.parent().joined(value);
 }
 
+bool readPrimitive(const Json& source, MeshPrimitive& result) {
+    if (!source.is_object())
+        return false;
+    const auto type = source.find("type");
+    const auto parameters = source.find("parameters");
+    if (type == source.end() || !type->is_string() ||
+        (parameters != source.end() && !parameters->is_object()))
+        return false;
+    const Json& values = parameters == source.end() ? Json::object() : *parameters;
+    const std::string& name = type->get_ref<const std::string&>();
+    if (name == "plane") {
+        PlaneGeometry geometry;
+        if (!readVector(values, "size", geometry.size, 2) ||
+            !readUInt(values, "segments_x", geometry.segmentsX) ||
+            !readUInt(values, "segments_z", geometry.segmentsZ))
+            return false;
+        result = geometry;
+    } else if (name == "box" || name == "cube") {
+        BoxGeometry geometry;
+        if (!readVector(values, "size", geometry.size, 3) ||
+            !readUInt(values, "segments_x", geometry.segmentsX) ||
+            !readUInt(values, "segments_y", geometry.segmentsY) ||
+            !readUInt(values, "segments_z", geometry.segmentsZ))
+            return false;
+        result = geometry;
+    } else if (name == "sphere" || name == "uv_sphere") {
+        UvSphereGeometry geometry;
+        if (!readFloat(values, "radius", geometry.radius) ||
+            !readUInt(values, "longitude_segments", geometry.longitudeSegments) ||
+            !readUInt(values, "latitude_segments", geometry.latitudeSegments))
+            return false;
+        result = geometry;
+    } else if (name == "cylinder") {
+        CylinderGeometry geometry;
+        if (!readFloat(values, "bottom_radius", geometry.bottomRadius) ||
+            !readFloat(values, "top_radius", geometry.topRadius) ||
+            !readFloat(values, "height", geometry.height) ||
+            !readUInt(values, "radial_segments", geometry.radialSegments) ||
+            !readUInt(values, "height_segments", geometry.heightSegments) ||
+            !readBool(values, "cap_bottom", geometry.capBottom) ||
+            !readBool(values, "cap_top", geometry.capTop))
+            return false;
+        result = geometry;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+bool validRuntimePrimitiveRecipe(const MeshBuildRecipe& recipe) {
+    constexpr std::uint32_t maxSegments = 512;
+    if (recipe.parts.empty() || recipe.parts.size() > 4096 ||
+        recipe.vertexLayout < PrimitiveVertexLayout::Position ||
+        recipe.vertexLayout > PrimitiveVertexLayout::PositionNormalTangentUv ||
+        recipe.indexPolicy < MeshIndexPolicy::Auto ||
+        recipe.indexPolicy > MeshIndexPolicy::UInt32 || recipe.usage < MeshUsage::Static ||
+        recipe.usage > MeshUsage::Stream)
+        return false;
+    return std::ranges::all_of(recipe.parts, [](const MeshPrimitivePart& part) {
+        if (!finite(part.translation) || !finite(part.rotation) || !finite(part.scale) ||
+            math::lengthSquared(part.rotation) <= math::kEpsilon * math::kEpsilon ||
+            std::abs(part.scale.x) <= math::kEpsilon || std::abs(part.scale.y) <= math::kEpsilon ||
+            std::abs(part.scale.z) <= math::kEpsilon)
+            return false;
+        return std::visit(
+            [](const auto& geometry) {
+                using T = std::decay_t<decltype(geometry)>;
+                const auto segments = [](std::uint32_t value, std::uint32_t minimum) {
+                    return value >= minimum && value <= maxSegments;
+                };
+                if constexpr (std::is_same_v<T, PlaneGeometry>) {
+                    return finite(geometry.size) && geometry.size.x > 0.0F &&
+                           geometry.size.y > 0.0F && segments(geometry.segmentsX, 1) &&
+                           segments(geometry.segmentsZ, 1);
+                } else if constexpr (std::is_same_v<T, BoxGeometry>) {
+                    return finite(geometry.size) && geometry.size.x > 0.0F &&
+                           geometry.size.y > 0.0F && geometry.size.z > 0.0F &&
+                           segments(geometry.segmentsX, 1) && segments(geometry.segmentsY, 1) &&
+                           segments(geometry.segmentsZ, 1);
+                } else if constexpr (std::is_same_v<T, UvSphereGeometry>) {
+                    return finite(geometry.radius) && geometry.radius > 0.0F &&
+                           segments(geometry.longitudeSegments, 3) &&
+                           segments(geometry.latitudeSegments, 2);
+                } else {
+                    return finite(geometry.bottomRadius) && finite(geometry.topRadius) &&
+                           finite(geometry.height) && geometry.bottomRadius >= 0.0F &&
+                           geometry.topRadius >= 0.0F &&
+                           (geometry.bottomRadius > math::kEpsilon ||
+                            geometry.topRadius > math::kEpsilon) &&
+                           geometry.height > 0.0F && segments(geometry.radialSegments, 3) &&
+                           segments(geometry.heightSegments, 1);
+                }
+            },
+            part.primitive.value);
+    });
+}
+
 bool parseComponent(const VirtualPath& path, const Json& source, SceneComponentAsset& result) {
     if (!source.is_object())
         return false;
@@ -149,10 +249,25 @@ bool parseComponent(const VirtualPath& path, const Json& source, SceneComponentA
     }
     if (typeName == "Mesh") {
         const auto mesh = source.find("mesh");
-        if (mesh == source.end() || !mesh->is_string())
+        const auto primitive = source.find("primitive");
+        if ((mesh == source.end()) == (primitive == source.end()))
             return false;
         MeshComponentAsset value;
-        value.mesh = readAssetPath(path, mesh->get_ref<const std::string&>());
+        if (mesh != source.end()) {
+            if (!mesh->is_string())
+                return false;
+            value.sourceType = MeshComponentSourceType::Asset;
+            value.mesh = readAssetPath(path, mesh->get_ref<const std::string&>());
+        } else {
+            MeshPrimitive parsed;
+            if (!readPrimitive(*primitive, parsed))
+                return false;
+            value.sourceType = MeshComponentSourceType::Primitive;
+            value.primitiveRecipe.name = "Scene Runtime Primitive";
+            value.primitiveRecipe.parts.emplace_back(std::move(parsed));
+            value.primitiveRecipe.usage = MeshUsage::Dynamic;
+            value.primitiveRecipe.keepCpuCopy = true;
+        }
         if (!readBool(source, "enabled", value.enabled) ||
             !readBool(source, "visible", value.visible) ||
             !readBool(source, "cast_shadow", value.castShadow) ||
@@ -346,8 +461,13 @@ bool validateSceneAsset(const SceneAsset& asset, const VirtualPath& scenePath) {
                         return finite(value.position) && finite(value.rotation) &&
                                finite(value.scale) && lengthSquared > math::kEpsilon;
                     } else if constexpr (std::is_same_v<T, MeshComponentAsset>) {
-                        return value.mesh.valid() && value.mesh.scheme() == "asset" &&
-                               value.mesh.relativePath().ends_with(".mesh.json");
+                        if (value.sourceType == MeshComponentSourceType::Asset) {
+                            return value.mesh.valid() && value.mesh.scheme() == "asset" &&
+                                   value.mesh.relativePath().ends_with(".mesh.json");
+                        }
+                        return value.sourceType == MeshComponentSourceType::Primitive &&
+                               !value.mesh.valid() &&
+                               validRuntimePrimitiveRecipe(value.primitiveRecipe);
                     } else if constexpr (std::is_same_v<T, MaterialComponentAsset>) {
                         return value.materials.size() <= kMaxMaterialsPerNode &&
                                std::ranges::all_of(value.materials, [](const VirtualPath& path) {
@@ -452,13 +572,19 @@ std::unique_ptr<Scene> SceneAsset::instantiate(const SceneInstantiationContext& 
                         node->transform().setLocalRotation(value.rotation);
                         node->transform().setLocalScale(value.scale);
                     } else if constexpr (std::is_same_v<T, MeshComponentAsset>) {
-                        if (!context.loadMesh)
-                            return false;
-                        const MeshHandle mesh = context.loadMesh(value.mesh);
-                        if (!mesh)
-                            return false;
                         MeshComponent* runtime = node->addComponent<MeshComponent>();
-                        runtime->mesh = mesh;
+                        if (value.sourceType == MeshComponentSourceType::Asset) {
+                            if (!context.loadMesh)
+                                return false;
+                            const MeshHandle mesh = context.loadMesh(value.mesh);
+                            if (!mesh)
+                                return false;
+                            runtime->setAssetMesh(mesh);
+                        } else {
+                            runtime->setPrimitiveRecipe(value.primitiveRecipe);
+                            if (!runtime->applyPrimitiveChanges())
+                                return false;
+                        }
                         runtime->visible = value.visible;
                         runtime->castShadow = value.castShadow;
                         runtime->receiveShadow = value.receiveShadow;

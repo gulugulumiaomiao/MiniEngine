@@ -4,7 +4,7 @@
   "nodes": [
     {
       "id": 1,
-      "name": "Geometry Showcase",
+      "name": "Runtime Ground",
       "components": [
         {
           "type": "Transform",
@@ -14,17 +14,21 @@
         },
         {
           "type": "Mesh",
-          "mesh": "../meshes/procedural_showcase.mesh.json",
+          "primitive": {
+            "type": "plane",
+            "parameters": {
+              "size": [8.0, 8.0],
+              "segments_x": 4,
+              "segments_z": 4
+            }
+          },
           "cast_shadow": true,
           "receive_shadow": true
         },
         {
           "type": "Material",
           "materials": [
-            "../materials/blinn_ground.material.json",
-            "../materials/blinn_red.material.json",
-            "../materials/blinn_blue.material.json",
-            "../materials/blinn_gold.material.json"
+            "../materials/blinn_ground.material.json"
           ]
         }
       ]
@@ -82,6 +86,72 @@
           "intensity": 4.0,
           "range": 8.0,
           "cast_shadow": false
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Runtime Box",
+      "components": [
+        {"type": "Transform", "position": [-2.0, 0.6, 0.0]},
+        {
+          "type": "Mesh",
+          "primitive": {
+            "type": "box",
+            "parameters": {"size": [1.2, 1.2, 1.2]}
+          }
+        },
+        {
+          "type": "Material",
+          "materials": ["../materials/blinn_red.material.json"]
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Runtime Sphere",
+      "components": [
+        {"type": "Transform", "position": [0.0, 0.75, 0.0]},
+        {
+          "type": "Mesh",
+          "primitive": {
+            "type": "sphere",
+            "parameters": {
+              "radius": 0.75,
+              "longitude_segments": 32,
+              "latitude_segments": 16
+            }
+          }
+        },
+        {
+          "type": "Material",
+          "materials": ["../materials/blinn_blue.material.json"]
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Runtime Cylinder",
+      "components": [
+        {"type": "Transform", "position": [2.0, 0.75, 0.0]},
+        {
+          "type": "Mesh",
+          "primitive": {
+            "type": "cylinder",
+            "parameters": {
+              "bottom_radius": 0.65,
+              "top_radius": 0.45,
+              "height": 1.5,
+              "radial_segments": 32,
+              "height_segments": 2,
+              "cap_bottom": true,
+              "cap_top": true
+            }
+          }
+        },
+        {
+          "type": "Material",
+          "materials": ["../materials/blinn_gold.material.json"]
         }
       ]
     }

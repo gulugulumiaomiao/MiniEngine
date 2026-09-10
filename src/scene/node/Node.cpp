@@ -17,7 +17,7 @@ void Node::initialize(NodeHandle handle) {
     auto transform = std::make_unique<TransformComponent>();
     transform_ = transform.get();
     components_.push_back(std::move(transform));
-    transform_->attach(*scene_, handle_, activeInHierarchy_);
+    transform_->attach(*this, activeInHierarchy_);
 }
 
 void Node::setActive(bool active) {
