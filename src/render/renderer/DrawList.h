@@ -38,6 +38,8 @@ struct DrawItem {
     rhi::GraphicsPipelineHandle pipeline;
     MaterialHandle material;
     rhi::BindGroupHandle materialBindGroup;
+    rhi::GraphicsPipelineHandle fallbackPipeline;
+    MaterialHandle fallbackMaterial;
     struct VertexBuffer {
         std::uint32_t binding{};
         rhi::BufferHandle buffer;

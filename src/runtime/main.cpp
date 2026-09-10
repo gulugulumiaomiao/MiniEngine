@@ -2,8 +2,13 @@
 #include "runtime/engine/Engine.h"
 #include "rhi/vulkan/VulkanFactory.h"
 
-int main() {
+#include <filesystem>
+
+int main(int argc, char** argv) {
+    (void)argc;
     engine::GameApplication application;
     const engine::rhi::vulkan::VulkanFactory contextFactory;
-    return ENGINE.run(application, contextFactory);
+    const std::filesystem::path executable =
+        std::filesystem::absolute(std::filesystem::path{argv[0]}).lexically_normal();
+    return ENGINE.run(application, contextFactory, executable.parent_path() / "engine.json");
 }

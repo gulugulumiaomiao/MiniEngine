@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "working_directory": "../..",
+  "application": {
+    "name": "Mini Vulkan Engine",
+    "width": 1280,
+    "height": 720,
+    "vsync": true
+  },
+  "filesystem": {
+    "mounts": [
+      {
+        "scheme": "asset",
+        "type": "directory",
+        "path": "assets",
+        "read_only": false
+      },
+      {
+        "scheme": "library",
+        "type": "directory",
+        "path": "library",
+        "read_only": false
+      },
+      {
+        "scheme": "shader-cache",
+        "type": "directory",
+        "path": "generated-shaders/runtime",
+        "read_only": false
+      },
+      {
+        "scheme": "shader-bin",
+        "type": "directory",
+        "path": "generated-shaders/compiled",
+        "read_only": true
+      }
+    ]
+  }
+}

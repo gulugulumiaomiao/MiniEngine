@@ -6,13 +6,12 @@
 
 namespace engine {
 
-class MaterialManager final : public Singleton<MaterialManager>,
-                              public KeyedHandleRegistry<Material,
-                                                         MaterialHandle,
-                                                         VirtualPath,
-                                                         VirtualPathHash> {
+class MaterialManager final
+    : public Singleton<MaterialManager>,
+      public KeyedHandleRegistry<Material, MaterialHandle, VirtualPath, VirtualPathHash> {
 public:
     [[nodiscard]] MaterialHandle load(const VirtualPath& materialAssetPath);
+    [[nodiscard]] MaterialHandle errorMaterial();
     void setShader(MaterialHandle handle, const VirtualPath& shaderPath);
     void refreshShader(const VirtualPath& shaderPath);
 

@@ -4,9 +4,13 @@
 #include "core/base/Singleton.h"
 #include "core/filesystem/VirtualPath.h"
 #include "render/scene/RenderScene.h"
+#include "runtime/engine/EngineConfig.h"
 #include "scene/scene/Scene.h"
 
+#include <filesystem>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace engine {
 
@@ -20,12 +24,14 @@ class Engine final : public Singleton<Engine> {
 public:
     ~Engine();
 
-    [[nodiscard]] int run(Application& application, const rhi::IContextFactory& contextFactory);
+    [[nodiscard]] int run(Application& application,
+                          const rhi::IContextFactory& contextFactory,
+                          const std::filesystem::path& configPath);
     void requestQuit() { shouldQuit_ = true; }
 
     [[nodiscard]] bool running() const { return running_; }
     [[nodiscard]] float deltaTime() const { return deltaTime_; }
-    [[nodiscard]] const AppConfig& config() const { return config_; }
+    [[nodiscard]] const AppConfig& config() const { return config_.application; }
     [[nodiscard]] Window& window();
     [[nodiscard]] Renderer& renderer();
     [[nodiscard]] Scene& scene() { return *scene_; }
@@ -38,12 +44,13 @@ private:
     friend class Singleton<Engine>;
     Engine();
 
-    [[nodiscard]] bool initialize(const AppConfig& config,
+    [[nodiscard]] bool initialize(const std::filesystem::path& configPath,
                                   const rhi::IContextFactory& contextFactory);
     void loop(Application& application);
     void shutdown();
 
-    AppConfig config_;
+    EngineConfig config_;
+    std::vector<std::string> mountedSchemes_;
     std::unique_ptr<Window> window_;
     std::unique_ptr<Renderer> renderer_;
     std::unique_ptr<Scene> scene_{std::make_unique<Scene>("Main Scene")};

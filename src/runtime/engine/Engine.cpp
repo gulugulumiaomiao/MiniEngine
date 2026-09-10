@@ -2,7 +2,6 @@
 
 #include "asset/importer/AssetImportPipeline.h"
 #include "asset/manager/AssetManager.h"
-#include "core/base/BuildConfig.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/logging/Log.h"
 #include "render/gpu/frame/FrameGpuManager.h"
@@ -32,45 +31,88 @@ namespace engine {
 Engine::Engine() = default;
 Engine::~Engine() = default;
 
-int Engine::run(Application& application, const rhi::IContextFactory& contextFactory) {
+int Engine::run(Application& application,
+                const rhi::IContextFactory& contextFactory,
+                const std::filesystem::path& configPath) {
     if (running_) {
         Log::error("Engine", "Engine is already running an Application");
         return 1;
     }
 
-    if (!initialize(application.getConfig(), contextFactory))
+    if (!initialize(configPath, contextFactory))
         return 1;
 
-    Log::info("Engine", "Starting application: %s", config_.name.c_str());
+    Log::info("Engine", "Starting application: %s", config_.application.name.c_str());
     application.onStart();
     loop(application);
     application.onStop();
-    Log::info("Engine", "Stopping application: %s", config_.name.c_str());
+    Log::info("Engine", "Stopping application: %s", config_.application.name.c_str());
     shutdown();
     return 0;
 }
 
-bool Engine::initialize(const AppConfig& config, const rhi::IContextFactory& contextFactory) {
-    if (config.name.empty() || config.width == 0 || config.height == 0) {
-        Log::error("Engine", "Invalid application configuration");
-        return false;
+bool Engine::initialize(const std::filesystem::path& configPath,
+                        const rhi::IContextFactory& contextFactory) {
+    const std::filesystem::path normalizedConfigPath =
+        std::filesystem::absolute(configPath).lexically_normal();
+    if (!std::filesystem::is_regular_file(normalizedConfigPath)) {
+        Log::fatal("Engine",
+                   "Engine configuration does not exist: %s",
+                   normalizedConfigPath.string().c_str());
     }
-
-    config_ = config;
+    std::string configError;
+    const std::optional<EngineConfig> loadedConfig =
+        EngineConfig::load(normalizedConfigPath, configError);
+    if (!loadedConfig) {
+        Log::fatal("Engine",
+                   "Cannot load engine configuration %s: %s",
+                   normalizedConfigPath.string().c_str(),
+                   configError.c_str());
+    }
+    config_ = *loadedConfig;
     shouldQuit_ = false;
     deltaTime_ = 0.0F;
 
-#if defined(MINI_RELEASE)
-    constexpr bool assetReadOnly = true;
-#else
-    constexpr bool assetReadOnly = false;
-#endif
-    const std::filesystem::path assetRoot{MINI_ASSET_DIR};
-    if (!FILE_SYSTEM.mountDirectory("asset", assetRoot, assetReadOnly) ||
-        !FILE_SYSTEM.mountDirectory("library", assetRoot.parent_path() / "library", false) ||
-        !FILE_SYSTEM.mountDirectory("shader", MINI_GENERATED_SHADER_DIR, false) ||
-        !ASSET_MANAGER.initialize()) {
-        Log::error("Engine", "Cannot initialize asset system: %s", assetRoot.string().c_str());
+    std::filesystem::path workingDirectory{config_.workingDirectory};
+    if (workingDirectory.is_relative()) {
+        workingDirectory = normalizedConfigPath.parent_path() / workingDirectory;
+    }
+    workingDirectory = std::filesystem::absolute(workingDirectory).lexically_normal();
+    std::error_code workingDirectoryError;
+    if (!std::filesystem::is_directory(workingDirectory, workingDirectoryError) ||
+        workingDirectoryError) {
+        Log::fatal("Engine",
+                   "Engine working directory does not exist: %s",
+                   workingDirectory.string().c_str());
+    }
+    std::filesystem::current_path(workingDirectory, workingDirectoryError);
+    if (workingDirectoryError) {
+        Log::fatal(
+            "Engine", "Cannot set engine working directory: %s", workingDirectory.string().c_str());
+    }
+    Log::info("Engine", "Working directory: %s", workingDirectory.string().c_str());
+
+    for (const FileSystemMountConfig& mount : config_.filesystem.mounts) {
+        std::filesystem::path directory{mount.path};
+        if (directory.is_relative()) {
+            directory = workingDirectory / directory;
+        }
+        directory = std::filesystem::absolute(directory).lexically_normal();
+        if (!FILE_SYSTEM.mountDirectory(mount.scheme, directory, mount.readOnly)) {
+            Log::fatal("Engine",
+                       "Cannot mount %s:// at %s",
+                       mount.scheme.c_str(),
+                       directory.string().c_str());
+        }
+        mountedSchemes_.push_back(mount.scheme);
+        Log::info("Engine",
+                  "Mounted %s:// at %s%s",
+                  mount.scheme.c_str(),
+                  directory.string().c_str(),
+                  mount.readOnly ? " (read-only)" : "");
+    }
+    if (!ASSET_MANAGER.initialize()) {
+        Log::error("Engine", "Cannot initialize asset system");
         shutdown();
         return false;
     }
@@ -84,13 +126,15 @@ bool Engine::initialize(const AppConfig& config, const rhi::IContextFactory& con
         sceneReloadPending_ = true;
     });
 
-    window_ = std::make_unique<Window>(config_.width, config_.height, config_.name);
+    const AppConfig& applicationConfig = config_.application;
+    window_ = std::make_unique<Window>(
+        applicationConfig.width, applicationConfig.height, applicationConfig.name);
     const auto [width, height] = window_->framebufferSize();
     rhi::Context context = contextFactory.createContext({
         .surface = {.windowSystem = rhi::WindowSystem::Win32,
                     .nativeDisplay = window_->nativeInstance(),
                     .nativeWindow = window_->nativeHandle()},
-        .swapchain = {.width = width, .height = height, .vsync = config_.vsync},
+        .swapchain = {.width = width, .height = height, .vsync = applicationConfig.vsync},
     });
     renderer_ = std::make_unique<Renderer>(*window_, std::move(context));
     if (!FRAME_GPU_MANAGER.initialize(renderer_->device()) ||
@@ -158,9 +202,10 @@ void Engine::shutdown() {
     TEXTURE_MANAGER.clear();
     SHADER_MANAGER.clear();
     ASSET_MANAGER.shutdown();
-    (void)FILE_SYSTEM.unmount("shader");
-    (void)FILE_SYSTEM.unmount("asset");
-    (void)FILE_SYSTEM.unmount("library");
+    for (auto iterator = mountedSchemes_.rbegin(); iterator != mountedSchemes_.rend(); ++iterator) {
+        (void)FILE_SYSTEM.unmount(*iterator);
+    }
+    mountedSchemes_.clear();
     window_.reset();
     scene_ = std::make_unique<Scene>("Main Scene");
     activeScenePath_ = {};

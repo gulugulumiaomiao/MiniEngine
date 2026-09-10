@@ -28,6 +28,10 @@ FILE_SYSTEM.mountDirectory("asset", assetRoot, true);
 FILE_SYSTEM.mountDirectory("cache", cacheRoot, false);
 ```
 
+正式引擎进程不应在业务模块中调用 `mountDirectory()`。运行时 mount 统一声明在
+`config/engine.json`，并由 `Engine::initialize()` 在其他系统启动前完成；上面的接口主要供
+独立工具、测试和文件系统自身的扩展使用。
+
 以后增加 Pak 时只需要实现新的 `IFileMount`，`AssetManager` 和业务层不需要改变。
 
 ## 同步接口

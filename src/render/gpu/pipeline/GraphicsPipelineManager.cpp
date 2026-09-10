@@ -199,16 +199,6 @@ rhi::GraphicsPipelineHandle GraphicsPipelineManager::resolve(const Shader& shade
     const ShaderProgramHandle programHandle =
         SHADER_GPU_MANAGER.getOrCreateProgram(shader, pass, variant);
     if (!programHandle) {
-        const auto previous = fallbackPipelines_.find(fallbackKey);
-        if (previous != fallbackPipelines_.end()) {
-            if (const GraphicsPipelineGpuResource* cached = cache_.find(previous->second)) {
-                Log::error("GraphicsPipelineManager",
-                           "Keeping the previous pipeline after Shader reload failure: %s/%s",
-                           shader.name().c_str(),
-                           pass.name().c_str());
-                return cached->pipeline;
-            }
-        }
         Log::error("GraphicsPipelineManager",
                    "Shader program is unavailable for pass: %s",
                    pass.name().c_str());

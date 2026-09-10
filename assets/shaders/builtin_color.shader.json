@@ -1,0 +1,45 @@
+{
+  "$schemaVersion": 1,
+  "name": "MiniEngine/BuiltinColor",
+  "properties": [
+    {
+      "name": "Color",
+      "displayName": "Color",
+      "type": "Color",
+      "default": [1.0, 1.0, 1.0, 1.0]
+    }
+  ],
+  "subShaders": [{
+    "tags": {
+      "renderPipeline": "MiniForward",
+      "renderType": "Opaque",
+      "queue": "Opaque"
+    },
+    "passes": [{
+      "name": "Forward",
+      "lightMode": "Forward",
+      "state": {
+        "cull": "Off",
+        "frontFace": "CW",
+        "fill": "Solid",
+        "topology": "TriangleList",
+        "depthWrite": true,
+        "depthTest": "LessEqual",
+        "blend": "Off",
+        "colorMask": "RGBA"
+      },
+      "program": {
+        "vertex": "builtin_color.Forward.vert",
+        "frag": "builtin_color.Forward.frag"
+      },
+      "vertexInput": [
+        { "name": "position", "semantic": "POSITION", "type": "Vec3", "location": 0 }
+      ],
+      "varyings": [],
+      "fragmentOutputs": [
+        { "name": "color", "type": "Vec4", "location": 0 }
+      ],
+      "features": []
+    }]
+  }]
+}

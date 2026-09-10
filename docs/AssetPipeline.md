@@ -67,7 +67,7 @@ FileWatcher 事件
   -> MaterialManager 刷新引用该 Handle 的材质
 ```
 
-JSON/导入失败时不 replace，旧 Shader 和 Material 保持不变。GLSL 在真正参与绘制时才编译；若新源码编译失败，GraphicsPipelineManager 以 Shader 路径、Pass、Variant、VertexLayout 和 RenderTarget 格式查找上一条有效 Pipeline，保证失败不会立刻破坏当前画面。成功编译后才把回退入口更新为新 Pipeline。
+JSON/导入失败时不 replace，旧 Shader 和 Material 保持不变。GLSL 在真正参与绘制时才编译；若 Shader 编译或 Pipeline 创建失败，Renderer 的 Forward Pass 使用内置洋红 Error Material，错误会直接显示在对应物体上。
 
 ## 开发与发布流程
 
@@ -88,7 +88,7 @@ cmake --preset clang-release
 cmake --build --preset clang-release
 ```
 
-构建过程先运行 `MiniAssetCooker <asset-root> <library-root>`。Release 引擎只读取生成的 AssetDatabase 与 Artifact，不启动 FileWatcher，不调用 Importer，也不会从源 JSON 直接实例化资产。
+构建过程只自动运行 `MiniAssetCooker <asset-root> <library-root>`。CMake 构建引擎不会编译 Shader；发布前需要由独立资产构建步骤调用 `MiniShaderCompiler` 生成打包 SPV。Release 引擎只读取生成的 AssetDatabase、Artifact 和 SPV，不启动 FileWatcher，不调用 Importer，也不会从源 JSON 直接实例化资产。
 
 ## 生命周期
 

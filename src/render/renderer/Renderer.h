@@ -26,7 +26,7 @@ public:
 
 private:
     void recordDrawCommands(rhi::BindGroupHandle sceneBindGroup, const DrawList& drawList);
-    void submitDrawList(const DrawList& drawList);
+    void submitDrawList(DrawList drawList);
     void recreateSwapchain();
 
     Window& window_;

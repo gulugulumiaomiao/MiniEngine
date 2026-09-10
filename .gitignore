@@ -1,6 +1,7 @@
 /build*/
 /work-shaders/
 /library/
+/generated-shaders/
 /.vs/
 /CMakeUserPresets.json
 /.cache/

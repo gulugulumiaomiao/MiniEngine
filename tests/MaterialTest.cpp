@@ -46,6 +46,17 @@ int main() {
         materials.find(cachedMaterialA->assetPath()) != &warmData || materials.size() != 2) {
         return 24;
     }
+    const MaterialHandle errorMaterial = materials.errorMaterial();
+    const Material* errorData = materials.find(errorMaterial);
+    const MaterialHandle failedMaterial =
+        materials.load(VirtualPath{"asset://shaders/builtin_color.shader.json"});
+    if (!errorData || failedMaterial != errorMaterial ||
+        errorData->shaderHandle() != SHADER_MANAGER.builtinColor() ||
+        errorData->shader().properties().size() != 1 ||
+        errorData->shader().properties().front().name != "Color" ||
+        errorData->getVec4("Color") != math::Vec4{1.0F, 0.0F, 1.0F, 1.0F}) {
+        return 26;
+    }
     const SubShader* runtimeSubShader = warmData.shader().selectSubShader("MiniForward");
     if (!runtimeSubShader || !runtimeSubShader->findPass(ShaderPassType::Forward)) {
         return 16;

@@ -5,11 +5,16 @@
 #include "render/shader/ShaderManager.h"
 
 namespace engine {
+namespace {
+
+const VirtualPath kErrorMaterialPath{"asset://materials/error.material.json"};
+
+} // namespace
 
 MaterialHandle MaterialManager::load(const VirtualPath& materialPath) {
     if (!materialPath.valid()) {
         Log::error("MaterialManager", "Invalid Material path: %s", materialPath.string().c_str());
-        return {};
+        return errorMaterial();
     }
     if (const MaterialHandle existing = findHandle(materialPath); existing) {
         return existing;
@@ -18,11 +23,25 @@ MaterialHandle MaterialManager::load(const VirtualPath& materialPath) {
     const std::shared_ptr<MaterialAsset> asset =
         ASSET_MANAGER.loadAsset<MaterialAsset>(materialPath);
     if (!asset) {
-        return {};
+        return materialPath == kErrorMaterialPath ? MaterialHandle{} : errorMaterial();
     }
     const ShaderHandle shader = SHADER_MANAGER.load(asset->shader);
     if (!shader)
+        return materialPath == kErrorMaterialPath ? MaterialHandle{} : errorMaterial();
+    return insert(asset->instantiate(shader));
+}
+
+MaterialHandle MaterialManager::errorMaterial() {
+    if (const MaterialHandle existing = findHandle(kErrorMaterialPath); existing)
+        return existing;
+
+    const std::shared_ptr<MaterialAsset> asset =
+        ASSET_MANAGER.loadAsset<MaterialAsset>(kErrorMaterialPath);
+    const ShaderHandle shader = SHADER_MANAGER.builtinColor();
+    if (!asset || !shader) {
+        Log::error("MaterialManager", "Built-in Error Material is unavailable");
         return {};
+    }
     return insert(asset->instantiate(shader));
 }
 

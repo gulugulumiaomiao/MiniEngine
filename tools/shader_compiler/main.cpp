@@ -15,7 +15,8 @@ class AssetRuntimeScope final {
 public:
     ~AssetRuntimeScope() {
         ASSET_MANAGER.shutdown();
-        (void)FILE_SYSTEM.unmount("shader");
+        (void)FILE_SYSTEM.unmount("shader-bin");
+        (void)FILE_SYSTEM.unmount("shader-cache");
         (void)FILE_SYSTEM.unmount("asset");
         (void)FILE_SYSTEM.unmount("library");
     }
@@ -54,7 +55,8 @@ int main(int argc, char** argv) {
     }
     const std::shared_ptr<engine::ShaderAsset> shaderAsset =
         ASSET_MANAGER.loadAsset<engine::ShaderAsset>(*shaderVirtualPath);
-    if (!shaderAsset || !FILE_SYSTEM.mountDirectory("shader", output, false))
+    if (!shaderAsset || !FILE_SYSTEM.mountDirectory("shader-cache", output / "runtime", false) ||
+        !FILE_SYSTEM.mountDirectory("shader-bin", output / "compiled", false))
         return 1;
 
     const engine::Shader shader{*shaderAsset};

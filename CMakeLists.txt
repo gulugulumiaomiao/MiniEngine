@@ -190,11 +190,13 @@ if(MINGW)
     )
 endif()
 
-set(GENERATED_SHADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-shaders")
-set(SHADER_PIPELINE_STAMP "${GENERATED_SHADER_DIR}/compiled/pipeline.stamp")
-add_custom_command(
-    OUTPUT "${SHADER_PIPELINE_STAMP}"
+set(GENERATED_SHADER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/generated-shaders")
+add_custom_target(MiniShaderPackagedShaders
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${GENERATED_SHADER_DIR}/compiled"
+    COMMAND "$<TARGET_FILE:MiniShaderCompiler>" compile
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/builtin_color.shader.json"
+            Forward
+            "${GENERATED_SHADER_DIR}"
     COMMAND "$<TARGET_FILE:MiniShaderCompiler>" compile
             "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/vertex_color.shader.json"
             Forward
@@ -203,9 +205,11 @@ add_custom_command(
             "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/blinn_phong.shader.json"
             Forward
             "${GENERATED_SHADER_DIR}"
-    COMMAND "${CMAKE_COMMAND}" -E touch "${SHADER_PIPELINE_STAMP}"
     DEPENDS
         MiniShaderCompiler
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/builtin_color.shader.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/builtin_color.Forward.vert"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/builtin_color.Forward.frag"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/vertex_color.shader.json"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/vertex_color.Forward.vert"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/vertex_color.Forward.frag"
@@ -213,15 +217,15 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/blinn_phong.Forward.vert"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/blinn_phong.Forward.frag"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/include/scene.glsl"
-    COMMENT "Compiling packaged shaders through ShaderCompilePipeline"
+    COMMENT "Explicitly compiling packaged shaders through ShaderCompilePipeline"
     VERBATIM
 )
-add_custom_target(MiniShaderPackagedShaders DEPENDS "${SHADER_PIPELINE_STAMP}")
 
 add_executable(MiniVulkanEngine
     src/runtime/main.cpp
     src/runtime/application/GameApplication.cpp
     src/runtime/engine/Engine.cpp
+    src/runtime/engine/EngineConfig.cpp
     src/runtime/window/Window.cpp
     src/asset/manager/AssetManager.cpp
     src/render/material/Material.cpp
@@ -273,23 +277,17 @@ target_compile_definitions(MiniVulkanEngine PRIVATE
     VK_USE_PLATFORM_WIN32_KHR
     WIN32_LEAN_AND_MEAN
     NOMINMAX
-    MINI_GENERATED_SHADER_DIR="${GENERATED_SHADER_DIR}"
     MINI_GLSLC_EXECUTABLE="${GLSLC_EXECUTABLE}"
-    MINI_ASSET_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets"
     $<$<CONFIG:Debug>:MINI_DEBUG=1>
     $<$<NOT:$<CONFIG:Debug>>:MINI_RELEASE=1>
 )
 
 add_custom_command(TARGET MiniVulkanEngine POST_BUILD
-    COMMAND "${CMAKE_COMMAND}" -E copy_directory
-            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-            "${CMAKE_CURRENT_BINARY_DIR}/assets"
-    COMMAND "$<TARGET_FILE:MiniAssetCooker>"
-            "${CMAKE_CURRENT_BINARY_DIR}/assets"
-            "${CMAKE_CURRENT_BINARY_DIR}/library"
-    COMMENT "Copying JSON shader and material assets"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/config/engine.json"
+            "$<TARGET_FILE_DIR:MiniVulkanEngine>/engine.json"
+    COMMENT "Staging engine configuration"
 )
-add_dependencies(MiniVulkanEngine MiniAssetCooker MiniShaderPackagedShaders)
 target_link_libraries(MiniVulkanEngine PRIVATE
     MiniAssetImporters
     MiniScene
@@ -365,7 +363,6 @@ if(BUILD_TESTING)
         MINI_TEST_GENERATED_SHADER_DIR="${GENERATED_SHADER_DIR}"
         MINI_GLSLC_EXECUTABLE="${GLSLC_EXECUTABLE}"
     )
-    add_dependencies(ShaderCompilerTest MiniShaderPackagedShaders)
     if(MSVC)
         target_compile_options(ShaderCompilerTest PRIVATE /W4 /permissive- /utf-8)
     else()
@@ -797,7 +794,7 @@ if(BUILD_TESTING)
     )
     target_compile_definitions(AssetReleaseTest PRIVATE
         MINI_RELEASE=1
-        MINI_TEST_COOKED_ASSET_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets"
+        MINI_TEST_COOKED_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets"
     )
     if(MSVC)
         target_compile_options(AssetReleaseTest PRIVATE /W4 /permissive- /utf-8)
@@ -814,7 +811,13 @@ if(BUILD_TESTING)
             "-Wl,--end-group,-Bdynamic"
         )
     endif()
-    add_dependencies(AssetReleaseTest MiniVulkanEngine)
+    add_dependencies(AssetReleaseTest MiniAssetCooker)
+    add_custom_command(TARGET AssetReleaseTest POST_BUILD
+        COMMAND "$<TARGET_FILE:MiniAssetCooker>"
+                "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+                "${CMAKE_CURRENT_SOURCE_DIR}/library"
+        COMMENT "Cooking release-test assets into the engine library"
+    )
     add_test(NAME AssetReleaseTest COMMAND AssetReleaseTest)
 
     add_test(

@@ -62,8 +62,8 @@ struct ShaderCompilePipelineConfig {
     ShaderCompileMode mode{ShaderCompileMode::DevelopmentRuntime};
     ShaderPreprocessorConfig preprocessorConfig;
     ShaderCompilerOptions compilerOptions;
-    VirtualPath intermediateRoot{"shader://runtime"};
-    VirtualPath packagedRoot{"shader://compiled"};
+    VirtualPath intermediateRoot{"shader-cache://"};
+    VirtualPath packagedRoot{"shader-bin://"};
 };
 
 class ShaderCompilePipeline final {
@@ -127,11 +127,10 @@ private:
                                                                ShaderStage stage,
                                                                std::string_view entryPoint,
                                                                const ShaderVariantKey& variant);
-    [[nodiscard]] static ShaderHash makeCompiledShaderPathKey(
-        const VirtualPath& binaryPath,
-        ShaderStage stage,
-        std::string_view entryPoint,
-        const ShaderVariantKey& variant);
+    [[nodiscard]] static ShaderHash makeCompiledShaderPathKey(const VirtualPath& binaryPath,
+                                                              ShaderStage stage,
+                                                              std::string_view entryPoint,
+                                                              const ShaderVariantKey& variant);
     [[nodiscard]] static std::optional<SpirvReflection>
     reflectSpirv(std::span<const std::byte> bytecode, const VirtualPath& sourcePath);
     [[nodiscard]] static bool validateSpirvReflection(const Shader& shader,

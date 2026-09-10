@@ -107,7 +107,7 @@ ShadowCaster → DepthOnly → Forward
 - 每帧首次请求 Pipeline 时轮询已加载依赖的时间戳。
 - 变化按 `CompiledShader → ShaderProgram → RHI Shader → Pipeline` 传播失效。
 - 已提交给 GPU 的旧 `VkPipeline` 和 `VkShaderModule` 进入 retirement 队列，至少经过 frames-in-flight 后才析构。
-- 打包产物是由 `ShaderCompilePipeline` 输出到 `shader://compiled` 的稳定 SPIR-V；未被加载流程消费的旧 `ShaderCooked*` 元数据模型已经删除。
+- 打包产物是由 `ShaderCompilePipeline` 输出到 `shader-bin://` 的稳定 SPIR-V；未被加载流程消费的旧 `ShaderCooked*` 元数据模型已经删除。
 
 ## 关键缓存键
 

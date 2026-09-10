@@ -71,19 +71,27 @@ include -----------------------------> preprocessed node
 ### DevelopmentRuntime
 
 首次请求 Pass/Variant 时按需生成、预处理和编译，SPV 保存在
-`shader://runtime/<compile-hash>.*.spv`。源文件变化后在下一次请求时重新编译。
+`shader-cache://<compile-hash>.*.spv`。源文件变化后在下一次请求时重新编译。
 
 ### OfflineTool
 
 `MiniShaderCompiler compile <shader.json> <pass> <output-directory>` 加载 Shader JSON，
 实例化运行时 `Shader`，然后调用同一个 `ShaderCompilePipeline`。中间结果写入
-`shader://runtime`，最终包内二进制写入 `shader://compiled`。
+`shader-cache://`，最终包内二进制写入 `shader-bin://`。
+
+`MiniShaderCompiler` 是显式调用的离线工具。CMake 构建 `MiniVulkanEngine` 时不会运行它，也不会把 GLSL 编译为 SPIR-V。
+
+需要生成仓库内置 Shader 的发布 SPV 时，显式执行：
+
+```powershell
+cmake --build build/clang-release --target MiniShaderPackagedShaders
+```
 
 ### PackagedRuntime
 
 根据 Shader 路径、Pass、Variant、Target 和 Stage 计算固定路径，只加载
-`shader://compiled/*.spv`。任何阶段缺失都会记录预期路径、返回无效 Program，Renderer
-跳过对应 DrawItem。打包模式不会调用 glslc，也不会回退到运行时编译。
+`shader-bin://*.spv`。任何阶段缺失都会记录预期路径、返回无效 Program，Renderer
+使用内置洋红 Error Material。打包模式不会调用 glslc，也不会回退到运行时编译。
 
 ## GPU 创建
 

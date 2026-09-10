@@ -67,7 +67,7 @@ layout(std140, set = 1, binding = 0) uniform MaterialProperties
 ```powershell
 ./build/clang-debug/MiniShaderCompiler.exe compile `
   assets/shaders/vertex_color.shader.json Forward `
-  build/clang-debug/generated-shaders
+  generated-shaders
 ```
 
 生成某个 Pass 的两个完整 GLSL 阶段：
@@ -79,10 +79,10 @@ cmake --build --preset clang-debug --target MiniShaderPackagedShaders
 CMake 只保留 `MiniShaderPackagedShaders` 离线目标，并通过 `MiniShaderCompiler compile` 调用统一管线。开发运行时第一次绘制 Pass/Variant 时按需编译；打包运行时只加载该目标生成的 SPIR-V：
 
 ```text
-build/<preset>/generated-shaders/runtime/<compile-hash>.vert.spv
-build/<preset>/generated-shaders/runtime/<compile-hash>.frag.spv
-build/<preset>/generated-shaders/compiled/<package-hash>.vert.spv
-build/<preset>/generated-shaders/compiled/<package-hash>.frag.spv
+generated-shaders/runtime/<compile-hash>.vert.spv
+generated-shaders/runtime/<compile-hash>.frag.spv
+generated-shaders/compiled/<package-hash>.vert.spv
+generated-shaders/compiled/<package-hash>.frag.spv
 ```
 
 输出目录属于构建产物，不应手工修改，也不作为源资产提交。
@@ -171,4 +171,4 @@ void FragmentMain(MiniVaryings inValue, out MiniFragmentOutput outValue)
 
 `ShaderGenerator` 由 `ShaderCompilePipeline` 调度。它只接收运行时 `Shader`、`ShaderPass`、当前阶段和用户源码，生成 Properties、接口与入口包装；随后预处理器展开 `#include`、注入变体宏并计算源码哈希。
 
-Shader JSON、阶段源码、include 依赖、生成后的 SPIR-V 和反射输入均使用 `VirtualPath`。资产源码通常位于 `asset://`，按需生成的 GLSL/SPIR-V 位于 `shader://runtime/<source-hash>.*`；只有文件系统挂载层负责映射到物理路径。
+Shader JSON、阶段源码、include 依赖、生成后的 SPIR-V 和反射输入均使用 `VirtualPath`。资产源码通常位于 `asset://`，按需生成的 GLSL/SPIR-V 位于 `shader-cache://<source-hash>.*`；只有文件系统挂载层负责映射到物理路径。

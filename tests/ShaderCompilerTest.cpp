@@ -53,7 +53,9 @@ int main() {
         return 2;
     }
 
-    if (!FILE_SYSTEM.mountDirectory("shader", MINI_TEST_GENERATED_SHADER_DIR, false)) {
+    const std::filesystem::path generatedShaderRoot{MINI_TEST_GENERATED_SHADER_DIR};
+    if (!FILE_SYSTEM.mountDirectory("shader-cache", generatedShaderRoot / "runtime", false) ||
+        !FILE_SYSTEM.mountDirectory("shader-bin", generatedShaderRoot / "compiled", false)) {
         return 8;
     }
     if (!test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR))
@@ -77,6 +79,14 @@ int main() {
     }
     if (pipeline.getOrCreate(runtimeShader, pass) != programHandle) {
         return 4;
+    }
+    ShaderCompilePipelineConfig offlineConfig;
+    offlineConfig.mode = ShaderCompileMode::OfflineTool;
+    offlineConfig.preprocessorConfig.includeSearchPaths = {VirtualPath{"asset://shaders/include"}};
+    offlineConfig.packagedRoot = VirtualPath{"shader-bin://"};
+    ShaderCompilePipeline offlinePipeline{std::move(offlineConfig)};
+    if (!offlinePipeline.getOrCreate(runtimeShader, pass)) {
+        return 20;
     }
     ShaderCompilePipelineConfig packagedConfig;
     packagedConfig.mode = ShaderCompileMode::PackagedRuntime;
@@ -124,5 +134,7 @@ int main() {
         return 16;
     }
     test::shutdownAssetEnvironment();
+    (void)FILE_SYSTEM.unmount("shader-bin");
+    (void)FILE_SYSTEM.unmount("shader-cache");
     (void)FILE_SYSTEM.unmount("fixture");
 }

@@ -6,13 +6,12 @@
 
 namespace engine {
 
-class ShaderManager final : public Singleton<ShaderManager>,
-                            public KeyedHandleRegistry<Shader,
-                                                       ShaderHandle,
-                                                       VirtualPath,
-                                                       VirtualPathHash> {
+class ShaderManager final
+    : public Singleton<ShaderManager>,
+      public KeyedHandleRegistry<Shader, ShaderHandle, VirtualPath, VirtualPathHash> {
 public:
     [[nodiscard]] ShaderHandle load(const VirtualPath& shaderPath);
+    [[nodiscard]] ShaderHandle builtinColor();
     [[nodiscard]] bool replace(ShaderHandle handle, Shader shader);
     [[nodiscard]] bool replace(const VirtualPath& shaderPath);
 

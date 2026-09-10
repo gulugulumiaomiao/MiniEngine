@@ -7,6 +7,11 @@
 #include <utility>
 
 namespace engine {
+namespace {
+
+const VirtualPath kBuiltinColorShaderPath{"asset://shaders/builtin_color.shader.json"};
+
+} // namespace
 
 ShaderHandle ShaderManager::load(const VirtualPath& shaderPath) {
     if (!shaderPath.valid()) {
@@ -17,6 +22,10 @@ ShaderHandle ShaderManager::load(const VirtualPath& shaderPath) {
         return existing;
     const std::shared_ptr<ShaderAsset> asset = ASSET_MANAGER.loadAsset<ShaderAsset>(shaderPath);
     return asset ? insert(asset->instantiate()) : ShaderHandle{};
+}
+
+ShaderHandle ShaderManager::builtinColor() {
+    return load(kBuiltinColorShaderPath);
 }
 
 bool ShaderManager::replace(ShaderHandle handle, Shader shader) {
