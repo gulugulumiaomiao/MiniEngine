@@ -1,5 +1,6 @@
 #include "render/mesh/MeshManager.h"
 
+#include "asset/manager/AssetManager.h"
 #include "core/logging/Log.h"
 #include "render/mesh/MeshBuilder.h"
 
@@ -7,6 +8,17 @@
 #include <utility>
 
 namespace engine {
+
+MeshHandle MeshManager::load(const VirtualPath& meshPath) {
+    if (!meshPath.valid()) {
+        Log::error("MeshManager", "Invalid Mesh path: %s", meshPath.string().c_str());
+        return {};
+    }
+    if (const MeshHandle existing = findHandle(meshPath); existing)
+        return existing;
+    const std::shared_ptr<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
+    return asset ? insert(asset->instantiate()) : MeshHandle{};
+}
 
 MeshHandle MeshManager::createRuntime(const MeshBuildRecipe& recipe) {
     const std::optional<MeshBuildResult> built = MeshBuilder::build(recipe);
@@ -113,6 +125,14 @@ bool MeshManager::replace(MeshHandle handle, Mesh mesh) {
     mesh.dirty_ = true;
     *current = std::move(mesh);
     return true;
+}
+
+bool MeshManager::replace(const VirtualPath& meshPath) {
+    const MeshHandle handle = findHandle(meshPath);
+    if (!handle)
+        return true;
+    const std::shared_ptr<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
+    return asset && replace(handle, asset->instantiate());
 }
 
 bool MeshManager::validate(const Mesh& mesh) {

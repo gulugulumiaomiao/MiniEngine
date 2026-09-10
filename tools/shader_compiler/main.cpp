@@ -39,7 +39,8 @@ int main(int argc, char** argv) {
     const std::filesystem::path toolLibrary =
         output / ".shader-tool-library" / shaderPath.filename();
     if (!FILE_SYSTEM.mountDirectory("asset", assetRoot, false) ||
-        !FILE_SYSTEM.mountDirectory("library", toolLibrary, false) || !ASSET_MANAGER.initialize()) {
+        !FILE_SYSTEM.mountDirectory("library", toolLibrary, false) ||
+        !ASSET_MANAGER.initialize(engine::AssetManagerMode::Development)) {
         engine::Log::error(
             "MiniShaderCompiler", "Cannot initialize asset system: %s", assetRoot.string().c_str());
         return 1;

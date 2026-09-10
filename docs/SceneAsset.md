@@ -19,7 +19,7 @@ std::unique_ptr<Scene> SceneAsset::instantiate(
     const SceneInstantiationContext& context) const;
 ```
 
-`SceneInstantiationContext` 提供 Mesh 和 Material 的路径加载函数。这样 `MiniScene` 只认识虚拟路径和资源 Handle，不直接依赖全局 Manager。
+`SceneInstantiationContext` 提供 Mesh 和 Material 的路径加载函数。这样 Scene 模块只认识虚拟路径和资源 Handle，不直接依赖全局 Manager。
 
 实例化分两遍执行：
 

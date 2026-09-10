@@ -13,8 +13,10 @@ inline void shutdownAssetEnvironment() {
     (void)FILE_SYSTEM.unmount("library");
 }
 
-[[nodiscard]] inline bool initializeAssetEnvironment(const std::filesystem::path& assetRoot,
-                                                     bool assetReadOnly = false) {
+[[nodiscard]] inline bool
+initializeAssetEnvironment(const std::filesystem::path& assetRoot,
+                           bool assetReadOnly = false,
+                           AssetManagerMode mode = AssetManagerMode::Development) {
     shutdownAssetEnvironment();
     const std::filesystem::path normalizedRoot =
         std::filesystem::absolute(assetRoot).lexically_normal();
@@ -23,7 +25,7 @@ inline void shutdownAssetEnvironment() {
         shutdownAssetEnvironment();
         return false;
     }
-    if (!ASSET_MANAGER.initialize()) {
+    if (!ASSET_MANAGER.initialize(mode)) {
         shutdownAssetEnvironment();
         return false;
     }

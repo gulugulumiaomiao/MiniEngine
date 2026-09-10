@@ -20,18 +20,29 @@
 namespace engine {
 
 bool AssetManager::initialize() {
+#if defined(MINI_RELEASE)
+    return initialize(AssetManagerMode::Packaged);
+#else
+    return initialize(AssetManagerMode::Development);
+#endif
+}
+
+bool AssetManager::initialize(AssetManagerMode mode) {
     shutdown();
+    mode_ = mode;
     if (!FILE_SYSTEM.isDirectory(VirtualPath{"asset://"})) {
         Log::error("AssetManager", "asset:// must be mounted before initialization");
         return false;
     }
 
-#if defined(MINI_RELEASE)
-    if (!ASSET_DATABASE.initialize()) {
-        Log::error("AssetManager", "Cannot load cooked AssetDatabase");
-        return false;
+    if (mode_ == AssetManagerMode::Packaged) {
+        if (!ASSET_DATABASE.initialize()) {
+            Log::error("AssetManager", "Cannot load cooked AssetDatabase");
+            return false;
+        }
+        return true;
     }
-#else
+
     if (!ASSET_IMPORT_PIPELINE.initialize()) {
         Log::error("AssetManager", "Cannot initialize asset import pipeline");
         return false;
@@ -64,7 +75,6 @@ bool AssetManager::initialize() {
         shutdown();
         return false;
     }
-#endif
     return true;
 }
 
@@ -82,10 +92,10 @@ bool AssetManager::ensureImported(const VirtualPath& path) {
         record->status == AssetImportStatus::Imported && FILE_SYSTEM.isFile(record->artifactPath)) {
         return true;
     }
-#if defined(MINI_RELEASE)
-    Log::error("AssetManager", "Cooked Artifact is unavailable: %s", path.string().c_str());
-    return false;
-#else
+    if (mode_ == AssetManagerMode::Packaged) {
+        Log::error("AssetManager", "Cooked Artifact is unavailable: %s", path.string().c_str());
+        return false;
+    }
     if (!ASSET_IMPORT_PIPELINE.initialized() || !ASSET_IMPORT_PIPELINE.importAsset(path)) {
         Log::error("AssetManager", "Asset import failed: %s", path.string().c_str());
         return false;
@@ -94,7 +104,6 @@ bool AssetManager::ensureImported(const VirtualPath& path) {
     return record && record->type != AssetType::Unknown &&
            record->status == AssetImportStatus::Imported &&
            FILE_SYSTEM.isFile(record->artifactPath);
-#endif
 }
 
 std::shared_ptr<Asset> AssetManager::loadAsset(const VirtualPath& path) {
@@ -144,25 +153,6 @@ void AssetManager::invalidate(const VirtualPath& path) {
 void AssetManager::clear() {
     std::scoped_lock lock{mutex_};
     cache_.clear();
-}
-
-MeshHandle MeshManager::load(const VirtualPath& meshPath) {
-    if (!meshPath.valid()) {
-        Log::error("MeshManager", "Invalid Mesh path: %s", meshPath.string().c_str());
-        return {};
-    }
-    if (const MeshHandle existing = findHandle(meshPath); existing)
-        return existing;
-    const std::shared_ptr<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
-    return asset ? insert(asset->instantiate()) : MeshHandle{};
-}
-
-bool MeshManager::replace(const VirtualPath& meshPath) {
-    const MeshHandle handle = findHandle(meshPath);
-    if (!handle)
-        return true;
-    const std::shared_ptr<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
-    return asset && replace(handle, asset->instantiate());
 }
 
 } // namespace engine

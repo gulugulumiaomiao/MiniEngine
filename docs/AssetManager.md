@@ -1,65 +1,78 @@
 # AssetManager
 
-`AssetManager` 是 CPU 资产的统一加载入口，通过 `ASSET_MANAGER` 全局访问。第一版只管理 `ShaderAsset` 和 `MaterialAsset`，缓存统一为：
+`AssetManager` 是 CPU 资产对象的统一加载入口，通过 `ASSET_MANAGER` 访问。它负责：
 
-```cpp
-std::unordered_map<std::string, std::weak_ptr<Asset>> cache;
-```
+- 根据 `asset://` 路径查询 `AssetDatabase`。
+- 从 `library://` 读取并反序列化 Artifact。
+- 在开发模式下按需触发导入。
+- 使用 `weak_ptr` 缓存已加载的 Asset，不延长资产生命周期。
+- 将成功的资产变更通知运行时。
 
-缓存键是规范化后的 `asset://` 虚拟路径。缓存保存 `weak_ptr`，因此 AssetManager 不负责延长资产生命期；调用方需要持有返回的 `shared_ptr`。
-
-## 加载路径
+它不负责创建 Shader、Material、Mesh 或 Texture 的运行时 Handle。对应工作分别属于
+各自的 Manager，Manager 的成员函数也必须保留在自己的实现文件中。
 
 ```text
 asset:// 路径
-  -> AssetDatabase 查询 AssetRecord
-  -> library:// 读取 Artifact
-  -> 反序列化 ShaderAsset / MaterialAsset
+  -> AssetDatabase::findByPath
+  -> 必要时导入（仅 Development）
+  -> library://artifacts/.../asset.bin
+  -> 反序列化具体 Asset
   -> weak_ptr<Asset> 缓存
 ```
 
-对外只保留类型明确的入口：
+## 初始化模式
+
+正常运行时调用无参数版本，由当前构建配置选择模式：
 
 ```cpp
-auto shader = ASSET_MANAGER.loadAsset<ShaderAsset>(
-    VirtualPath{"asset://shaders/lit.shader.json"});
-auto material = ASSET_MANAGER.loadAsset<MaterialAsset>(
-    VirtualPath{"asset://materials/brick.material.json"});
+ASSET_MANAGER.initialize();
 ```
 
-AssetManager 不直接读取源 JSON 来构造资产，也不加载运行时 `Shader` 或 `Material`。运行时对象分别交给 `SHADER_MANAGER` 和 `MATERIAL_MANAGER`。
+- Debug 默认使用 `AssetManagerMode::Development`：初始化导入流水线、扫描资产并启动
+  `FileWatcher`。
+- Release 默认使用 `AssetManagerMode::Packaged`：只加载已经 Cook 的数据库和 Artifact，
+  缺失时返回失败，不执行运行时导入。
 
-AssetManager 的路径接口只接受 `VirtualPath`。它不接收、保存、返回或解析 `std::filesystem::path`，也不负责物理目录挂载。启动层应先挂载 `asset://` 和 `library://`，再初始化 AssetManager：
+工具或测试可以显式选择模式，而不需要为了改变行为重新编译 `AssetManager.cpp`：
 
 ```cpp
-FILE_SYSTEM.mountDirectory("asset", physicalAssetRoot, false);
+ASSET_MANAGER.initialize(AssetManagerMode::Packaged);
+```
+
+这使 AssetManager 能作为 `MiniEngine` 唯一静态库的一部分复用，避免过去把同一批源码重复
+编入多个工具和测试目标。
+
+初始化前，启动层必须统一完成文件系统挂载：
+
+```cpp
+FILE_SYSTEM.mountDirectory("asset", physicalAssetRoot, true);
 FILE_SYSTEM.mountDirectory("library", physicalLibraryRoot, false);
 if (!ASSET_MANAGER.initialize()) {
     // 初始化失败
 }
 ```
 
-## Debug 与 Release
+## 资产与运行时资源
 
-- Debug：`initialize()` 初始化导入管线，扫描资产并启动 FileWatcher。Artifact 缺失或过期时允许导入。
-- Release：只初始化 AssetDatabase 并读取已经 Cook 的 Artifact；缺失时记录 error 并返回 `nullptr`，绝不在运行时导入。
-- `MiniAssetCooker` 是构建期工具，负责为 Release 输出 `library/AssetDatabase.json` 和 `library/artifacts/`。
-
-## 运行时实例
+AssetManager 返回可序列化的 CPU 资产描述；领域 Manager 将其转换为运行时资源：
 
 ```text
-Material 路径
-  -> MaterialManager::load
-  -> AssetManager::loadAsset<MaterialAsset>
-  -> ShaderManager::load(materialAsset.shader)
-  -> MaterialAsset::instantiate(ShaderHandle)
-  -> KeyedHandleRegistry::insert(Material)
+asset://meshes/example.mesh.json
+  -> AssetManager::loadAsset<MeshAsset>
+  -> MeshManager::load
+  -> MeshAsset::instantiate
+  -> MeshManager 内部 HandlePool
+  -> MeshHandle
 ```
 
-同一路径在各自 KeyedHandleRegistry 中只对应一个活动 Handle。ShaderManager 和 MaterialManager 共同继承 KeyedHandleRegistry，由它组合 HandlePool、free list 和可自定义的 Key → Handle 索引。`Material` 只保存 `ShaderHandle`，不持有 `ShaderAsset` 或 `shared_ptr<Shader>`。
+Shader、Material 和 Texture 使用相同模式。相同路径在对应 Manager 中只映射到一个有效
+Handle；AssetManager 的 `weak_ptr` 缓存与运行时 Handle 缓存互不替代。
 
 ## 热重载
 
-成功重新导入后，AssetManager 清除对应弱缓存。已经实例化的 Shader 会由 ShaderManager 在原 Handle 上替换并增加 revision，MaterialManager 随后重建相关材质布局、迁移同名兼容属性。导入失败不会触碰旧运行时 Shader；Shader 编译失败时 GraphicsPipelineManager 会尝试返回上一条有效 GraphicsPipeline。
+导入成功后，AssetManager 先使对应 Asset 弱缓存失效，再刷新已实例化的 Shader、Mesh 或
+Texture，并发送通用变更通知。Shader 更新后会通知 MaterialManager 刷新相关布局。
+导入失败不会覆盖旧的运行时资源。
 
-关闭顺序为：MaterialManager → ShaderManager → AssetManager 缓存 → AssetImportPipeline → FileWatcher → AssetDatabase → FileSystem 挂载。
+引擎关闭时，先销毁引用资产的场景和运行时资源，再关闭 AssetManager、导入流水线、文件
+监视器、数据库以及文件系统挂载。

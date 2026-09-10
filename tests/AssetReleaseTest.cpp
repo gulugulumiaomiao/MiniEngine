@@ -17,7 +17,8 @@
 
 int main() {
     using namespace engine;
-    if (!test::initializeAssetEnvironment(MINI_TEST_COOKED_ASSET_DIR, true)) {
+    if (!test::initializeAssetEnvironment(
+            MINI_TEST_COOKED_ASSET_DIR, true, AssetManagerMode::Packaged)) {
         return 5;
     }
     if (FILE_WATCHER.running() || ASSET_IMPORT_PIPELINE.initialized())

@@ -13,11 +13,17 @@
 
 namespace engine {
 
+enum class AssetManagerMode {
+    Development,
+    Packaged,
+};
+
 class AssetManager final : public Singleton<AssetManager> {
 public:
     using ChangeListener = std::function<void(const VirtualPath&, AssetType, bool removed)>;
 
     [[nodiscard]] bool initialize();
+    [[nodiscard]] bool initialize(AssetManagerMode mode);
     void shutdown();
 
     [[nodiscard]] std::shared_ptr<Asset> loadAsset(const VirtualPath& path);
@@ -59,6 +65,7 @@ private:
     mutable std::mutex mutex_;
     std::unordered_map<std::string, std::weak_ptr<Asset>> cache_;
     ChangeListener changeListener_;
+    AssetManagerMode mode_{AssetManagerMode::Development};
 };
 
 } // namespace engine

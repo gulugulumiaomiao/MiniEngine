@@ -94,8 +94,9 @@ Scene JSON 保留原有的 `"mesh": "...mesh.json"` 资产写法，并新增运�
 
 `MeshComponent` 直接通过单例 `MeshManager` 创建、重建和销毁运行时 Mesh。为避免
 Scene 依赖 GPU/RHI，`MeshManager` 在资源销毁时发送生命周期通知；`MeshGpuManager`
-注册观察者并立即清理对应 GPU 缓存。MeshManager 的资产路径加载实现位于
-`AssetManager.cpp`，因此 `MiniScene -> MiniMesh` 不会反向依赖 AssetImporter。
+注册观察者并立即清理对应 GPU 缓存。MeshManager 的资产加载、运行时构建、替换和销毁
+全部实现在 `MeshManager.cpp`；构建系统将强相关子系统统一编入 `MiniEngine`，无需跨文件
+寄放成员函数来规避静态库循环依赖。
 
 默认 `PositionNormalTangentUv` 是 stride 48 的交错流：POSITION Vec3、NORMAL Vec3、TANGENT Vec4、TEXCOORD0 Vec2。也可选择 `Position`（stride 12）或 `PositionNormalUv`（stride 32）。
 
