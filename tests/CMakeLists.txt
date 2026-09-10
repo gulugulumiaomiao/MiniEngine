@@ -34,6 +34,7 @@ mini_add_test(RenderCacheTest)
 mini_add_test(SceneTest)
 mini_add_test(SceneAssetTest)
 mini_add_test(RenderGraphTest)
+mini_add_test(RenderTargetTest)
 
 mini_add_test(MaterialTest)
 target_compile_definitions(MaterialTest PRIVATE

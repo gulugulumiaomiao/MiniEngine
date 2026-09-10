@@ -5,6 +5,7 @@
 #include "render/mesh/Mesh.h"
 #include "render/mesh/MeshManager.h"
 #include "render/render_graph/RenderGraph.h"
+#include "render/render_target/RenderTarget.h"
 #include "render/gpu/frame/FrameGpuManager.h"
 #include "render/gpu/material/MaterialGpuManager.h"
 #include "render/gpu/mesh/MeshGpuManager.h"
@@ -45,12 +46,27 @@ Renderer::Renderer(Window& window, rhi::Context context)
     if (!device_ || !swapchain_) {
         Log::fatal("Renderer", "RHI context is incomplete");
     }
+    forwardTargets_.reserve(FrameGpuManager::kFramesInFlight);
+    for (std::uint32_t frame = 0; frame < FrameGpuManager::kFramesInFlight; ++frame) {
+        auto target = std::make_unique<RenderTarget>(*device_);
+        RenderTargetDesc targetDesc;
+        targetDesc.width = swapchain_->width();
+        targetDesc.height = swapchain_->height();
+        targetDesc.depthAttachment.emplace();
+        targetDesc.depthAttachment->storeOp = rhi::StoreOp::DontCare;
+        targetDesc.debugName = "ForwardTarget" + std::to_string(frame);
+        if (!target->create(std::move(targetDesc))) {
+            Log::fatal("Renderer", "Cannot create the Forward render target");
+        }
+        forwardTargets_.push_back(std::move(target));
+    }
 }
 
 Renderer::~Renderer() {
     if (!device_)
         return;
     device_->waitIdle();
+    forwardTargets_.clear();
     swapchain_.reset();
     device_.reset();
 }
@@ -124,7 +140,8 @@ void Renderer::renderFrame(const RenderScene& scene) {
                                                   *shaderPass,
                                                   variant,
                                                   meshInstance->desc().vertexLayout,
-                                                  swapchain_->format()),
+                                                  swapchain_->format(),
+                                                  forwardTargets_.front()->depthFormat()),
             };
         };
         for (const MeshDrawInfo::Range& range : mesh.subMeshes) {
@@ -184,43 +201,46 @@ void Renderer::recordDrawCommands(rhi::BindGroupHandle sceneBindGroup, const Dra
         .finalState = rhi::ResourceState::Present,
         .aspect = rhi::TextureAspect::Color,
     });
-    rhi::RenderingInfo rendering;
-    rendering.renderArea = {0, 0, swapchain_->width(), swapchain_->height()};
+    RenderTarget& forwardTarget = *forwardTargets_[swapchain_->frameIndex()];
+    forwardTarget.importDepth(graph);
+    rhi::RenderingInfo rendering = forwardTarget.renderingInfo();
     rendering.colorAttachments.push_back({swapchain_->currentTextureView(),
                                           rhi::LoadOp::Clear,
                                           rhi::StoreOp::Store,
                                           drawList.clearColor});
-    graph.addGraphicsPass(
-        "Forward",
-        std::move(rendering),
-        {{backBuffer, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment}},
-        [this, sceneBindGroup, &drawList](rhi::IGraphicsCommandEncoder& encoder) {
-            encoder.setViewport({0.0F,
-                                 0.0F,
-                                 static_cast<float>(swapchain_->width()),
-                                 static_cast<float>(swapchain_->height()),
-                                 0.0F,
-                                 1.0F});
-            encoder.setScissor({0, 0, swapchain_->width(), swapchain_->height()});
-            rhi::GraphicsPipelineHandle boundPipeline;
-            rhi::BindGroupHandle boundMaterial;
-            for (const DrawItem& item : drawList.items) {
-                if (item.pipeline != boundPipeline) {
-                    encoder.bindPipeline(item.pipeline);
-                    encoder.bindGroup(0, sceneBindGroup);
-                    boundPipeline = item.pipeline;
-                }
-                if (item.materialBindGroup != boundMaterial) {
-                    encoder.bindGroup(1, item.materialBindGroup);
-                    boundMaterial = item.materialBindGroup;
-                }
-                for (const DrawItem::VertexBuffer& vertex : item.vertexBuffers) {
-                    encoder.bindVertexBuffer(vertex.binding, vertex.buffer);
-                }
-                encoder.bindIndexBuffer(item.indexBuffer, 0, item.indexFormat);
-                encoder.drawIndexed(item.arguments);
-            }
-        });
+    std::vector<RenderGraph::ResourceUsage> resources = forwardTarget.writeUsages();
+    resources.insert(resources.begin(),
+                     {backBuffer, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment});
+    graph.addGraphicsPass("Forward",
+                          std::move(rendering),
+                          std::move(resources),
+                          [this, sceneBindGroup, &drawList](rhi::IGraphicsCommandEncoder& encoder) {
+                              encoder.setViewport({0.0F,
+                                                   0.0F,
+                                                   static_cast<float>(swapchain_->width()),
+                                                   static_cast<float>(swapchain_->height()),
+                                                   0.0F,
+                                                   1.0F});
+                              encoder.setScissor({0, 0, swapchain_->width(), swapchain_->height()});
+                              rhi::GraphicsPipelineHandle boundPipeline;
+                              rhi::BindGroupHandle boundMaterial;
+                              for (const DrawItem& item : drawList.items) {
+                                  if (item.pipeline != boundPipeline) {
+                                      encoder.bindPipeline(item.pipeline);
+                                      encoder.bindGroup(0, sceneBindGroup);
+                                      boundPipeline = item.pipeline;
+                                  }
+                                  if (item.materialBindGroup != boundMaterial) {
+                                      encoder.bindGroup(1, item.materialBindGroup);
+                                      boundMaterial = item.materialBindGroup;
+                                  }
+                                  for (const DrawItem::VertexBuffer& vertex : item.vertexBuffers) {
+                                      encoder.bindVertexBuffer(vertex.binding, vertex.buffer);
+                                  }
+                                  encoder.bindIndexBuffer(item.indexBuffer, 0, item.indexFormat);
+                                  encoder.drawIndexed(item.arguments);
+                              }
+                          });
     graph.execute(swapchain_->encoder());
 }
 
@@ -260,6 +280,11 @@ void Renderer::recreateSwapchain() {
     device_->waitIdle();
     GRAPHICS_PIPELINE_MANAGER.clear();
     swapchain_->resize(width, height);
+    for (const std::unique_ptr<RenderTarget>& target : forwardTargets_) {
+        if (!target->resize(swapchain_->width(), swapchain_->height())) {
+            Log::fatal("Renderer", "Cannot resize the Forward render target");
+        }
+    }
 }
 
 void Renderer::waitIdle() {

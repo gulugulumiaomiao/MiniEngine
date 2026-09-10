@@ -32,7 +32,8 @@ public:
                                                       const ShaderPass& pass,
                                                       const ShaderVariantKey& variant,
                                                       const VertexLayout& vertexLayout,
-                                                      rhi::TextureFormat colorFormat);
+                                                      rhi::TextureFormat colorFormat,
+                                                      rhi::TextureFormat depthFormat);
     void refreshShaders(std::uint64_t frameSerial, std::uint64_t retireSerial);
     void collect(std::uint64_t completedSerial);
     void clear();
@@ -51,15 +52,18 @@ private:
     [[nodiscard]] static GraphicsPipelineCacheKey makeCacheKey(const ShaderProgram& program,
                                                                const ShaderPass& pass,
                                                                const VertexLayout& vertexLayout,
-                                                               rhi::TextureFormat colorFormat);
+                                                               rhi::TextureFormat colorFormat,
+                                                               rhi::TextureFormat depthFormat);
     [[nodiscard]] static std::uint64_t makeFallbackKey(const Shader& shader,
                                                        const ShaderPass& pass,
                                                        const ShaderVariantKey& variant,
                                                        const VertexLayout& vertexLayout,
-                                                       rhi::TextureFormat colorFormat);
+                                                       rhi::TextureFormat colorFormat,
+                                                       rhi::TextureFormat depthFormat);
     [[nodiscard]] rhi::GraphicsPipelineDesc makeDescription(const ShaderPass& pass,
                                                             const VertexLayout& vertexLayout,
                                                             rhi::TextureFormat colorFormat,
+                                                            rhi::TextureFormat depthFormat,
                                                             rhi::ShaderHandle vertexShader,
                                                             std::string vertexEntry,
                                                             rhi::ShaderHandle fragmentShader,

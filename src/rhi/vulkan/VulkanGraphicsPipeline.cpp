@@ -48,9 +48,10 @@ VkFormat toVulkan(TextureFormat format) {
     case TextureFormat::Rgba8Srgb: return VK_FORMAT_R8G8B8A8_SRGB;
     case TextureFormat::Bgra8Unorm: return VK_FORMAT_B8G8R8A8_UNORM;
     case TextureFormat::Bgra8Srgb: return VK_FORMAT_B8G8R8A8_SRGB;
+    case TextureFormat::Depth32Float: return VK_FORMAT_D32_SFLOAT;
     case TextureFormat::Undefined: break;
     }
-    Log::fatal("VulkanGraphicsPipeline", "Unsupported color format");
+    Log::fatal("VulkanGraphicsPipeline", "Unsupported attachment format");
 }
 
 VkColorComponentFlags toVulkan(ColorWriteMask mask) {
@@ -187,6 +188,9 @@ VulkanGraphicsPipeline::VulkanGraphicsPipeline(
     VkPipelineRenderingCreateInfo renderingInfo{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
     renderingInfo.colorAttachmentCount = static_cast<std::uint32_t>(colorFormats.size());
     renderingInfo.pColorAttachmentFormats = colorFormats.data();
+    if (desc.depthFormat != TextureFormat::Undefined) {
+        renderingInfo.depthAttachmentFormat = toVulkan(desc.depthFormat);
+    }
 
     VkGraphicsPipelineCreateInfo pipelineInfo{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
     pipelineInfo.pNext = &renderingInfo;

@@ -42,6 +42,8 @@ enum class TextureUsage : std::uint32_t {
     Sampled = 1U << 0U,
     TransferSource = 1U << 1U,
     TransferDestination = 1U << 2U,
+    ColorAttachment = 1U << 3U,
+    DepthStencilAttachment = 1U << 4U,
 };
 
 constexpr TextureUsage operator|(TextureUsage left, TextureUsage right) {
@@ -75,6 +77,7 @@ struct TextureUploadRegion {
 struct TextureViewDesc {
     TextureHandle texture;
     TextureFormat format{TextureFormat::Undefined};
+    TextureAspect aspect{TextureAspect::Color};
     std::uint32_t baseMipLevel{};
     std::uint32_t mipCount{1};
 };

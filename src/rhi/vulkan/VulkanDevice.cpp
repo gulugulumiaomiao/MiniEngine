@@ -91,6 +91,7 @@ VkFormat toVulkan(TextureFormat format) {
     case TextureFormat::Rgba8Srgb: return VK_FORMAT_R8G8B8A8_SRGB;
     case TextureFormat::Bgra8Unorm: return VK_FORMAT_B8G8R8A8_UNORM;
     case TextureFormat::Bgra8Srgb: return VK_FORMAT_B8G8R8A8_SRGB;
+    case TextureFormat::Depth32Float: return VK_FORMAT_D32_SFLOAT;
     case TextureFormat::Undefined: break;
     }
     Log::fatal("VulkanDevice", "Unsupported Texture format");
@@ -104,6 +105,10 @@ VkImageUsageFlags toVulkan(TextureUsage usage) {
         result |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     if (hasFlag(usage, TextureUsage::TransferDestination))
         result |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    if (hasFlag(usage, TextureUsage::ColorAttachment))
+        result |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    if (hasFlag(usage, TextureUsage::DepthStencilAttachment))
+        result |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     return result;
 }
 
@@ -410,6 +415,10 @@ TextureHandle VulkanDevice::createTexture(const TextureDesc& desc) {
         desc.usage == TextureUsage::None) {
         Log::fatal("VulkanDevice", "Invalid Texture description");
     }
+    if ((isColorFormat(desc.format) && hasFlag(desc.usage, TextureUsage::DepthStencilAttachment)) ||
+        (isDepthFormat(desc.format) && hasFlag(desc.usage, TextureUsage::ColorAttachment))) {
+        Log::fatal("VulkanDevice", "Texture format and attachment usage do not match");
+    }
     auto image = std::make_unique<VulkanImage>(allocator_,
                                                VkExtent3D{desc.width, desc.height, desc.depth},
                                                toVulkan(desc.format),
@@ -546,11 +555,16 @@ TextureViewHandle VulkanDevice::createTextureView(const TextureViewDesc& desc) {
                            desc.mipCount > texture->owned->mipCount() - desc.baseMipLevel)) {
         Log::fatal("VulkanDevice", "TextureView does not match its Texture");
     }
+    if ((desc.aspect == TextureAspect::Color && !isColorFormat(desc.format)) ||
+        (desc.aspect == TextureAspect::Depth && !isDepthFormat(desc.format))) {
+        Log::fatal("VulkanDevice", "TextureView format and aspect do not match");
+    }
     VkImageViewCreateInfo info{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
     info.image = texture->handle();
     info.viewType = VK_IMAGE_VIEW_TYPE_2D;
     info.format = toVulkan(desc.format);
-    info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    info.subresourceRange.aspectMask =
+        desc.aspect == TextureAspect::Color ? VK_IMAGE_ASPECT_COLOR_BIT : VK_IMAGE_ASPECT_DEPTH_BIT;
     info.subresourceRange.baseMipLevel = desc.baseMipLevel;
     info.subresourceRange.levelCount = desc.mipCount;
     info.subresourceRange.layerCount = 1;
@@ -591,7 +605,11 @@ void VulkanDevice::destroyShader(ShaderHandle handle) {
 }
 
 GraphicsPipelineHandle VulkanDevice::createGraphicsPipeline(const GraphicsPipelineDesc& desc) {
-    if (!desc.vertexShader || !desc.fragmentShader || desc.colorFormats.empty()) {
+    if (!desc.vertexShader || !desc.fragmentShader ||
+        (desc.colorFormats.empty() && desc.depthFormat == TextureFormat::Undefined) ||
+        std::ranges::any_of(desc.colorFormats,
+                            [](TextureFormat format) { return !isColorFormat(format); }) ||
+        (desc.depthFormat != TextureFormat::Undefined && !isDepthFormat(desc.depthFormat))) {
         Log::fatal("VulkanDevice", "Invalid graphics pipeline description");
     }
     std::vector<VkDescriptorSetLayout> layouts;

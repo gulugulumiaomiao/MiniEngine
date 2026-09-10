@@ -14,7 +14,17 @@ enum class TextureFormat {
     Rgba8Srgb,
     Bgra8Unorm,
     Bgra8Srgb,
+    Depth32Float,
 };
+
+[[nodiscard]] constexpr bool isColorFormat(TextureFormat format) {
+    return format == TextureFormat::Rgba8Unorm || format == TextureFormat::Rgba8Srgb ||
+           format == TextureFormat::Bgra8Unorm || format == TextureFormat::Bgra8Srgb;
+}
+
+[[nodiscard]] constexpr bool isDepthFormat(TextureFormat format) {
+    return format == TextureFormat::Depth32Float;
+}
 
 enum class VertexFormat {
     Float32,
@@ -129,6 +139,7 @@ struct GraphicsPipelineDesc {
     DepthStencilStateDesc depthStencil;
     BlendStateDesc blend;
     std::vector<TextureFormat> colorFormats;
+    TextureFormat depthFormat{TextureFormat::Undefined};
 };
 
 } // namespace engine::rhi

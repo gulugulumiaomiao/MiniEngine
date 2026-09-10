@@ -23,6 +23,8 @@ public:
         rhi::ResourceState initialState{rhi::ResourceState::Undefined};
         rhi::ResourceState finalState{rhi::ResourceState::Undefined};
         rhi::TextureAspect aspect{rhi::TextureAspect::Color};
+        // When present, execute() writes finalState back after recording the final barrier.
+        rhi::ResourceState* trackedState{};
     };
 
     void importTexture(ImportedTexture texture);

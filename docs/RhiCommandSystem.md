@@ -134,14 +134,14 @@ Mesh 上传的 staging buffer 和 device-local buffer 都进入带 generation �
 ## 当前限制与下一步
 
 - RenderGraph 只处理导入纹理和图形 Pass，尚未创建临时纹理，也没有 buffer barrier；
-- 每个 Pass 当前最多一个深度附件；
+- 每个 Pass 当前最多一个深度附件，RenderTarget 已支持 `Depth32Float`；
 - Mesh 当前仍只有一个活动 VertexLayout；
 - BindGroup 已拆分为 Scene/Object（set 0）与 Material（set 1），Object 目前仍与 Scene 共用 set；
 - 未实现 compute encoder、indirect draw、push constants 和 secondary command buffer；
 - 资源销毁会等待 device idle，后续应加入按 frame/timeline 回收的 deferred deletion queue。
 
-下一阶段可继续拆分 Object 更新频率，并扩展 Texture/Sampler 资源创建、RenderGraph 深度附件和
-临时纹理；这样即可自然接入 ShaderLab 的 `ShadowCaster → Forward → 后处理` 多 Pass 链路。
+下一阶段可继续拆分 Object 更新频率，并扩展 RenderGraph 临时纹理；这样即可自然接入
+ShaderLab 的 `ShadowCaster → Forward → 后处理` 多 Pass 链路。
 
 ## 验证
 

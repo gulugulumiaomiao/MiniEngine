@@ -25,12 +25,16 @@ void RenderGraph::execute(rhi::IGraphicsCommandEncoder& encoder) const {
         rhi::TextureAspect aspect;
         rhi::ResourceState current;
         rhi::ResourceState final;
+        rhi::ResourceState* tracked;
     };
     std::vector<State> states;
     states.reserve(textures_.size());
     for (const ImportedTexture& texture : textures_) {
-        states.push_back(
-            {texture.texture, texture.aspect, texture.initialState, texture.finalState});
+        states.push_back({texture.texture,
+                          texture.aspect,
+                          texture.initialState,
+                          texture.finalState,
+                          texture.trackedState});
     }
 
     for (const GraphicsPass& pass : passes_) {
@@ -62,6 +66,11 @@ void RenderGraph::execute(rhi::IGraphicsCommandEncoder& encoder) const {
         }
     }
     encoder.resourceBarriers(finalBarriers);
+    for (const State& state : states) {
+        if (state.tracked) {
+            *state.tracked = state.final;
+        }
+    }
 }
 
 } // namespace engine

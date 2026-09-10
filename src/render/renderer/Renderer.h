@@ -5,10 +5,12 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace engine {
 
 class RenderScene;
+class RenderTarget;
 class Window;
 
 class Renderer final {
@@ -32,6 +34,7 @@ private:
     Window& window_;
     std::unique_ptr<rhi::IDevice> device_;
     std::unique_ptr<rhi::ISwapchain> swapchain_;
+    std::vector<std::unique_ptr<RenderTarget>> forwardTargets_;
     std::uint64_t frameSerial_{};
 };
 

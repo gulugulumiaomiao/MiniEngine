@@ -18,6 +18,6 @@ Shader
 
 Shader 资产加载阶段只读取 JSON 和缓存 `ShaderAsset`，不会生成 GLSL、编译 SPIR-V 或创建 Vulkan 对象。第一次为实际绘制请求某个 Pass/Variant 的 Pipeline 时，`ShaderCompilePipeline` 调度 `ShaderGenerator`、`ShaderPreprocessor` 和 `ShaderCompiler`，随后执行 SPIRV-Cross Reflection 校验并创建 ShaderModule 和 Pipeline。生成结果按处理后源码哈希缓存于 `shader-cache://`。
 
-Render 层已经接入 `GraphicsPipelineCache`。Renderer 为每个 DrawItem 选出 ShaderPass 后，通过单例 `GraphicsPipelineManager` 获取缓存 Pipeline；缓存键包含 Pass 程序与 RenderState、当前 VertexLayout 和颜色 RenderTarget 格式。Swapchain 格式变化时会清空缓存并递增句柄 generation。
+Render 层已经接入 `GraphicsPipelineCache`。Renderer 为每个 DrawItem 选出 ShaderPass 后，通过单例 `GraphicsPipelineManager` 获取缓存 Pipeline；缓存键包含 Pass 程序与 RenderState、当前 VertexLayout，以及颜色和深度 RenderTarget 格式。Swapchain 格式变化时会清空缓存并递增句柄 generation。
 
 Keyword/Variant 尚未加入缓存键，Mesh 也仍限制为一个活动 VertexLayout；这两项将在 Variant 和多布局 Mesh 阶段扩展。
