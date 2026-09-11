@@ -9,16 +9,19 @@ float SampleShadow(vec3 worldPosition, vec3 normal)
     vec3 offsetPosition = worldPosition + normal * Scene.shadowParams.z;
     vec4 lightSpace = Scene.lightSpaceMatrix * vec4(offsetPosition, 1.0);
     vec3 projected = lightSpace.xyz / lightSpace.w;
+    // Clip-space xy spans [-1, 1]; remap to the [0, 1] shadow map UV space. Depth needs no
+    // remap: the orthographic projection already emits Vulkan's zero-to-one depth range.
+    vec2 shadowUv = projected.xy * 0.5 + 0.5;
     if (projected.z > 1.0 ||
-        any(lessThan(projected.xy, vec2(0.0))) ||
-        any(greaterThan(projected.xy, vec2(1.0)))) {
+        any(lessThan(shadowUv, vec2(0.0))) ||
+        any(greaterThan(shadowUv, vec2(1.0)))) {
         return 1.0;
     }
     float lit = 0.0;
     vec2 texel = vec2(Scene.shadowParams.w);
     for (int x = -1; x <= 1; ++x) {
         for (int y = -1; y <= 1; ++y) {
-            float shadowDepth = texture(ShadowMap, projected.xy + vec2(float(x), float(y)) * texel).r;
+            float shadowDepth = texture(ShadowMap, shadowUv + vec2(float(x), float(y)) * texel).r;
             lit += (projected.z <= shadowDepth + Scene.shadowParams.y) ? 1.0 : 0.0;
         }
     }

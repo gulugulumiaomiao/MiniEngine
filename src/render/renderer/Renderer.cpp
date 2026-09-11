@@ -37,6 +37,9 @@ Renderer::~Renderer() {
     if (!device_)
         return;
     device_->waitIdle();
+    // Transient pool entries call into the device on destruction; the implicit member
+    // destruction order would run after device_.reset() below and hit a dangling device.
+    rgTexturePool_.reset();
     forwardTargets_.clear();
     swapchain_.reset();
     device_.reset();
