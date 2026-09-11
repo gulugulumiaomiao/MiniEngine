@@ -1,10 +1,12 @@
 #pragma once
 
 #include "render/pipeline/RenderPipeline.h"
+#include "render/render_graph/RgTexturePool.h"
 #include "rhi/RhiFactory.h"
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace engine {
@@ -33,6 +35,7 @@ public:
     [[nodiscard]] RenderTarget& currentForwardTarget() {
         return *forwardTargets_[swapchain_->frameIndex()];
     }
+    [[nodiscard]] RgTexturePool& rgTexturePool() { return *rgTexturePool_; }
     [[nodiscard]] Window& window() { return window_; }
     [[nodiscard]] std::uint64_t frameSerial() const { return frameSerial_; }
 
@@ -43,6 +46,7 @@ private:
     std::unique_ptr<rhi::IDevice> device_;
     std::unique_ptr<rhi::ISwapchain> swapchain_;
     std::vector<std::unique_ptr<RenderTarget>> forwardTargets_;
+    std::optional<RgTexturePool> rgTexturePool_;
     std::unique_ptr<IRenderPipeline> pipeline_;
     std::uint64_t frameSerial_{};
 };

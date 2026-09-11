@@ -16,6 +16,7 @@ Renderer::Renderer(Window& window, rhi::Context context)
     if (!device_ || !swapchain_) {
         Log::fatal("Renderer", "RHI context is incomplete");
     }
+    rgTexturePool_.emplace(*device_);
     forwardTargets_.reserve(FrameGpuManager::kFramesInFlight);
     for (std::uint32_t frame = 0; frame < FrameGpuManager::kFramesInFlight; ++frame) {
         auto target = std::make_unique<RenderTarget>(*device_);
@@ -47,6 +48,7 @@ void Renderer::renderFrame(const RenderScene& scene) {
     }
     GRAPHICS_PIPELINE_MANAGER.refreshShaders(frameSerial_,
                                              frameSerial_ + FrameGpuManager::kFramesInFlight);
+    rgTexturePool_->beginFrame(swapchain_->frameIndex());
     if (swapchain_->beginFrame() == rhi::FrameStatus::OutOfDate) {
         recreateSwapchain();
         return;

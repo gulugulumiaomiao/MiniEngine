@@ -26,6 +26,10 @@ RenderTarget& RenderContext::currentForwardTarget() const {
     return renderer_.currentForwardTarget();
 }
 
+RgTexturePool& RenderContext::rgTexturePool() const {
+    return renderer_.rgTexturePool();
+}
+
 std::uint32_t RenderContext::frameIndex() const {
     return renderer_.swapchain().frameIndex();
 }

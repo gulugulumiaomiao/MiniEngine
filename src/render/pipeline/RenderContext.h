@@ -8,6 +8,7 @@ namespace engine {
 
 class Renderer;
 class RenderTarget;
+class RgTexturePool;
 
 namespace rhi {
 class IDevice;
@@ -23,6 +24,7 @@ public:
     [[nodiscard]] rhi::ISwapchain& swapchain() const;
     [[nodiscard]] rhi::IGraphicsCommandEncoder& encoder() const;
     [[nodiscard]] RenderTarget& currentForwardTarget() const;
+    [[nodiscard]] RgTexturePool& rgTexturePool() const;
     [[nodiscard]] std::uint32_t frameIndex() const;
     [[nodiscard]] std::uint64_t frameSerial() const;
     [[nodiscard]] const RenderScene& scene() const { return scene_; }

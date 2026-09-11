@@ -1,9 +1,80 @@
 #include "render/render_graph/RenderGraph.h"
+#include "render/render_graph/RgTexturePool.h"
+#include "rhi/api/Device.h"
 
+#include <cstddef>
+#include <span>
 #include <string>
 #include <vector>
 
 namespace {
+
+class MockDevice final : public engine::rhi::IDevice {
+public:
+    engine::rhi::BufferHandle createBuffer(const engine::rhi::BufferDesc&) override { return {}; }
+    void destroyBuffer(engine::rhi::BufferHandle) override {}
+    void uploadBuffer(engine::rhi::BufferHandle,
+                      std::span<const std::byte>,
+                      std::uint64_t) override {}
+
+    engine::rhi::TextureHandle createTexture(const engine::rhi::TextureDesc& desc) override {
+        textures.push_back(desc);
+        return {static_cast<std::uint32_t>(textures.size()), 1};
+    }
+    void destroyTexture(engine::rhi::TextureHandle handle) override {
+        if (handle)
+            destroyedTextures.push_back(handle);
+    }
+    void uploadTexture(engine::rhi::TextureHandle,
+                       std::span<const engine::rhi::TextureUploadRegion>) override {}
+    engine::rhi::TextureViewHandle
+    createTextureView(const engine::rhi::TextureViewDesc& desc) override {
+        views.push_back(desc);
+        return {static_cast<std::uint32_t>(views.size()), 1};
+    }
+    void destroyTextureView(engine::rhi::TextureViewHandle handle) override {
+        if (handle)
+            destroyedViews.push_back(handle);
+    }
+    engine::rhi::SamplerHandle createSampler(const engine::rhi::SamplerDesc&) override {
+        return {};
+    }
+    void destroySampler(engine::rhi::SamplerHandle) override {}
+    engine::rhi::ShaderHandle createShader(const engine::rhi::ShaderDesc&) override { return {}; }
+    void destroyShader(engine::rhi::ShaderHandle) override {}
+    engine::rhi::GraphicsPipelineHandle
+    createGraphicsPipeline(const engine::rhi::GraphicsPipelineDesc&) override {
+        return {};
+    }
+    void destroyGraphicsPipeline(engine::rhi::GraphicsPipelineHandle) override {}
+    engine::rhi::BindGroupLayoutHandle
+    createBindGroupLayout(const engine::rhi::BindGroupLayoutDesc&) override {
+        return {};
+    }
+    void destroyBindGroupLayout(engine::rhi::BindGroupLayoutHandle) override {}
+    engine::rhi::BindGroupHandle createBindGroup(const engine::rhi::BindGroupDesc&) override {
+        return {};
+    }
+    void destroyBindGroup(engine::rhi::BindGroupHandle) override {}
+    VkDevice device() const override { return VK_NULL_HANDLE; }
+    VkBuffer resolveBuffer(engine::rhi::BufferHandle) const override { return VK_NULL_HANDLE; }
+    VkImage resolveTexture(engine::rhi::TextureHandle) const override { return VK_NULL_HANDLE; }
+    VkImageView resolveTextureView(engine::rhi::TextureViewHandle) const override {
+        return VK_NULL_HANDLE;
+    }
+    engine::rhi::ResolvedPipeline resolvePipeline(engine::rhi::GraphicsPipelineHandle) const override {
+        return {};
+    }
+    VkDescriptorSet resolveBindGroup(engine::rhi::BindGroupHandle) const override {
+        return VK_NULL_HANDLE;
+    }
+    void waitIdle() override {}
+
+    std::vector<engine::rhi::TextureDesc> textures;
+    std::vector<engine::rhi::TextureViewDesc> views;
+    std::vector<engine::rhi::TextureHandle> destroyedTextures;
+    std::vector<engine::rhi::TextureViewHandle> destroyedViews;
+};
 
 class MockGraphicsEncoder final : public engine::rhi::IGraphicsCommandEncoder {
 public:
@@ -39,24 +110,30 @@ public:
 
 int main() {
     using namespace engine;
+
+    MockDevice device;
+    RgTexturePool pool{device, 2};
+    pool.beginFrame(0);
+
     const rhi::TextureHandle texture{3, 7};
     const rhi::TextureViewHandle view{3, 7};
 
     RenderGraph graph;
-    graph.importTexture({texture,
-                         rhi::ResourceState::Undefined,
-                         rhi::ResourceState::Present,
-                         rhi::TextureAspect::Color});
-    rhi::RenderingInfo rendering;
+    const RgTextureHandle imported = graph.importTexture({texture,
+                                                          view,
+                                                          rhi::ResourceState::Undefined,
+                                                          rhi::ResourceState::Present,
+                                                          rhi::TextureAspect::Color});
+    RgRenderingInfo rendering;
     rendering.renderArea = {0, 0, 1280, 720};
-    rendering.colorAttachments.push_back(
-        {view, rhi::LoadOp::Clear, rhi::StoreOp::Store, {0.0F, 0.0F, 0.0F, 1.0F}});
+    rendering.colorAttachments.push_back({imported, rhi::LoadOp::Clear, rhi::StoreOp::Store, {}});
     graph.addGraphicsPass(
         "Forward",
         std::move(rendering),
-        {{texture, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment}},
+        {{imported, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment}},
         [](rhi::IGraphicsCommandEncoder&) {});
 
+    graph.compile(pool);
     MockGraphicsEncoder encoder;
     graph.execute(encoder);
 
@@ -68,5 +145,38 @@ int main() {
         encoder.recordedBarriers[1].before != rhi::ResourceState::ColorAttachment ||
         encoder.recordedBarriers[1].after != rhi::ResourceState::Present) {
         return 1;
+    }
+
+    graph.reset();
+
+    // Transient texture path: a second pass reads from a transient color texture.
+    pool.beginFrame(1);
+    RenderGraph transientGraph;
+    const RgTextureHandle transient = transientGraph.createTexture({
+        .format = rhi::TextureFormat::Rgba8Unorm,
+        .width = 1280,
+        .height = 720,
+        .usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled,
+        .aspect = rhi::TextureAspect::Color,
+        .debugName = "Transient",
+    });
+    RgRenderingInfo transientRendering;
+    transientRendering.renderArea = {0, 0, 1280, 720};
+    transientRendering.colorAttachments.push_back(
+        {transient, rhi::LoadOp::Clear, rhi::StoreOp::Store, {}});
+    transientGraph.addGraphicsPass("Write",
+                                   std::move(transientRendering),
+                                   {{transient,
+                                     rhi::TextureAspect::Color,
+                                     rhi::ResourceState::ColorAttachment}},
+                                   [](rhi::IGraphicsCommandEncoder&) {});
+
+    transientGraph.compile(pool);
+    MockGraphicsEncoder transientEncoder;
+    transientGraph.execute(transientEncoder);
+    transientGraph.reset();
+
+    if (device.textures.empty() || device.views.empty()) {
+        return 2;
     }
 }

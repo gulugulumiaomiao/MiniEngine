@@ -182,24 +182,29 @@ void MiniForwardPipeline::submitDrawList(RenderContext& context, DrawList drawLi
 void MiniForwardPipeline::recordDrawCommands(RenderContext& context,
                                              rhi::BindGroupHandle sceneBindGroup,
                                              const DrawList& drawList) {
-    const rhi::TextureHandle backBuffer = context.swapchain().currentTexture();
     RenderGraph graph;
-    graph.importTexture({
-        .texture = backBuffer,
+    const RgTextureHandle backBuffer = graph.importTexture({
+        .texture = context.swapchain().currentTexture(),
+        .view = context.swapchain().currentTextureView(),
         .initialState = context.swapchain().currentTextureState(),
         .finalState = rhi::ResourceState::Present,
         .aspect = rhi::TextureAspect::Color,
     });
     RenderTarget& forwardTarget = context.currentForwardTarget();
-    forwardTarget.importDepth(graph);
-    rhi::RenderingInfo rendering = forwardTarget.renderingInfo();
-    rendering.colorAttachments.push_back({context.swapchain().currentTextureView(),
-                                          rhi::LoadOp::Clear,
-                                          rhi::StoreOp::Store,
-                                          drawList.clearColor});
-    std::vector<RenderGraph::ResourceUsage> resources = forwardTarget.writeUsages();
-    resources.insert(resources.begin(),
-                     {backBuffer, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment});
+    const RgTextureHandle depthHandle = forwardTarget.importDepth(graph);
+
+    RgRenderingInfo rendering;
+    rendering.renderArea = {0, 0, context.swapchain().width(), context.swapchain().height()};
+    rendering.colorAttachments.push_back(
+        {backBuffer, rhi::LoadOp::Clear, rhi::StoreOp::Store, drawList.clearColor});
+    rendering.depthAttachments.push_back(
+        {depthHandle, rhi::LoadOp::Clear, rhi::StoreOp::DontCare, 1.0F});
+
+    std::vector<RgResourceUsage> resources;
+    resources.reserve(2);
+    resources.push_back({backBuffer, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment});
+    resources.push_back({depthHandle, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment});
+
     graph.addGraphicsPass("Forward",
                           std::move(rendering),
                           std::move(resources),
@@ -230,7 +235,9 @@ void MiniForwardPipeline::recordDrawCommands(RenderContext& context,
                                   encoder.drawIndexed(item.arguments);
                               }
                           });
+    graph.compile(context.rgTexturePool());
     graph.execute(context.encoder());
+    graph.reset();
 }
 
 void MiniForwardPipeline::onSwapchainChanged() {

@@ -71,16 +71,17 @@ public:
     [[nodiscard]] rhi::TextureFormat depthFormat() const;
 
     [[nodiscard]] rhi::RenderingInfo renderingInfo() const;
-    [[nodiscard]] std::vector<RenderGraph::ResourceUsage> writeUsages() const;
 
     void import(RenderGraph& graph,
                 rhi::ResourceState colorFinalState = rhi::ResourceState::ColorAttachment,
                 rhi::ResourceState depthFinalState = rhi::ResourceState::DepthAttachment);
-    void importColor(RenderGraph& graph,
-                     std::size_t index,
-                     rhi::ResourceState finalState = rhi::ResourceState::ColorAttachment);
-    void importDepth(RenderGraph& graph,
-                     rhi::ResourceState finalState = rhi::ResourceState::DepthAttachment);
+    [[nodiscard]] RgTextureHandle importColor(
+        RenderGraph& graph,
+        std::size_t index,
+        rhi::ResourceState finalState = rhi::ResourceState::ColorAttachment);
+    [[nodiscard]] RgTextureHandle importDepth(
+        RenderGraph& graph,
+        rhi::ResourceState finalState = rhi::ResourceState::DepthAttachment);
 
 private:
     struct Attachment {

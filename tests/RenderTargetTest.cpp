@@ -1,4 +1,5 @@
 #include "render/render_target/RenderTarget.h"
+#include "render/render_graph/RgTexturePool.h"
 #include "rhi/api/Device.h"
 
 #include <cstddef>
@@ -148,23 +149,37 @@ int main() {
         return 2;
     }
 
+    RgTexturePool pool{device, 2};
+    pool.beginFrame(0);
+
     const rhi::RenderingInfo rendering = target.renderingInfo();
-    const std::vector<RenderGraph::ResourceUsage> usages = target.writeUsages();
     if (rendering.renderArea.width != 640 || rendering.renderArea.height != 360 ||
         rendering.colorAttachments.size() != 2 || rendering.depthAttachments.size() != 1 ||
         rendering.colorAttachments[0].clearColor.x != 0.1F ||
         rendering.colorAttachments[1].loadOp != rhi::LoadOp::DontCare ||
-        rendering.depthAttachments[0].clearDepth != 0.75F || usages.size() != 3 ||
-        usages[0].state != rhi::ResourceState::ColorAttachment ||
-        usages[2].state != rhi::ResourceState::DepthAttachment) {
+        rendering.depthAttachments[0].clearDepth != 0.75F) {
         return 3;
     }
 
     RenderGraph firstGraph;
-    target.import(firstGraph, rhi::ResourceState::ShaderRead, rhi::ResourceState::ShaderRead);
-    firstGraph.addGraphicsPass("Lighting", rendering, usages, [](rhi::IGraphicsCommandEncoder&) {});
+    const RgTextureHandle color0 = target.importColor(firstGraph, 0, rhi::ResourceState::ShaderRead);
+    const RgTextureHandle color1 = target.importColor(firstGraph, 1, rhi::ResourceState::ShaderRead);
+    const RgTextureHandle depth = target.importDepth(firstGraph, rhi::ResourceState::ShaderRead);
+    RgRenderingInfo firstRendering;
+    firstRendering.renderArea = {0, 0, 640, 360};
+    firstRendering.colorAttachments.push_back({color0, rhi::LoadOp::Clear, rhi::StoreOp::Store, {0.1F, 0.2F, 0.3F, 1.0F}});
+    firstRendering.colorAttachments.push_back({color1, rhi::LoadOp::DontCare, rhi::StoreOp::Store, {}});
+    firstRendering.depthAttachments.push_back({depth, rhi::LoadOp::Clear, rhi::StoreOp::DontCare, 0.75F});
+    firstGraph.addGraphicsPass("Lighting",
+                               std::move(firstRendering),
+                               {{color0, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment},
+                                {color1, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment},
+                                {depth, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment}},
+                               [](rhi::IGraphicsCommandEncoder&) {});
+    firstGraph.compile(pool);
     FakeEncoder firstEncoder;
     firstGraph.execute(firstEncoder);
+    firstGraph.reset();
     if (firstEncoder.barriers.size() != 6 ||
         firstEncoder.barriers[0].before != rhi::ResourceState::Undefined ||
         firstEncoder.barriers[0].after != rhi::ResourceState::ColorAttachment ||
@@ -173,14 +188,26 @@ int main() {
         return 4;
     }
 
+    pool.beginFrame(1);
     RenderGraph secondGraph;
-    target.import(secondGraph);
+    const RgTextureHandle c0b = target.importColor(secondGraph, 0);
+    const RgTextureHandle c1b = target.importColor(secondGraph, 1);
+    const RgTextureHandle db = target.importDepth(secondGraph);
+    RgRenderingInfo secondRendering;
+    secondRendering.renderArea = {0, 0, 640, 360};
+    secondRendering.colorAttachments.push_back({c0b, rhi::LoadOp::Clear, rhi::StoreOp::Store, {}});
+    secondRendering.colorAttachments.push_back({c1b, rhi::LoadOp::DontCare, rhi::StoreOp::Store, {}});
+    secondRendering.depthAttachments.push_back({db, rhi::LoadOp::Clear, rhi::StoreOp::DontCare, 1.0F});
     secondGraph.addGraphicsPass("Lighting",
-                                target.renderingInfo(),
-                                target.writeUsages(),
+                                std::move(secondRendering),
+                                {{c0b, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment},
+                                 {c1b, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment},
+                                 {db, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment}},
                                 [](rhi::IGraphicsCommandEncoder&) {});
+    secondGraph.compile(pool);
     FakeEncoder secondEncoder;
     secondGraph.execute(secondEncoder);
+    secondGraph.reset();
     if (secondEncoder.barriers.size() != 3 ||
         secondEncoder.barriers[0].before != rhi::ResourceState::ShaderRead ||
         secondEncoder.barriers[2].before != rhi::ResourceState::ShaderRead) {

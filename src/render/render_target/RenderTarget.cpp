@@ -233,37 +233,24 @@ rhi::RenderingInfo RenderTarget::renderingInfo() const {
     return result;
 }
 
-std::vector<RenderGraph::ResourceUsage> RenderTarget::writeUsages() const {
-    std::vector<RenderGraph::ResourceUsage> result;
-    result.reserve(colors_.size() + (depth_ ? 1U : 0U));
-    for (const Attachment& color : colors_) {
-        result.push_back(
-            {color.texture, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment});
-    }
-    if (depth_) {
-        result.push_back(
-            {depth_->texture, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment});
-    }
-    return result;
-}
-
 void RenderTarget::import(RenderGraph& graph,
                           rhi::ResourceState colorFinalState,
                           rhi::ResourceState depthFinalState) {
     for (std::size_t index = 0; index < colors_.size(); ++index) {
-        importColor(graph, index, colorFinalState);
+        (void)importColor(graph, index, colorFinalState);
     }
     if (depth_) {
-        importDepth(graph, depthFinalState);
+        (void)importDepth(graph, depthFinalState);
     }
 }
 
-void RenderTarget::importColor(RenderGraph& graph,
-                               std::size_t index,
-                               rhi::ResourceState finalState) {
+RgTextureHandle RenderTarget::importColor(RenderGraph& graph,
+                                          std::size_t index,
+                                          rhi::ResourceState finalState) {
     Attachment& color = requireColor(index);
-    graph.importTexture({
+    return graph.importTexture({
         .texture = color.texture,
+        .view = color.view,
         .initialState = color.state,
         .finalState = finalState,
         .aspect = rhi::TextureAspect::Color,
@@ -271,10 +258,11 @@ void RenderTarget::importColor(RenderGraph& graph,
     });
 }
 
-void RenderTarget::importDepth(RenderGraph& graph, rhi::ResourceState finalState) {
+RgTextureHandle RenderTarget::importDepth(RenderGraph& graph, rhi::ResourceState finalState) {
     Attachment& depth = requireDepth();
-    graph.importTexture({
+    return graph.importTexture({
         .texture = depth.texture,
+        .view = depth.view,
         .initialState = depth.state,
         .finalState = finalState,
         .aspect = rhi::TextureAspect::Depth,
