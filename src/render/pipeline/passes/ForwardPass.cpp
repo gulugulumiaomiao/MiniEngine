@@ -2,6 +2,7 @@
 
 #include "render/pipeline/RenderContext.h"
 #include "render/pipeline/passes/RenderPassUtils.h"
+#include "render/queue/RenderQueue.h"
 #include "render/render_graph/RenderGraph.h"
 #include "render/render_target/RenderTarget.h"
 #include "render/scene/RenderScene.h"
@@ -35,6 +36,32 @@ void ForwardPass::execute(RenderContext& context,
     if (items.empty()) {
         return;
     }
+
+    // Sort opaque front-to-back by queue/state, then transparent back-to-front by camera distance.
+    std::vector<DrawItem> opaque;
+    std::vector<DrawItem> transparent;
+    opaque.reserve(items.size());
+    transparent.reserve(items.size());
+    for (DrawItem& item : items) {
+        if (RenderQueueRange::opaque().contains(item.renderQueue)) {
+            opaque.push_back(std::move(item));
+        } else {
+            transparent.push_back(std::move(item));
+        }
+    }
+
+    DrawSorter sorter;
+    sorter.sort(opaque,
+                SortingCriteria::RenderQueue | SortingCriteria::Pipeline | SortingCriteria::Material |
+                    SortingCriteria::Mesh,
+                context.scene());
+    sorter.sort(transparent, SortingCriteria::BackToFront, context.scene());
+
+    items.clear();
+    items.insert(items.end(), std::make_move_iterator(opaque.begin()), std::make_move_iterator(opaque.end()));
+    items.insert(items.end(),
+                 std::make_move_iterator(transparent.begin()),
+                 std::make_move_iterator(transparent.end()));
 
     const RgTextureHandle backBuffer = graph.importTexture({
         .texture = context.swapchain().currentTexture(),

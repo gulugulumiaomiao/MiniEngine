@@ -1,6 +1,7 @@
 #include "render/renderer/DrawListBuilder.h"
 
 #include "core/logging/Log.h"
+#include "core/math/Frustum.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
 #include "render/mesh/MeshManager.h"
@@ -14,6 +15,7 @@
 
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <ranges>
 
 namespace engine {
@@ -66,11 +68,13 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
         RenderPhase::ShadowCaster, RenderPhase::DepthOnly, RenderPhase::Forward};
 
     DrawList drawList;
+    std::optional<math::Frustum> frustum;
     if (scene.camera()) {
         const RenderCamera& camera = *scene.camera();
         drawList.scene.viewProjection = camera.projection * camera.view;
         drawList.scene.cameraPosition = math::Vec4{camera.worldPosition, 1.0F};
         drawList.clearColor = camera.clearColor;
+        frustum = math::extractFrustum(drawList.scene.viewProjection);
     }
 
     const auto directional = std::ranges::find_if(scene.lights(), [](const RenderLight& light) {
@@ -92,6 +96,12 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
     for (const RenderObject& object : scene.objects()) {
         if (scene.camera() && (object.layerMask & scene.camera()->cullingMask) == 0) {
             continue;
+        }
+        if (frustum) {
+            const math::Vec3 center = math::transformPoint(object.transform, math::Vec3{0.0F});
+            if (!math::intersects(*frustum, center, object.boundsRadius)) {
+                continue;
+            }
         }
         Mesh* meshInstance = MESH_MANAGER.find(object.mesh);
         if (!meshInstance) {

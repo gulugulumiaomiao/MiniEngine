@@ -16,6 +16,7 @@ struct RenderObject {
     std::vector<MaterialHandle> materials;
     math::Mat44 transform{1.0F};
     std::uint32_t layerMask{1};
+    float boundsRadius{0.0F}; // Bounding sphere radius in world units; 0 treats the object as a point.
     bool castShadow{true};
     bool receiveShadow{true};
 

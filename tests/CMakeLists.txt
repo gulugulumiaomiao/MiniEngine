@@ -27,6 +27,7 @@ add_test(NAME LogFatalTest COMMAND LogTest fatal)
 set_tests_properties(LogFatalTest PROPERTIES WILL_FAIL TRUE)
 
 mini_add_test(HandlePoolTest)
+mini_add_test(FrustumTest)
 mini_add_test(TransferTest)
 mini_add_test(MeshTest)
 mini_add_test(TextureTest)
