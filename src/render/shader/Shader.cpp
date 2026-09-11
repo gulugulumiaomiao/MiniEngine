@@ -1,4 +1,4 @@
-#include "render/shader/Shader.h"
+﻿#include "render/shader/Shader.h"
 
 #include "render/material/Material.h"
 
@@ -460,9 +460,10 @@ ShaderVariantKey ShaderKeywordSchema::makeKey(std::span<const std::string> enabl
                                               std::uint32_t platformFeatureBits) const {
     ShaderVariantKey result{0, meshFeatureBits, platformFeatureBits};
     for (const std::string& keyword : enabledKeywords) {
+        // Material keywords may target any pass of the shader (e.g. RECEIVE_SHADOWS only
+        // affects the Forward pass); passes that do not declare a keyword simply ignore it.
         const auto found = std::ranges::lower_bound(keywords_, keyword);
         if (found == keywords_.end() || *found != keyword) {
-            Log::warn("ShaderKeywordSchema", "Keyword is not declared: %s", keyword.c_str());
             continue;
         }
         const std::size_t bit = static_cast<std::size_t>(std::distance(keywords_.begin(), found));

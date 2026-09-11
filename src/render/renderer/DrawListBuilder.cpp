@@ -15,6 +15,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <limits>
 #include <optional>
 #include <ranges>
 
@@ -51,6 +53,14 @@ DrawListBuilder::ResolvedMaterialPass DrawListBuilder::resolveMaterialPass(
     if (!shaderPass)
         return {};
     const ShaderVariantKey variant = shaderPass->variantKey(material->keywords);
+    // ShadowCaster pipelines render depth-only into the off-screen shadow map: they are
+    // resolved against an empty color attachment list and the shadow map depth format.
+    const bool shadowCaster = phase == RenderPhase::ShadowCaster;
+    const rhi::TextureFormat colorFormat =
+        shadowCaster ? rhi::TextureFormat::Undefined : context.swapchain().format();
+    const rhi::TextureFormat depthFormat = shadowCaster
+                                               ? rhi::TextureFormat::Depth32Float
+                                               : context.currentForwardTarget().depthFormat();
     return {
         materialHandle,
         shaderPass,
@@ -58,8 +68,8 @@ DrawListBuilder::ResolvedMaterialPass DrawListBuilder::resolveMaterialPass(
                                           *shaderPass,
                                           variant,
                                           meshInstance.desc().vertexLayout,
-                                          context.swapchain().format(),
-                                          context.currentForwardTarget().depthFormat()),
+                                          colorFormat,
+                                          depthFormat),
     };
 }
 
@@ -84,6 +94,35 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
         drawList.scene.directionalLightDirection = math::Vec4{directional->direction, 1.0F};
         drawList.scene.directionalLightColorIntensity =
             math::Vec4{directional->color, directional->intensity};
+    }
+    if (directional != scene.lights().end() && directional->castShadow &&
+        !scene.objects().empty()) {
+        // Fit an orthographic light-space volume around a sphere covering every object's
+        // position plus its bounds radius; the shadow map then covers the whole scene.
+        math::Vec3 minBounds{std::numeric_limits<float>::max()};
+        math::Vec3 maxBounds{std::numeric_limits<float>::lowest()};
+        for (const RenderObject& object : scene.objects()) {
+            const math::Vec3 center = math::transformPoint(object.transform, math::Vec3{0.0F});
+            const math::Vec3 extent{object.boundsRadius};
+            minBounds = math::min(minBounds, center - extent);
+            maxBounds = math::max(maxBounds, center + extent);
+        }
+        const math::Vec3 center = (minBounds + maxBounds) * 0.5F;
+        const float radius = math::length(maxBounds - minBounds) * 0.5F;
+        math::Vec3 up{0.0F, 1.0F, 0.0F};
+        if (std::abs(math::dot(directional->direction, up)) > 0.9F) {
+            up = math::Vec3{1.0F, 0.0F, 0.0F};
+        }
+        const float distance = radius * 2.0F + 1.0F;
+        drawList.scene.lightSpaceMatrix =
+            math::lookAt(center - directional->direction * distance, center, up) *
+            math::orthographic(-radius,
+                               radius,
+                               -radius,
+                               radius,
+                               0.1F,
+                               distance + radius * 2.0F);
+        drawList.scene.shadowParams = math::Vec4{0.8F, 0.0025F, 0.05F, 1.0F / 1024.0F};
     }
     const auto point = std::ranges::find_if(
         scene.lights(), [](const RenderLight& light) { return light.type == LightType::Point; });

@@ -26,6 +26,15 @@ add_custom_target(MiniShaderPackagedShaders
             "${PROJECT_SOURCE_DIR}/assets/shaders/blinn_phong.shader.json"
             Forward
             "${MINI_GENERATED_SHADER_DIR}"
+    COMMAND "$<TARGET_FILE:MiniShaderCompiler>" compile
+            "${PROJECT_SOURCE_DIR}/assets/shaders/blinn_phong.shader.json"
+            Forward
+            "${MINI_GENERATED_SHADER_DIR}"
+            RECEIVE_SHADOWS
+    COMMAND "$<TARGET_FILE:MiniShaderCompiler>" compile
+            "${PROJECT_SOURCE_DIR}/assets/shaders/blinn_phong.shader.json"
+            ShadowCaster
+            "${MINI_GENERATED_SHADER_DIR}"
     DEPENDS
         MiniShaderCompiler
         "${PROJECT_SOURCE_DIR}/assets/shaders/builtin_color.shader.json"
@@ -37,6 +46,8 @@ add_custom_target(MiniShaderPackagedShaders
         "${PROJECT_SOURCE_DIR}/assets/shaders/blinn_phong.shader.json"
         "${PROJECT_SOURCE_DIR}/assets/shaders/blinn_phong.Forward.vert"
         "${PROJECT_SOURCE_DIR}/assets/shaders/blinn_phong.Forward.frag"
+        "${PROJECT_SOURCE_DIR}/assets/shaders/blinn_phong.ShadowCaster.vert"
+        "${PROJECT_SOURCE_DIR}/assets/shaders/blinn_phong.ShadowCaster.frag"
         "${PROJECT_SOURCE_DIR}/assets/shaders/include/scene.glsl"
         "${PROJECT_SOURCE_DIR}/assets/shaders/include/objects.glsl"
     COMMENT "Explicitly compiling packaged shaders through ShaderCompilePipeline"

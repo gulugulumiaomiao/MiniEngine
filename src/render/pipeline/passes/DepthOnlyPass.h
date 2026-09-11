@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "render/pipeline/RenderPass.h"
 #include "render/queue/RenderQueue.h"
@@ -11,10 +11,7 @@ class DepthOnlyPass final : public IRenderPass {
 public:
     explicit DepthOnlyPass(DrawFilter filter = DrawFilter{RenderQueueRange::opaque()});
 
-    void execute(RenderContext& context,
-                 RenderGraph& graph,
-                 rhi::BindGroupHandle sceneBindGroup,
-                 const DrawList& drawList) override;
+    void execute(RenderContext& context, RenderGraph& graph, const DrawList& drawList) override;
 
 private:
     DrawFilter filter_;

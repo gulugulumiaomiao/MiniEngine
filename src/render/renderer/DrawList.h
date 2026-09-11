@@ -19,13 +19,18 @@ struct SceneDrawData {
     math::Vec4 directionalLightColorIntensity{1.0F};
     math::Vec4 pointLightPositionRange{0.0F};
     math::Vec4 pointLightColorIntensity{0.0F};
+    math::Mat44 lightSpaceMatrix{1.0F};
+    // x = shadow strength, y = depth bias, z = normal offset, w = shadow map texel size.
+    math::Vec4 shadowParams{0.0F, 0.0F, 0.0F, 1.0F};
 };
-static_assert(sizeof(SceneDrawData) == 144, "SceneDrawData must match the std140 shader layout");
+static_assert(sizeof(SceneDrawData) == 224, "SceneDrawData must match the std140 shader layout");
 static_assert(offsetof(SceneDrawData, cameraPosition) == 64);
 static_assert(offsetof(SceneDrawData, directionalLightDirection) == 80);
 static_assert(offsetof(SceneDrawData, directionalLightColorIntensity) == 96);
 static_assert(offsetof(SceneDrawData, pointLightPositionRange) == 112);
 static_assert(offsetof(SceneDrawData, pointLightColorIntensity) == 128);
+static_assert(offsetof(SceneDrawData, lightSpaceMatrix) == 144);
+static_assert(offsetof(SceneDrawData, shadowParams) == 208);
 
 struct ObjectDrawData {
     math::Mat44 transform;

@@ -8,6 +8,7 @@
 #include <iostream>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -25,9 +26,9 @@ public:
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 5 || std::string{argv[1]} != "compile") {
+    if (argc < 5 || std::string{argv[1]} != "compile") {
         std::cerr << "Usage: MiniShaderCompiler compile <shader.json> <pass-name> "
-                     "<output-directory>\n";
+                     "<output-directory> [keywords...]\n";
         return 2;
     }
 
@@ -86,8 +87,12 @@ int main(int argc, char** argv) {
 #else
     config.compilerOptions.optimization = engine::ShaderOptimization::Debug;
 #endif
+    std::vector<std::string> keywords;
+    for (int index = 5; index < argc; ++index) {
+        keywords.emplace_back(argv[index]);
+    }
     engine::ShaderCompilePipeline pipeline{std::move(config)};
-    if (!pipeline.getOrCreate(shader, *pass))
+    if (!pipeline.getOrCreate(shader, *pass, pass->variantKey(keywords)))
         return 1;
     engine::Log::info("MiniShaderCompiler",
                       "Compiled packaged Shader: %s/%s",

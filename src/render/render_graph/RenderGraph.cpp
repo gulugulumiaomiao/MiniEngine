@@ -104,6 +104,7 @@ void RenderGraph::execute(rhi::IGraphicsCommandEncoder& encoder) const {
         rhi::ResourceState current;
         rhi::ResourceState final;
         rhi::ResourceState* tracked;
+        bool transient{};
     };
     std::vector<State> states;
     states.reserve(textures_.size());
@@ -113,7 +114,8 @@ void RenderGraph::execute(rhi::IGraphicsCommandEncoder& encoder) const {
                           node.aspect,
                           node.initialState,
                           node.finalState,
-                          node.trackedState});
+                          node.trackedState,
+                          node.isTransient});
     }
 
     for (const CompiledPass& pass : compiledPasses_) {
@@ -140,6 +142,12 @@ void RenderGraph::execute(rhi::IGraphicsCommandEncoder& encoder) const {
 
     std::vector<rhi::TextureBarrier> finalBarriers;
     for (const State& state : states) {
+        // Transient textures return to the pool in their last-used state; a barrier to the
+        // default finalState (Undefined) is invalid in Vulkan, and the next frame's first
+        // declared usage performs the transition anyway.
+        if (state.transient) {
+            continue;
+        }
         if (state.current != state.final) {
             finalBarriers.push_back({state.texture, state.aspect, state.current, state.final});
         }
@@ -157,6 +165,10 @@ void RenderGraph::reset() {
     compiledPasses_.clear();
     pool_ = nullptr;
     compiled_ = false;
+}
+
+rhi::TextureViewHandle RenderGraph::resolvedTextureView(RgTextureHandle handle) const {
+    return resolveNode(handle).resolvedView;
 }
 
 const RenderGraph::TextureNode& RenderGraph::resolveNode(RgTextureHandle handle) const {

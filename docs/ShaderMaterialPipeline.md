@@ -83,8 +83,11 @@ Pipeline key 包含：
 - `set = 0, binding = 0`：场景 uniform buffer；
 - `set = 0, binding = 1`：对象 transform storage buffer；
 - `set = 0, binding = 2`：每帧实例表 storage buffer（合批后的对象行索引，见 `docs/DrawBatching.md`）；
+- `set = 0, binding = 3`：阴影贴图 combined image sampler，`FrameGpuManager` 绑定解析后的 shadow map view，未启用阴影时绑定 1x1 `Depth32Float` 占位纹理；
 - `set = 1, binding = 0`：材质 uniform buffer；
 - `set = 1, binding = 1..16`：按 Shader properties 声明顺序排列的 Texture2D。
+
+场景 uniform buffer（`SceneDrawData`，std140，224 字节）布局：`viewProjection`(0)、`cameraPosition`(64)、`directionalLightDirection`(80)、`directionalLightColorIntensity`(96)、`pointLightPositionRange`(112)、`pointLightColorIntensity`(128)、`lightSpaceMatrix`(144)、`shadowParams`(208)；`shadowParams = {strength, depthBias, normalOffset, texelSize}`，shader 侧声明见 `assets/shaders/include/scene.glsl`。
 
 每个 in-flight frame 有独立的材质 uniform buffer 和 BindGroup。`MaterialBindingCache` 让槽位跨帧常驻：`MaterialGpuFactory` 通过
 `rhi::IDevice` 创建 Buffer 和 BindGroup，不接触 Vulkan descriptor。`Material::version()`
@@ -93,7 +96,7 @@ RHI TextureView/Sampler handle，未安装 resolver 或纹理未就绪时只输�
 
 ### 9. Keyword、Variant 与多 Pass
 
-`ShaderKeywordSchema` 为每个 Pass 建立稳定的关键字位表，材质的 keyword 列表转换为 `ShaderVariantKey` 后参与 CompiledShader、Program 和 Pipeline 缓存。
+`ShaderKeywordSchema` 为每个 Pass 建立稳定的关键字位表，材质的 keyword 列表转换为 `ShaderVariantKey` 后参与 CompiledShader、Program 和 Pipeline 缓存。材质 keyword 只需被 shader 的任意 Pass 声明（例如 `RECEIVE_SHADOWS` 只影响 Forward）：未声明该 keyword 的 Pass 静默忽略，拼写错误在材质实例化时按 shader 级一次性告警。
 
 Renderer 按以下顺序提交存在的 Pass：
 
@@ -101,7 +104,7 @@ Renderer 按以下顺序提交存在的 Pass：
 ShadowCaster → DepthOnly → Forward
 ```
 
-某个 SubShader 没有对应 Pass 时直接跳过。当前示例只声明 Forward，因此行为与原三角形示例一致；添加另外两个 Pass 后不需要改变场景提交接口。
+某个 SubShader 没有对应 Pass 时直接跳过。`blinn_phong` 示例 shader 声明了 `ShadowCaster`（position-only 顶点输入、depth-only 管线）与 `Forward`（`RECEIVE_SHADOWS` 变体做 3x3 PCF 阴影采样）两个 Pass，四个示例材质开启 `RECEIVE_SHADOWS` keyword。
 
 ### 10. 依赖、热重载、延迟销毁和 Cooked 元数据
 

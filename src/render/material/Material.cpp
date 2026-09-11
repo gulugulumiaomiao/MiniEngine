@@ -1,4 +1,4 @@
-#include "render/material/Material.h"
+﻿#include "render/material/Material.h"
 
 #include "core/logging/Log.h"
 #include "core/serialization/Transfer.h"
@@ -267,8 +267,19 @@ void Material::rebuildForShader(ShaderHandle newShaderHandle, bool preserveValue
 Material MaterialAsset::instantiate(ShaderHandle shaderHandle) const {
     Material material;
     material.initialize(assetPath(), name, shaderHandle, renderQueue);
-    if (!SHADER_MANAGER.find(shaderHandle))
+    const Shader* shader = SHADER_MANAGER.find(shaderHandle);
+    if (!shader)
         return material;
+    // Keyword typos are reported once here at shader level; passes silently ignore keywords
+    // they do not declare (see ShaderKeywordSchema::makeKey).
+    for (const std::string& keyword : keywords) {
+        if (!shader->declaresKeyword(keyword)) {
+            Log::warn("Material",
+                      "Keyword is not declared by shader: %s (%s)",
+                      keyword.c_str(),
+                      name.c_str());
+        }
+    }
     material.keywords = keywords;
     material.suppressChanges_ = true;
     for (const auto& [propertyName, value] : properties) {

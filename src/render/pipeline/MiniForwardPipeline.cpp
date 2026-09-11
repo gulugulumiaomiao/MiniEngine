@@ -16,9 +16,9 @@
 namespace engine {
 
 MiniForwardPipeline::MiniForwardPipeline() {
-    passes_.push_back(std::make_unique<ShadowCasterPass>());
+    passes_.push_back(std::make_unique<ShadowCasterPass>(&shadowOutput_));
     passes_.push_back(std::make_unique<DepthOnlyPass>());
-    passes_.push_back(std::make_unique<ForwardPass>());
+    passes_.push_back(std::make_unique<ForwardPass>(&shadowOutput_));
 }
 
 void MiniForwardPipeline::render(RenderContext& context) {
@@ -30,14 +30,18 @@ void MiniForwardPipeline::render(RenderContext& context) {
                   [](const DrawItem& item) { return !item.pipeline || !item.materialBindGroup; });
 
     FRAME_GPU_MANAGER.beginFrame(context.frameIndex());
-    const rhi::BindGroupHandle sceneBindGroup =
-        FRAME_GPU_MANAGER.upload(context.frameIndex(), drawList);
+    FRAME_GPU_MANAGER.upload(context.frameIndex(), drawList);
 
     RenderGraph graph;
+    shadowOutput_ = {};
     for (const std::unique_ptr<IRenderPass>& pass : passes_) {
-        pass->execute(context, graph, sceneBindGroup, drawList);
+        pass->execute(context, graph, drawList);
     }
     graph.compile(context.rgTexturePool());
+    if (shadowOutput_.castShadows && shadowOutput_.shadowMap.valid()) {
+        FRAME_GPU_MANAGER.bindShadowMap(context.frameIndex(),
+                                        graph.resolvedTextureView(shadowOutput_.shadowMap));
+    }
     graph.execute(context.encoder());
     graph.reset();
 }

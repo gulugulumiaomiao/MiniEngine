@@ -4,7 +4,7 @@ The render pass system splits the monolithic forward renderer into small, compos
 
 ## Core abstractions
 
-- `IRenderPass` (`render/pipeline/RenderPass.h`) is the base interface. A pass receives the frame `RenderContext`, the active `RenderGraph`, the GPU scene bind group and the prepared `DrawList`. It decides which items to draw and which resources to declare.
+- `IRenderPass` (`render/pipeline/RenderPass.h`) is the base interface. A pass receives the frame `RenderContext`, the active `RenderGraph` and the prepared `DrawList`. It decides which items to draw and which resources to declare. Pass callbacks run during `RenderGraph::execute` and query the frame scene bind group from `FRAME_GPU_MANAGER` at execution time, so the pipeline may rebuild that bind group between `compile()` and `execute()` (e.g. to bind the resolved shadow map view).
 - `MiniForwardPipeline` (`render/pipeline/MiniForwardPipeline.h`) owns an ordered list of `IRenderPass` instances and executes them every frame after resolving material bind groups and uploading scene/object uniforms.
 - `DrawListBuilder` (`render/renderer/DrawListBuilder.h`) builds the `DrawList` from the `RenderScene`. It resolves shader passes for the built-in phases `ShadowCaster`, `DepthOnly` and `Forward` and leaves GPU material bind group resolution to the pipeline.
 
@@ -38,16 +38,21 @@ Draws the `DepthOnly` phase into the forward depth target only. It is used as a 
 
 ### ShadowCasterPass
 
-Draws the `ShadowCaster` phase into a transient depth shadow map allocated from the `RenderGraph` texture pool. The default shadow map size is 2048x2048 and can be configured per instance.
+Draws the `ShadowCaster` phase into a transient depth shadow map allocated from the `RenderGraph` texture pool (default 1024x1024, `Depth32Float`, usage `DepthStencilAttachment | Sampled`, depth aspect). When the scene contains a shadow-casting directional light the pass always creates and clears the shadow map - a fully cleared map decodes as "no shadow" - and writes the handle plus a `castShadows` flag into the `ShadowCasterOutput` struct owned by the pipeline.
+
+`ForwardPass` receives the same `ShadowCasterOutput` pointer, declares the shadow map as a `ShaderRead` input, and the pipeline calls `FRAME_GPU_MANAGER.bindShadowMap(frameIndex, graph.resolvedTextureView(handle))` between `compile()` and `execute()` so set 0 binding 3 samples the resolved view. Because the pool buckets textures per frame index, the resolved view is stable across frames and the bind group is not rebuilt in steady state.
 
 ## Composing a pipeline
 
+The default `MiniForwardPipeline` constructor already installs the `ShadowCaster -> DepthOnly -> Forward` chain wired to its internal `ShadowCasterOutput`. Custom chains must keep the producer/consumer pair connected to one shared struct:
+
 ```cpp
+ShadowCasterOutput shadowOutput;
 auto pipeline = std::make_unique<MiniForwardPipeline>();
 pipeline->setPasses({
-    std::make_unique<ShadowCasterPass>(1024),
+    std::make_unique<ShadowCasterPass>(&shadowOutput, 1024),
     std::make_unique<DepthOnlyPass>(),
-    std::make_unique<ForwardPass>(),
+    std::make_unique<ForwardPass>(&shadowOutput),
 });
 renderer.setPipeline(std::move(pipeline));
 ```

@@ -1,5 +1,5 @@
-#include "render/pipeline/passes/ShadowCasterPass.h"
-
+﻿#include "render/pipeline/passes/ShadowCasterPass.h"
+#include "render/gpu/frame/FrameGpuManager.h"
 #include "render/pipeline/RenderContext.h"
 #include "render/pipeline/passes/RenderPassUtils.h"
 #include "render/render_graph/RenderGraph.h"
@@ -10,13 +10,25 @@
 
 namespace engine {
 
-ShadowCasterPass::ShadowCasterPass(std::uint32_t shadowMapSize, DrawFilter filter)
-    : shadowMapSize_(shadowMapSize), filter_(std::move(filter)) {}
+ShadowCasterPass::ShadowCasterPass(ShadowCasterOutput* output,
+                                   std::uint32_t shadowMapSize,
+                                   DrawFilter filter)
+    : output_(output), shadowMapSize_(shadowMapSize), filter_(std::move(filter)) {}
 
 void ShadowCasterPass::execute(RenderContext& context,
                                RenderGraph& graph,
-                               rhi::BindGroupHandle sceneBindGroup,
                                const DrawList& drawList) {
+    const auto shadowCaster =
+        std::ranges::find_if(context.scene().lights(), [](const RenderLight& light) {
+            return light.type == LightType::Directional && light.castShadow;
+        });
+    if (shadowCaster == context.scene().lights().end()) {
+        return;
+    }
+    if (output_) {
+        output_->castShadows = true;
+    }
+
     std::vector<DrawItem> items;
     items.reserve(drawList.items.size());
     for (const DrawItem& item : drawList.items) {
@@ -31,10 +43,6 @@ void ShadowCasterPass::execute(RenderContext& context,
             items.push_back(item);
         }
     }
-    if (items.empty()) {
-        return;
-    }
-
     const RgTextureHandle shadowMap = graph.createTexture({
         .dimension = rhi::TextureDimension::Texture2D,
         .format = rhi::TextureFormat::Depth32Float,
@@ -42,10 +50,13 @@ void ShadowCasterPass::execute(RenderContext& context,
         .height = shadowMapSize_,
         .depth = 1,
         .mipCount = 1,
-        .usage = rhi::TextureUsage::DepthStencilAttachment,
+        .usage = rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::Sampled,
         .aspect = rhi::TextureAspect::Depth,
         .debugName = "ShadowMap",
     });
+    if (output_) {
+        output_->shadowMap = shadowMap;
+    }
 
     RgRenderingInfo rendering;
     rendering.renderArea = {0, 0, shadowMapSize_, shadowMapSize_};
@@ -59,13 +70,20 @@ void ShadowCasterPass::execute(RenderContext& context,
     graph.addGraphicsPass("ShadowCaster",
                           std::move(rendering),
                           std::move(resources),
-                          [sceneBindGroup, items = std::move(items), size = shadowMapSize_,
+                          [items = std::move(items), size = shadowMapSize_,
                            frameIndex = context.frameIndex()](
                               rhi::IGraphicsCommandEncoder& encoder) mutable {
-                              encoder.setViewport(
-                                  {0.0F, 0.0F, static_cast<float>(size), static_cast<float>(size), 0.0F, 1.0F});
+                              encoder.setViewport({0.0F,
+                                                   0.0F,
+                                                   static_cast<float>(size),
+                                                   static_cast<float>(size),
+                                                   0.0F,
+                                                   1.0F});
                               encoder.setScissor({0, 0, size, size});
-                              drawFilteredItems(frameIndex, items, sceneBindGroup, encoder);
+                              drawFilteredItems(frameIndex,
+                                                items,
+                                                FRAME_GPU_MANAGER.sceneBindGroup(frameIndex),
+                                                encoder);
                           });
 }
 

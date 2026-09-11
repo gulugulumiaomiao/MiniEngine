@@ -12,10 +12,7 @@ namespace {
 
 class CountingPass final : public engine::IRenderPass {
 public:
-    void execute(engine::RenderContext&,
-                 engine::RenderGraph&,
-                 engine::rhi::BindGroupHandle,
-                 const engine::DrawList&) override {
+    void execute(engine::RenderContext&, engine::RenderGraph&, const engine::DrawList&) override {
         ++count;
     }
 

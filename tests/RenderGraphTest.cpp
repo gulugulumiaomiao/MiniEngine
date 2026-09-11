@@ -179,4 +179,57 @@ int main() {
     if (device.textures.empty() || device.views.empty()) {
         return 2;
     }
+
+    // Shadow map barrier chain: a transient depth texture written by a ShadowCaster-style
+    // pass (DepthAttachment) and read by a Forward-style pass (ShaderRead). Transient
+    // textures receive no final barrier back to Undefined.
+    pool.beginFrame(0);
+    RenderGraph shadowGraph;
+    const RgTextureHandle shadowMap = shadowGraph.createTexture({
+        .format = rhi::TextureFormat::Depth32Float,
+        .width = 1024,
+        .height = 1024,
+        .usage = rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::Sampled,
+        .aspect = rhi::TextureAspect::Depth,
+        .debugName = "ShadowMap",
+    });
+    RgRenderingInfo shadowRendering;
+    shadowRendering.renderArea = {0, 0, 1024, 1024};
+    shadowRendering.depthAttachments.push_back(
+        {shadowMap, rhi::LoadOp::Clear, rhi::StoreOp::Store, 1.0F});
+    shadowGraph.addGraphicsPass("ShadowCaster",
+                                std::move(shadowRendering),
+                                {{shadowMap,
+                                  rhi::TextureAspect::Depth,
+                                  rhi::ResourceState::DepthAttachment}},
+                                [](rhi::IGraphicsCommandEncoder&) {});
+    shadowGraph.addGraphicsPass("Forward",
+                                RgRenderingInfo{},
+                                {{shadowMap,
+                                  rhi::TextureAspect::Depth,
+                                  rhi::ResourceState::ShaderRead}},
+                                [](rhi::IGraphicsCommandEncoder&) {});
+    shadowGraph.compile(pool);
+    MockGraphicsEncoder shadowEncoder;
+    shadowGraph.execute(shadowEncoder);
+    shadowGraph.reset();
+
+    const std::vector<std::string> expectedShadowEvents{
+        "label:ShadowCaster", "barriers:1", "beginRendering", "endRendering", "endLabel",
+        "label:Forward",      "barriers:1", "beginRendering", "endRendering", "endLabel",
+        "barriers:0",
+    };
+    const bool usageValid =
+        rhi::hasFlag(device.textures.back().usage, rhi::TextureUsage::DepthStencilAttachment) &&
+        rhi::hasFlag(device.textures.back().usage, rhi::TextureUsage::Sampled);
+    if (shadowEncoder.events != expectedShadowEvents ||
+        shadowEncoder.recordedBarriers.size() != 2 ||
+        shadowEncoder.recordedBarriers[0].before != rhi::ResourceState::Undefined ||
+        shadowEncoder.recordedBarriers[0].after != rhi::ResourceState::DepthAttachment ||
+        shadowEncoder.recordedBarriers[1].before != rhi::ResourceState::DepthAttachment ||
+        shadowEncoder.recordedBarriers[1].after != rhi::ResourceState::ShaderRead ||
+        !usageValid) {
+        return 3;
+    }
+    return 0;
 }

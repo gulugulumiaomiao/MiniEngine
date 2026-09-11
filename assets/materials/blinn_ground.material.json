@@ -8,5 +8,5 @@
     "AmbientColor": [0.18, 0.20, 0.24, 1.0],
     "Shininess": 24.0
   },
-  "keywords": []
+  "keywords": ["RECEIVE_SHADOWS"]
 }

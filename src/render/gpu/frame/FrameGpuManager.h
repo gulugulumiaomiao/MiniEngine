@@ -20,8 +20,12 @@ public:
     static constexpr std::uint32_t kMaxInstances = 8192;
 
     [[nodiscard]] bool initialize(rhi::IDevice& device);
-    [[nodiscard]] rhi::BindGroupHandle upload(std::uint32_t frameIndex, const DrawList& drawList);
+    void upload(std::uint32_t frameIndex, const DrawList& drawList);
     void shutdown();
+
+    // Binds the frame's shadow map view to scene binding 3; rebuilds only on view change.
+    void bindShadowMap(std::uint32_t frameIndex, rhi::TextureViewHandle view);
+    [[nodiscard]] rhi::BindGroupHandle sceneBindGroup(std::uint32_t frameIndex) const;
 
     // Per-frame instance table management. Batches draw multiple instances per
     // drawIndexed call; the table maps each instance slot to an object row.
@@ -43,6 +47,7 @@ private:
         rhi::BufferHandle objectBuffer;
         rhi::BufferHandle instanceTable;
         rhi::BindGroupHandle sceneBindGroup;
+        rhi::TextureViewHandle shadowView;
         std::uint32_t instancesUsed{};
     };
 
@@ -52,6 +57,9 @@ private:
     rhi::IDevice* device_{};
     rhi::BindGroupLayoutHandle sceneLayout_;
     rhi::BindGroupLayoutHandle materialLayout_;
+    rhi::SamplerHandle shadowSampler_;
+    rhi::TextureHandle placeholderTexture_;
+    rhi::TextureViewHandle placeholderView_;
     std::array<FrameResources, kFramesInFlight> frames_{};
 };
 

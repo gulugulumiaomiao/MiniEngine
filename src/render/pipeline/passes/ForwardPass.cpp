@@ -1,5 +1,6 @@
 #include "render/pipeline/passes/ForwardPass.h"
 
+#include "render/gpu/frame/FrameGpuManager.h"
 #include "render/pipeline/RenderContext.h"
 #include "render/pipeline/passes/RenderPassUtils.h"
 #include "render/queue/RenderQueue.h"
@@ -13,11 +14,11 @@
 
 namespace engine {
 
-ForwardPass::ForwardPass(DrawFilter filter) : filter_(std::move(filter)) {}
+ForwardPass::ForwardPass(const ShadowCasterOutput* shadowOutput, DrawFilter filter)
+    : shadowOutput_(shadowOutput), filter_(std::move(filter)) {}
 
 void ForwardPass::execute(RenderContext& context,
                           RenderGraph& graph,
-                          rhi::BindGroupHandle sceneBindGroup,
                           const DrawList& drawList) {
     std::vector<DrawItem> items;
     items.reserve(drawList.items.size());
@@ -62,7 +63,6 @@ void ForwardPass::execute(RenderContext& context,
     items.insert(items.end(),
                  std::make_move_iterator(transparent.begin()),
                  std::make_move_iterator(transparent.end()));
-
     const RgTextureHandle backBuffer = graph.importTexture({
         .texture = context.swapchain().currentTexture(),
         .view = context.swapchain().currentTextureView(),
@@ -81,14 +81,19 @@ void ForwardPass::execute(RenderContext& context,
         {depthHandle, rhi::LoadOp::Clear, rhi::StoreOp::DontCare, 1.0F});
 
     std::vector<RgResourceUsage> resources;
-    resources.reserve(2);
+    resources.reserve(3);
     resources.push_back({backBuffer, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment});
     resources.push_back({depthHandle, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment});
+    if (shadowOutput_ && shadowOutput_->shadowMap.valid()) {
+        resources.push_back({shadowOutput_->shadowMap,
+                             rhi::TextureAspect::Depth,
+                             rhi::ResourceState::ShaderRead});
+    }
 
     graph.addGraphicsPass("Forward",
                           std::move(rendering),
                           std::move(resources),
-                          [sceneBindGroup, items = std::move(items), &context](
+                          [items = std::move(items), &context](
                               rhi::IGraphicsCommandEncoder& encoder) mutable {
                               encoder.setViewport({0.0F,
                                                    0.0F,
@@ -98,7 +103,10 @@ void ForwardPass::execute(RenderContext& context,
                                                    1.0F});
                               encoder.setScissor(
                                   {0, 0, context.swapchain().width(), context.swapchain().height()});
-                              drawFilteredItems(context.frameIndex(), items, sceneBindGroup, encoder);
+                              drawFilteredItems(context.frameIndex(),
+                                                items,
+                                                FRAME_GPU_MANAGER.sceneBindGroup(context.frameIndex()),
+                                                encoder);
                           });
 }
 

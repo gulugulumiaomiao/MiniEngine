@@ -1,5 +1,6 @@
 #include "render/pipeline/passes/DepthOnlyPass.h"
 
+#include "render/gpu/frame/FrameGpuManager.h"
 #include "render/pipeline/RenderContext.h"
 #include "render/pipeline/passes/RenderPassUtils.h"
 #include "render/render_graph/RenderGraph.h"
@@ -16,7 +17,6 @@ DepthOnlyPass::DepthOnlyPass(DrawFilter filter) : filter_(std::move(filter)) {}
 
 void DepthOnlyPass::execute(RenderContext& context,
                             RenderGraph& graph,
-                            rhi::BindGroupHandle sceneBindGroup,
                             const DrawList& drawList) {
     std::vector<DrawItem> items;
     items.reserve(drawList.items.size());
@@ -51,7 +51,7 @@ void DepthOnlyPass::execute(RenderContext& context,
     graph.addGraphicsPass("DepthOnly",
                           std::move(rendering),
                           std::move(resources),
-                          [sceneBindGroup, items = std::move(items), &context](
+                          [items = std::move(items), &context](
                               rhi::IGraphicsCommandEncoder& encoder) mutable {
                               encoder.setViewport({0.0F,
                                                    0.0F,
@@ -61,7 +61,10 @@ void DepthOnlyPass::execute(RenderContext& context,
                                                    1.0F});
                               encoder.setScissor(
                                   {0, 0, context.swapchain().width(), context.swapchain().height()});
-                              drawFilteredItems(context.frameIndex(), items, sceneBindGroup, encoder);
+                              drawFilteredItems(context.frameIndex(),
+                                                items,
+                                                FRAME_GPU_MANAGER.sceneBindGroup(context.frameIndex()),
+                                                encoder);
                           });
 }
 

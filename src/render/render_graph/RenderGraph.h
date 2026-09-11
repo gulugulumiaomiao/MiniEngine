@@ -60,6 +60,11 @@ public:
     void execute(rhi::IGraphicsCommandEncoder& encoder) const;
     void reset();
 
+    // Resolves a texture node to its RHI view; valid after compile() and before reset().
+    // Pipelines use this to bind graph-allocated textures (e.g. the shadow map) into bind
+    // groups between compile and execute.
+    [[nodiscard]] rhi::TextureViewHandle resolvedTextureView(RgTextureHandle handle) const;
+
     [[nodiscard]] bool compiled() const { return compiled_; }
     [[nodiscard]] std::size_t passCount() const { return passes_.size(); }
     [[nodiscard]] std::size_t textureCount() const { return textures_.size(); }

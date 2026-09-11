@@ -2,6 +2,7 @@
 
 #include "render/pipeline/RenderPass.h"
 #include "render/pipeline/RenderPipeline.h"
+#include "render/pipeline/passes/ShadowCasterPass.h"
 
 #include <memory>
 #include <vector>
@@ -27,6 +28,9 @@ public:
 private:
     void resolveMaterialBindGroups(DrawList& drawList, std::uint32_t frameIndex);
 
+    // Filled by ShadowCasterPass during recording; consumed by ForwardPass and by render()
+    // when binding the resolved shadow map view into the scene bind group.
+    ShadowCasterOutput shadowOutput_;
     std::vector<std::unique_ptr<IRenderPass>> passes_;
 };
 

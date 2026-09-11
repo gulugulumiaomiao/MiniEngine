@@ -18,7 +18,7 @@ RenderGraph v2
   createTexture(transient)  → RgTextureHandle
   addGraphicsPass(name, RgRenderingInfo, usages, callback)
   compile(RgTexturePool&)   → 解析 RgTextureHandle → rhi::TextureHandle/View
-  execute(encoder)          → barriers + beginRendering + callbacks + final barriers
+  execute(encoder)          → barriers + beginRendering + callbacks + final barriers（仅 imported 纹理）
   reset()                   → 释放临时纹理回池
 ```
 
@@ -85,6 +85,12 @@ graph.reset();
 - `acquire()` 优先复用同帧同描述的空闲条目，否则创建新的 `Texture + TextureView`。
 - `release()` 标记条目空闲；池析构时统一销毁所有纹理与视图。
 
+## Transient 纹理与 final barrier 语义
+
+`execute()` 结束时只对 **imported** 纹理发 final barrier（转换到声明的 `finalState`，例如 backbuffer 的 `Present`）。transient 纹理的 final barrier 被跳过：它们随 `reset()` 回池，保持最后一次使用的状态；下一帧被 `acquire()` 复用时，首个 usage barrier 负责转换到所需状态。跳过的原因是 Vulkan 禁止把 barrier 的 newLayout 指定为 `VK_IMAGE_LAYOUT_UNDEFINED`（VUID-VkImageMemoryBarrier-newLayout-01198），而 transient 纹理没有有意义的「最终状态」。
+
+编译后管线可通过 `resolvedTextureView(RgTextureHandle)` 拿到 transient 纹理解析出的实际 `TextureViewHandle`（例如把 shadow map 绑进 scene bind group）；该句柄仅在 `compile()` 之后、`reset()` 之前有效。
+
 ## 改造点
 
 ### RenderTarget
@@ -108,6 +114,7 @@ graph.reset();
 ## 验证
 
 - `RenderGraphTest`：验证 import 路径的屏障序列与 transient 路径的池分配。
+- `RenderGraphTest`（shadow map 场景）：`Depth32Float`（`DepthStencilAttachment | Sampled`）纹理经 `DepthAttachment` 写入后由后续 pass 以 `ShaderRead` 读取，断言 `Undefined -> DepthAttachment -> ShaderRead` 两道屏障、transient 纹理无 final barrier、纹理 usage 含 `Sampled`。
 - `RenderTargetTest`：验证 `importColor` / `importDepth` 返回 handle 后图能正确执行。
 - `RgTexturePoolTest`：验证同帧复用、不同描述新建、跨帧桶隔离、两帧后复用。
 - 构建并运行 `MiniVulkanEngine`，确认 showcase 场景画面与阶段 A 一致。

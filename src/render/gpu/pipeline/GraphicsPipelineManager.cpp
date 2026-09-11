@@ -157,7 +157,11 @@ GraphicsPipelineManager::makeDescription(const ShaderPass& pass,
     desc.fragmentShader = fragmentShader;
     desc.fragmentEntry = std::move(fragmentEntry);
     desc.bindGroupLayouts = {sceneLayout_, materialLayout_};
-    desc.colorFormats = {colorFormat};
+    // Depth-only passes (ShadowCaster) pass Undefined as the color format and render without
+    // any color attachment; toVulkan(Undefined) is not a valid attachment format.
+    if (colorFormat != rhi::TextureFormat::Undefined) {
+        desc.colorFormats = {colorFormat};
+    }
     desc.depthFormat = depthFormat;
     for (const VertexBinding& binding : vertexLayout.bindings) {
         desc.vertexBindings.push_back({binding.binding,

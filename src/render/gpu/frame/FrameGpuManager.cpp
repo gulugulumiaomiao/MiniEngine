@@ -9,6 +9,15 @@
 
 namespace engine {
 
+namespace {
+
+constexpr std::uint64_t kObjectBufferSize =
+    sizeof(ObjectDrawData) * FrameGpuManager::kMaxRenderObjects;
+constexpr std::uint64_t kInstanceTableSize =
+    sizeof(std::uint32_t) * FrameGpuManager::kMaxInstances;
+
+} // namespace
+
 bool FrameGpuManager::initialize(rhi::IDevice& device) {
     if (initialized()) {
         Log::error("FrameGpuManager", "Manager is already initialized");
@@ -23,6 +32,8 @@ bool FrameGpuManager::initialize(rhi::IDevice& device) {
             1, rhi::BindingType::StorageBuffer, rhi::ShaderVisibility::Vertex},
         rhi::BindGroupLayoutEntry{
             2, rhi::BindingType::StorageBuffer, rhi::ShaderVisibility::Vertex},
+        rhi::BindGroupLayoutEntry{
+            3, rhi::BindingType::SampledTexture, rhi::ShaderVisibility::Fragment},
     };
     sceneLayout_ = device_->createBindGroupLayout({sceneBindings, "Scene bind group layout"});
 
@@ -33,8 +44,32 @@ bool FrameGpuManager::initialize(rhi::IDevice& device) {
     materialLayout_ =
         device_->createBindGroupLayout({materialBindings, "Material bind group layout"});
 
-    constexpr std::uint64_t objectBufferSize = sizeof(ObjectDrawData) * kMaxRenderObjects;
-    constexpr std::uint64_t instanceTableSize = sizeof(std::uint32_t) * kMaxInstances;
+    shadowSampler_ = device_->createSampler({
+        .minFilter = rhi::SamplerFilter::Linear,
+        .magFilter = rhi::SamplerFilter::Linear,
+        .mipmapFilter = rhi::SamplerMipmapFilter::Nearest,
+        .addressU = rhi::SamplerAddressMode::ClampToEdge,
+        .addressV = rhi::SamplerAddressMode::ClampToEdge,
+    });
+    placeholderTexture_ = device_->createTexture({
+        .format = rhi::TextureFormat::Depth32Float,
+        .width = 1,
+        .height = 1,
+        .depth = 1,
+        .mipCount = 1,
+        .usage = rhi::TextureUsage::Sampled | rhi::TextureUsage::DepthStencilAttachment,
+        .debugName = "Shadow map placeholder",
+    });
+    placeholderView_ = device_->createTextureView({
+        .texture = placeholderTexture_,
+        .format = rhi::TextureFormat::Depth32Float,
+        .aspect = rhi::TextureAspect::Depth,
+        .baseMipLevel = 0,
+        .mipCount = 1,
+    });
+    if (!shadowSampler_ || !placeholderTexture_ || !placeholderView_) {
+        Log::fatal("FrameGpuManager", "Cannot create shadow sampling resources");
+    }
     for (FrameResources& frame : frames_) {
         frame.sceneBuffer = device_->createBuffer({
             .size = sizeof(SceneDrawData),
@@ -43,13 +78,13 @@ bool FrameGpuManager::initialize(rhi::IDevice& device) {
             .debugName = "Scene uniforms",
         });
         frame.objectBuffer = device_->createBuffer({
-            .size = objectBufferSize,
+            .size = kObjectBufferSize,
             .usage = rhi::BufferUsage::Storage,
             .memoryUsage = rhi::MemoryUsage::Upload,
             .debugName = "Object draw data",
         });
         frame.instanceTable = device_->createBuffer({
-            .size = instanceTableSize,
+            .size = kInstanceTableSize,
             .usage = rhi::BufferUsage::Storage,
             .memoryUsage = rhi::MemoryUsage::Upload,
             .debugName = "Instance table",
@@ -62,21 +97,26 @@ bool FrameGpuManager::initialize(rhi::IDevice& device) {
             rhi::BindGroupEntry{.binding = 1,
                                 .type = rhi::BindingType::StorageBuffer,
                                 .buffer = frame.objectBuffer,
-                                .size = objectBufferSize},
+                                .size = kObjectBufferSize},
             rhi::BindGroupEntry{.binding = 2,
                                 .type = rhi::BindingType::StorageBuffer,
                                 .buffer = frame.instanceTable,
-                                .size = instanceTableSize},
+                                .size = kInstanceTableSize},
+            rhi::BindGroupEntry{.binding = 3,
+                                .type = rhi::BindingType::SampledTexture,
+                                .textureView = placeholderView_,
+                                .sampler = shadowSampler_},
         };
         frame.sceneBindGroup =
             device_->createBindGroup({sceneLayout_, bindings, "Scene bind group"});
+        frame.shadowView = placeholderView_;
     }
     return true;
 }
 
-rhi::BindGroupHandle FrameGpuManager::upload(std::uint32_t frameIndex, const DrawList& drawList) {
+void FrameGpuManager::upload(std::uint32_t frameIndex, const DrawList& drawList) {
     if (!initialized() || frameIndex >= frames_.size())
-        return {};
+        return;
     if (drawList.objects.size() > kMaxRenderObjects)
         Log::fatal("FrameGpuManager", "DrawList exceeds kMaxRenderObjects");
 
@@ -84,7 +124,43 @@ rhi::BindGroupHandle FrameGpuManager::upload(std::uint32_t frameIndex, const Dra
     device_->uploadBuffer(frame.sceneBuffer, std::as_bytes(std::span{&drawList.scene, 1}));
     if (!drawList.objects.empty())
         device_->uploadBuffer(frame.objectBuffer, std::as_bytes(std::span{drawList.objects}));
-    return frame.sceneBindGroup;
+}
+
+void FrameGpuManager::bindShadowMap(std::uint32_t frameIndex, rhi::TextureViewHandle view) {
+    if (!initialized() || frameIndex >= frames_.size() || !view)
+        return;
+    FrameResources& frame = frames_[frameIndex];
+    if (frame.shadowView == view)
+        return;
+    frame.shadowView = view;
+    if (frame.sceneBindGroup)
+        device_->destroyBindGroup(frame.sceneBindGroup);
+    const std::array bindings{
+        rhi::BindGroupEntry{.binding = 0,
+                            .type = rhi::BindingType::UniformBuffer,
+                            .buffer = frame.sceneBuffer,
+                            .size = sizeof(SceneDrawData)},
+        rhi::BindGroupEntry{.binding = 1,
+                            .type = rhi::BindingType::StorageBuffer,
+                            .buffer = frame.objectBuffer,
+                            .size = kObjectBufferSize},
+        rhi::BindGroupEntry{.binding = 2,
+                            .type = rhi::BindingType::StorageBuffer,
+                            .buffer = frame.instanceTable,
+                            .size = kInstanceTableSize},
+        rhi::BindGroupEntry{.binding = 3,
+                            .type = rhi::BindingType::SampledTexture,
+                            .textureView = view,
+                            .sampler = shadowSampler_},
+    };
+    frame.sceneBindGroup =
+        device_->createBindGroup({sceneLayout_, bindings, "Scene bind group"});
+}
+
+rhi::BindGroupHandle FrameGpuManager::sceneBindGroup(std::uint32_t frameIndex) const {
+    if (frameIndex >= frames_.size())
+        return {};
+    return frames_[frameIndex].sceneBindGroup;
 }
 
 void FrameGpuManager::beginFrame(std::uint32_t frameIndex) {
@@ -135,10 +211,19 @@ void FrameGpuManager::shutdown() {
             device_->destroyBuffer(frame.instanceTable);
         frame = {};
     }
+    if (placeholderView_)
+        device_->destroyTextureView(placeholderView_);
+    if (placeholderTexture_)
+        device_->destroyTexture(placeholderTexture_);
+    if (shadowSampler_)
+        device_->destroySampler(shadowSampler_);
     if (sceneLayout_)
         device_->destroyBindGroupLayout(sceneLayout_);
     if (materialLayout_)
         device_->destroyBindGroupLayout(materialLayout_);
+    placeholderView_ = {};
+    placeholderTexture_ = {};
+    shadowSampler_ = {};
     sceneLayout_ = {};
     materialLayout_ = {};
     device_ = nullptr;
