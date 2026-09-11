@@ -115,13 +115,13 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
         }
         const float distance = radius * 2.0F + 1.0F;
         drawList.scene.lightSpaceMatrix =
-            math::lookAt(center - directional->direction * distance, center, up) *
             math::orthographic(-radius,
                                radius,
                                -radius,
                                radius,
                                0.1F,
-                               distance + radius * 2.0F);
+                               distance + radius * 2.0F) *
+            math::lookAt(center - directional->direction * distance, center, up);
         drawList.scene.shadowParams = math::Vec4{0.8F, 0.0025F, 0.05F, 1.0F / 1024.0F};
     }
     const auto point = std::ranges::find_if(
@@ -138,7 +138,8 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
         }
         if (frustum) {
             const math::Vec3 center = math::transformPoint(object.transform, math::Vec3{0.0F});
-            if (!math::intersects(*frustum, center, object.boundsRadius)) {
+            const bool visible = math::intersects(*frustum, center, object.boundsRadius);
+            if (!visible) {
                 continue;
             }
         }

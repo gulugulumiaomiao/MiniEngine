@@ -60,7 +60,7 @@
       "components": [
         {
           "type": "Transform",
-          "rotation": [-0.38268343, 0.0, 0.0, 0.92387953]
+          "rotation": [-0.32494, 0.32494, 0.0, 0.88807]
         },
         {
           "type": "Light",

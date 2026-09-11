@@ -1,6 +1,8 @@
 #include "scene/scene/Scene.h"
 
 #include "core/logging/Log.h"
+#include "render/mesh/Mesh.h"
+#include "render/mesh/MeshManager.h"
 #include "render/scene/RenderScene.h"
 #include "scene/components/CameraComponent.h"
 #include "scene/components/LightComponent.h"
@@ -131,11 +133,23 @@ void Scene::extractRenderNode(Node& node, RenderScene& output, float aspectRatio
     const MeshComponent* mesh = node.getComponent<MeshComponent>();
     const MaterialComponent* material = node.getComponent<MaterialComponent>();
     if (mesh && material && mesh->active() && material->active() && mesh->visible && mesh->mesh()) {
+        // The world-space bounds radius feeds shadow-volume fitting and frustum culling; scaling
+        // the local bounding sphere by the longest transform axis keeps it conservative under
+        // non-uniform scale.
+        float boundsRadius = 0.0F;
+        if (const Mesh* meshInstance = MESH_MANAGER.find(mesh->mesh())) {
+            float maxAxisScale = 0.0F;
+            for (std::uint32_t column = 0; column < 3; ++column) {
+                maxAxisScale = std::max(maxAxisScale, math::length(math::Vec3(world[column])));
+            }
+            boundsRadius = meshInstance->desc().bounds.sphere.radius * maxAxisScale;
+        }
         output.submit({
             .mesh = mesh->mesh(),
             .materials = material->materials(),
             .transform = world,
             .layerMask = mesh->layerMask,
+            .boundsRadius = boundsRadius,
             .castShadow = mesh->castShadow,
             .receiveShadow = mesh->receiveShadow,
         });
