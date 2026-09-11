@@ -30,13 +30,11 @@
   "subShaders": [{
     "tags": {
       "renderPipeline": "MiniForward",
-      "renderType": "Opaque",
       "queue": "Opaque"
     },
     "passes": [
       {
         "name": "Forward",
-        "lightMode": "Forward",
         "state": {
           "cull": "Off",
           "frontFace": "CW",

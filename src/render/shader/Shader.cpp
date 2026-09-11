@@ -71,7 +71,6 @@ bool ShaderPassAsset::transfer(Transfer& archive) {
 
 bool SubShaderDesc::transfer(Transfer& archive) {
     return archive.transfer("render_pipeline", renderPipeline) &&
-           archive.transfer("render_type", renderType) &&
            archive.transfer("render_queue", renderQueue) && archive.transfer("passes", passes);
 }
 
@@ -553,7 +552,6 @@ ShaderAsset parseShaderAssetValue(const VirtualPath& path, std::string_view sour
         SubShaderDesc subShader;
         const Json tags = subShaderJson.value("tags", rootTags);
         subShader.renderPipeline = tags.value("renderPipeline", subShader.renderPipeline);
-        subShader.renderType = tags.value("renderType", subShader.renderType);
         subShader.renderQueue = parseQueue(tags, path);
         const Json passes = subShaderJson.value("passes", Json::array());
         if (passes.empty()) {
@@ -569,8 +567,10 @@ ShaderAsset parseShaderAssetValue(const VirtualPath& path, std::string_view sour
             if (!passNames.insert(pass.name).second) {
                 fail(path, at + ".name", "duplicate pass '" + pass.name + "'");
             }
+            // lightMode is optional and defaults to the pass name, which for the
+            // built-in pass names (Forward/DepthOnly/ShadowCaster) is the mode itself.
             pass.type =
-                parseEnum<ShaderPassType>(required<std::string>(json, "lightMode", path, at),
+                parseEnum<ShaderPassType>(json.value("lightMode", pass.name),
                                           {{"Forward", ShaderPassType::Forward},
                                            {"DepthOnly", ShaderPassType::DepthOnly},
                                            {"ShadowCaster", ShaderPassType::ShadowCaster}},
@@ -792,8 +792,7 @@ ShaderVariantKey ShaderPass::variantKey(std::span<const std::string> materialKey
 }
 
 SubShader::SubShader(const SubShaderDesc& desc)
-    : renderPipeline_(desc.renderPipeline), renderType_(desc.renderType),
-      renderQueue_(desc.renderQueue) {
+    : renderPipeline_(desc.renderPipeline), renderQueue_(desc.renderQueue) {
     passes_.reserve(desc.passes.size());
     for (const ShaderPassAsset& asset : desc.passes) {
         passes_.emplace_back(asset.pass, asset.renderState);

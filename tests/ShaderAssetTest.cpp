@@ -55,6 +55,16 @@ int main() {
         return 2;
     }
 
+    // lightMode omitted: the pass type is inferred from the pass name.
+    const std::shared_ptr<ShaderAsset> inferredOwner = ASSET_MANAGER.loadAsset<ShaderAsset>(
+        VirtualPath{"asset://shader_lightmode_inferred.shader.json"});
+    if (!inferredOwner)
+        return 3;
+    if (inferredOwner->subShaders.front()
+            .requirePass(ShaderPassType::Forward)
+            .name != "Forward")
+        return 4;
+
     const RenderStateDesc& defaults = generated.subShaders.front().passes.front().renderState;
     if (defaults.cull != CullMode::Back || defaults.frontFace != FrontFace::Clockwise ||
         defaults.fill != FillMode::Solid || defaults.topology != PrimitiveTopology::TriangleList ||

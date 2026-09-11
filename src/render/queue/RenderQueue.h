@@ -3,7 +3,6 @@
 #include "render/renderer/DrawList.h"
 
 #include <cstdint>
-#include <string>
 #include <vector>
 
 namespace engine {
@@ -37,13 +36,10 @@ struct RenderQueueRange {
 struct DrawFilter {
     RenderQueueRange queueRange{RenderQueueRange::all()};
     std::uint32_t layerMask{0xFFFFFFFFU};
-    std::string renderType; // Empty means any render type.
 
     DrawFilter() = default;
-    DrawFilter(RenderQueueRange queueRange,
-               std::uint32_t layerMask = 0xFFFFFFFFU,
-               std::string renderType = {})
-        : queueRange(queueRange), layerMask(layerMask), renderType(std::move(renderType)) {}
+    explicit DrawFilter(RenderQueueRange queueRange, std::uint32_t layerMask = 0xFFFFFFFFU)
+        : queueRange(queueRange), layerMask(layerMask) {}
 
     [[nodiscard]] bool accepts(const DrawItem& item, std::uint32_t objectLayerMask) const;
 };

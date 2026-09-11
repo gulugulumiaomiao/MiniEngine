@@ -119,7 +119,6 @@ struct ShaderPassAsset {
 
 struct SubShaderDesc {
     std::string renderPipeline{"MiniForward"};
-    std::string renderType{"Opaque"};
     int renderQueue{2000};
     std::vector<ShaderPassAsset> passes;
 
@@ -240,7 +239,6 @@ public:
     explicit SubShader(const SubShaderDesc& desc);
 
     [[nodiscard]] const std::string& renderPipeline() const { return renderPipeline_; }
-    [[nodiscard]] const std::string& renderType() const { return renderType_; }
     [[nodiscard]] int renderQueue() const { return renderQueue_; }
     [[nodiscard]] const std::vector<ShaderPass>& passes() const { return passes_; }
     [[nodiscard]] const ShaderPass* findPass(ShaderPassType type) const;
@@ -249,7 +247,6 @@ public:
 
 private:
     std::string renderPipeline_;
-    std::string renderType_;
     int renderQueue_{2000};
     std::vector<ShaderPass> passes_;
 };

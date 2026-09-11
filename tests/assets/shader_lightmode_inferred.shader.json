@@ -1,0 +1,26 @@
+{
+  "$schemaVersion": 1,
+  "name": "MiniTest/LightModeInferred",
+  "properties": [],
+  "subShaders": [{
+    "tags": {
+      "renderPipeline": "MiniForward",
+      "queue": "Opaque"
+    },
+    "passes": [{
+      "name": "Forward",
+      "program": {
+        "vertex": "unused.vert",
+        "frag": "unused.frag"
+      },
+      "vertexInput": [
+        { "name": "position", "semantic": "POSITION", "type": "Vec3", "location": 0 }
+      ],
+      "varyings": [],
+      "fragmentOutputs": [
+        { "name": "color", "type": "Vec4", "location": 0 }
+      ],
+      "features": []
+    }]
+  }]
+}

@@ -110,11 +110,10 @@ JSON ShaderLab 将 Shader 声明与材质参数值分开保存：
     {
       "tags": {
         "renderPipeline": "MiniForward",
-        "renderType": "Opaque",
         "queue": "Opaque"
       },
       "passes": [
-        { "name": "Forward", "lightMode": "Forward", "program": {} }
+        { "name": "Forward", "program": {} }
       ]
     }
   ]
@@ -126,7 +125,7 @@ JSON ShaderLab 将 Shader 声明与材质参数值分开保存：
 支持的属性类型包括 `Float`、`Range`、`Vec2`、`Vec3`、`Vec4`、`Color`、`Texture2D` 和 `Bool`。
 `Vec2`、`Vec3`、`Vec4` 的默认值必须分别包含两个、三个、四个数字，`Color` 必须包含四个数字；`Range` 还必须提供 `[min, max]` 范围。旧类型名 `Vector` 会按 `Vec4` 解析，以兼容已有资产。
 
-支持的 Pass 光照模式包括 `Forward`、`DepthOnly` 和 `ShadowCaster`。每个 Pass 必须具有唯一名称、一个包含顶点和片元 SPIR-V 路径的 `program`、可选的功能 Keyword，以及可选的渲染状态对象。
+支持的 Pass 光照模式包括 `Forward`、`DepthOnly` 和 `ShadowCaster`。`lightMode` 可选，缺省时取 Pass 的 `name`；内置名称本身就是合法光照模式。每个 Pass 必须具有唯一名称、一个包含顶点和片元 SPIR-V 路径的 `program`、可选的功能 Keyword，以及可选的渲染状态对象。
 
 支持以下渲染状态：
 
