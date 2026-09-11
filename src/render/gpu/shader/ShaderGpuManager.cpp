@@ -20,7 +20,7 @@ bool ShaderGpuManager::initialize(rhi::IDevice& device) {
         return false;
     }
     ShaderCompilePipelineConfig config;
-#if defined(MINI_RELEASE)
+#if defined(MINI_PUBLISH)
     config.mode = ShaderCompileMode::PackagedRuntime;
 #else
     config.mode = ShaderCompileMode::DevelopmentRuntime;

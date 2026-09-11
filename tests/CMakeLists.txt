@@ -7,6 +7,7 @@ function(mini_add_test target)
     add_test(NAME ${target} COMMAND ${target})
 endfunction()
 
+mini_add_test(BuildConfigTest)
 mini_add_test(HashTest)
 mini_add_test(ShaderCompilerTest)
 target_compile_definitions(ShaderCompilerTest PRIVATE

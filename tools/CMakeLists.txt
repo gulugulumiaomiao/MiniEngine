@@ -2,7 +2,7 @@ add_executable(MiniShaderCompiler shader_compiler/main.cpp)
 target_link_libraries(MiniShaderCompiler PRIVATE MiniEngine)
 target_compile_definitions(MiniShaderCompiler PRIVATE
     MINI_GLSLC_EXECUTABLE="${GLSLC_EXECUTABLE}"
-    $<$<NOT:$<CONFIG:Debug>>:MINI_SHADER_RELEASE=1>
+    $<$<CONFIG:Publish>:MINI_SHADER_RELEASE=1>
 )
 mini_enable_warnings(MiniShaderCompiler)
 mini_link_mingw_runtime(MiniShaderCompiler)

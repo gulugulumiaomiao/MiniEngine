@@ -33,16 +33,22 @@ target_include_directories(MiniEngine SYSTEM PRIVATE
     ${PROJECT_SOURCE_DIR}/third_party/stb
     ${PROJECT_SOURCE_DIR}/third_party/vma/include
 )
-target_compile_definitions(MiniEngine PRIVATE
+target_compile_definitions(MiniEngine PUBLIC
     VK_USE_PLATFORM_WIN32_KHR
     WIN32_LEAN_AND_MEAN
     NOMINMAX
+    # MINI_DEBUG: validation layers, debug labels, runtime shader compilation and
+    # hot reload (Debug configuration).
+    # MINI_RELEASE: optimized build that still uses runtime shader compilation and
+    # hot reload, but disables validation layers (Release configuration).
+    # MINI_PUBLISH: shipping configuration with packaged assets and read-only
+    # packaged SPIR-V; no hot reload (Publish configuration).
+    $<$<CONFIG:Debug>:MINI_DEBUG=1>
+    $<$<CONFIG:Release>:MINI_RELEASE=1>
+    $<$<CONFIG:Publish>:MINI_PUBLISH=1>
+)
+target_compile_definitions(MiniEngine PRIVATE
     MINI_GLSLC_EXECUTABLE="${GLSLC_EXECUTABLE}"
-    # Development behavior (validation layers, hot reload, debug labels) is
-    # compiled into Debug and Release; Release only changes code optimization.
-    # Publish is the shipping configuration with packaged assets and shaders.
-    $<$<CONFIG:Debug,Release>:MINI_DEBUG=1>
-    $<$<CONFIG:Publish>:MINI_RELEASE=1>
 )
 target_link_libraries(MiniEngine PUBLIC Vulkan::Vulkan)
 target_link_libraries(MiniEngine PRIVATE user32)

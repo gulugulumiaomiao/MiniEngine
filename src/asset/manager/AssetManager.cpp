@@ -20,7 +20,7 @@
 namespace engine {
 
 bool AssetManager::initialize() {
-#if defined(MINI_RELEASE)
+#if defined(MINI_PUBLISH)
     return initialize(AssetManagerMode::Packaged);
 #else
     return initialize(AssetManagerMode::Development);

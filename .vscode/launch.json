@@ -26,6 +26,19 @@
       "sourceLanguages": [
         "cpp"
       ]
+    },
+    {
+      "name": "Run MiniVulkanEngine Publish",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/clang-publish/MiniVulkanEngine.exe",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "CMake: Package Publish Shaders",
+      "stopOnEntry": false,
+      "terminal": "integrated",
+      "sourceLanguages": [
+        "cpp"
+      ]
     }
   ]
 }

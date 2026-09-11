@@ -5,6 +5,7 @@
   "cmake.buildPreset": "clang-debug",
   "clangd.arguments": [
     "--compile-commands-dir=${workspaceFolder}/build/clang-debug",
+    "--query-driver=**/clang++.exe",
     "--background-index",
     "--clang-tidy",
     "--completion-style=detailed",

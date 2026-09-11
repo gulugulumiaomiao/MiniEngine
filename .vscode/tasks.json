@@ -124,6 +124,30 @@
       "dependsOn": "CMake: Configure Publish",
       "dependsOrder": "sequence",
       "problemMatcher": "$gcc"
+    },
+    {
+      "label": "CMake: Package Publish Shaders",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/tools/dev/Invoke-CMake.ps1",
+        "--build",
+        "--preset",
+        "clang-publish",
+        "--target",
+        "MiniShaderPackagedShaders",
+        "--parallel"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "dependsOn": "CMake: Build Publish",
+      "dependsOrder": "sequence",
+      "problemMatcher": "$gcc"
     }
   ]
 }
