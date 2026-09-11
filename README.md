@@ -4,9 +4,6 @@
 可运行的 Vulkan 渲染器出发，逐步建立了场景、资产、Shader、Material、Mesh
 和 RHI 分层，同时刻意保持实现规模可读、可调试、可继续扩展。
 
-当前开发讨论与设计上下文：
-[ChatGPT 对话记录](https://chatgpt.com/s/cx_6a9da5c8bb548191b0761faaed298538)。
-
 ## 当前效果
 
 示例程序创建 Win32 窗口，在深蓝色背景上绘制两个共享 Mesh、使用不同
@@ -87,8 +84,8 @@ Core → RHI → Render → Asset / Scene → Runtime
 - 每类 Asset 通过 `Transferable::transfer(Transfer&)` 自行实现 JSON/二进制
   数据传输。
 - Artifact 使用二进制格式保存导入后的运行时数据。
-- Debug 下 FileWatcher 驱动重新导入、缓存失效以及 Shader/Mesh/Scene 热重载。
-- Release 下只读取已烘焙 AssetDatabase 和 Artifact，不依赖源 JSON 的动态导入。
+- Debug 与 Release 下 FileWatcher 驱动重新导入、缓存失效以及 Shader/Mesh/Scene 热重载。
+- Publish 下只读取已烘焙 AssetDatabase 和 Artifact，不依赖源 JSON 的动态导入。
 
 ### Scene
 
@@ -141,9 +138,9 @@ main
   → Application::onStart()
 ```
 
-Debug 构建会扫描源资产并启动 FileWatcher；Release 构建直接读取 Cooker 生成的
-数据库和 Artifact。示例 `GameApplication::onStart()` 创建三角形 Mesh、加载两个
-Material，并向 Scene 添加 Mesh、Material、Camera 和 Light 组件。
+Debug 与 Release 构建会扫描源资产并启动 FileWatcher；Publish 构建直接读取 Cooker
+生成的数据库和 Artifact。示例 `GameApplication::onStart()` 创建三角形 Mesh、加载
+两个 Material，并向 Scene 添加 Mesh、Material、Camera 和 Light 组件。
 
 ### 2. 资产加载
 
@@ -228,12 +225,21 @@ cmake --build --preset clang-debug
 ./build/clang-debug/MiniVulkanEngine.exe
 ```
 
-Release：
+Release（优化构建，仍启用热重载与运行时 shader 编译）：
 
 ```powershell
 cmake --preset clang-release
 cmake --build --preset clang-release
 ./build/clang-release/MiniVulkanEngine.exe
+```
+
+Publish（发布构建，需先打包 SPIR-V）：
+
+```powershell
+cmake --preset clang-publish
+cmake --build --preset clang-publish
+cmake --build --preset clang-publish --target MiniShaderPackagedShaders
+./build/clang-publish/MiniVulkanEngine.exe
 ```
 
 运行全部测试：
@@ -242,8 +248,9 @@ cmake --build --preset clang-release
 ctest --test-dir build/clang-debug --output-on-failure
 ```
 
-Debug 定义 `MINI_DEBUG=1` 并启用 Vulkan Validation、debug messenger 和调试
-Shader 信息；Release 定义 `MINI_RELEASE=1`，关闭验证层并启用优化。
+- Debug 定义 `MINI_DEBUG=1`：启用 Vulkan Validation、debug messenger、运行时 shader 编译与热重载。
+- Release 定义 `MINI_RELEASE=1`：仍启用运行时 shader 编译与热重载，但关闭验证层并启用优化。
+- Publish 定义 `MINI_PUBLISH=1`：关闭验证层与热重载，使用预打包资产与 SPIR-V。
 
 ## VS Code 调试
 
@@ -255,7 +262,8 @@ Shader 信息；Release 定义 `MINI_RELEASE=1`，关闭验证层并启用优化
 3. 选择 `Debug MiniVulkanEngine (CodeLLDB)`。
 
 VS Code 会自动执行 Debug configure 和 build。选择
-`Run MiniVulkanEngine Release` 可启动 Release；`Ctrl+Shift+B` 只执行默认
+`Run MiniVulkanEngine Release` 可启动 Release，选择
+`Run MiniVulkanEngine Publish` 可启动 Publish；`Ctrl+Shift+B` 只执行默认
 Debug 构建任务。
 
 更完整的新电脑安装和调试说明见 [Getting Started](docs/GettingStarted.md)。
