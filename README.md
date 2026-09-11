@@ -6,8 +6,9 @@
 
 ## 当前效果
 
-示例程序创建 Win32 窗口，在深蓝色背景上绘制两个共享 Mesh、使用不同
-Material 和 Transform 的三色三角形。它覆盖了从场景组件到 DrawList、
+示例程序创建 Win32 窗口，加载 `blinn_phong_showcase.scene.json` 场景：一块地面、
+一个盒子、一个球体和一个圆柱体，分别使用不同 Blinn-Phong 材质；同时包含一个
+投射阴影的方向光和一个点光源。它覆盖了从场景组件、光照与阴影到 DrawList、
 Shader Pass、Vulkan Pipeline 和最终 Present 的完整链路。
 
 ## 引擎架构
@@ -139,8 +140,9 @@ main
 ```
 
 Debug 与 Release 构建会扫描源资产并启动 FileWatcher；Publish 构建直接读取 Cooker
-生成的数据库和 Artifact。示例 `GameApplication::onStart()` 创建三角形 Mesh、加载
-两个 Material，并向 Scene 添加 Mesh、Material、Camera 和 Light 组件。
+生成的数据库和 Artifact。示例 `GameApplication::onStart()` 直接加载
+`asset://scenes/blinn_phong_showcase.scene.json`，场景中已包含地面、几何体、
+Camera、Directional Light 和 Point Light 组件。
 
 ### 2. 资产加载
 
