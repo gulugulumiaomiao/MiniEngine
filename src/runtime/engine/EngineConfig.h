@@ -17,6 +17,12 @@ struct AppConfig {
     bool vsync{true};
 };
 
+struct RenderConfig {
+    std::string pipeline{"MiniForward"};
+
+    bool transfer(Transfer& archive);
+};
+
 struct FileSystemMountConfig {
     std::string scheme;
     std::string type{"directory"};
@@ -36,6 +42,7 @@ struct EngineConfig {
     std::uint32_t schemaVersion{1};
     std::string workingDirectory{"."};
     AppConfig application;
+    RenderConfig render;
     FileSystemConfig filesystem;
 
     bool transfer(Transfer& archive);

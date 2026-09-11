@@ -12,6 +12,10 @@
 
 namespace engine {
 
+bool RenderConfig::transfer(Transfer& archive) {
+    return archive.transfer("pipeline", pipeline);
+}
+
 bool FileSystemMountConfig::transfer(Transfer& archive) {
     return archive.transfer("scheme", scheme) && archive.transfer("type", type) &&
            archive.transfer("path", path) && archive.transfer("read_only", readOnly);
@@ -27,7 +31,8 @@ bool EngineConfig::transfer(Transfer& archive) {
         !archive.beginObject("application") || !archive.transfer("name", application.name) ||
         !archive.transfer("width", application.width) ||
         !archive.transfer("height", application.height) ||
-        !archive.transfer("vsync", application.vsync) || !archive.endObject()) {
+        !archive.transfer("vsync", application.vsync) || !archive.endObject() ||
+        !archive.transfer("render", render)) {
         return false;
     }
     return archive.transfer("filesystem", filesystem);
@@ -44,6 +49,10 @@ bool EngineConfig::validate(std::string& error) const {
     }
     if (application.name.empty() || application.width == 0 || application.height == 0) {
         error = "Application name and window dimensions must be valid";
+        return false;
+    }
+    if (render.pipeline.empty()) {
+        error = "Render pipeline name cannot be empty";
         return false;
     }
     if (filesystem.mounts.empty()) {

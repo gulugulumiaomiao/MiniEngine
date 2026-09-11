@@ -5,6 +5,8 @@
 #include "core/filesystem/FileSystem.h"
 #include "core/logging/Log.h"
 #include "render/gpu/frame/FrameGpuManager.h"
+#include "render/pipeline/MiniForwardPipeline.h"
+#include "render/pipeline/RenderPipeline.h"
 #include "render/gpu/material/MaterialGpuManager.h"
 #include "render/gpu/mesh/MeshGpuManager.h"
 #include "render/gpu/pipeline/GraphicsPipelineManager.h"
@@ -136,6 +138,13 @@ bool Engine::initialize(const std::filesystem::path& configPath,
         .swapchain = {.width = width, .height = height, .vsync = applicationConfig.vsync},
     });
     renderer_ = std::make_unique<Renderer>(*window_, std::move(context));
+
+    RenderPipelineRegistry pipelineRegistry;
+    pipelineRegistry.registerPipeline("MiniForward", []() {
+        return std::make_unique<MiniForwardPipeline>();
+    });
+    renderer_->setPipeline(pipelineRegistry.create(config_.render.pipeline));
+
     if (!FRAME_GPU_MANAGER.initialize(renderer_->device()) ||
         !MESH_GPU_MANAGER.initialize(renderer_->device()) ||
         !TEXTURE_GPU_MANAGER.initialize(renderer_->device()) ||
