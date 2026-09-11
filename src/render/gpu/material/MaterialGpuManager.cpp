@@ -1,11 +1,13 @@
 #include "render/gpu/material/MaterialGpuManager.h"
 
 #include "core/logging/Log.h"
+#include "render/gpu/common/GpuResourceKey.h"
 #include "render/gpu/material/MaterialGpuFactory.h"
 #include "render/gpu/texture/TextureGpuManager.h"
 #include "render/material/MaterialManager.h"
 #include "render/shader/Shader.h"
 
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -30,13 +32,13 @@ bool MaterialGpuManager::initialize(rhi::IDevice& device,
 }
 
 std::uint64_t MaterialGpuManager::cacheKey(MaterialHandle handle) {
-    return (static_cast<std::uint64_t>(handle.generation) << 32U) | handle.index;
+    return handleKey(handle);
 }
 
 namespace {
 
 [[nodiscard]] bool sameTextureBindings(const std::vector<rhi::TextureBinding>& lhs,
-                                       const std::vector<rhi::TextureBinding>& rhs) {
+                                       std::span<const rhi::TextureBinding> rhs) {
     if (lhs.size() != rhs.size())
         return false;
     for (std::size_t i = 0; i < lhs.size(); ++i) {
@@ -62,39 +64,32 @@ rhi::BindGroupHandle MaterialGpuManager::resolve(MaterialHandle handle) {
             return resource.bindGroup;
         }
 
-        const std::optional<std::vector<rhi::TextureBinding>> textures =
-            collectTextureBindings(*material);
-        if (!textures) {
+        if (!collectTextureBindings(*material)) {
             return {};
         }
 
         // Dirty path: only the uniform payload changed, keep the bind group.
         if (!resource.pendingRelease && resource.bindGroup && resource.uniformBuffer &&
-            sameTextureBindings(resource.textureBindings, *textures) &&
+            sameTextureBindings(resource.textureBindings, textureScratch_) &&
             resource.boundSize >= material->uniformBytes().size()) {
             return factory_->updateUniforms(*material, resource) ? resource.bindGroup
                                                                  : rhi::BindGroupHandle{};
         }
 
         // Full rebuild: textures or buffer geometry changed, or the slot was evicted.
-        return factory_->create({*material, *textures}, resource)
-                   ? resource.bindGroup
-                   : rhi::BindGroupHandle{};
+        return factory_->create({*material, textureScratch_}, resource) ? resource.bindGroup
+                                                                        : rhi::BindGroupHandle{};
     }
 
-    const std::optional<std::vector<rhi::TextureBinding>> textures =
-        collectTextureBindings(*material);
-    if (!textures) {
+    if (!collectTextureBindings(*material)) {
         return {};
     }
-    return factory_->create({*material, *textures}, *slot.resource)
-               ? slot.resource->bindGroup
-               : rhi::BindGroupHandle{};
+    return factory_->create({*material, textureScratch_}, *slot.resource) ? slot.resource->bindGroup
+                                                                          : rhi::BindGroupHandle{};
 }
 
-std::optional<std::vector<rhi::TextureBinding>>
-MaterialGpuManager::collectTextureBindings(const Material& material) {
-    std::vector<rhi::TextureBinding> textures;
+bool MaterialGpuManager::collectTextureBindings(const Material& material) {
+    textureScratch_.clear();
     for (const ShaderPropertyDesc& property : material.shader().properties()) {
         if (property.type != ShaderPropertyType::Texture2D)
             continue;
@@ -105,11 +100,11 @@ MaterialGpuManager::collectTextureBindings(const Material& material) {
         if (!texture) {
             Log::error(
                 "MaterialGpuManager", "Material Texture is unavailable: %s", property.name.c_str());
-            return std::nullopt;
+            return false;
         }
-        textures.push_back(*texture);
+        textureScratch_.push_back(*texture);
     }
-    return textures;
+    return true;
 }
 
 void MaterialGpuManager::beginFrame(std::uint32_t frameIndex) {

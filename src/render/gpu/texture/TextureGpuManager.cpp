@@ -1,6 +1,7 @@
 #include "render/gpu/texture/TextureGpuManager.h"
 
 #include "core/logging/Log.h"
+#include "render/gpu/common/GpuManagerUtils.h"
 #include "render/gpu/texture/SamplerGpuFactory.h"
 #include "render/gpu/texture/TextureGpuFactory.h"
 #include "render/texture/TextureManager.h"
@@ -47,23 +48,13 @@ std::optional<rhi::TextureBinding> TextureGpuManager::resolve(TextureHandle hand
     TextureGpuResource created;
     if (!textureFactory_->create({*texture}, created))
         return std::nullopt;
-    auto replaced =
-        cache_.extractIf([source = TextureGpuCache::sourceKey(handle)](
-                            const TextureGpuCacheKey& candidate, const TextureGpuResource&) {
-            return candidate.source == source;
-        });
-    if (!replaced.empty())
-        device_->waitIdle();
-    for (auto& [unused, resource] : replaced) {
-        (void)unused;
-        textureFactory_->release(resource);
-    }
-    if (auto duplicate = cache_.put(key, std::move(created)))
-        textureFactory_->release(*duplicate);
+    // Drop any upload of an earlier version of this Texture before the new one goes resident.
+    releaseBySource(cache_, *textureFactory_, *device_, TextureGpuCache::sourceKey(handle));
+    auto stored = cache_.store(key, std::move(created));
+    if (stored.replaced)
+        textureFactory_->release(*stored.replaced);
     texture->markClean();
-    const TextureGpuResource* stored = cache_.find(key);
-    return stored ? std::optional{rhi::TextureBinding{stored->view, defaultSampler_}}
-                  : std::nullopt;
+    return rhi::TextureBinding{stored.stored->view, defaultSampler_};
 }
 
 std::optional<rhi::TextureBinding> TextureGpuManager::resolveReference(std::string_view reference) {
@@ -90,26 +81,14 @@ std::optional<rhi::TextureBinding> TextureGpuManager::resolveReference(std::stri
 void TextureGpuManager::invalidate(TextureHandle handle) {
     if (!initialized())
         return;
-    auto removed = cache_.extractIf(
-        [source = TextureGpuCache::sourceKey(handle)](const TextureGpuCacheKey& candidate,
-                                                      const TextureGpuResource&) {
-            return candidate.source == source;
-        });
-    if (!removed.empty())
-        device_->waitIdle();
-    for (auto& [unused, resource] : removed) {
-        (void)unused;
-        textureFactory_->release(resource);
-    }
+    releaseBySource(cache_, *textureFactory_, *device_, TextureGpuCache::sourceKey(handle));
 }
 
 void TextureGpuManager::shutdown() {
     if (!initialized())
         return;
-    for (auto& [unused, resource] : cache_.extractAll()) {
-        (void)unused;
-        textureFactory_->release(resource);
-    }
+    for (auto& entry : cache_.extractAll())
+        textureFactory_->release(entry.second);
     if (samplerFactory_)
         samplerFactory_->release(defaultSampler_);
     samplerFactory_.reset();

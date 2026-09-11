@@ -61,10 +61,10 @@ rhi::ShaderHandle ShaderGpuManager::resolve(CompiledShaderHandle handle) {
     ShaderModuleGpuResource created;
     if (!factory_->create(shader, created))
         return {};
-    if (auto replaced = cache_.put(shader.id, std::move(created)))
-        factory_->release(*replaced);
-    const ShaderModuleGpuResource* stored = cache_.find(shader.id);
-    return stored ? stored->shader : rhi::ShaderHandle{};
+    auto stored = cache_.store(shader.id, std::move(created));
+    if (stored.replaced)
+        factory_->release(*stored.replaced);
+    return stored.stored->shader;
 }
 
 std::vector<CompiledShaderId> ShaderGpuManager::invalidateChanged(std::uint64_t retireSerial) {
@@ -83,10 +83,8 @@ void ShaderGpuManager::invalidate(std::span<const CompiledShaderId> shaders,
         cache_.extractIf([&](CompiledShaderId id, const ShaderModuleGpuResource&) {
             return std::ranges::find(shaders, id) != shaders.end();
         });
-    for (auto& [unused, resource] : modules) {
-        (void)unused;
-        retired_.push_back({std::move(resource), retireSerial});
-    }
+    for (auto& entry : modules)
+        retired_.push_back({std::move(entry.second), retireSerial});
 }
 
 void ShaderGpuManager::collect(std::uint64_t completedSerial) {
@@ -106,10 +104,8 @@ void ShaderGpuManager::shutdown() {
     for (RetiredShader& retired : retired_)
         factory_->release(retired.resource);
     retired_.clear();
-    for (auto& [unused, resource] : cache_.extractAll()) {
-        (void)unused;
-        factory_->release(resource);
-    }
+    for (auto& entry : cache_.extractAll())
+        factory_->release(entry.second);
     factory_.reset();
     compilePipeline_->clear();
     compilePipeline_.reset();

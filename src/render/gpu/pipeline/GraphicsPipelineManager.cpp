@@ -80,7 +80,7 @@ bool GraphicsPipelineManager::initialize(rhi::IDevice& device,
 
 GraphicsPipelineCacheKey GraphicsPipelineManager::makeCacheKey(const ShaderProgram& program,
                                                                const ShaderPass& pass,
-                                                               const VertexLayout& vertexLayout,
+                                                               std::uint64_t vertexLayoutHash,
                                                                rhi::TextureFormat colorFormat,
                                                                rhi::TextureFormat depthFormat) {
     const RenderStateDesc& state = pass.renderState();
@@ -96,49 +96,9 @@ GraphicsPipelineCacheKey GraphicsPipelineManager::makeCacheKey(const ShaderProgr
     hashAppend(key, state.depthTest);
     hashAppend(key, state.blend);
     key = hashString(state.colorMask, key);
-    for (const VertexBinding& binding : vertexLayout.bindings) {
-        hashAppend(key, binding.binding);
-        hashAppend(key, binding.stride);
-        hashAppend(key, binding.inputRate);
-    }
-    for (const VertexAttribute& attribute : vertexLayout.attributes) {
-        hashAppend(key, attribute.location);
-        hashAppend(key, attribute.offset);
-        hashAppend(key, attribute.binding);
-        hashAppend(key, attribute.format);
-        hashAppend(key, attribute.semantic.type);
-        hashAppend(key, attribute.semantic.index);
-    }
-    return key;
-}
-
-std::uint64_t GraphicsPipelineManager::makeFallbackKey(const Shader& shader,
-                                                       const ShaderPass& pass,
-                                                       const ShaderVariantKey& variant,
-                                                       const VertexLayout& vertexLayout,
-                                                       rhi::TextureFormat colorFormat,
-                                                       rhi::TextureFormat depthFormat) {
-    ShaderHash key = hashString(shader.assetPath().string());
-    key = hashString(pass.name(), key);
-    hashAppend(key, pass.type());
-    hashAppend(key, variant.keywordBits);
-    hashAppend(key, variant.meshFeatureBits);
-    hashAppend(key, variant.platformFeatureBits);
-    hashAppend(key, colorFormat);
-    hashAppend(key, depthFormat);
-    for (const VertexBinding& binding : vertexLayout.bindings) {
-        hashAppend(key, binding.binding);
-        hashAppend(key, binding.stride);
-        hashAppend(key, binding.inputRate);
-    }
-    for (const VertexAttribute& attribute : vertexLayout.attributes) {
-        hashAppend(key, attribute.location);
-        hashAppend(key, attribute.offset);
-        hashAppend(key, attribute.binding);
-        hashAppend(key, attribute.format);
-        hashAppend(key, attribute.semantic.type);
-        hashAppend(key, attribute.semantic.index);
-    }
+    // The Mesh caches its layout hash, so the vertex layout costs one mix instead of a
+    // full walk over every binding and attribute on each resolve.
+    hashAppend(key, vertexLayoutHash);
     return key;
 }
 
@@ -200,13 +160,11 @@ GraphicsPipelineManager::makeDescription(const ShaderPass& pass,
 rhi::GraphicsPipelineHandle GraphicsPipelineManager::resolve(const Shader& shader,
                                                              const ShaderPass& pass,
                                                              const ShaderVariantKey& variant,
-                                                             const VertexLayout& vertexLayout,
+                                                             const Mesh& mesh,
                                                              rhi::TextureFormat colorFormat,
                                                              rhi::TextureFormat depthFormat) {
     if (!initialized())
         return {};
-    const std::uint64_t fallbackKey =
-        makeFallbackKey(shader, pass, variant, vertexLayout, colorFormat, depthFormat);
     const ShaderProgramHandle programHandle =
         SHADER_GPU_MANAGER.getOrCreateProgram(shader, pass, variant);
     if (!programHandle) {
@@ -218,17 +176,15 @@ rhi::GraphicsPipelineHandle GraphicsPipelineManager::resolve(const Shader& shade
 
     const ShaderProgram& program = SHADER_GPU_MANAGER.resolveProgram(programHandle);
     const GraphicsPipelineCacheKey key =
-        makeCacheKey(program, pass, vertexLayout, colorFormat, depthFormat);
-    if (const GraphicsPipelineGpuResource* cached = cache_.find(key)) {
-        fallbackPipelines_.insert_or_assign(fallbackKey, key);
+        makeCacheKey(program, pass, mesh.vertexLayoutHash(), colorFormat, depthFormat);
+    if (const GraphicsPipelineGpuResource* cached = cache_.find(key))
         return cached->pipeline;
-    }
 
     const CompiledShader& vertex = SHADER_GPU_MANAGER.resolveCompiled(program.vertex);
     const CompiledShader& fragment = SHADER_GPU_MANAGER.resolveCompiled(program.fragment);
     GraphicsPipelineGpuResource created;
     if (!factory_->create(makeDescription(pass,
-                                          vertexLayout,
+                                          mesh.desc().vertexLayout,
                                           colorFormat,
                                           depthFormat,
                                           SHADER_GPU_MANAGER.resolve(program.vertex),
@@ -241,11 +197,10 @@ rhi::GraphicsPipelineHandle GraphicsPipelineManager::resolve(const Shader& shade
     created.program = program.id;
     created.vertex = program.vertexId;
     created.fragment = program.fragmentId;
-    if (auto replaced = cache_.put(key, std::move(created)))
-        factory_->release(*replaced);
-    fallbackPipelines_.insert_or_assign(fallbackKey, key);
-    const GraphicsPipelineGpuResource* stored = cache_.find(key);
-    return stored ? stored->pipeline : rhi::GraphicsPipelineHandle{};
+    auto stored = cache_.store(key, std::move(created));
+    if (stored.replaced)
+        factory_->release(*stored.replaced);
+    return stored.stored->pipeline;
 }
 
 void GraphicsPipelineManager::refreshShaders(std::uint64_t frameSerial,
@@ -268,10 +223,8 @@ void GraphicsPipelineManager::invalidate(std::span<const CompiledShaderId> shade
             return std::ranges::find(shaders, resource.vertex) != shaders.end() ||
                    std::ranges::find(shaders, resource.fragment) != shaders.end();
         });
-    for (auto& [key, resource] : pipelines) {
-        std::erase_if(fallbackPipelines_, [key](const auto& item) { return item.second == key; });
-        retired_.push_back({std::move(resource), retireSerial});
-    }
+    for (auto& entry : pipelines)
+        retired_.push_back({std::move(entry.second), retireSerial});
 }
 
 void GraphicsPipelineManager::collect(std::uint64_t completedSerial) {
@@ -289,11 +242,8 @@ void GraphicsPipelineManager::collect(std::uint64_t completedSerial) {
 void GraphicsPipelineManager::clear() {
     if (!initialized())
         return;
-    fallbackPipelines_.clear();
-    for (auto& [unused, resource] : cache_.extractAll()) {
-        (void)unused;
-        factory_->release(resource);
-    }
+    for (auto& entry : cache_.extractAll())
+        factory_->release(entry.second);
     for (RetiredPipeline& retired : retired_)
         factory_->release(retired.resource);
     retired_.clear();

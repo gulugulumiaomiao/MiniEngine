@@ -10,7 +10,6 @@
 #include <cstdint>
 #include <memory>
 #include <span>
-#include <unordered_map>
 #include <vector>
 
 namespace engine {
@@ -31,7 +30,7 @@ public:
     [[nodiscard]] rhi::GraphicsPipelineHandle resolve(const Shader& shader,
                                                       const ShaderPass& pass,
                                                       const ShaderVariantKey& variant,
-                                                      const VertexLayout& vertexLayout,
+                                                      const Mesh& mesh,
                                                       rhi::TextureFormat colorFormat,
                                                       rhi::TextureFormat depthFormat);
     void refreshShaders(std::uint64_t frameSerial, std::uint64_t retireSerial);
@@ -51,15 +50,9 @@ private:
 
     [[nodiscard]] static GraphicsPipelineCacheKey makeCacheKey(const ShaderProgram& program,
                                                                const ShaderPass& pass,
-                                                               const VertexLayout& vertexLayout,
+                                                               std::uint64_t vertexLayoutHash,
                                                                rhi::TextureFormat colorFormat,
                                                                rhi::TextureFormat depthFormat);
-    [[nodiscard]] static std::uint64_t makeFallbackKey(const Shader& shader,
-                                                       const ShaderPass& pass,
-                                                       const ShaderVariantKey& variant,
-                                                       const VertexLayout& vertexLayout,
-                                                       rhi::TextureFormat colorFormat,
-                                                       rhi::TextureFormat depthFormat);
     [[nodiscard]] rhi::GraphicsPipelineDesc makeDescription(const ShaderPass& pass,
                                                             const VertexLayout& vertexLayout,
                                                             rhi::TextureFormat colorFormat,
@@ -74,7 +67,6 @@ private:
     rhi::BindGroupLayoutHandle materialLayout_;
     GraphicsPipelineCache cache_;
     std::unique_ptr<GraphicsPipelineGpuFactory> factory_;
-    std::unordered_map<std::uint64_t, GraphicsPipelineCacheKey> fallbackPipelines_;
     std::vector<RetiredPipeline> retired_;
     std::uint64_t lastShaderPollSerial_{~std::uint64_t{}};
 };

@@ -1,6 +1,7 @@
 #include "render/gpu/mesh/MeshGpuManager.h"
 
 #include "core/logging/Log.h"
+#include "render/gpu/common/GpuManagerUtils.h"
 #include "render/gpu/mesh/MeshGpuFactory.h"
 #include "render/mesh/MeshManager.h"
 #include "rhi/api/Device.h"
@@ -35,46 +36,27 @@ MeshDrawInfo MeshGpuManager::resolve(MeshHandle handle) {
     MeshGpuResource created;
     if (!factory_->create({*mesh}, created))
         return {};
-    auto replaced = cache_.extractIf([source = MeshGpuCache::sourceKey(handle)](
-                                         const MeshGpuCacheKey& candidate, const MeshGpuResource&) {
-        return candidate.source == source;
-    });
-    if (!replaced.empty())
-        device_->waitIdle();
-    for (auto& [unused, resource] : replaced) {
-        (void)unused;
-        factory_->release(resource);
-    }
-    if (auto duplicate = cache_.put(key, std::move(created)))
-        factory_->release(*duplicate);
+    // Drop any upload of an earlier version of this Mesh before the new one goes resident.
+    releaseBySource(cache_, *factory_, *device_, MeshGpuCache::sourceKey(handle));
+    auto stored = cache_.store(key, std::move(created));
+    if (stored.replaced)
+        factory_->release(*stored.replaced);
     mesh->markClean();
-    const MeshGpuResource* stored = cache_.find(key);
-    return stored ? stored->drawInfo : MeshDrawInfo{};
+    return stored.stored->drawInfo;
 }
 
 void MeshGpuManager::invalidate(MeshHandle handle) {
     if (!initialized())
         return;
-    auto removed = cache_.extractIf([source = MeshGpuCache::sourceKey(handle)](
-                                        const MeshGpuCacheKey& candidate, const MeshGpuResource&) {
-        return candidate.source == source;
-    });
-    if (!removed.empty())
-        device_->waitIdle();
-    for (auto& [unused, resource] : removed) {
-        (void)unused;
-        factory_->release(resource);
-    }
+    releaseBySource(cache_, *factory_, *device_, MeshGpuCache::sourceKey(handle));
 }
 
 void MeshGpuManager::shutdown() {
     MESH_MANAGER.setDestroyObserver({});
     if (!initialized())
         return;
-    for (auto& [unused, resource] : cache_.extractAll()) {
-        (void)unused;
-        factory_->release(resource);
-    }
+    for (auto& entry : cache_.extractAll())
+        factory_->release(entry.second);
     factory_.reset();
     device_ = nullptr;
 }

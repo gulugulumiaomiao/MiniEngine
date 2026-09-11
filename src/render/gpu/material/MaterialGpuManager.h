@@ -7,7 +7,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <vector>
 
 namespace engine {
@@ -39,11 +38,15 @@ private:
     MaterialGpuManager();
 
     [[nodiscard]] static std::uint64_t cacheKey(MaterialHandle handle);
-    [[nodiscard]] static std::optional<std::vector<rhi::TextureBinding>>
-    collectTextureBindings(const Material& material);
+    // Resolves the material's texture properties into textureScratch_ and reports whether
+    // every one of them is available.
+    [[nodiscard]] bool collectTextureBindings(const Material& material);
 
     MaterialBindingCache cache_;
     std::unique_ptr<MaterialGpuFactory> factory_;
+    // Reused across resolve() calls so rebuilding a material's texture signature does not
+    // allocate every time.
+    std::vector<rhi::TextureBinding> textureScratch_;
 };
 
 } // namespace engine

@@ -283,6 +283,7 @@ Mesh::Mesh(MeshDesc desc, MeshData data, std::optional<MeshBuildRecipe> buildRec
         desc_ = {};
         data_ = {};
     }
+    cacheVertexLayoutHash();
 }
 
 bool validateMesh(const MeshDesc& desc, const MeshData& data) {
@@ -365,6 +366,7 @@ Mesh MeshAsset::instantiate() const {
     result.desc_ = desc;
     result.data_ = meshData;
     result.buildRecipe_ = buildRecipe;
+    result.cacheVertexLayoutHash();
     return result;
 }
 

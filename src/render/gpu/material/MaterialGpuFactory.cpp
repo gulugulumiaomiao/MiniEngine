@@ -31,13 +31,14 @@ bool MaterialGpuFactory::create(const MaterialGpuCreateInfo& request,
     if (!request.material.uniformBytes().empty())
         device_.uploadBuffer(destination.uniformBuffer, request.material.uniformBytes());
 
-    std::vector<rhi::BindGroupEntry> bindings{{
+    std::vector<rhi::BindGroupEntry> bindings;
+    bindings.reserve(request.textures.size() + 1);
+    bindings.push_back({
         .binding = 0,
         .type = rhi::BindingType::UniformBuffer,
         .buffer = destination.uniformBuffer,
         .size = byteSize,
-    }};
-    bindings.reserve(request.textures.size() + 1);
+    });
     std::uint32_t binding = 1;
     for (const rhi::TextureBinding& texture : request.textures) {
         bindings.push_back({

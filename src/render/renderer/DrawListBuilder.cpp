@@ -64,12 +64,8 @@ DrawListBuilder::ResolvedMaterialPass DrawListBuilder::resolveMaterialPass(
     return {
         materialHandle,
         shaderPass,
-        GRAPHICS_PIPELINE_MANAGER.resolve(material->shader(),
-                                          *shaderPass,
-                                          variant,
-                                          meshInstance.desc().vertexLayout,
-                                          colorFormat,
-                                          depthFormat),
+        GRAPHICS_PIPELINE_MANAGER.resolve(
+            material->shader(), *shaderPass, variant, meshInstance, colorFormat, depthFormat),
     };
 }
 
@@ -115,12 +111,7 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
         }
         const float distance = radius * 2.0F + 1.0F;
         drawList.scene.lightSpaceMatrix =
-            math::orthographic(-radius,
-                               radius,
-                               -radius,
-                               radius,
-                               0.1F,
-                               distance + radius * 2.0F) *
+            math::orthographic(-radius, radius, -radius, radius, 0.1F, distance + radius * 2.0F) *
             math::lookAt(center - directional->direction * distance, center, up);
         drawList.scene.shadowParams = math::Vec4{0.8F, 0.0025F, 0.05F, 1.0F / 1024.0F};
     }

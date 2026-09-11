@@ -238,6 +238,10 @@ public:
     [[nodiscard]] const MeshData& data() const { return data_; }
     [[nodiscard]] const std::optional<MeshBuildRecipe>& buildRecipe() const { return buildRecipe_; }
     [[nodiscard]] std::uint64_t version() const { return version_; }
+    // Hash of desc().vertexLayout, computed once because the layout is fixed for the
+    // lifetime of the Mesh; data updates never reshape it. Pipeline cache keys use this
+    // instead of walking the bindings and attributes on every draw item.
+    [[nodiscard]] std::uint64_t vertexLayoutHash() const { return vertexLayoutHash_; }
     [[nodiscard]] bool dirty() const { return dirty_; }
     void markClean() { dirty_ = false; }
 
@@ -251,11 +255,13 @@ private:
     friend class MeshManager;
 
     void markChanged();
+    void cacheVertexLayoutHash() { vertexLayoutHash_ = desc_.vertexLayout.hash(); }
 
     VirtualPath assetPath_;
     MeshDesc desc_;
     MeshData data_;
     std::optional<MeshBuildRecipe> buildRecipe_;
+    std::uint64_t vertexLayoutHash_{};
     std::uint64_t version_{1};
     bool dirty_{true};
 };
