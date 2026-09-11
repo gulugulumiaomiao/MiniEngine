@@ -80,13 +80,15 @@ Pipeline key 包含：
 
 固定的 descriptor 约定为：
 
-- `set = 0, binding = 0`：对象 transform storage buffer；
+- `set = 0, binding = 0`：场景 uniform buffer；
+- `set = 0, binding = 1`：对象 transform storage buffer；
+- `set = 0, binding = 2`：每帧实例表 storage buffer（合批后的对象行索引，见 `docs/DrawBatching.md`）；
 - `set = 1, binding = 0`：材质 uniform buffer；
 - `set = 1, binding = 1..16`：按 Shader properties 声明顺序排列的 Texture2D。
 
-每个 in-flight frame 有独立的材质 uniform buffer 和 BindGroup。`MaterialBindingCache` 只负责同帧查找和槽位复用，`MaterialGpuFactory` 通过
+每个 in-flight frame 有独立的材质 uniform buffer 和 BindGroup。`MaterialBindingCache` 让槽位跨帧常驻：`MaterialGpuFactory` 通过
 `rhi::IDevice` 创建 Buffer 和 BindGroup，不接触 Vulkan descriptor。`Material::version()`
-负责标识 CPU 数据版本；同一帧内相同 `MaterialHandle` 只上传一次。纹理 resolver 返回
+负责标识 CPU 数据版本；resolve 按三级路径刷新（版本一致直接命中、仅 uniform 变化脏更新、纹理或缓冲变化全量重建），同一帧内相同 `MaterialHandle` 只处理一次。纹理 resolver 返回
 RHI TextureView/Sampler handle，未安装 resolver 或纹理未就绪时只输出 warn。
 
 ### 9. Keyword、Variant 与多 Pass
@@ -118,7 +120,7 @@ ShadowCaster → DepthOnly → Forward
 | ShaderProgramCache | vertex CompileID + fragment CompileID + Variant | ShaderProgram |
 | ShaderModuleCache | CompileID | RHI Shader handle |
 | GraphicsPipelineCache | ProgramID + LayoutID + VertexLayout + RenderState + RT format | RHI Pipeline handle |
-| MaterialBindingCache | frame + MaterialHandle | RHI uniform buffer + BindGroup slot |
+| MaterialBindingCache | frame + MaterialHandle | 常驻的 RHI uniform buffer + BindGroup slot（LRU 驱逐） |
 
 ## 生命周期和修改规则
 
@@ -138,7 +140,7 @@ ShadowCaster → DepthOnly → Forward
 - `src/render/gpu/shader/ShaderModuleCache.h/.cpp`：CompileID 到 RHI Shader handle 的纯缓存。
 - `src/render/gpu/pipeline/GraphicsPipelineCache.h/.cpp`：Pipeline key 到 RHI Pipeline handle 的纯缓存。
 - `src/rhi/vulkan/VulkanGraphicsPipeline.h/.cpp`：将 RHI Pipeline 描述转换为 Vulkan graphics pipeline。
-- `src/render/gpu/material/MaterialBindingCache.h/.cpp`：每帧材质 GPU 数据槽位缓存。
+- `src/render/gpu/material/MaterialBindingCache.h/.cpp`：跨帧常驻的材质 GPU 资源槽位缓存。
 - `src/render/gpu/<domain>/*GpuFactory.h/.cpp`：RHI 资源创建、必要的数据上传和释放实现。
 - `src/render/gpu/<domain>/*GpuManager.h/.cpp`：各类 GPU 缓存命中、资源创建和退役流程编排。
 - `src/render/renderer/Renderer.cpp`：Variant 选择、多 Pass 场景提交和 DrawList 录制；缓存组装与热重载由对应 GPU Manager 负责。

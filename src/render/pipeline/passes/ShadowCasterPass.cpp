@@ -59,12 +59,13 @@ void ShadowCasterPass::execute(RenderContext& context,
     graph.addGraphicsPass("ShadowCaster",
                           std::move(rendering),
                           std::move(resources),
-                          [sceneBindGroup, items = std::move(items), size = shadowMapSize_](
+                          [sceneBindGroup, items = std::move(items), size = shadowMapSize_,
+                           frameIndex = context.frameIndex()](
                               rhi::IGraphicsCommandEncoder& encoder) mutable {
                               encoder.setViewport(
                                   {0.0F, 0.0F, static_cast<float>(size), static_cast<float>(size), 0.0F, 1.0F});
                               encoder.setScissor({0, 0, size, size});
-                              drawFilteredItems(items, sceneBindGroup, encoder);
+                              drawFilteredItems(frameIndex, items, sceneBindGroup, encoder);
                           });
 }
 

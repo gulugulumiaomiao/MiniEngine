@@ -44,6 +44,8 @@ struct DrawItem {
     struct VertexBuffer {
         std::uint32_t binding{};
         rhi::BufferHandle buffer;
+
+        [[nodiscard]] bool operator==(const VertexBuffer&) const = default;
     };
     std::vector<VertexBuffer> vertexBuffers;
     rhi::BufferHandle indexBuffer;

@@ -61,7 +61,7 @@ void DepthOnlyPass::execute(RenderContext& context,
                                                    1.0F});
                               encoder.setScissor(
                                   {0, 0, context.swapchain().width(), context.swapchain().height()});
-                              drawFilteredItems(items, sceneBindGroup, encoder);
+                              drawFilteredItems(context.frameIndex(), items, sceneBindGroup, encoder);
                           });
 }
 

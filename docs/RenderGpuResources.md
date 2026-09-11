@@ -20,10 +20,10 @@ Renderer
 
 - `MeshGpuManager`：查询 CPU Mesh、处理版本缓存、创建和释放顶点/索引 Buffer，并私有持有 `MeshGpuCache`。
 - `TextureGpuManager`：查询或加载 CPU Texture、管理纹理缓存和共享默认 Sampler，并私有持有 `TextureGpuCache`。
-- `MaterialGpuManager`：按 in-flight frame 复用 Material binding，依赖 TextureGpuManager 解析纹理，并私有持有 `MaterialBindingCache`。
+- `MaterialGpuManager`：材质 GPU 资源跨帧常驻，按版本号三级路径（命中/脏更新/全量重建）刷新，依赖 TextureGpuManager 解析纹理，并私有持有 `MaterialBindingCache`。
 - `ShaderGpuManager`：持有 ShaderCompilePipeline，管理 SPIR-V 编译、ShaderModule 缓存和延迟退役，并私有持有 `ShaderModuleCache`。
 - `GraphicsPipelineManager`：管理 Pipeline 描述生成、缓存、编译失败回退和延迟退役，并私有持有 `GraphicsPipelineCache`。
-- `FrameGpuManager`：管理场景/对象 Buffer、BindGroupLayout 和每帧 BindGroup，并负责帧数据上传。
+- `FrameGpuManager`：管理场景/对象 Buffer、每帧实例表、BindGroupLayout 和每帧 BindGroup，并负责帧数据上传。
 
 这些 Manager 都是单例。Renderer 不拥有它们，也不提供 CPU/GPU 资产的创建、加载、修改或销毁 API。Cache 仅属于对应 Manager，不再通过全局 Registry 暴露。
 
@@ -31,14 +31,14 @@ Renderer
 
 - `MeshGpuFactory` 创建并上传顶点、索引 Buffer；`MeshGpuCache` 使用 MeshHandle generation 和 Mesh version 组成缓存键。
 - `TextureGpuFactory` 创建 Texture、上传 mip 并创建 TextureView；`TextureGpuCache` 使用 TextureHandle generation 和 Texture version 组成缓存键。
-- `MaterialGpuFactory` 更新 uniform buffer 并创建 BindGroup；`MaterialBindingCache` 按 in-flight frame 复用资源槽位。
+- `MaterialGpuFactory` 更新 uniform buffer 并创建 BindGroup，另提供 uniform-only 脏更新；`MaterialBindingCache` 跨帧常驻槽位并在容量耗尽时 LRU 驱逐。
 - `ShaderModuleGpuFactory` 根据 `CompiledShader` 创建 RHI ShaderModule；`ShaderModuleCache` 按 `CompiledShaderId` 查询。
 - `GraphicsPipelineGpuFactory` 根据完整 RHI 描述创建 Pipeline；`GraphicsPipelineCache` 按 Program、布局、RenderState、VertexLayout 和目标格式生成的键查询。
 - `SamplerGpuFactory` 创建 TextureGpuManager 持有的共享默认 Sampler。
 
 ## 初始化和关闭
 
-Engine 在 Renderer 建立 RHI Device 与 BindGroupLayout 后依次初始化各 GPU Manager。每个 Manager 自行初始化其 Cache；其中 MaterialGpuManager 接收 in-flight frame 数量，用它初始化按帧的 binding cache。
+Engine 在 Renderer 建立 RHI Device 与 BindGroupLayout 后依次初始化各 GPU Manager。每个 Manager 自行初始化其 Cache；其中 MaterialGpuManager 接收 in-flight frame 数量和常驻容量上限，用它初始化按帧的常驻 binding cache。
 
 关闭时 Engine 先等待 Device 空闲，然后按以下顺序关闭：
 

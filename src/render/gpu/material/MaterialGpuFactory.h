@@ -24,6 +24,10 @@ public:
                               MaterialGpuResource& destination) override;
     void release(MaterialGpuResource& resource) override;
 
+    // Uniform-only update for materials whose bind group is already valid.
+    // Keeps the existing bind group and only refreshes the uniform payload.
+    [[nodiscard]] bool updateUniforms(const Material& material, MaterialGpuResource& resource);
+
 private:
     rhi::BindGroupLayoutHandle layout_;
 };

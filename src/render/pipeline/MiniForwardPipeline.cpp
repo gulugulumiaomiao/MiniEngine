@@ -29,6 +29,7 @@ void MiniForwardPipeline::render(RenderContext& context) {
     std::erase_if(drawList.items,
                   [](const DrawItem& item) { return !item.pipeline || !item.materialBindGroup; });
 
+    FRAME_GPU_MANAGER.beginFrame(context.frameIndex());
     const rhi::BindGroupHandle sceneBindGroup =
         FRAME_GPU_MANAGER.upload(context.frameIndex(), drawList);
 

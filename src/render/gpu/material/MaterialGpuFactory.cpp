@@ -48,7 +48,26 @@ bool MaterialGpuFactory::create(const MaterialGpuCreateInfo& request,
         });
     }
     destination.bindGroup = device_.createBindGroup({layout_, bindings, "Material bind group"});
-    return static_cast<bool>(destination.bindGroup);
+    if (!destination.bindGroup)
+        return false;
+
+    // Persistent-residency bookkeeping for the freshly built resource.
+    destination.uniformVersion = request.material.version();
+    destination.boundSize = byteSize;
+    destination.textureBindings.assign(request.textures.begin(), request.textures.end());
+    destination.pendingRelease = false;
+    return true;
+}
+
+bool MaterialGpuFactory::updateUniforms(const Material& material, MaterialGpuResource& resource) {
+    if (!resource.uniformBuffer)
+        return false;
+    if (material.version() == resource.uniformVersion)
+        return true;
+    if (!material.uniformBytes().empty())
+        device_.uploadBuffer(resource.uniformBuffer, material.uniformBytes());
+    resource.uniformVersion = material.version();
+    return true;
 }
 
 void MaterialGpuFactory::release(MaterialGpuResource& resource) {

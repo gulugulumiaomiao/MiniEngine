@@ -7,6 +7,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
+#include <vector>
 
 namespace engine {
 
@@ -18,6 +20,10 @@ class IDevice;
 
 class MaterialGpuManager final : public Singleton<MaterialGpuManager> {
 public:
+    // Upper bound on simultaneously resident materials. Slots beyond this count
+    // are recycled least-recently-used first.
+    static constexpr std::uint32_t kMaxResidentMaterials = 512;
+
     ~MaterialGpuManager();
 
     [[nodiscard]] bool initialize(rhi::IDevice& device,
@@ -33,6 +39,8 @@ private:
     MaterialGpuManager();
 
     [[nodiscard]] static std::uint64_t cacheKey(MaterialHandle handle);
+    [[nodiscard]] static std::optional<std::vector<rhi::TextureBinding>>
+    collectTextureBindings(const Material& material);
 
     MaterialBindingCache cache_;
     std::unique_ptr<MaterialGpuFactory> factory_;
