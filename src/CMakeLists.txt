@@ -38,8 +38,11 @@ target_compile_definitions(MiniEngine PRIVATE
     WIN32_LEAN_AND_MEAN
     NOMINMAX
     MINI_GLSLC_EXECUTABLE="${GLSLC_EXECUTABLE}"
-    $<$<CONFIG:Debug>:MINI_DEBUG=1>
-    $<$<NOT:$<CONFIG:Debug>>:MINI_RELEASE=1>
+    # Development behavior (validation layers, hot reload, debug labels) is
+    # compiled into Debug and Release; Release only changes code optimization.
+    # Publish is the shipping configuration with packaged assets and shaders.
+    $<$<CONFIG:Debug,Release>:MINI_DEBUG=1>
+    $<$<CONFIG:Publish>:MINI_RELEASE=1>
 )
 target_link_libraries(MiniEngine PUBLIC Vulkan::Vulkan)
 target_link_libraries(MiniEngine PRIVATE user32)

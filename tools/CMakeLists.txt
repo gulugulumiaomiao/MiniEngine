@@ -38,6 +38,7 @@ add_custom_target(MiniShaderPackagedShaders
         "${PROJECT_SOURCE_DIR}/assets/shaders/blinn_phong.Forward.vert"
         "${PROJECT_SOURCE_DIR}/assets/shaders/blinn_phong.Forward.frag"
         "${PROJECT_SOURCE_DIR}/assets/shaders/include/scene.glsl"
+        "${PROJECT_SOURCE_DIR}/assets/shaders/include/objects.glsl"
     COMMENT "Explicitly compiling packaged shaders through ShaderCompilePipeline"
     VERBATIM
 )

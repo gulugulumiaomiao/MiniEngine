@@ -84,6 +84,46 @@
       "dependsOn": "CMake: Configure Release",
       "dependsOrder": "sequence",
       "problemMatcher": "$gcc"
+    },
+    {
+      "label": "CMake: Configure Publish",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/tools/dev/Invoke-CMake.ps1",
+        "--preset",
+        "clang-publish"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "CMake: Build Publish",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/tools/dev/Invoke-CMake.ps1",
+        "--build",
+        "--preset",
+        "clang-publish",
+        "--parallel"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "dependsOn": "CMake: Configure Publish",
+      "dependsOrder": "sequence",
+      "problemMatcher": "$gcc"
     }
   ]
 }

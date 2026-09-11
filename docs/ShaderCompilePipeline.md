@@ -84,7 +84,7 @@ include -----------------------------> preprocessed node
 需要生成仓库内置 Shader 的发布 SPV 时，显式执行：
 
 ```powershell
-cmake --build build/clang-release --target MiniShaderPackagedShaders
+cmake --build build/clang-publish --target MiniShaderPackagedShaders
 ```
 
 ### PackagedRuntime

@@ -27,7 +27,7 @@ bool ShaderGpuManager::initialize(rhi::IDevice& device) {
 #endif
     config.preprocessorConfig.includeSearchPaths = {VirtualPath{"asset://shaders/include"}};
     config.compilerOptions.compilerVersion = MINI_GLSLC_EXECUTABLE;
-#if defined(MINI_DEBUG) || !defined(NDEBUG)
+#if !defined(NDEBUG)
     config.compilerOptions.optimization = ShaderOptimization::Debug;
 #else
     config.compilerOptions.optimization = ShaderOptimization::Release;

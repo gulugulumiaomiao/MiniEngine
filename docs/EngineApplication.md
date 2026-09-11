@@ -33,7 +33,7 @@
 
 `working_directory` 相对 `engine.json` 解析，并被设置为进程工作目录；所有相对 mount 路径再以该目录为基准解析。当前支持的 mount 类型是 `directory`，scheme 必须唯一；`asset`、`library`、`shader-cache` 和 `shader-bin` 是运行时必需项。
 
-Debug 和 Release 可执行文件分别位于 `build/clang-debug` 与 `build/clang-release`，所以 `working_directory` 使用 `../..` 指向仓库根目录。`assets`、`library` 和 `generated-shaders` 均位于该根目录下，构建目录不保存这些资源副本。
+Debug、Release 和 Publish 可执行文件分别位于 `build/clang-debug`、`build/clang-release` 与 `build/clang-publish`，所以 `working_directory` 使用 `../..` 指向仓库根目录。`assets`、`library` 和 `generated-shaders` 均位于该根目录下，构建目录不保存这些资源副本。
 
 `shader-cache://` 保存开发运行时可重新生成的预处理源码和 SPIR-V；`shader-bin://` 对应打包产物，运行时只读。`shader-generated://` 仅作为 `FileDependencyGraph` 的逻辑节点，因此不需要 mount。
 

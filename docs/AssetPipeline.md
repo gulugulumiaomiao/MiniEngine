@@ -81,14 +81,24 @@ ctest --test-dir build/clang-debug --output-on-failure
 
 Debug 运行时允许在 Artifact 缺失时导入，并持续监听资产变化。
 
-Release 构建：
+Release 构建（优化后的 Debug，行为不变）：
 
 ```powershell
 cmake --preset clang-release
 cmake --build --preset clang-release
 ```
 
-构建过程只自动运行 `MiniAssetCooker <asset-root> <library-root>`。CMake 构建引擎不会编译 Shader；发布前需要由独立资产构建步骤调用 `MiniShaderCompiler` 生成打包 SPV。Release 引擎只读取生成的 AssetDatabase、Artifact 和 SPV，不启动 FileWatcher，不调用 Importer，也不会从源 JSON 直接实例化资产。
+Release 与 Debug 共享同一套开发行为：Artifact 缺失时导入，持续监听资产变化，启用 Vulkan 验证层。
+
+Publish 构建（发布版）：
+
+```powershell
+cmake --preset clang-publish
+cmake --build --preset clang-publish
+cmake --build --preset clang-publish --target MiniShaderPackagedShaders
+```
+
+构建过程只自动运行 `MiniAssetCooker <asset-root> <library-root>`。CMake 构建引擎不会编译 Shader；发布前需要由独立资产构建步骤调用 `MiniShaderCompiler` 生成打包 SPV。Publish 引擎只读取生成的 AssetDatabase、Artifact 和 SPV，不启动 FileWatcher，不调用 Importer，也不会从源 JSON 直接实例化资产，也不启用 Vulkan 验证层。Publish 构建不生成测试目标（`BUILD_TESTING=OFF`）。
 
 ## 生命周期
 

@@ -37,7 +37,7 @@ powershell -ExecutionPolicy Bypass -File tools/dev/Invoke-CMake.ps1 --build --pr
 ./build/clang-debug/MiniVulkanEngine.exe
 ```
 
-Release 将 `clang-debug` 改为 `clang-release`。
+Release 将 `clang-debug` 改为 `clang-release`：行为与 Debug 完全一致（含验证层和热重载），仅开启编译优化。发布版使用 `clang-publish`，它以 Release 级优化编译并启用发布行为：只读取打包后的 AssetDatabase、Artifact 和预编译 SPV，不启动验证层、FileWatcher 和运行时 Shader 编译。
 
 ## 仓库内容约定
 

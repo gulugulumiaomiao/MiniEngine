@@ -10,12 +10,17 @@
 
 namespace engine::build {
 
-#if defined(MINI_DEBUG)
-inline constexpr std::string_view kConfiguration = "Debug";
-inline constexpr std::string_view kWindowTitle = "Mini Vulkan Engine [Debug]";
-#else
+// MINI_DEBUG covers the Debug and Release configurations; Publish defines
+// MINI_RELEASE instead. NDEBUG separates the optimized build from Debug.
+#if defined(MINI_RELEASE)
+inline constexpr std::string_view kConfiguration = "Publish";
+inline constexpr std::string_view kWindowTitle = "Mini Vulkan Engine [Publish]";
+#elif defined(NDEBUG)
 inline constexpr std::string_view kConfiguration = "Release";
 inline constexpr std::string_view kWindowTitle = "Mini Vulkan Engine [Release]";
+#else
+inline constexpr std::string_view kConfiguration = "Debug";
+inline constexpr std::string_view kWindowTitle = "Mini Vulkan Engine [Debug]";
 #endif
 
 } // namespace engine::build

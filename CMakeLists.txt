@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.24)
 project(MiniVulkanEngine VERSION 0.1.0 LANGUAGES CXX)
 
+# Publish is the shipping configuration: Release-level code generation plus the
+# engine's publish behavior (MINI_RELEASE). CMake only predefines flags for its
+# known configurations, so alias the custom one to the Release profile.
+set(CMAKE_CXX_FLAGS_PUBLISH "${CMAKE_CXX_FLAGS_RELEASE}" CACHE STRING
+    "Compiler flags used for Publish builds." FORCE)
+
 include(CTest)
 
 set(CMAKE_CXX_STANDARD 20)

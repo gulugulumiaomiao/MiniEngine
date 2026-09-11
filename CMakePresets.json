@@ -25,6 +25,16 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "clang-publish",
+      "displayName": "Clang Publish",
+      "inherits": "clang-debug",
+      "binaryDir": "${sourceDir}/build/clang-publish",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Publish",
+        "BUILD_TESTING": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -35,6 +45,10 @@
     {
       "name": "clang-release",
       "configurePreset": "clang-release"
+    },
+    {
+      "name": "clang-publish",
+      "configurePreset": "clang-publish"
     }
   ]
 }
