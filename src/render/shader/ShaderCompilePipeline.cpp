@@ -83,15 +83,19 @@ findDescriptor(const SpirvReflection& reflection, std::uint32_t set, std::uint32
     return found == reflection.descriptors.end() ? nullptr : &*found;
 }
 
-bool validateMaterialBlock(std::span<const ShaderPropertyDesc> properties,
+// Validates the Material uniform block against the shader's declared properties. A stage
+// that never reads material data legitimately has no block: the generator always declares
+// it, but SPIR-V optimization strips unused descriptors, so absence is not an error. Only a
+// wrong descriptor type or a member at an unexpected offset would corrupt the upload.
+void validateMaterialBlock(std::span<const ShaderPropertyDesc> properties,
                            const SpirvReflection& reflection,
                            const VirtualPath& path) {
     const UniformBlockLayout layout = buildUniformBlockLayout(properties);
     if (layout.members.empty())
-        return true;
+        return;
     const ShaderDescriptorBinding* block = findDescriptor(reflection, 1, 0);
     if (!block)
-        return false;
+        return;
     if (block->type != ShaderDescriptorType::UniformBuffer)
         reflectionFail("%s set 1 binding 0 is not a uniform block", path.string().c_str());
     for (const UniformMemberLayout& expected : layout.members) {
@@ -105,7 +109,6 @@ bool validateMaterialBlock(std::span<const ShaderPropertyDesc> properties,
                            expected.name.c_str());
         }
     }
-    return true;
 }
 
 void validateTextureBindings(std::span<const ShaderPropertyDesc> properties,
@@ -118,8 +121,12 @@ void validateTextureBindings(std::span<const ShaderPropertyDesc> properties,
         const ShaderDescriptorBinding* descriptor = findDescriptor(fragment, 1, binding);
         if (!descriptor)
             descriptor = findDescriptor(vertex, 1, binding);
-        if (!descriptor || descriptor->type != ShaderDescriptorType::CombinedImageSampler) {
-            reflectionFail("Texture property %s is missing descriptor set 1 binding %u",
+        // Same reasoning as validateMaterialBlock: a pass that never samples the texture
+        // has no descriptor left after optimization. The binding counter still advances so
+        // the remaining properties keep their declared slots.
+        if (descriptor && descriptor->type != ShaderDescriptorType::CombinedImageSampler) {
+            reflectionFail("Texture property %s is bound as the wrong descriptor type at set 1 "
+                           "binding %u",
                            property.name.c_str(),
                            binding);
         }
@@ -236,14 +243,8 @@ bool ShaderCompilePipeline::validateSpirvReflection(const Shader& shader,
         validateInterface(pass.varyings(), fragment.inputs, fragmentPath, "stage input");
         validateInterface(
             pass.fragmentOutputs(), fragment.outputs, fragmentPath, "fragment output");
-        const bool vertexHasMaterialBlock =
-            validateMaterialBlock(shader.properties(), vertex, vertexPath);
-        const bool fragmentHasMaterialBlock =
-            validateMaterialBlock(shader.properties(), fragment, fragmentPath);
-        if (!vertexHasMaterialBlock && !fragmentHasMaterialBlock &&
-            !shader.uniformBlockLayout().members.empty()) {
-            reflectionFail("Material uniform block is absent from both shader stages");
-        }
+        validateMaterialBlock(shader.properties(), vertex, vertexPath);
+        validateMaterialBlock(shader.properties(), fragment, fragmentPath);
         validateTextureBindings(shader.properties(), vertex, fragment);
         for (const ShaderDescriptorBinding& descriptor : vertex.descriptors) {
             if (const ShaderDescriptorBinding* other =
