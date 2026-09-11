@@ -37,6 +37,8 @@ mini_add_test(RenderGraphTest)
 mini_add_test(RenderTargetTest)
 mini_add_test(RgTexturePoolTest)
 mini_add_test(RenderPipelineTest)
+mini_add_test(RenderQueueTest)
+mini_add_test(RenderPassTest)
 
 mini_add_test(MaterialTest)
 target_compile_definitions(MaterialTest PRIVATE

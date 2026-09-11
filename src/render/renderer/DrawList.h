@@ -35,6 +35,7 @@ static_assert(sizeof(ObjectDrawData) == 64, "ObjectDrawData must match the std43
 struct DrawItem {
     const ShaderPass* shaderPass{};
     RenderPhase renderPhase{RenderPhase::Forward};
+    MeshHandle mesh;
     rhi::GraphicsPipelineHandle pipeline;
     MaterialHandle material;
     rhi::BindGroupHandle materialBindGroup;
