@@ -91,8 +91,9 @@ VulkanGraphicsPipeline::VulkanGraphicsPipeline(
     const GraphicsPipelineDesc& desc,
     VkShaderModule vertexShader,
     VkShaderModule fragmentShader,
-    std::span<const VkDescriptorSetLayout> descriptorLayouts)
-    : device_(device) {
+    VkPipelineLayout layout,
+    VkPipelineCache cache)
+    : device_(device), layout_(layout) {
     std::array<VkPipelineShaderStageCreateInfo, 2> stages{};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -173,13 +174,6 @@ VulkanGraphicsPipeline::VulkanGraphicsPipeline(
     dynamicState.dynamicStateCount = static_cast<std::uint32_t>(dynamicStates.size());
     dynamicState.pDynamicStates = dynamicStates.data();
 
-    VkPipelineLayoutCreateInfo layoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-    layoutInfo.setLayoutCount = static_cast<std::uint32_t>(descriptorLayouts.size());
-    layoutInfo.pSetLayouts = descriptorLayouts.data();
-    if (vkCreatePipelineLayout(device_, &layoutInfo, nullptr, &layout_) != VK_SUCCESS) {
-        Log::fatal("VulkanGraphicsPipeline", "vkCreatePipelineLayout failed");
-    }
-
     std::vector<VkFormat> colorFormats;
     colorFormats.reserve(desc.colorFormats.size());
     for (TextureFormat format : desc.colorFormats) {
@@ -206,17 +200,14 @@ VulkanGraphicsPipeline::VulkanGraphicsPipeline(
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = layout_;
 
-    if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_) !=
+    if (vkCreateGraphicsPipelines(device_, cache, 1, &pipelineInfo, nullptr, &pipeline_) !=
         VK_SUCCESS) {
-        vkDestroyPipelineLayout(device_, layout_, nullptr);
-        layout_ = VK_NULL_HANDLE;
         Log::fatal("VulkanGraphicsPipeline", "vkCreateGraphicsPipelines failed");
     }
 }
 
 VulkanGraphicsPipeline::~VulkanGraphicsPipeline() {
     vkDestroyPipeline(device_, pipeline_, nullptr);
-    vkDestroyPipelineLayout(device_, layout_, nullptr);
 }
 
 } // namespace engine::rhi::vulkan

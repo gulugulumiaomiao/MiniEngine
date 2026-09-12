@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/filesystem/VirtualPath.h"
 #include "rhi/api/Device.h"
 #include "rhi/api/Swapchain.h"
 
@@ -25,6 +26,9 @@ struct Context {
 struct ContextDesc {
     SurfaceSource surface;
     SwapchainDesc swapchain;
+    // Virtual path for the pipeline cache (e.g. shader-cache://...), or empty
+    // for an in-memory-only cache.
+    engine::VirtualPath pipelineCachePath;
 };
 
 class IContextFactory {

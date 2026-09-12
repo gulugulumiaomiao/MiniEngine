@@ -10,6 +10,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
+#include <vector>
 
 namespace engine::rhi::vulkan {
 
@@ -21,9 +23,25 @@ class VulkanDescriptorSetLayout;
 class VulkanImage;
 class VulkanSampler;
 
+struct PipelineLayoutKeyHash final {
+    [[nodiscard]] std::size_t operator()(const std::vector<BindGroupLayoutHandle>& key) const
+        noexcept {
+        std::size_t seed = key.size();
+        for (const BindGroupLayoutHandle& handle : key) {
+            seed ^= static_cast<std::size_t>(handle.index) << 32U | handle.generation;
+            seed *= 0x9E3779B97F4A7C15ULL;
+        }
+        return seed;
+    }
+};
+
+using PipelineLayoutKey = std::vector<BindGroupLayoutHandle>;
+
 class VulkanDevice final : public IDevice {
 public:
-    explicit VulkanDevice(const SurfaceSource& surface);
+    // An empty pipeline cache path keeps the cache in memory only.
+    explicit VulkanDevice(const SurfaceSource& surface,
+                          const engine::VirtualPath& pipelineCachePath = {});
     ~VulkanDevice() override;
 
     VulkanDevice(const VulkanDevice&) = delete;
@@ -144,6 +162,10 @@ private:
     void createLogicalDevice();
     void createAllocator();
     void createCommandPool();
+    void createPipelineCache(const engine::VirtualPath& path);
+    void savePipelineCache();
+    [[nodiscard]] VkPipelineLayout acquirePipelineLayout(const PipelineLayoutKey& key);
+    void destroyPipelineLayoutsReferencing(BindGroupLayoutHandle handle);
     void clear();
 
     VkInstance instance_{VK_NULL_HANDLE};
@@ -166,6 +188,9 @@ private:
     HandlePool<TextureViewResource, TextureViewHandle> textureViews_;
     HandlePool<SamplerResource, SamplerHandle> samplers_;
     std::unique_ptr<VulkanDescriptorAllocator> descriptorAllocator_;
+    VkPipelineCache pipelineCache_{VK_NULL_HANDLE};
+    engine::VirtualPath pipelineCachePath_;
+    std::unordered_map<PipelineLayoutKey, VkPipelineLayout, PipelineLayoutKeyHash> pipelineLayouts_;
 };
 
 } // namespace engine::rhi::vulkan

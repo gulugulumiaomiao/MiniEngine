@@ -13,7 +13,8 @@
 namespace engine {
 
 bool RenderConfig::transfer(Transfer& archive) {
-    return archive.transfer("pipeline", pipeline);
+    return archive.transfer("pipeline", pipeline) &&
+           archive.transfer("pipeline_cache_path", pipelineCachePath);
 }
 
 bool FileSystemMountConfig::transfer(Transfer& archive) {

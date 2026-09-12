@@ -4,17 +4,18 @@
 
 #include <vulkan/vulkan.h>
 
-#include <span>
-
 namespace engine::rhi::vulkan {
 
 class VulkanGraphicsPipeline final {
 public:
+    // The pipeline layout is shared through VulkanDevice's layout cache and the
+    // pipeline cache outlives individual pipelines; neither is owned here.
     VulkanGraphicsPipeline(VkDevice device,
                            const GraphicsPipelineDesc& desc,
                            VkShaderModule vertexShader,
                            VkShaderModule fragmentShader,
-                           std::span<const VkDescriptorSetLayout> descriptorLayouts);
+                           VkPipelineLayout layout,
+                           VkPipelineCache cache);
     ~VulkanGraphicsPipeline();
 
     VulkanGraphicsPipeline(const VulkanGraphicsPipeline&) = delete;

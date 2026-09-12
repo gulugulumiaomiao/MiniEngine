@@ -6,7 +6,7 @@
 namespace engine::rhi::vulkan {
 
 Context VulkanFactory::createContext(const ContextDesc& desc) const {
-    auto device = std::make_unique<VulkanDevice>(desc.surface);
+    auto device = std::make_unique<VulkanDevice>(desc.surface, desc.pipelineCachePath);
     auto swapchain = std::make_unique<VulkanSwapchain>(*device, desc.swapchain);
     return {std::move(device), std::move(swapchain)};
 }

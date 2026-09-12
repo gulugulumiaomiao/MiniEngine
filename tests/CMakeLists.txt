@@ -37,6 +37,15 @@ mini_add_test(SceneTest)
 mini_add_test(SceneAssetTest)
 mini_add_test(RenderGraphTest)
 mini_add_test(RenderTargetTest)
+
+mini_add_test(VulkanPipelineCacheTest)
+target_link_libraries(VulkanPipelineCacheTest PRIVATE user32)
+target_include_directories(VulkanPipelineCacheTest SYSTEM PRIVATE
+    ${PROJECT_SOURCE_DIR}/third_party/vma/include
+)
+if(NOT MSVC)
+    target_compile_options(VulkanPipelineCacheTest PRIVATE -Wno-missing-field-initializers)
+endif()
 mini_add_test(RgTexturePoolTest)
 mini_add_test(RenderPipelineTest)
 mini_add_test(RenderQueueTest)

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/filesystem/VirtualPath.h"
+
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -19,6 +21,9 @@ struct AppConfig {
 
 struct RenderConfig {
     std::string pipeline{"MiniForward"};
+    // Virtual path such as "shader-cache://pipeline_cache.bin".  Empty or
+    // invalid disables persistence and keeps the cache in memory only.
+    VirtualPath pipelineCachePath{"shader-cache://pipeline_cache.bin"};
 
     bool transfer(Transfer& archive);
 };

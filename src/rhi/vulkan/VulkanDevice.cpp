@@ -1,5 +1,7 @@
 #include "rhi/vulkan/VulkanDevice.h"
 
+#include "core/filesystem/FileSystem.h"
+#include "core/filesystem/VirtualPath.h"
 #include "core/logging/Log.h"
 #include "rhi/vulkan/VulkanBuffer.h"
 #include "rhi/vulkan/VulkanDescriptorAllocator.h"
@@ -18,6 +20,7 @@
 #include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace engine::rhi::vulkan {
 namespace {
@@ -132,9 +135,27 @@ std::pair<VmaMemoryUsage, VmaAllocationCreateFlags> toVulkan(MemoryUsage usage) 
     return {VMA_MEMORY_USAGE_AUTO, 0};
 }
 
+std::vector<std::byte> loadPipelineCacheInitialData(const VirtualPath& path,
+                                                    VkPhysicalDevice physicalDevice) {
+    const auto data = FILE_SYSTEM.readBinary(path);
+    if (!data)
+        return {};
+    if (data->size() < sizeof(VkPipelineCacheHeaderVersionOne))
+        return {};
+    const auto* header = reinterpret_cast<const VkPipelineCacheHeaderVersionOne*>(data->data());
+    if (header->headerVersion != VK_PIPELINE_CACHE_HEADER_VERSION_ONE)
+        return {};
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+    if (std::memcmp(header->pipelineCacheUUID, properties.pipelineCacheUUID, VK_UUID_SIZE) != 0)
+        return {};
+    return *data;
+}
+
 } // namespace
 
-VulkanDevice::VulkanDevice(const SurfaceSource& surface) {
+VulkanDevice::VulkanDevice(const SurfaceSource& surface,
+                           const VirtualPath& pipelineCachePath) {
     createInstance();
     createDebugMessenger();
     createSurface(surface);
@@ -143,10 +164,12 @@ VulkanDevice::VulkanDevice(const SurfaceSource& surface) {
     createAllocator();
     descriptorAllocator_ = std::make_unique<VulkanDescriptorAllocator>(device_, 256);
     createCommandPool();
+    createPipelineCache(pipelineCachePath);
 }
 
 VulkanDevice::~VulkanDevice() {
     waitIdle();
+    savePipelineCache();
     clear();
     if (allocator_ != VK_NULL_HANDLE) {
         vmaDestroyAllocator(allocator_);
@@ -612,17 +635,14 @@ GraphicsPipelineHandle VulkanDevice::createGraphicsPipeline(const GraphicsPipeli
         (desc.depthFormat != TextureFormat::Undefined && !isDepthFormat(desc.depthFormat))) {
         Log::fatal("VulkanDevice", "Invalid graphics pipeline description");
     }
-    std::vector<VkDescriptorSetLayout> layouts;
-    layouts.reserve(desc.bindGroupLayouts.size());
-    for (BindGroupLayoutHandle layout : desc.bindGroupLayouts) {
-        layouts.push_back(resolveBindGroupLayout(layout));
-    }
+    const PipelineLayoutKey key(desc.bindGroupLayouts.begin(), desc.bindGroupLayouts.end());
     return pipelines_.insert(PipelineResource{
         std::make_unique<VulkanGraphicsPipeline>(device_,
                                                  desc,
                                                  resolveShader(desc.vertexShader),
                                                  resolveShader(desc.fragmentShader),
-                                                 layouts)});
+                                                 acquirePipelineLayout(key),
+                                                 pipelineCache_)});
 }
 
 void VulkanDevice::destroyGraphicsPipeline(GraphicsPipelineHandle handle) {
@@ -647,6 +667,9 @@ BindGroupLayoutHandle VulkanDevice::createBindGroupLayout(const BindGroupLayoutD
 }
 
 void VulkanDevice::destroyBindGroupLayout(BindGroupLayoutHandle handle) {
+    // Pipelines must be destroyed before the layouts they reference; drop the
+    // cached pipeline layouts that still point at this descriptor set layout.
+    destroyPipelineLayoutsReferencing(handle);
     (void)bindGroupLayouts_.release(handle);
 }
 
@@ -803,8 +826,102 @@ void VulkanDevice::unregisterExternalTextureView(TextureViewHandle handle) {
     (void)textureViews_.release(handle);
 }
 
+void VulkanDevice::createPipelineCache(const VirtualPath& path) {
+    pipelineCachePath_ = path;
+    std::vector<std::byte> initialData;
+    if (!path.empty()) {
+        const auto physicalPath = FILE_SYSTEM.resolvePhysicalPath(path);
+        if (physicalPath) {
+            Log::info("VulkanDevice",
+                      "Loading pipeline cache from %s -> %s",
+                      path.string().c_str(),
+                      physicalPath->string().c_str());
+        } else {
+            Log::warn("VulkanDevice",
+                      "Cannot resolve pipeline cache virtual path: %s",
+                      path.string().c_str());
+        }
+        initialData = loadPipelineCacheInitialData(path, physicalDevice_);
+    }
+
+    VkPipelineCacheCreateInfo info{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+    if (!initialData.empty()) {
+        info.initialDataSize = initialData.size();
+        info.pInitialData = initialData.data();
+        if (vkCreatePipelineCache(device_, &info, nullptr, &pipelineCache_) == VK_SUCCESS)
+            return;
+        Log::warn("VulkanDevice",
+                  "Discarding invalid pipeline cache data: %s",
+                  path.string().c_str());
+        info.initialDataSize = 0;
+        info.pInitialData = nullptr;
+    }
+    check(vkCreatePipelineCache(device_, &info, nullptr, &pipelineCache_),
+          "vkCreatePipelineCache");
+}
+
+void VulkanDevice::savePipelineCache() {
+    if (pipelineCache_ == VK_NULL_HANDLE)
+        return;
+    std::size_t size = 0;
+    if (vkGetPipelineCacheData(device_, pipelineCache_, &size, nullptr) != VK_SUCCESS ||
+        size == 0) {
+        vkDestroyPipelineCache(device_, pipelineCache_, nullptr);
+        pipelineCache_ = VK_NULL_HANDLE;
+        return;
+    }
+    std::vector<std::byte> data(size);
+    if (vkGetPipelineCacheData(device_, pipelineCache_, &size, data.data()) != VK_SUCCESS) {
+        vkDestroyPipelineCache(device_, pipelineCache_, nullptr);
+        pipelineCache_ = VK_NULL_HANDLE;
+        return;
+    }
+    if (!pipelineCachePath_.empty()) {
+        (void)FILE_SYSTEM.createDirectories(pipelineCachePath_.parent());
+        if (!FILE_SYSTEM.writeBinaryAtomic(pipelineCachePath_, data)) {
+            Log::warn("VulkanDevice",
+                      "Cannot persist the pipeline cache to %s",
+                      pipelineCachePath_.string().c_str());
+        }
+    }
+    vkDestroyPipelineCache(device_, pipelineCache_, nullptr);
+    pipelineCache_ = VK_NULL_HANDLE;
+}
+
+VkPipelineLayout VulkanDevice::acquirePipelineLayout(const PipelineLayoutKey& key) {
+    if (const auto found = pipelineLayouts_.find(key); found != pipelineLayouts_.end())
+        return found->second;
+    std::vector<VkDescriptorSetLayout> layouts;
+    layouts.reserve(key.size());
+    for (BindGroupLayoutHandle handle : key)
+        layouts.push_back(resolveBindGroupLayout(handle));
+    VkPipelineLayoutCreateInfo info{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    info.setLayoutCount = static_cast<std::uint32_t>(layouts.size());
+    info.pSetLayouts = layouts.data();
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    if (vkCreatePipelineLayout(device_, &info, nullptr, &layout) != VK_SUCCESS) {
+        Log::fatal("VulkanDevice", "vkCreatePipelineLayout failed");
+    }
+    pipelineLayouts_.emplace(key, layout);
+    return layout;
+}
+
+void VulkanDevice::destroyPipelineLayoutsReferencing(BindGroupLayoutHandle handle) {
+    for (auto entry = pipelineLayouts_.begin(); entry != pipelineLayouts_.end();) {
+        if (std::find(entry->first.begin(), entry->first.end(), handle) != entry->first.end()) {
+            vkDestroyPipelineLayout(device_, entry->second, nullptr);
+            entry = pipelineLayouts_.erase(entry);
+        } else {
+            ++entry;
+        }
+    }
+}
+
 void VulkanDevice::clear() {
     pipelines_.clear();
+    for (auto& [key, layout] : pipelineLayouts_)
+        vkDestroyPipelineLayout(device_, layout, nullptr);
+    pipelineLayouts_.clear();
     bindGroups_.forEach([this](const BindGroupResource& resource) {
         descriptorAllocator_->free(resource.resource);
     });

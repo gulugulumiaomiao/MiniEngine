@@ -131,11 +131,17 @@ bool Engine::initialize(const std::filesystem::path& configPath,
     window_ = std::make_unique<Window>(
         applicationConfig.width, applicationConfig.height, applicationConfig.name);
     const auto [width, height] = window_->framebufferSize();
+    if (!config_.render.pipelineCachePath.empty()) {
+        Log::info("Engine",
+                  "Pipeline cache virtual path: %s",
+                  config_.render.pipelineCachePath.string().c_str());
+    }
     rhi::Context context = contextFactory.createContext({
         .surface = {.windowSystem = rhi::WindowSystem::Win32,
                     .nativeDisplay = window_->nativeInstance(),
                     .nativeWindow = window_->nativeHandle()},
         .swapchain = {.width = width, .height = height, .vsync = applicationConfig.vsync},
+        .pipelineCachePath = config_.render.pipelineCachePath,
     });
     renderer_ = std::make_unique<Renderer>(*window_, std::move(context));
 
