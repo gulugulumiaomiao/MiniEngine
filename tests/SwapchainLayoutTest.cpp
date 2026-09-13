@@ -52,6 +52,7 @@ int main() {
                     .nativeDisplay = GetModuleHandle(nullptr),
                     .nativeWindow = hwnd},
         .swapchain = desc,
+        .enablePipelineCache = false,
     });
 
     if (!context.device || !context.swapchain) {

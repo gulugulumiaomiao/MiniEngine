@@ -1,12 +1,12 @@
 #pragma once
 
-#include "core/filesystem/VirtualPath.h"
 #include "core/serialization/Transferable.h"
 
 #include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace engine {
@@ -35,15 +35,9 @@ struct WindowConfig : public Transferable {
 
 struct RenderConfig : public Transferable {
     std::string pipeline{"MiniForward"};
-    // Virtual path such as "shader-cache://pipeline_cache.bin". Empty or
-    // invalid disables persistence and keeps the cache in memory only.
-    // Optional when reading: a configuration without this field (e.g. an older
-    // project.json) keeps the default instead of failing.
-    VirtualPath pipelineCachePath{"shader-cache://pipeline_cache.bin"};
 
     RenderConfig() = default;
-    RenderConfig(std::string pipeline, VirtualPath pipelineCachePath)
-        : pipeline(std::move(pipeline)), pipelineCachePath(std::move(pipelineCachePath)) {}
+    explicit RenderConfig(std::string pipeline) : pipeline(std::move(pipeline)) {}
 
     bool transfer(Transfer& archive) override;
 };

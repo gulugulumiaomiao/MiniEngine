@@ -39,9 +39,8 @@ using PipelineLayoutKey = std::vector<BindGroupLayoutHandle>;
 
 class VulkanDevice final : public IDevice {
 public:
-    // An empty pipeline cache path keeps the cache in memory only.
-    explicit VulkanDevice(const SurfaceSource& surface,
-                          const engine::VirtualPath& pipelineCachePath = {});
+    // 禁用时不创建、读取或保存管线缓存。
+    explicit VulkanDevice(const SurfaceSource& surface, bool enablePipelineCache = true);
     ~VulkanDevice() override;
 
     VulkanDevice(const VulkanDevice&) = delete;
@@ -166,7 +165,7 @@ private:
     void createLogicalDevice();
     void createAllocator();
     void createCommandPool();
-    void createPipelineCache(const engine::VirtualPath& path);
+    void createPipelineCache();
     void savePipelineCache();
     [[nodiscard]] VkPipelineLayout acquirePipelineLayout(const PipelineLayoutKey& key);
     void destroyPipelineLayoutsReferencing(BindGroupLayoutHandle handle);
@@ -193,7 +192,6 @@ private:
     HandlePool<SamplerResource, SamplerHandle> samplers_;
     std::unique_ptr<VulkanDescriptorAllocator> descriptorAllocator_;
     VkPipelineCache pipelineCache_{VK_NULL_HANDLE};
-    engine::VirtualPath pipelineCachePath_;
     std::unordered_map<PipelineLayoutKey, VkPipelineLayout, PipelineLayoutKeyHash> pipelineLayouts_;
 };
 

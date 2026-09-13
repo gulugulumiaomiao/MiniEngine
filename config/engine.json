@@ -7,7 +7,6 @@
     "vsync": true
   },
   "render": {
-    "pipeline": "MiniForward",
-    "pipeline_cache_path": "shader-cache://pipeline_cache.bin"
+    "pipeline": "MiniForward"
   }
 }

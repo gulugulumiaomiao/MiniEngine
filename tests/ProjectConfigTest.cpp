@@ -100,6 +100,21 @@ template <typename T> bool checkConfigScopes(T source) {
 
 bool testConfigScopes([[maybe_unused]] const std::filesystem::path& root) {
     using namespace engine;
+    EngineConfig engineConfig = EngineConfig::createDefault();
+    if (!checkConfigScopes(engineConfig) || !checkConfigScopes(engineConfig.render))
+        return false;
+    // 缓存路径不再序列化；旧配置中的该字段仍可忽略并正常读取。
+    for (const char* json : {
+             R"({"pipeline":"MiniForward"})",
+             R"({"pipeline":"MiniForward","pipeline_cache_path":"custom://cache.bin"})"}) {
+        RenderConfig render;
+        JsonReader reader{json};
+        JsonWriter encoded;
+        if (!render.transfer(reader) || !reader.valid() || !render.transfer(encoded) ||
+            nlohmann::json::parse(encoded.toString()) !=
+                nlohmann::json{{"pipeline", "MiniForward"}})
+            return false;
+    }
     ProjectConfig project;
     project.name = "Scope";
     if (!checkConfigScopes(project))
@@ -188,8 +203,7 @@ int main() {
     const std::optional<ProjectConfig> overridden = ProjectConfig::load(overridePath, error);
     if (!overridden || !overridden->window.has_value() ||
         overridden->window->width != 1920 || overridden->window->height != 1080 ||
-        overridden->window->vsync || overridden->render.pipeline != "MiniForward" ||
-        overridden->render.pipelineCachePath.string() != "shader-cache://pipeline_cache.bin") {
+        overridden->window->vsync || overridden->render.pipeline != "MiniForward") {
         return 23;
     }
 

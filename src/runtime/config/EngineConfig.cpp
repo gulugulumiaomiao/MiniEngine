@@ -1,6 +1,5 @@
 ﻿#include "runtime/config/EngineConfig.h"
 
-#include "core/filesystem/VirtualPath.h"
 #include "core/logging/Log.h"
 #include "core/serialization/JsonTransfer.h"
 #include "core/serialization/Transfer.h"
@@ -17,18 +16,8 @@ bool WindowConfig::transfer(Transfer& archive) {
 }
 
 bool RenderConfig::transfer(Transfer& archive) {
-    if (!archive.beginObject({}) || !archive.transfer("pipeline", pipeline))
-        return false;
-    if (archive.writing())
-        return archive.transfer("pipeline_cache_path", pipelineCachePath) && archive.endObject();
-    // The cache path is optional in older or leaner configurations (e.g. project.json
-    // files written before the field existed): when absent, the default is kept.
-    VirtualPath loaded;
-    if (!archive.transfer("pipeline_cache_path", loaded))
-        archive.clearError();
-    else
-        pipelineCachePath = std::move(loaded);
-    return archive.endObject();
+    return archive.beginObject({}) && archive.transfer("pipeline", pipeline) &&
+           archive.endObject();
 }
 
 bool EngineConfig::transfer(Transfer& archive) {
@@ -66,7 +55,7 @@ EngineConfig EngineConfig::createDefault() {
     config.schemaVersion = 1;
     config.workingDirectory = ".";
     config.window = WindowConfig{1280, 720, true};
-    config.render = RenderConfig{"MiniForward", VirtualPath{"shader-cache://pipeline_cache.bin"}};
+    config.render = RenderConfig{"MiniForward"};
     return config;
 }
 

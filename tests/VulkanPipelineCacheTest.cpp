@@ -2,6 +2,7 @@
 #include "core/filesystem/VirtualPath.h"
 #include "rhi/api/ResourceDesc.h"
 #include "rhi/vulkan/VulkanDevice.h"
+#include "rhi/vulkan/VulkanFactory.h"
 
 #include <windows.h>
 #include <vulkan/vulkan.h>
@@ -15,6 +16,8 @@
 #include <vector>
 
 namespace {
+
+static_assert(engine::rhi::ContextDesc{}.enablePipelineCache);
 
 // Compiled from: #version 450 / void main() { gl_Position = vec4(0.0, 0.0, 0.0, 1.0); }
 constexpr std::array<std::uint32_t, 188> kVertexSpirv = {
@@ -186,6 +189,24 @@ engine::rhi::GraphicsPipelineDesc basePipelineDesc(const Fixture& fixture) {
     return desc;
 }
 
+// 通过工厂验证开关透传，禁用缓存时仍必须能创建图形管线。
+[[nodiscard]] bool compileWithoutPipelineCache(const engine::rhi::SurfaceSource& surface) {
+    const engine::rhi::vulkan::VulkanFactory factory;
+    auto context = factory.createContext({
+        .surface = surface,
+        .swapchain = {.width = 64, .height = 64, .vsync = false},
+        .enablePipelineCache = false,
+    });
+    auto& device = static_cast<engine::rhi::vulkan::VulkanDevice&>(*context.device);
+    const Fixture fixture = createFixture(device);
+    const auto pipeline = device.createGraphicsPipeline(basePipelineDesc(fixture));
+    const auto resolved = device.resolvePipeline(pipeline);
+    const bool valid = resolved.layout != VK_NULL_HANDLE && resolved.pipeline != VK_NULL_HANDLE;
+    device.destroyGraphicsPipeline(pipeline);
+    destroyFixture(device, fixture);
+    return valid;
+}
+
 [[nodiscard]] bool cacheFileHasEntries(const engine::VirtualPath& path) {
     const auto physical = engine::FileSystem::instance().resolvePhysicalPath(path);
     return physical && std::filesystem::is_regular_file(*physical) &&
@@ -211,15 +232,34 @@ int main() {
     std::error_code ignored;
     std::filesystem::remove_all(tempDir, ignored);
     std::filesystem::create_directories(tempDir);
-    if (!engine::FileSystem::instance().mountDirectory("pipcache", tempDir, false)) {
+    // 编辑器进入项目前没有缓存挂载，禁用时仍可正常创建管线。
+    if (!compileWithoutPipelineCache(surface))
+        return 11;
+    if (!engine::FileSystem::instance().mountDirectory("shader-cache", tempDir, false)) {
         return 10;
     }
-    const engine::VirtualPath cachePath{"pipcache://cache.bin"};
-    (void)engine::FileSystem::instance().removeFile(cachePath);
+    const engine::VirtualPath cachePath{"shader-cache://pipeline_cache.bin"};
+
+    // 即使存在可写挂载，禁用时也不生成缓存文件。
+    if (!compileWithoutPipelineCache(surface) ||
+        std::filesystem::exists(tempDir / "pipeline_cache.bin"))
+        return 12;
+
+    // 禁用时不能覆盖已有缓存，也不能更新文件时间。
+    const std::vector<std::byte> sentinel(128, std::byte{0xCD});
+    if (!engine::FileSystem::instance().writeBinaryAtomic(cachePath, sentinel))
+        return 13;
+    const auto lastWrite = std::filesystem::last_write_time(tempDir / "pipeline_cache.bin");
+    if (!compileWithoutPipelineCache(surface))
+        return 14;
+    const auto unchanged = engine::FileSystem::instance().readBinary(cachePath);
+    if (!unchanged || *unchanged != sentinel ||
+        std::filesystem::last_write_time(tempDir / "pipeline_cache.bin") != lastWrite)
+        return 15;
 
     // Phase 1: pipelines sharing a bind group layout share the VkPipelineLayout.
     {
-        engine::rhi::vulkan::VulkanDevice device{surface, cachePath};
+        engine::rhi::vulkan::VulkanDevice device{surface};
         const Fixture fixture = createFixture(device);
         engine::rhi::GraphicsPipelineDesc desc = basePipelineDesc(fixture);
 
@@ -271,7 +311,12 @@ int main() {
 
     // Phase 2: a new device reloads the persisted cache and still compiles pipelines.
     {
-        engine::rhi::vulkan::VulkanDevice device{surface, cachePath};
+        const engine::rhi::vulkan::VulkanFactory factory;
+        auto context = factory.createContext({
+            .surface = surface,
+            .swapchain = {.width = 64, .height = 64, .vsync = false},
+        });
+        auto& device = static_cast<engine::rhi::vulkan::VulkanDevice&>(*context.device);
         const Fixture fixture = createFixture(device);
         engine::rhi::GraphicsPipelineDesc desc = basePipelineDesc(fixture);
         const engine::rhi::GraphicsPipelineHandle pipeline = device.createGraphicsPipeline(desc);
@@ -294,7 +339,7 @@ int main() {
         }
     }
     {
-        engine::rhi::vulkan::VulkanDevice device{surface, cachePath};
+        engine::rhi::vulkan::VulkanDevice device{surface};
         const Fixture fixture = createFixture(device);
         engine::rhi::GraphicsPipelineDesc desc = basePipelineDesc(fixture);
         const engine::rhi::GraphicsPipelineHandle pipeline = device.createGraphicsPipeline(desc);
@@ -309,7 +354,7 @@ int main() {
         return 10;
     }
 
-    (void)engine::FileSystem::instance().unmount("pipcache");
+    (void)engine::FileSystem::instance().unmount("shader-cache");
     std::filesystem::remove_all(tempDir, ignored);
     return 0;
 }

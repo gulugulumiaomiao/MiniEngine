@@ -2,6 +2,7 @@
 
 // 项目配置与目录约定由普通引擎和编辑器共用，不依赖编辑器宏。
 
+#include "core/filesystem/VirtualPath.h"
 #include "runtime/config/EngineConfig.h"
 
 #include <cstdint>
@@ -39,10 +40,7 @@ struct ProjectConfig : public Transferable {
     std::uint32_t schemaVersion{1};
     std::string name;
     std::optional<WindowConfig> window;
-    // RenderConfig reuses the engine's render settings, including the optional cache
-    // path (pipeline_cache_path). When a project omits it, the shader-cache default is
-    // used: the engine reads and writes that cache only while the project is open, so
-    // the editor never touches a pipeline cache without a project.
+    // 与引擎复用渲染配置；管线缓存路径固定，不属于项目配置。
     RenderConfig render;
 
     bool transfer(Transfer& archive) override;

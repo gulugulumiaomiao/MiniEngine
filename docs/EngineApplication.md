@@ -20,13 +20,14 @@
     "vsync": true
   },
   "render": {
-    "pipeline": "MiniForward",
-    "pipeline_cache_path": "shader-cache://pipeline_cache.bin"
+    "pipeline": "MiniForward"
   }
 }
 ```
 
 `working_directory` 相对 `engine.json` 解析，并被设置为进程工作目录。
+
+管线缓存固定使用 `shader-cache://pipeline_cache.bin`，不再提供路径配置。`rhi::ContextDesc::enablePipelineCache` 默认为 `true`；编辑器进入项目前设为 `false`，不创建、读取或保存缓存，打开项目后启用。
 
 挂载表**不在配置里**。游戏运行时在 `Engine::initialize()` 中按固定表挂载，四个目录一律相对 `working_directory` 解析；编辑器启动时不挂载任何项目 scheme，改由 `openProject()` 通过 `projectMounts(projectRoot)` 从项目布局派生。
 

@@ -93,11 +93,9 @@ private:
     // Brings up the asset system after project mounts are in place.
     [[nodiscard]] bool initializeProjectSubsystems();
     // Creates the renderer and GPU managers. Called by initialize() and openProject().
-    // pipelineCachePath selects where the RHI loads/saves the Vulkan pipeline cache;
-    // passing an empty path keeps the cache in memory only (used at editor boot, where
-    // no project (and thus no shader-cache:// mount) exists yet).
+    // 编辑器进入项目前禁用管线缓存，其他情况默认启用。
     [[nodiscard]] bool initializeGpuManagers(const rhi::IContextFactory& contextFactory,
-                                             const VirtualPath& pipelineCachePath);
+                                             bool enablePipelineCache = true);
     // Applies the effective window config (engine default -> editor preference ->
     // project override) and creates or recreates the window.
     void applyWindowConfig(const WindowConfig& effective);

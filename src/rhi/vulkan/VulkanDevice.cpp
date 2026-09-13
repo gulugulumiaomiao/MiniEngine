@@ -29,6 +29,7 @@ namespace {
 constexpr std::array kValidationLayers{"VK_LAYER_KHRONOS_validation"};
 #endif
 constexpr std::array kDeviceExtensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+const VirtualPath kPipelineCachePath{"shader-cache://pipeline_cache.bin"};
 
 void check(VkResult result, const char* operation) {
     if (result != VK_SUCCESS) {
@@ -154,8 +155,7 @@ std::vector<std::byte> loadPipelineCacheInitialData(const VirtualPath& path,
 
 } // namespace
 
-VulkanDevice::VulkanDevice(const SurfaceSource& surface,
-                           const VirtualPath& pipelineCachePath) {
+VulkanDevice::VulkanDevice(const SurfaceSource& surface, bool enablePipelineCache) {
     createInstance();
     createDebugMessenger();
     createSurface(surface);
@@ -164,7 +164,8 @@ VulkanDevice::VulkanDevice(const SurfaceSource& surface,
     createAllocator();
     descriptorAllocator_ = std::make_unique<VulkanDescriptorAllocator>(device_, 256);
     createCommandPool();
-    createPipelineCache(pipelineCachePath);
+    if (enablePipelineCache)
+        createPipelineCache();
 }
 
 VulkanDevice::~VulkanDevice() {
@@ -826,23 +827,19 @@ void VulkanDevice::unregisterExternalTextureView(TextureViewHandle handle) {
     (void)textureViews_.release(handle);
 }
 
-void VulkanDevice::createPipelineCache(const VirtualPath& path) {
-    pipelineCachePath_ = path;
-    std::vector<std::byte> initialData;
-    if (!path.empty()) {
-        const auto physicalPath = FILE_SYSTEM.resolvePhysicalPath(path);
-        if (physicalPath) {
-            Log::info("VulkanDevice",
-                      "Loading pipeline cache from %s -> %s",
-                      path.string().c_str(),
-                      physicalPath->string().c_str());
-        } else {
-            Log::warn("VulkanDevice",
-                      "Cannot resolve pipeline cache virtual path: %s",
-                      path.string().c_str());
-        }
-        initialData = loadPipelineCacheInitialData(path, physicalDevice_);
+void VulkanDevice::createPipelineCache() {
+    const auto physicalPath = FILE_SYSTEM.resolvePhysicalPath(kPipelineCachePath);
+    if (physicalPath) {
+        Log::info("VulkanDevice",
+                  "Loading pipeline cache from %s -> %s",
+                  kPipelineCachePath.string().c_str(),
+                  physicalPath->string().c_str());
+    } else {
+        Log::warn("VulkanDevice",
+                  "Cannot resolve pipeline cache virtual path: %s",
+                  kPipelineCachePath.string().c_str());
     }
+    const auto initialData = loadPipelineCacheInitialData(kPipelineCachePath, physicalDevice_);
 
     VkPipelineCacheCreateInfo info{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
     if (!initialData.empty()) {
@@ -852,7 +849,7 @@ void VulkanDevice::createPipelineCache(const VirtualPath& path) {
             return;
         Log::warn("VulkanDevice",
                   "Discarding invalid pipeline cache data: %s",
-                  path.string().c_str());
+                  kPipelineCachePath.string().c_str());
         info.initialDataSize = 0;
         info.pInitialData = nullptr;
     }
@@ -876,13 +873,11 @@ void VulkanDevice::savePipelineCache() {
         pipelineCache_ = VK_NULL_HANDLE;
         return;
     }
-    if (!pipelineCachePath_.empty()) {
-        (void)FILE_SYSTEM.createDirectories(pipelineCachePath_.parent());
-        if (!FILE_SYSTEM.writeBinaryAtomic(pipelineCachePath_, data)) {
-            Log::warn("VulkanDevice",
-                      "Cannot persist the pipeline cache to %s",
-                      pipelineCachePath_.string().c_str());
-        }
+    (void)FILE_SYSTEM.createDirectories(kPipelineCachePath.parent());
+    if (!FILE_SYSTEM.writeBinaryAtomic(kPipelineCachePath, data)) {
+        Log::warn("VulkanDevice",
+                  "Cannot persist the pipeline cache to %s",
+                  kPipelineCachePath.string().c_str());
     }
     vkDestroyPipelineCache(device_, pipelineCache_, nullptr);
     pipelineCache_ = VK_NULL_HANDLE;

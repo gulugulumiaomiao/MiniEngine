@@ -65,11 +65,6 @@ bool hasStandardLayout(const std::filesystem::path& root) {
     return true;
 }
 
-// The engine's default cache path must be the one the template seeds.
-bool checkCachePathIsEngineDefault(const engine::RenderConfig& render) {
-    return render.pipelineCachePath == projectCachePath();
-}
-
 // Simulates the Vulkan device persisting a cache into the open project: the placeholder
 // written by the template disappears (replaced), and the loaded bytes come back through
 // the scheme and land in the project directory.
@@ -217,8 +212,7 @@ constexpr std::string_view kDemoScenePath =
     const std::optional<ProjectConfig> config =
         ProjectConfig::load(projectConfigPath(projectA), error);
     if (!config || config->schemaVersion != 1 || config->name != "LifecycleProject" ||
-        config->render.pipeline.empty() || config->window.has_value() ||
-        !checkCachePathIsEngineDefault(config->render))
+        config->render.pipeline.empty() || config->window.has_value())
         return 10;
     if (!mountProject(projectA))
         return 11;

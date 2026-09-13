@@ -164,15 +164,13 @@ bool Engine::initialize(const std::filesystem::path& configPath,
 
     applyWindowConfig(effectiveWindowConfig());
 
-    // The editor boots without a project, so the shader-cache:// mount (and its
-    // pipeline cache) does not exist yet; keep the cache in memory until openProject
-    // supplies the project cache path. The game runtime mounts its cache at boot.
+    // 编辑器进入项目前没有 shader-cache:// 挂载，不使用管线缓存。
 #if defined(MINI_EDITOR)
-    const VirtualPath pipelineCachePath;
+    constexpr bool enablePipelineCache = false;
 #else
-    const VirtualPath pipelineCachePath = config_.render.pipelineCachePath;
+    constexpr bool enablePipelineCache = true;
 #endif
-    if (!initializeGpuManagers(contextFactory, pipelineCachePath)) {
+    if (!initializeGpuManagers(contextFactory, enablePipelineCache)) {
         shutdown();
         return false;
     }
@@ -208,14 +206,14 @@ bool Engine::initializeProjectSubsystems() {
 }
 
 bool Engine::initializeGpuManagers(const rhi::IContextFactory& contextFactory,
-                                   const VirtualPath& pipelineCachePath) {
+                                   bool enablePipelineCache) {
     const auto [width, height] = window_->framebufferSize();
     rhi::Context context = contextFactory.createContext({
         .surface = {.windowSystem = rhi::WindowSystem::Win32,
                     .nativeDisplay = window_->nativeInstance(),
                     .nativeWindow = window_->nativeHandle()},
         .swapchain = {.width = width, .height = height, .vsync = config_.window.vsync},
-        .pipelineCachePath = pipelineCachePath,
+        .enablePipelineCache = enablePipelineCache,
     });
     renderer_ = std::make_unique<Renderer>(*window_, std::move(context));
 
@@ -458,7 +456,7 @@ bool Engine::openProject(const std::filesystem::path& projectRoot) {
         applyWindowConfig(effectiveWindow);
     }
 
-    if (!initializeGpuManagers(*contextFactory_, projectConfig_.render.pipelineCachePath)) {
+    if (!initializeGpuManagers(*contextFactory_)) {
         Log::error("Engine", "Cannot initialize GPU resource managers for the new project");
         closeProject();
         return false;

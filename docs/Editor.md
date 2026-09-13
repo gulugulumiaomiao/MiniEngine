@@ -109,7 +109,7 @@ ENGINE.openProject(root)
   -> initializeProjectSubsystems()        // AssetManager + Engine 自己的场景重载监听
   -> ensureProjectMainScene()
   -> 合并 engine -> editor -> project 窗口配置，尺寸变化时重建窗口
-  -> initializeGpuManagers(pipelineCachePath)
+  -> initializeGpuManagers(contextFactory) // 打开项目后默认启用管线缓存
   -> selectProjectScene({}) 并 loadScene
 installSceneChangeListener()              // 抢回单槽监听，见下方第三处顺序约束
 imguiLayer_.attach(新 renderer, window)   // 必须重新挂载，否则新 renderer 没有 overlay
