@@ -312,7 +312,9 @@ bool testWindowSession(const std::filesystem::path& root) {
     WindowSession app{session};
 #endif
     const rhi::vulkan::VulkanFactory factory;
-    const int result = ENGINE.run(app, factory, session / "engine.json");
+    // ENGINE.run 现在从当前工作目录解析 engine.json，测试把 CWD 切到 session 沙箱。
+    std::filesystem::current_path(session);
+    const int result = ENGINE.run(app, factory);
     std::filesystem::current_path(previousDirectory);
     if (result != 0 || !app.passed)
         return false;
@@ -327,7 +329,8 @@ bool testWindowSession(const std::filesystem::path& root) {
         return false;
     ENGINE.loadEditorConfig(editorPath);
     WindowSession reopened{session};
-    const int reopenedResult = ENGINE.run(reopened, factory, session / "engine.json");
+    std::filesystem::current_path(session);
+    const int reopenedResult = ENGINE.run(reopened, factory);
     std::filesystem::current_path(previousDirectory);
     if (reopenedResult != 0 || !reopened.passed)
         return false;

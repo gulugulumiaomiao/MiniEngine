@@ -24,7 +24,7 @@
 
 ```text
 tools/editor/
-├── main.cpp                入口：定位 editor.json，构造 EditorApplication 并交给 Engine::run
+├── main.cpp                入口：构造 EditorApplication 并交给 Engine::run（editor.json/engine.json 各自从当前工作目录解析）
 ├── EditorApplication.*     Application 实现：菜单栏、Dock 布局、快捷键、项目与场景的打开/保存编排
 ├── EditorConfig.*          编辑器窗口偏好及内嵌的最近项目注册表
 ├── ImGuiLayer.*            IFrameOverlay 实现：ImGui 上下文、Win32 后端、帧序与帧末叠加录制
@@ -50,12 +50,12 @@ tools/editor/
 
 ```text
 main()
-  -> editorConfigPath = <exe 目录>/editor/config/editor.json
   -> EditorApplication 构造
+       -> editorConfigPath = <CWD>/editor/config/editor.json   // 内部解析，不再由 main 传入
        -> ENGINE.loadEditorConfig(editorConfigPath)   // 缺失时按默认值创建
-       -> imguiLayer_.setIniPath(<exe 目录>/editor/config/imgui.ini)
+       -> imguiLayer_.setIniPath(<CWD>/editor/config/imgui.ini)
        -> 绑定 picker 的 open/create/changed 回调
-  -> ENGINE.run(application, VulkanFactory, <exe 目录>/engine.json)
+  -> ENGINE.run(application, VulkanFactory)   // engine.json 由 run 从 <CWD> 解析
        -> Engine::initialize
             // MINI_EDITOR 分支：不挂载任何 scheme，不初始化资产系统
             -> 按 engine.json -> editor.json 合并窗口配置并创建窗口

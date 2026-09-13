@@ -2,13 +2,9 @@
 #include "runtime/engine/Engine.h"
 #include "rhi/vulkan/VulkanFactory.h"
 
-#include <filesystem>
-
-int main(int argc, char** argv) {
-    (void)argc;
+int main() {
+    // engine.json 由 Engine::run 从进程当前工作目录解析，main 不再定位或传入路径。
     engine::GameApplication application;
     const engine::rhi::vulkan::VulkanFactory contextFactory;
-    const std::filesystem::path executable =
-        std::filesystem::absolute(std::filesystem::path{argv[0]}).lexically_normal();
-    return ENGINE.run(application, contextFactory, executable.parent_path() / "engine.json");
+    return ENGINE.run(application, contextFactory);
 }

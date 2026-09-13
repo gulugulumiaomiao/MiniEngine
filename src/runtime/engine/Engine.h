@@ -28,9 +28,7 @@ class Engine final : public Singleton<Engine> {
 public:
     ~Engine();
 
-    [[nodiscard]] int run(Application& application,
-                          const rhi::IContextFactory& contextFactory,
-                          const std::filesystem::path& configPath);
+    [[nodiscard]] int run(Application& application, const rhi::IContextFactory& contextFactory);
     void requestQuit() { shouldQuit_ = true; }
 
     [[nodiscard]] bool running() const { return running_; }

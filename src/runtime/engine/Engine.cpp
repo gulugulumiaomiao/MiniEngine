@@ -94,9 +94,7 @@ WindowConfig Engine::effectiveWindowConfig() const {
 }
 Engine::~Engine() = default;
 
-int Engine::run(Application& application,
-                const rhi::IContextFactory& contextFactory,
-                const std::filesystem::path& configPath) {
+int Engine::run(Application& application, const rhi::IContextFactory& contextFactory) {
     if (running_) {
         Log::error("Engine", "Engine is already running an Application");
         return 1;
@@ -104,7 +102,9 @@ int Engine::run(Application& application,
 
     contextFactory_ = &contextFactory;
 
-    if (!initialize(configPath, contextFactory))
+    // engine.json 固定在进程当前工作目录下解析，不再由调用方传入路径。必须在
+    // initialize 之前取 CWD：initialize 会按配置的 working_directory 重设当前目录。
+    if (!initialize(std::filesystem::current_path() / "engine.json", contextFactory))
         return 1;
 
     Log::info("Engine", "Starting application");

@@ -49,9 +49,8 @@ Debug、Release 和 Publish 可执行文件分别位于 `build/clang-debug`、`b
 
 ```text
 main()
-  -> 定位 executable/engine.json
   -> 创建 GameApplication
-  -> Engine::run(Application&, ContextFactory&, configPath)
+  -> Engine::run(Application&, ContextFactory&)   // engine.json 由 run 从当前工作目录解析
        -> 读取并校验 EngineConfig
        -> 按固定挂载表挂载 FileSystem（编辑器变体跳过，等 openProject）
        -> 初始化 AssetManager、Window、Renderer 和 GPU Managers

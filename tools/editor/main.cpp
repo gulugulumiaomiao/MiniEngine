@@ -2,17 +2,10 @@
 #include "runtime/engine/Engine.h"
 #include "rhi/vulkan/VulkanFactory.h"
 
-#include <filesystem>
-
-int main(int, char** argv) {
-    const std::filesystem::path executable =
-        std::filesystem::absolute(std::filesystem::path{argv[0]}).lexically_normal();
-    // The editor config lives under editor/config/ next to the executable and is read
-    // and written as a plain physical file: window preference plus the recent-project
-    // registry. There is no editor-config:// mount; the whole file is owned by
-    // EditorConfig::load/save.
-    const std::filesystem::path editorConfigPath = executable.parent_path() / "editor" / "config" / "editor.json";
-    engine::editor::EditorApplication application{editorConfigPath};
+int main() {
+    // editor.json / imgui.ini / engine.json 全部由 EditorApplication 与 Engine::run
+    // 从进程当前工作目录下的固定位置解析，main 不再定位或传入任何路径。
+    engine::editor::EditorApplication application;
     const engine::rhi::vulkan::VulkanFactory contextFactory;
-    return ENGINE.run(application, contextFactory, executable.parent_path() / "engine.json");
+    return ENGINE.run(application, contextFactory);
 }

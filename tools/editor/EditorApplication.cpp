@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <filesystem>
 
 namespace engine::editor {
 namespace {
@@ -57,12 +58,15 @@ bool hasDockedPanelLayout() {
 
 } // namespace
 
-EditorApplication::EditorApplication(const std::filesystem::path& editorConfigPath)
+EditorApplication::EditorApplication()
     : projectPicker_(ENGINE.editorConfig().registry),
       projectPanel_([this](const VirtualPath& path) { openScene(path); }),
       hierarchyPanel_(document_),
       inspectorPanel_(document_),
       sceneViewPanel_(document_) {
+    // editor.json 固定在当前工作目录下的 editor/config/ 解析（不再由 main 传入）。
+    const std::filesystem::path editorConfigPath =
+        std::filesystem::current_path() / "editor" / "config" / "editor.json";
     // Load the editor config into the engine. The picker binds to the engine-owned
     // registry, so loading replaces the contents of the same object the picker
     // references; there is no application-side copy of the config.

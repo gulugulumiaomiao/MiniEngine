@@ -22,10 +22,9 @@ namespace engine::editor {
 // output, which acts as the scene view.
 class EditorApplication final : public Application {
 public:
-    // editorConfigPath is the physical path to editor.json (next to the executable).
-    // The editor config, including the recent-project registry, is loaded and saved at
-    // this path; there is no virtual mount for editor configuration.
-    explicit EditorApplication(const std::filesystem::path& editorConfigPath);
+    // editor.json 与 imgui.ini 固定在进程当前工作目录下的 editor/config/ 解析，构造
+    // 时不再接收路径。编辑器配置（含最近项目注册表）在该物理路径读写，没有虚拟挂载。
+    EditorApplication();
     ~EditorApplication() override;
 
     EditorApplication(const EditorApplication&) = delete;
