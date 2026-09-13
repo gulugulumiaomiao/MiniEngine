@@ -39,7 +39,7 @@ void ImGuiLayer::attach(Renderer& renderer, Window& window) {
         return;
     }
 
-    if (!renderer_.initialize(renderer.device(), renderer.swapchain().format())) {
+    if (!imguiRenderer_.initialize(renderer.device(), renderer.swapchain().format())) {
         Log::error("ImGuiLayer", "Cannot initialize the ImGui RHI renderer");
         ImGui_ImplWin32_Shutdown();
         ImGui::DestroyContext();
@@ -77,7 +77,7 @@ void ImGuiLayer::detach() {
         engineRenderer_->setOverlay(nullptr);
         engineRenderer_ = nullptr;
     }
-    renderer_.shutdown();
+    imguiRenderer_.shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
     initialized_ = false;
@@ -149,7 +149,7 @@ void ImGuiLayer::recordOverlay(RenderContext& context) {
         }},
     });
     if (hasUi)
-        renderer_.render(encoder, *drawData, context.frameIndex());
+        imguiRenderer_.render(encoder, *drawData, context.frameIndex());
     encoder.endRendering();
 
     const rhi::TextureBarrier toPresent{
@@ -165,7 +165,7 @@ void ImGuiLayer::onSwapchainRecreated(Renderer& renderer) {
         return;
     // Geometry buffers and the font atlas are resolution independent, and the pipeline
     // uses a dynamic viewport and scissor, so only a changed color format matters.
-    renderer_.onColorFormatChanged(renderer.swapchain().format());
+    imguiRenderer_.onColorFormatChanged(renderer.swapchain().format());
 }
 
 } // namespace engine::editor

@@ -42,7 +42,7 @@ public:
     void onSwapchainRecreated(Renderer& renderer) override;
 
 private:
-    ImGuiRenderer renderer_;
+    ImGuiRenderer imguiRenderer_;
     Renderer* engineRenderer_{};
     Window* window_{};
     std::string iniFilename_;
