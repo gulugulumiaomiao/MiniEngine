@@ -81,32 +81,6 @@ target_include_directories(MiniImGui SYSTEM PUBLIC
 target_link_libraries(MiniImGui PUBLIC gdi32 dwmapi imm32)
 set_target_properties(MiniImGui PROPERTIES FOLDER ThirdParty)
 
-# The editor UI pipeline is built directly from the RHI, so its shaders bypass the
-# ShaderLab asset pipeline: glslc emits them as comma separated words that
-# ImGuiRenderer.cpp includes inside constexpr uint32 arrays. The fragment stage is
-# compiled twice because an sRGB attachment needs ImGui's colors decoded first.
-function(mini_compile_editor_shader source output)
-    add_custom_command(
-        OUTPUT "${MINI_EDITOR_SHADER_DIR}/${output}"
-        COMMAND "${CMAKE_COMMAND}" -E make_directory "${MINI_EDITOR_SHADER_DIR}"
-        COMMAND "${GLSLC_EXECUTABLE}" --target-env=vulkan1.3 -O -mfmt=num ${ARGN}
-                -o "${MINI_EDITOR_SHADER_DIR}/${output}"
-                "${CMAKE_CURRENT_SOURCE_DIR}/editor/shaders/${source}"
-        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/editor/shaders/${source}"
-        COMMENT "Compiling editor UI shader ${output}"
-        VERBATIM
-    )
-endfunction()
-mini_compile_editor_shader(imgui.vert imgui.vert.inc)
-mini_compile_editor_shader(imgui.frag imgui.frag.inc)
-mini_compile_editor_shader(imgui.frag imgui.frag.srgb.inc -DSRGB_TARGET)
-add_custom_target(MiniEditorShaders DEPENDS
-    "${MINI_EDITOR_SHADER_DIR}/imgui.vert.inc"
-    "${MINI_EDITOR_SHADER_DIR}/imgui.frag.inc"
-    "${MINI_EDITOR_SHADER_DIR}/imgui.frag.srgb.inc"
-)
-set_target_properties(MiniEditorShaders PROPERTIES FOLDER Tools)
-
 # 编辑器配置、项目注册与模板仅编入编辑器变体，供编辑器接口和测试复用。
 target_sources(MiniEngineEditor PRIVATE
     editor/EditorConfig.cpp
@@ -133,8 +107,9 @@ add_executable(MiniEditor
     editor/InspectorPanel.cpp
     editor/SceneViewPanel.cpp
 )
-add_dependencies(MiniEditor MiniEditorShaders)
-target_include_directories(MiniEditor PRIVATE ${PROJECT_SOURCE_DIR} "${MINI_EDITOR_SHADER_DIR}")
+# ImGuiRenderer.cpp bakes the UI shaders in as SPIR-V words, so the editor no longer
+# needs a shader compile step or the generated-shader include directory.
+target_include_directories(MiniEditor PRIVATE ${PROJECT_SOURCE_DIR})
 # MINI_EDITOR 启用编辑器配置、最近项目和模板同步；项目配置与生命周期由两种引擎共用。
 # 此目标也显式声明宏，供 tools/editor 内的代码使用。
 target_link_libraries(MiniEditor PRIVATE MiniEngineEditor MiniImGui)

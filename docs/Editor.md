@@ -256,11 +256,11 @@ backbuffer 留在 `PRESENT_SRC`。实现按 `RenderContext::backBufferWritten()`
   用 16 位索引而不被 ImGui 拆分。
 - 只支持 `ImDrawCallback_ResetRenderState`，其他 user callback 记 warn 后忽略。
 
-UI shader 绕过 ShaderLab 资产管线：构建期用
-`glslc --target-env=vulkan1.3 -O -mfmt=num` 生成
-`build/<配置>/editor-shaders/imgui.vert.inc`、`imgui.frag.inc`、
-`imgui.frag.srgb.inc`，由 `ImGuiRenderer.cpp` 直接 `#include` 进 `constexpr uint32`
-数组（uint32 保证 SPIR-V 四字节对齐）。
+UI shader 绕过 ShaderLab 资产管线：两段 GLSL 用
+`glslc --target-env=vulkan1.3 -O -mfmt=num`（sRGB 变体加 `-DSRGB_TARGET`）离线编译，
+生成的 SPIR-V 字直接内联在 `ImGuiRenderer.cpp` 的 `constexpr uint32` 数组里（uint32
+保证四字节对齐），对应 GLSL 源码作为注释保留在同一处；因此不再需要 shader 文件夹
+或构建期编译步骤。
 
 `onSwapchainRecreated` 只在颜色格式变化时重建管线：几何缓冲和字体图集与分辨率无关，
 管线用的是动态 viewport 与 scissor。
@@ -310,7 +310,6 @@ Dock 宿主是一个铺满工作区、不可停靠、无标题栏、无背景的
 
 ```text
 MiniImGui            imgui 四个核心 cpp + imgui_impl_win32；链 gdi32/dwmapi/imm32
-MiniEditorShaders    glslc 生成三个内嵌 SPIR-V 头（.inc）
 MiniEditor           编辑器可执行文件；链 MiniEngineEditor + MiniImGui + ole32/shell32
 MiniCopyBuiltin      把 builtin/ 两层扁平合并到可执行文件旁的 assets/（不含 .meta），供游戏运行时使用
 ```
@@ -342,8 +341,8 @@ VS Code 中对应 `Debug MiniEditor (CodeLLDB)` 与 `Run MiniEditor Release` 两
   `ProjectLifecycleTest`、`BuildConfigEditorTest`。
 - `ProjectConfigTest` 链接普通 `MiniEngine`；`ProjectConfigEditorTest` 复用相同源码，
   链接 `MiniEngineEditor`。两者验证项目配置与项目 API 可用、编辑器配置 API 正确隔离。
-- `ImGuiRendererTest` 直接编译 `tools/editor/ImGuiRenderer.cpp`，依赖
-  `MiniEditorShaders` 与 `MiniImGui`，链接 `MiniEngine`（UI 后端不需要编辑器变体）。
+- `ImGuiRendererTest` 直接编译 `tools/editor/ImGuiRenderer.cpp`（UI shader 已内联其中），
+  依赖 `MiniImGui`，链接 `MiniEngine`（UI 后端不需要编辑器变体）。
 - 面板与 `EditorApplication` 的交互逻辑没有单元测试，需要实跑编辑器验证。
 
 ## 当前限制

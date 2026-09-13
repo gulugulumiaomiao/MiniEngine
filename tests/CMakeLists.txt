@@ -81,16 +81,13 @@ mini_add_test(RenderGraphTest)
 mini_add_test(RenderTargetTest)
 
 # The editor UI backend lives with the editor, so its test compiles that translation
-# unit directly and needs the same embedded shaders and ImGui headers.
+# unit directly; the UI shaders are baked into it as SPIR-V words, so no shader build
+# step or generated-shader include directory is needed.
 add_executable(ImGuiRendererTest
     ImGuiRendererTest.cpp
     ${PROJECT_SOURCE_DIR}/tools/editor/ImGuiRenderer.cpp
 )
-add_dependencies(ImGuiRendererTest MiniEditorShaders)
-target_include_directories(ImGuiRendererTest PRIVATE
-    ${PROJECT_SOURCE_DIR}
-    "${MINI_EDITOR_SHADER_DIR}"
-)
+target_include_directories(ImGuiRendererTest PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(ImGuiRendererTest PRIVATE MiniEngine MiniImGui)
 mini_enable_warnings(ImGuiRendererTest)
 if(NOT MSVC)
