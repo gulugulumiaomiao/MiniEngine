@@ -25,6 +25,9 @@ find_program(GLSLC_EXECUTABLE
 )
 
 set(MINI_GENERATED_SHADER_DIR "${PROJECT_SOURCE_DIR}/generated-shaders")
+# The editor UI shaders are compiled to embeddable SPIR-V words next to the build tree;
+# both the editor and its test include them from here.
+set(MINI_EDITOR_SHADER_DIR "${CMAKE_BINARY_DIR}/editor-shaders")
 
 if(MINGW)
     # Keep executables independent of the compiler installation's runtime DLLs.

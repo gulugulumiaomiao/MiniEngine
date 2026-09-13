@@ -34,6 +34,8 @@ public:
     [[nodiscard]] virtual std::uint32_t width() const = 0;
     [[nodiscard]] virtual std::uint32_t height() const = 0;
     [[nodiscard]] virtual std::uint32_t frameIndex() const = 0;
+    // Number of swapchain images; adjacent tooling sizes its per-image resources with this.
+    [[nodiscard]] virtual std::uint32_t imageCount() const = 0;
 };
 
 } // namespace engine::rhi

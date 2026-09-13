@@ -9,7 +9,10 @@
 namespace engine {
 namespace {
 
-const VirtualPath kBuiltinColorShaderPath{"asset://shaders/builtin_color.shader.json"};
+// The engine's fallback Shader is part of the built-in contract layer, refreshed into
+// every project's assets/ on open (syncEngineContractIntoProject), so it resolves through
+// the project's assets:// mount like any user asset.
+const VirtualPath kBuiltinColorShaderPath{"assets://shaders/builtin_color.shader.json"};
 
 } // namespace
 

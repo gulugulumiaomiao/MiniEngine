@@ -29,9 +29,16 @@ public:
     [[nodiscard]] std::uint64_t frameSerial() const;
     [[nodiscard]] const RenderScene& scene() const { return scene_; }
 
+    // True once a pass actually rendered into the swapchain backbuffer this frame.
+    // The overlay uses this instead of guessing from scene contents: a scene can have
+    // objects yet still produce no draw items, leaving the backbuffer untouched.
+    [[nodiscard]] bool backBufferWritten() const { return backBufferWritten_; }
+    void markBackBufferWritten() { backBufferWritten_ = true; }
+
 private:
     Renderer& renderer_;
     const RenderScene& scene_;
+    bool backBufferWritten_{};
 };
 
 } // namespace engine

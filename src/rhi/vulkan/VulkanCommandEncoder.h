@@ -14,6 +14,9 @@ public:
     void resourceBarriers(std::span<const TextureBarrier> barriers) override;
     void beginRendering(const RenderingInfo& info) override;
     void endRendering() override;
+    [[nodiscard]] VkCommandBuffer nativeCommandBuffer() const override {
+        return commandBuffer_;
+    }
     void setViewport(const Viewport& viewport) override;
     void setScissor(const Rect& scissor) override;
     void bindPipeline(GraphicsPipelineHandle pipeline) override;

@@ -31,5 +31,8 @@ int main() {
 #else
 #error "Exactly one of MINI_DEBUG, MINI_RELEASE or MINI_PUBLISH must be defined"
 #endif
+    // This target links MiniEngine, the variant without the editor-only features.
+    if (engine::build::kEditor)
+        return fail("MiniEngine must not report an editor build");
     return 0;
 }

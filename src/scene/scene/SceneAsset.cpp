@@ -1,4 +1,4 @@
-#include "scene/scene/SceneAsset.h"
+﻿#include "scene/scene/SceneAsset.h"
 
 #include "core/logging/Log.h"
 #include "core/serialization/Transfer.h"
@@ -462,7 +462,7 @@ bool validateSceneAsset(const SceneAsset& asset, const VirtualPath& scenePath) {
                                finite(value.scale) && lengthSquared > math::kEpsilon;
                     } else if constexpr (std::is_same_v<T, MeshComponentAsset>) {
                         if (value.sourceType == MeshComponentSourceType::Asset) {
-                            return value.mesh.valid() && value.mesh.scheme() == "asset" &&
+                            return value.mesh.valid() && value.mesh.scheme() == "assets" &&
                                    value.mesh.relativePath().ends_with(".mesh.json");
                         }
                         return value.sourceType == MeshComponentSourceType::Primitive &&
@@ -471,7 +471,7 @@ bool validateSceneAsset(const SceneAsset& asset, const VirtualPath& scenePath) {
                     } else if constexpr (std::is_same_v<T, MaterialComponentAsset>) {
                         return value.materials.size() <= kMaxMaterialsPerNode &&
                                std::ranges::all_of(value.materials, [](const VirtualPath& path) {
-                                   return path.valid() && path.scheme() == "asset" &&
+                                   return path.valid() && path.scheme() == "assets" &&
                                           path.relativePath().ends_with(".material.json");
                                });
                     } else if constexpr (std::is_same_v<T, CameraComponentAsset>) {

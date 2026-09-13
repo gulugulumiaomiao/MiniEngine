@@ -31,7 +31,9 @@ struct PlaneGeometry final : public Transferable {
     math::Vec2 size{1.0F};
     std::uint32_t segmentsX{1};
     std::uint32_t segmentsZ{1};
-    bool operator==(const PlaneGeometry&) const = default;
+    bool operator==(const PlaneGeometry& other) const {
+        return size == other.size && segmentsX == other.segmentsX && segmentsZ == other.segmentsZ;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
@@ -47,7 +49,10 @@ struct BoxGeometry final : public Transferable {
     std::uint32_t segmentsX{1};
     std::uint32_t segmentsY{1};
     std::uint32_t segmentsZ{1};
-    bool operator==(const BoxGeometry&) const = default;
+    bool operator==(const BoxGeometry& other) const {
+        return size == other.size && segmentsX == other.segmentsX && segmentsY == other.segmentsY &&
+               segmentsZ == other.segmentsZ;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
@@ -60,7 +65,10 @@ struct UvSphereGeometry final : public Transferable {
     float radius{0.5F};
     std::uint32_t longitudeSegments{32};
     std::uint32_t latitudeSegments{16};
-    bool operator==(const UvSphereGeometry&) const = default;
+    bool operator==(const UvSphereGeometry& other) const {
+        return radius == other.radius && longitudeSegments == other.longitudeSegments &&
+               latitudeSegments == other.latitudeSegments;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
@@ -84,7 +92,12 @@ struct CylinderGeometry final : public Transferable {
     std::uint32_t heightSegments{1};
     bool capBottom{true};
     bool capTop{true};
-    bool operator==(const CylinderGeometry&) const = default;
+    bool operator==(const CylinderGeometry& other) const {
+        return bottomRadius == other.bottomRadius && topRadius == other.topRadius &&
+               height == other.height && radialSegments == other.radialSegments &&
+               heightSegments == other.heightSegments && capBottom == other.capBottom &&
+               capTop == other.capTop;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
@@ -99,7 +112,7 @@ struct MeshPrimitive final : public Transferable {
     MeshPrimitive(UvSphereGeometry geometry) : value(geometry) {}
     MeshPrimitive(CylinderGeometry geometry) : value(geometry) {}
 
-    bool operator==(const MeshPrimitive&) const = default;
+    bool operator==(const MeshPrimitive& other) const { return value == other.value; }
     [[nodiscard]] MeshPrimitiveType type() const;
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
@@ -120,7 +133,10 @@ struct MeshPrimitivePart final : public Transferable {
     math::Vec3 scale{1.0F};
     std::uint32_t materialSlot{};
 
-    bool operator==(const MeshPrimitivePart&) const = default;
+    bool operator==(const MeshPrimitivePart& other) const {
+        return primitive == other.primitive && translation == other.translation &&
+               rotation == other.rotation && scale == other.scale && materialSlot == other.materialSlot;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 

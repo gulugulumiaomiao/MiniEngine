@@ -27,6 +27,10 @@ F5 会依次调用仓库中的 `tools/dev/Invoke-CMake.ps1`、配置 `clang-debu
 构建 `MiniVulkanEngine.exe`，最后由 CodeLLDB 启动程序。工具发现脚本不会保存用户名、
 SDK 版本或 WinGet 缓存绝对路径，因此仓库可以在不同 Windows 用户目录中工作。
 
+调试编辑器选 `Debug MiniEditor (CodeLLDB)`（Release 选 `Run MiniEditor Release`）：
+任务会先构建 `MiniEditor` 目标及其内嵌的 UI Shader，然后启动
+`build/clang-debug/MiniEditor.exe`。
+
 ## 命令行验证
 
 不修改当前 PowerShell 的 PATH 也可以直接执行：
@@ -39,11 +43,24 @@ powershell -ExecutionPolicy Bypass -File tools/dev/Invoke-CMake.ps1 --build --pr
 
 Release 将 `clang-debug` 改为 `clang-release`：行为与 Debug 完全一致（含验证层和热重载），仅开启编译优化。发布版使用 `clang-publish`，它以 Release 级优化编译并启用发布行为：只读取打包后的 AssetDatabase、Artifact 和预编译 SPV，不启动验证层、FileWatcher 和运行时 Shader 编译。
 
+`MiniEditor` 目标在三个配置下都会构建，但只有 Debug 与 Release 可用：Publish 的
+资产系统是 Packaged 模式，只读烘焙后的 AssetDatabase 与 Artifact，而项目 `assets/`
+里放的是源 JSON：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/dev/Invoke-CMake.ps1 --build --preset clang-debug --target MiniEditor --parallel
+./build/clang-debug/MiniEditor.exe
+```
+
+首次启动会在 `build/clang-debug/editor/config/` 下生成 `editor.json` 与 `imgui.ini`，
+并弹出项目选择框；新建或选定的项目目录会自己持有 `assets/`、`library/` 和
+`generated-shaders/`。详见[编辑器文档](Editor.md)。
+
 ## 仓库内容约定
 
 会提交：
 
-- `src/`、`assets/`、`shaders/`、`docs/`、`tests/`、`tools/`
+- `src/`、`builtin/`、`config/`、`docs/`、`tests/`、`tools/`
 - `third_party/` 固定版本依赖
 - `.vscode/`、`CMakeLists.txt`、`CMakePresets.json`
 
@@ -51,4 +68,5 @@ Release 将 `clang-debug` 改为 `clang-release`：行为与 Debug 完全一致�
 
 - `build*` 构建目录
 - `library/` 导入缓存和 Artifact
+- `generated-shaders/` 运行时与打包 Shader 产物
 - 日志、IDE 用户配置和临时 Shader 产物

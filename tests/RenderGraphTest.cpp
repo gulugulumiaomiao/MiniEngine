@@ -57,6 +57,10 @@ public:
     }
     void destroyBindGroup(engine::rhi::BindGroupHandle) override {}
     VkDevice device() const override { return VK_NULL_HANDLE; }
+    VkInstance instance() const override { return VK_NULL_HANDLE; }
+    VkPhysicalDevice physicalDevice() const override { return VK_NULL_HANDLE; }
+    VkQueue graphicsQueue() const override { return VK_NULL_HANDLE; }
+    std::uint32_t graphicsQueueFamily() const override { return 0; }
     VkBuffer resolveBuffer(engine::rhi::BufferHandle) const override { return VK_NULL_HANDLE; }
     VkImage resolveTexture(engine::rhi::TextureHandle) const override { return VK_NULL_HANDLE; }
     VkImageView resolveTextureView(engine::rhi::TextureViewHandle) const override {
@@ -101,6 +105,9 @@ public:
         events.push_back("label:" + std::string{name});
     }
     void endDebugLabel() override { events.emplace_back("endLabel"); }
+    [[nodiscard]] VkCommandBuffer nativeCommandBuffer() const override {
+        return VK_NULL_HANDLE;
+    }
 
     std::vector<std::string> events;
     std::vector<engine::rhi::TextureBarrier> recordedBarriers;

@@ -2,7 +2,7 @@
 
 `AssetManager` 是 CPU 资产对象的统一加载入口，通过 `ASSET_MANAGER` 访问。它负责：
 
-- 根据 `asset://` 路径查询 `AssetDatabase`。
+- 根据 `assets://` 路径查询 `AssetDatabase`。
 - 从 `library://` 读取并反序列化 Artifact。
 - 在开发模式下按需触发导入。
 - 使用 `weak_ptr` 缓存已加载的 Asset，不延长资产生命周期。
@@ -12,7 +12,7 @@
 各自的 Manager，Manager 的成员函数也必须保留在自己的实现文件中。
 
 ```text
-asset:// 路径
+assets:// 路径
   -> AssetDatabase::findByPath
   -> 必要时导入（仅 Development）
   -> library://artifacts/.../asset.bin
@@ -45,7 +45,7 @@ ASSET_MANAGER.initialize(AssetManagerMode::Packaged);
 初始化前，启动层必须统一完成文件系统挂载：
 
 ```cpp
-FILE_SYSTEM.mountDirectory("asset", physicalAssetRoot, true);
+FILE_SYSTEM.mountDirectory("assets", physicalAssetRoot, true);
 FILE_SYSTEM.mountDirectory("library", physicalLibraryRoot, false);
 if (!ASSET_MANAGER.initialize()) {
     // 初始化失败
@@ -57,7 +57,7 @@ if (!ASSET_MANAGER.initialize()) {
 AssetManager 返回可序列化的 CPU 资产描述；领域 Manager 将其转换为运行时资源：
 
 ```text
-asset://meshes/example.mesh.json
+assets://meshes/example.mesh.json
   -> AssetManager::loadAsset<MeshAsset>
   -> MeshManager::load
   -> MeshAsset::instantiate

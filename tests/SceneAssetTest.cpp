@@ -1,4 +1,4 @@
-#include "asset/derived_data/AssetArtifact.h"
+﻿#include "asset/derived_data/AssetArtifact.h"
 #include "asset/base/AssetMeta.h"
 #include "core/serialization/BinaryTransfer.h"
 #include "render/mesh/MeshManager.h"
@@ -39,7 +39,7 @@ constexpr std::string_view kSceneJson = R"json(
         },
         {
           "type": "Material",
-          "materials": ["asset://materials/default.material.json"]
+          "materials": ["assets://materials/default.material.json"]
         }
       ]
     },
@@ -111,7 +111,7 @@ int main() {
     static_assert(std::is_base_of_v<Transferable, LightComponentAsset>);
     static_assert(std::is_base_of_v<Transferable, SceneNodeAsset>);
 
-    const VirtualPath scenePath{"asset://scenes/example.scene.json"};
+    const VirtualPath scenePath{"assets://scenes/example.scene.json"};
     if (inferAssetType(scenePath) != AssetType::Scene ||
         assetTypeFromName("Scene") != AssetType::Scene ||
         std::string_view{assetTypeName(AssetType::Scene)} != "Scene") {
@@ -131,9 +131,9 @@ int main() {
     const auto* mesh = std::get_if<MeshComponentAsset>(&world.components[1]);
     const auto* material = std::get_if<MaterialComponentAsset>(&world.components[2]);
     if (!transform || transform->position != math::Vec3{1.0F, 2.0F, 3.0F} || !mesh ||
-        mesh->mesh != VirtualPath{"asset://meshes/cube.mesh.json"} || mesh->castShadow ||
+        mesh->mesh != VirtualPath{"assets://meshes/cube.mesh.json"} || mesh->castShadow ||
         mesh->layerMask != 3 || !material || material->materials.size() != 1 ||
-        material->materials[0] != VirtualPath{"asset://materials/default.material.json"}) {
+        material->materials[0] != VirtualPath{"assets://materials/default.material.json"}) {
         return 3;
     }
 
@@ -187,8 +187,8 @@ int main() {
     std::unique_ptr<Scene> runtime = decoded.instantiate(context);
     if (!runtime || runtime->name() != "Example Scene" || runtime->nodeCount() != 5 ||
         loadedMeshes.size() != 1 || loadedMaterials.size() != 1 || MESH_MANAGER.size() != 1 ||
-        loadedMeshes.front() != VirtualPath{"asset://meshes/cube.mesh.json"} ||
-        loadedMaterials.front() != VirtualPath{"asset://materials/default.material.json"}) {
+        loadedMeshes.front() != VirtualPath{"assets://meshes/cube.mesh.json"} ||
+        loadedMaterials.front() != VirtualPath{"assets://materials/default.material.json"}) {
         return 12;
     }
     const Node* runtimeWorld = runtime->findNode(runtime->root().children().front());

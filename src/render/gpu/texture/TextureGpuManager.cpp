@@ -1,4 +1,4 @@
-#include "render/gpu/texture/TextureGpuManager.h"
+﻿#include "render/gpu/texture/TextureGpuManager.h"
 
 #include "core/logging/Log.h"
 #include "render/gpu/common/GpuManagerUtils.h"
@@ -64,8 +64,8 @@ std::optional<rhi::TextureBinding> TextureGpuManager::resolveReference(std::stri
     } else {
         VirtualPath path{reference};
         if (!path.valid())
-            path = VirtualPath{"asset://" + std::string{reference}};
-        if (path.valid() && path.scheme() == "asset")
+            path = VirtualPath{"assets://" + std::string{reference}};
+        if (path.valid() && path.scheme() == "assets")
             handle = TEXTURE_MANAGER.load(path);
         if (!handle) {
             Log::warn("TextureGpuManager",

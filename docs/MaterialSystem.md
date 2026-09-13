@@ -51,7 +51,7 @@ Renderer 每帧从 Material 选择 `Shader -> SubShader -> ShaderPass`，生成 
 
 `MiniEngine/BuiltinColor` 是最小兜底 Shader，只声明一个 `Color` uniform。顶点阶段仅执行对象与相机变换，片元阶段直接输出该颜色。
 
-`asset://materials/error.material.json` 使用该 Shader，并把 `Color` 设置为洋红色 `(1, 0, 1, 1)`。`MaterialManager::errorMaterial()` 延迟加载并复用这个材质。
+`assets://materials/error.material.json` 使用该 Shader，并把 `Color` 设置为洋红色 `(1, 0, 1, 1)`。`MaterialManager::errorMaterial()` 延迟加载并复用这个材质。
 
 回退规则：
 

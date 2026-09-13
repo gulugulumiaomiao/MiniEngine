@@ -39,6 +39,32 @@
       "sourceLanguages": [
         "cpp"
       ]
+    },
+    {
+      "name": "Debug MiniEditor (CodeLLDB)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/clang-debug/MiniEditor.exe",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "CMake: Build MiniEditor Debug",
+      "stopOnEntry": false,
+      "terminal": "integrated",
+      "sourceLanguages": [
+        "cpp"
+      ]
+    },
+    {
+      "name": "Run MiniEditor Release",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/clang-release/MiniEditor.exe",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "CMake: Build MiniEditor Release",
+      "stopOnEntry": false,
+      "terminal": "integrated",
+      "sourceLanguages": [
+        "cpp"
+      ]
     }
   ]
 }

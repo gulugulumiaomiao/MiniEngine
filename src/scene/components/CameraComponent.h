@@ -22,7 +22,13 @@ struct CameraComponentAsset final : public Transferable {
     bool primary{};
     bool enabled{true};
 
-    bool operator==(const CameraComponentAsset&) const = default;
+    bool operator==(const CameraComponentAsset& other) const {
+        return projection == other.projection && fieldOfView == other.fieldOfView &&
+               orthographicSize == other.orthographicSize && nearPlane == other.nearPlane &&
+               farPlane == other.farPlane && clearColor == other.clearColor &&
+               cullingMask == other.cullingMask && priority == other.priority &&
+               primary == other.primary && enabled == other.enabled;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 

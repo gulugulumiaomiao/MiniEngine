@@ -1,4 +1,4 @@
-#include "core/filesystem/FileSystem.h"
+﻿#include "core/filesystem/FileSystem.h"
 #include "core/filesystem/FileDependencyGraph.h"
 #include "core/filesystem/DirectoryMount.h"
 #include "core/filesystem/VirtualPath.h"
@@ -12,10 +12,10 @@
 int main() {
     using namespace engine;
 
-    const VirtualPath normalized{"Asset://folder/./nested/../file.txt"};
-    const VirtualPath escaped{"asset://../outside.txt"};
-    if (!normalized.valid() || normalized.scheme() != "asset" ||
-        normalized.string() != "asset://folder/file.txt" || escaped.valid()) {
+    const VirtualPath normalized{"Assets://folder/./nested/../file.txt"};
+    const VirtualPath escaped{"assets://../outside.txt"};
+    if (!normalized.valid() || normalized.scheme() != "assets" ||
+        normalized.string() != "assets://folder/file.txt" || escaped.valid()) {
         return 1;
     }
 

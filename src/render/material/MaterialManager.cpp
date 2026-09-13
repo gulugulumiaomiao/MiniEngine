@@ -7,7 +7,10 @@
 namespace engine {
 namespace {
 
-const VirtualPath kErrorMaterialPath{"asset://materials/error.material.json"};
+// The engine's fallback Material is part of the built-in contract layer, refreshed into
+// every project's assets/ on open (syncEngineContractIntoProject), so it resolves through
+// the project's assets:// mount like any user asset.
+const VirtualPath kErrorMaterialPath{"assets://materials/error.material.json"};
 
 } // namespace
 

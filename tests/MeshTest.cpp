@@ -1,4 +1,4 @@
-#include "render/mesh/Mesh.h"
+﻿#include "render/mesh/Mesh.h"
 #include "render/mesh/MeshManager.h"
 #include "core/serialization/BinaryTransfer.h"
 #include "core/serialization/JsonTransfer.h"
@@ -80,6 +80,10 @@ public:
     }
     void destroyBindGroup(engine::rhi::BindGroupHandle) override {}
     VkDevice device() const override { return VK_NULL_HANDLE; }
+    VkInstance instance() const override { return VK_NULL_HANDLE; }
+    VkPhysicalDevice physicalDevice() const override { return VK_NULL_HANDLE; }
+    VkQueue graphicsQueue() const override { return VK_NULL_HANDLE; }
+    std::uint32_t graphicsQueueFamily() const override { return 0; }
     VkBuffer resolveBuffer(engine::rhi::BufferHandle) const override { return VK_NULL_HANDLE; }
     VkImage resolveTexture(engine::rhi::TextureHandle) const override { return VK_NULL_HANDLE; }
     VkImageView resolveTextureView(engine::rhi::TextureViewHandle) const override {
@@ -125,7 +129,7 @@ int main() {
     constexpr std::array<std::uint16_t, 3> indices{0, 1, 2};
 
     MeshAsset source;
-    source.setAssetPath(VirtualPath{"asset://meshes/test.mesh"});
+    source.setAssetPath(VirtualPath{"assets://meshes/test.mesh"});
     source.desc.debugName = "MultiStreamTriangle";
     source.desc.vertexLayout.bindings = {
         {0, sizeof(math::Vec3), VertexInputRate::Vertex},

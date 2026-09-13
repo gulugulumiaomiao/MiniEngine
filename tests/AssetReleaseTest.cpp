@@ -1,4 +1,4 @@
-#include "asset/importer/AssetImportPipeline.h"
+﻿#include "asset/importer/AssetImportPipeline.h"
 #include "asset/importer/FileWatcher.h"
 #include "asset/manager/AssetManager.h"
 #include "render/material/Material.h"
@@ -25,12 +25,12 @@ int main() {
         return 1;
 
     const auto shader = ASSET_MANAGER.loadAsset<ShaderAsset>(
-        VirtualPath{"asset://shaders/vertex_color.shader.json"});
+        VirtualPath{"assets://shaders/vertex_color.shader.json"});
     const auto material = ASSET_MANAGER.loadAsset<MaterialAsset>(
-        VirtualPath{"asset://materials/warm_vertex_color.material.json"});
+        VirtualPath{"assets://materials/warm_vertex_color.material.json"});
     if (!shader || !material)
         return 2;
-    if (ASSET_MANAGER.loadAsset<ShaderAsset>(VirtualPath{"asset://shaders/missing.shader.json"})) {
+    if (ASSET_MANAGER.loadAsset<ShaderAsset>(VirtualPath{"assets://shaders/missing.shader.json"})) {
         return 3;
     }
 
@@ -40,7 +40,7 @@ int main() {
     }
 
     const auto showcase = ASSET_MANAGER.loadAsset<SceneAsset>(
-        VirtualPath{"asset://scenes/blinn_phong_showcase.scene.json"});
+        VirtualPath{"assets://scenes/blinn_phong_showcase.scene.json"});
     if (!showcase || showcase->nodes.size() != 7)
         return 6;
     const SceneInstantiationContext context{

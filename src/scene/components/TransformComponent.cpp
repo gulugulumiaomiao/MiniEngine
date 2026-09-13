@@ -6,8 +6,9 @@
 namespace engine {
 
 bool TransformComponentAsset::transfer(Transfer& archive) {
-    return archive.transfer("position", position) && archive.transfer("rotation", rotation) &&
-           archive.transfer("scale", scale);
+    return archive.beginObject({}) && archive.transfer("position", position) &&
+           archive.transfer("rotation", rotation) && archive.transfer("scale", scale) &&
+           archive.endObject();
 }
 
 void TransformComponent::setLocalPosition(const math::Vec3& position) {

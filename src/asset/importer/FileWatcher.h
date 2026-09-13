@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "core/base/Singleton.h"
 #include "core/filesystem/VirtualPath.h"
@@ -24,7 +24,7 @@ class FileWatcher final : public Singleton<FileWatcher> {
 public:
     ~FileWatcher();
 
-    [[nodiscard]] bool start(const VirtualPath& root = VirtualPath{"asset://"},
+    [[nodiscard]] bool start(const VirtualPath& root = VirtualPath{"assets://"},
                              std::chrono::milliseconds debounce = std::chrono::milliseconds{200},
                              bool background = true);
     void stop();

@@ -12,7 +12,7 @@ Transfer
     └── JsonWriter
 ```
 
-资产层另外提供 `Transferable` 抽象接口：
+核心序列化层提供 `Transferable` 抽象接口：
 
 ```cpp
 class Transferable {
@@ -26,7 +26,9 @@ class Asset : public Transferable {
 };
 ```
 
-所有具体 Asset 都通过 `Asset` 继承 `Transferable`，并必须实现自己的 `transfer()`。普通值类型不需要继承该接口，只要提供同名成员方法即可，避免为 Vertex、Node 数据等小对象增加虚表。
+引擎与编辑器中所有实现 `bool transfer(Transfer&)` 的数据类型都直接或间接继承 `Transferable`，包括配置、项目注册表、资产与嵌套值类型。具体 Asset 通过 `Asset` 继承接口。`Transfer`/Reader/Writer 是归档器，其字段读写重载不属于这个数据接口。
+
+`Transferable` 不提供 `operator==`；需要比较的派生类自行比较字段。新增继承会使原聚合类型不再支持聚合初始化，使用位置参数构造的类型需提供相应构造函数。
 
 ## 支持的数据
 
@@ -34,29 +36,33 @@ class Asset : public Transferable {
 - Vec2、Vec3、Vec4、Mat33、Mat44 和 Quat。
 - enum、vector、optional 和 variant。
 - `std::vector<std::byte>` 与 `VirtualPath`。
-- 提供 `bool T::transfer(Transfer&)` 成员方法的自定义类型。
+- 继承 `Transferable` 并覆盖 `bool transfer(Transfer&)` 的自定义类型。
 
 ## 自定义类型
 
 需要参与 Transfer 的数据类型直接声明成员接口：
 
 ```cpp
-struct Example {
+struct Example : public Transferable {
     std::string name;
     math::Vec3 position;
     std::vector<float> values;
 
-    bool transfer(Transfer& archive);
+    bool transfer(Transfer& archive) override;
 };
 
 bool Example::transfer(Transfer& archive) {
-    return archive.transfer("name", name) &&
+    return archive.beginObject({}) &&
+           archive.transfer("name", name) &&
            archive.transfer("position", position) &&
-           archive.transfer("values", values);
+           archive.transfer("values", values) &&
+           archive.endObject();
 }
 ```
 
-`Transfer::transfer(name, value)` 会建立对象作用域，再调用 `value.transfer(*this)`。不再使用 ADL 或自由函数 `transferValue`。
+每个数据类型的 `transfer` 自己负责 `beginObject({})`/`endObject()`。根对象直接调用 `value.transfer(archive)`，调用方不再包装根对象。嵌套对象使用 `archive.transfer("child", value)`：归档器仅定位字段，不创建对象，再通过 `Transferable` 调用其实现。数组、optional、variant 内的自定义对象同样遵循此约定，JSON 层级与 Binary 字段顺序不变。
+
+不要在已写入其他字段的对象内直接调用另一个对象的 `transfer`，否则空名称会选中当前对象，JSON 写入时会清空它；命名子对象必须通过字段重载传输。字段作用域在成功或失败后都会恢复父位置，但错误仍保留，不能把传输失败当作成功。根对象失败后应丢弃归档器；只有明确的可选字段兼容逻辑可以清错继续。
 
 接口不是 `const`，因为读取与写入共用同一个签名：Reader 修改字段，Writer 只读取字段。
 

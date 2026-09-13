@@ -1,4 +1,4 @@
-#include "asset/derived_data/AssetArtifact.h"
+﻿#include "asset/derived_data/AssetArtifact.h"
 #include "asset/base/Asset.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/base/AssetMeta.h"
@@ -31,13 +31,13 @@ int main() {
     std::error_code error;
     std::filesystem::create_directories(assetRoot, error);
     std::filesystem::create_directories(libraryRoot, error);
-    if (error || !FILE_SYSTEM.mountDirectory("asset", assetRoot) ||
+    if (error || !FILE_SYSTEM.mountDirectory("assets", assetRoot) ||
         !FILE_SYSTEM.mountDirectory("library", libraryRoot)) {
         return 2;
     }
 
-    const VirtualPath shaderPath{"asset://shaders/test.shader.json"};
-    const VirtualPath materialPath{"asset://materials/test.material.json"};
+    const VirtualPath shaderPath{"assets://shaders/test.shader.json"};
+    const VirtualPath materialPath{"assets://materials/test.material.json"};
     if (!FILE_SYSTEM.writeText(shaderPath, "{}") || !FILE_SYSTEM.writeText(materialPath, "{}") ||
         inferAssetType(shaderPath) != AssetType::Shader ||
         inferAssetType(materialPath) != AssetType::Material) {
@@ -121,7 +121,7 @@ int main() {
         return 12;
     }
     database.shutdown();
-    (void)FILE_SYSTEM.unmount("asset");
+    (void)FILE_SYSTEM.unmount("assets");
     (void)FILE_SYSTEM.unmount("library");
     std::filesystem::remove_all(root, error);
     return error ? 13 : 0;

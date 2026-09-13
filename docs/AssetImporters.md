@@ -41,6 +41,6 @@ Shader 导入输出类型专用的二进制 Artifact，不运行 glslc。SPIR-V�
 
 ## Material 导入
 
-管线先解析 Material 的 Shader 虚拟路径并保证 Shader 已成功导入。Material Importer 随后从 Shader Artifact 读取属性声明，校验 Material 的 Properties 和 Keywords，并输出 Material Artifact。Material 依赖列表包含其 Shader 的 `asset://` 路径，因此 Shader 变化会通过 AssetDatabase 的反向依赖触发 Material 重导入。
+管线先解析 Material 的 Shader 虚拟路径并保证 Shader 已成功导入。Material Importer 随后从 Shader Artifact 读取属性声明，校验 Material 的 Properties 和 Keywords，并输出 Material Artifact。Material 依赖列表包含其 Shader 的 `assets://` 路径，因此 Shader 变化会通过 AssetDatabase 的反向依赖触发 Material 重导入。
 
 完整导入与热重载流程见 [AssetPipeline.md](AssetPipeline.md)。

@@ -21,6 +21,9 @@ public:
 private:
     template <typename T> bool writeInteger(T value);
 
+    bool beginValue(std::string_view) override { return valid(); }
+    bool endValue() override { return valid(); }
+
     bool transferBool(std::string_view, bool& value) override;
     bool transferInt8(std::string_view, std::int8_t& value) override;
     bool transferUInt8(std::string_view, std::uint8_t& value) override;
@@ -54,6 +57,9 @@ public:
 
 private:
     template <typename T> bool readInteger(T& value);
+
+    bool beginValue(std::string_view) override { return valid(); }
+    bool endValue() override { return valid(); }
 
     bool transferBool(std::string_view, bool& value) override;
     bool transferInt8(std::string_view, std::int8_t& value) override;

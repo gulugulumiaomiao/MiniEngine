@@ -5,27 +5,30 @@
 namespace engine {
 
 bool PlaneGeometry::transfer(Transfer& archive) {
-    return archive.transfer("size", size) && archive.transfer("segments_x", segmentsX) &&
-           archive.transfer("segments_z", segmentsZ);
+    return archive.beginObject({}) && archive.transfer("size", size) &&
+           archive.transfer("segments_x", segmentsX) && archive.transfer("segments_z", segmentsZ) &&
+           archive.endObject();
 }
 
 bool BoxGeometry::transfer(Transfer& archive) {
-    return archive.transfer("size", size) && archive.transfer("segments_x", segmentsX) &&
-           archive.transfer("segments_y", segmentsY) && archive.transfer("segments_z", segmentsZ);
+    return archive.beginObject({}) && archive.transfer("size", size) &&
+           archive.transfer("segments_x", segmentsX) && archive.transfer("segments_y", segmentsY) &&
+           archive.transfer("segments_z", segmentsZ) && archive.endObject();
 }
 
 bool UvSphereGeometry::transfer(Transfer& archive) {
-    return archive.transfer("radius", radius) &&
+    return archive.beginObject({}) && archive.transfer("radius", radius) &&
            archive.transfer("longitude_segments", longitudeSegments) &&
-           archive.transfer("latitude_segments", latitudeSegments);
+           archive.transfer("latitude_segments", latitudeSegments) && archive.endObject();
 }
 
 bool CylinderGeometry::transfer(Transfer& archive) {
-    return archive.transfer("bottom_radius", bottomRadius) &&
+    return archive.beginObject({}) && archive.transfer("bottom_radius", bottomRadius) &&
            archive.transfer("top_radius", topRadius) && archive.transfer("height", height) &&
            archive.transfer("radial_segments", radialSegments) &&
            archive.transfer("height_segments", heightSegments) &&
-           archive.transfer("cap_bottom", capBottom) && archive.transfer("cap_top", capTop);
+           archive.transfer("cap_bottom", capBottom) && archive.transfer("cap_top", capTop) &&
+           archive.endObject();
 }
 
 MeshPrimitiveType MeshPrimitive::type() const {
@@ -33,6 +36,8 @@ MeshPrimitiveType MeshPrimitive::type() const {
 }
 
 bool MeshPrimitive::transfer(Transfer& archive) {
+    if (!archive.beginObject({}))
+        return false;
     MeshPrimitiveType primitiveType = type();
     if (!archive.transfer("primitive_type", primitiveType))
         return false;
@@ -46,13 +51,16 @@ bool MeshPrimitive::transfer(Transfer& archive) {
         }
     }
     return std::visit(
-        [&archive](auto& geometry) { return archive.transfer("parameters", geometry); }, value);
+               [&archive](auto& geometry) { return archive.transfer("parameters", geometry); },
+               value) &&
+           archive.endObject();
 }
 
 bool MeshPrimitivePart::transfer(Transfer& archive) {
-    return archive.transfer("primitive", primitive) &&
+    return archive.beginObject({}) && archive.transfer("primitive", primitive) &&
            archive.transfer("translation", translation) && archive.transfer("rotation", rotation) &&
-           archive.transfer("scale", scale) && archive.transfer("material_slot", materialSlot);
+           archive.transfer("scale", scale) && archive.transfer("material_slot", materialSlot) &&
+           archive.endObject();
 }
 
 } // namespace engine

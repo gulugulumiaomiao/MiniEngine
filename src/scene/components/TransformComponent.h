@@ -13,7 +13,9 @@ struct TransformComponentAsset final : public Transferable {
     math::Quat rotation{1.0F, 0.0F, 0.0F, 0.0F};
     math::Vec3 scale{1.0F};
 
-    bool operator==(const TransformComponentAsset&) const = default;
+    bool operator==(const TransformComponentAsset& other) const {
+        return position == other.position && rotation == other.rotation && scale == other.scale;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 

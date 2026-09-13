@@ -209,6 +209,32 @@ FrameStatus VulkanSwapchain::beginFrame() {
     VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     check(vkBeginCommandBuffer(frame.commandBuffer, &beginInfo), "vkBeginCommandBuffer");
+    
+    // On first use, transition from UNDEFINED to COLOR_ATTACHMENT_OPTIMAL
+    if (!imageInitialized_[imageIndex_]) {
+        VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = images_[imageIndex_];
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        vkCmdPipelineBarrier(
+            frame.commandBuffer,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            0,
+            0, nullptr,
+            0, nullptr,
+            1, &barrier);
+    }
+    
     encoder_ = std::make_unique<VulkanGraphicsCommandEncoder>(frame.commandBuffer, device_);
     frameOpen_ = true;
     return FrameStatus::Ready;
@@ -219,6 +245,7 @@ FrameStatus VulkanSwapchain::endFrame() {
         Log::fatal("VulkanSwapchain", "No frame is open");
     Frame& frame = frames_[currentFrame_];
     encoder_.reset();
+    // Note: Layout transition to PRESENT_SRC_KHR is handled by RenderGraph
     check(vkEndCommandBuffer(frame.commandBuffer), "vkEndCommandBuffer");
     const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     const VkSemaphore finished = renderFinished_[imageIndex_];

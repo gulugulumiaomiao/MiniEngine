@@ -19,4 +19,13 @@ inline constexpr std::string_view kConfiguration = "Debug";
 inline constexpr std::string_view kWindowTitle = "Mini Vulkan Engine [Debug]";
 #endif
 
+// True in the MiniEngineEditor library variant, which compiles the editor-only engine
+// features (project management). Orthogonal to the configuration macros above: the
+// editor is normally built in Debug and Release.
+#if defined(MINI_EDITOR)
+inline constexpr bool kEditor = true;
+#else
+inline constexpr bool kEditor = false;
+#endif
+
 } // namespace engine::build

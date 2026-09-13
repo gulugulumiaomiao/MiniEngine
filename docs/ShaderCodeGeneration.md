@@ -45,7 +45,7 @@ ShaderLab 类型映射如下：
 | Vec4、Color | `vec4` |
 | Texture2D | `sampler2D` |
 
-例如 `assets/shaders/vertex_color.shader.json` 会生成：
+例如 `builtin/samples/shaders/vertex_color.shader.json` 会生成：
 
 ```glsl
 // Generated from ShaderLab properties. Do not edit.
@@ -66,7 +66,7 @@ layout(std140, set = 1, binding = 0) uniform MaterialProperties
 
 ```powershell
 ./build/clang-debug/MiniShaderCompiler.exe compile `
-  assets/shaders/vertex_color.shader.json Forward `
+  builtin/samples/shaders/vertex_color.shader.json Forward `
   generated-shaders
 ```
 
@@ -171,4 +171,4 @@ void FragmentMain(MiniVaryings inValue, out MiniFragmentOutput outValue)
 
 `ShaderGenerator` 由 `ShaderCompilePipeline` 调度。它只接收运行时 `Shader`、`ShaderPass`、当前阶段和用户源码，生成 Properties、接口与入口包装；随后预处理器展开 `#include`、注入变体宏并计算源码哈希。
 
-Shader JSON、阶段源码、include 依赖、生成后的 SPIR-V 和反射输入均使用 `VirtualPath`。资产源码通常位于 `asset://`，按需生成的 GLSL/SPIR-V 位于 `shader-cache://<source-hash>.*`；只有文件系统挂载层负责映射到物理路径。
+Shader JSON、阶段源码、include 依赖、生成后的 SPIR-V 和反射输入均使用 `VirtualPath`。资产源码通常位于 `assets://`，按需生成的 GLSL/SPIR-V 位于 `shader-cache://<source-hash>.*`；只有文件系统挂载层负责映射到物理路径。

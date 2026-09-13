@@ -1,4 +1,4 @@
-#include "asset/database/AssetDatabase.h"
+﻿#include "asset/database/AssetDatabase.h"
 #include "asset/importer/AssetImportPipeline.h"
 #include "asset/base/AssetMeta.h"
 #include "asset/importer/FileWatcher.h"
@@ -141,16 +141,16 @@ int main() {
         return 20;
     FILE_WATCHER.stop();
 
-    if (!FILE_SYSTEM.writeText(VirtualPath{"asset://shaders/simple.vert"},
+    if (!FILE_SYSTEM.writeText(VirtualPath{"assets://shaders/simple.vert"},
                                "#version 450\nvoid main(){gl_Position=vec4(0);}\n") ||
-        !FILE_SYSTEM.writeText(VirtualPath{"asset://shaders/simple.frag"},
+        !FILE_SYSTEM.writeText(VirtualPath{"assets://shaders/simple.frag"},
                                "#version 450\nlayout(location=0) out vec4 c;"
                                "void main(){c=vec4(1);}\n") ||
-        !FILE_SYSTEM.writeText(VirtualPath{"asset://shaders/first.shader.json"},
+        !FILE_SYSTEM.writeText(VirtualPath{"assets://shaders/first.shader.json"},
                                shaderSource("Tests/First")) ||
-        !FILE_SYSTEM.writeText(VirtualPath{"asset://shaders/second.shader.json"},
+        !FILE_SYSTEM.writeText(VirtualPath{"assets://shaders/second.shader.json"},
                                shaderSource("Tests/Second", true)) ||
-        !FILE_SYSTEM.writeText(VirtualPath{"asset://materials/test.material.json"},
+        !FILE_SYSTEM.writeText(VirtualPath{"assets://materials/test.material.json"},
                                R"json({
   "$schemaVersion": 1,
   "name": "Pipeline Material",
@@ -158,13 +158,37 @@ int main() {
   "properties": { "BaseColor": [0.25, 0.5, 0.75, 1.0] },
   "keywords": [],
   "renderQueue": 2450
+})json") ||
+        // A stale Meta (source placeholder identity: not a valid UUID) must not fail
+        // the import: the pipeline regenerates a real Meta for the asset instead.
+        !FILE_SYSTEM.writeText(VirtualPath{"assets://shaders/foreign.shader.json"},
+                               shaderSource("Tests/Foreign")) ||
+        !FILE_SYSTEM.writeText(VirtualPath{"assets://shaders/foreign.shader.json.meta"},
+                               R"json({
+  "version": 1,
+  "asset_id": "b111n-mat-2fc2-4bf0-9a32-f1b10b0e1ebf",
+  "asset_type": "Shader"
 })json")) {
         return 1;
     }
     if (!ASSET_IMPORT_PIPELINE.scanAll())
         return 2;
 
-    const VirtualPath meshPath{"asset://meshes/test.mesh.json"};
+    const VirtualPath foreignPath{"assets://shaders/foreign.shader.json"};
+    const VirtualPath foreignMetaPath = assetMetaPath(foreignPath);
+    const auto foreignRecord = ASSET_DATABASE.findByPath(foreignPath);
+    const auto foreignMeta = foreignRecord && FILE_SYSTEM.isFile(foreignMetaPath)
+                                 ? loadAssetMeta(foreignMetaPath)
+                                 : std::nullopt;
+    if (!foreignRecord || foreignRecord->status != AssetImportStatus::Imported ||
+        !foreignMeta || foreignMeta->assetType != AssetType::Shader) {
+        return 50;
+    }
+    const auto foreignText = FILE_SYSTEM.readText(foreignMetaPath);
+    if (!foreignText || foreignText->find("b111n-mat") != std::string::npos)
+        return 51;
+
+    const VirtualPath meshPath{"assets://meshes/test.mesh.json"};
     if (!FILE_SYSTEM.writeText(meshPath, meshSource(-1.0F)))
         return 25;
     const MeshHandle meshHandle = MESH_MANAGER.load(meshPath);
@@ -184,7 +208,7 @@ int main() {
         return 28;
     }
 
-    const VirtualPath scenePath{"asset://scenes/test.scene.json"};
+    const VirtualPath scenePath{"assets://scenes/test.scene.json"};
     const std::string sceneSource = R"json({
   "$schemaVersion": 1,
   "name": "Pipeline Scene",
@@ -213,7 +237,7 @@ int main() {
     const auto sceneRecord = ASSET_DATABASE.findByPath(scenePath);
     if (!sceneAsset || !sceneRecord || sceneAsset->name != "Pipeline Scene" ||
         sceneRecord->dependencies !=
-            std::vector<VirtualPath>{VirtualPath{"asset://materials/test.material.json"},
+            std::vector<VirtualPath>{VirtualPath{"assets://materials/test.material.json"},
                                      meshPath} ||
         sceneChanges != 1) {
         return 30;
@@ -226,8 +250,8 @@ int main() {
     if (!runtimeScene || runtimeScene->nodeCount() != 2)
         return 31;
 
-    const VirtualPath firstPath{"asset://shaders/first.shader.json"};
-    const VirtualPath materialPath{"asset://materials/test.material.json"};
+    const VirtualPath firstPath{"assets://shaders/first.shader.json"};
+    const VirtualPath materialPath{"assets://materials/test.material.json"};
     const auto firstRecord = ASSET_DATABASE.findByPath(firstPath);
     const auto materialRecord = ASSET_DATABASE.findByPath(materialPath);
     if (!firstRecord || !materialRecord || firstRecord->status != AssetImportStatus::Imported ||
@@ -239,7 +263,7 @@ int main() {
         return 3;
     }
 
-    const VirtualPath latePath{"asset://shaders/late.shader.json"};
+    const VirtualPath latePath{"assets://shaders/late.shader.json"};
     if (!FILE_SYSTEM.writeText(latePath, shaderSource("Tests/Late")))
         return 18;
     const auto lateAsset = ASSET_MANAGER.loadAsset<ShaderAsset>(latePath);
@@ -268,7 +292,7 @@ int main() {
         return 6;
     }
 
-    MATERIAL_MANAGER.setShader(materialHandle, VirtualPath{"asset://shaders/second.shader.json"});
+    MATERIAL_MANAGER.setShader(materialHandle, VirtualPath{"assets://shaders/second.shader.json"});
     const ShaderHandle secondHandle = material.shaderHandle();
     if (!secondHandle || secondHandle == firstHandleA ||
         material.shader().name() != "Tests/Second" ||
@@ -277,7 +301,7 @@ int main() {
         return 7;
     }
 
-    if (!FILE_WATCHER.start(VirtualPath{"asset://"}, 100ms, false))
+    if (!FILE_WATCHER.start(VirtualPath{"assets://"}, 100ms, false))
         return 8;
     const std::uint64_t oldRevision = SHADER_MANAGER.find(firstHandleA)->revision();
     if (!FILE_SYSTEM.writeText(firstPath, shaderSource("Tests/First Reloaded"))) {
@@ -306,13 +330,13 @@ int main() {
     }
 
     FILE_WATCHER.stop();
-    if (!FILE_WATCHER.start(VirtualPath{"asset://"}, 100ms, false) ||
-        !FILE_SYSTEM.writeText(VirtualPath{"asset://.ignored.tmp"}, "ignored") ||
-        !FILE_SYSTEM.writeText(VirtualPath{"asset://watch.txt"}, "watch")) {
+    if (!FILE_WATCHER.start(VirtualPath{"assets://"}, 100ms, false) ||
+        !FILE_SYSTEM.writeText(VirtualPath{"assets://.ignored.tmp"}, "ignored") ||
+        !FILE_SYSTEM.writeText(VirtualPath{"assets://watch.txt"}, "watch")) {
         return 13;
     }
     FILE_WATCHER.scanNow();
-    if (!FILE_SYSTEM.writeText(VirtualPath{"asset://watch.txt"}, "watch changed")) {
+    if (!FILE_SYSTEM.writeText(VirtualPath{"assets://watch.txt"}, "watch changed")) {
         return 20;
     }
     FILE_WATCHER.scanNow();
@@ -321,18 +345,18 @@ int main() {
     if (events.size() != 1 || events.front().type != FileChangeType::Added) {
         return 14;
     }
-    if (!FILE_SYSTEM.move(VirtualPath{"asset://watch.txt"}, VirtualPath{"asset://renamed.txt"})) {
+    if (!FILE_SYSTEM.move(VirtualPath{"assets://watch.txt"}, VirtualPath{"assets://renamed.txt"})) {
         return 15;
     }
     FILE_WATCHER.scanNow();
     waitForEvents();
     events = FILE_WATCHER.pollEvents();
     if (events.size() != 1 || events.front().type != FileChangeType::Renamed ||
-        events.front().previousPath != VirtualPath{"asset://watch.txt"} ||
-        events.front().path != VirtualPath{"asset://renamed.txt"}) {
+        events.front().previousPath != VirtualPath{"assets://watch.txt"} ||
+        events.front().path != VirtualPath{"assets://renamed.txt"}) {
         return 16;
     }
-    if (!FILE_SYSTEM.writeText(VirtualPath{"asset://renamed.txt"}, "modified contents")) {
+    if (!FILE_SYSTEM.writeText(VirtualPath{"assets://renamed.txt"}, "modified contents")) {
         return 21;
     }
     FILE_WATCHER.scanNow();
@@ -341,7 +365,7 @@ int main() {
     if (events.size() != 1 || events.front().type != FileChangeType::Modified) {
         return 22;
     }
-    if (!FILE_SYSTEM.removeFile(VirtualPath{"asset://renamed.txt"}))
+    if (!FILE_SYSTEM.removeFile(VirtualPath{"assets://renamed.txt"}))
         return 23;
     FILE_WATCHER.scanNow();
     waitForEvents();

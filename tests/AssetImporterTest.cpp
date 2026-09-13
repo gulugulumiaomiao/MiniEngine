@@ -1,4 +1,4 @@
-#include "asset/database/AssetDatabase.h"
+﻿#include "asset/database/AssetDatabase.h"
 #include "asset/derived_data/AssetArtifact.h"
 #include "asset/importer/AssetImporterRegistry.h"
 #include "asset/importer/BuiltinAssetImporters.h"
@@ -51,16 +51,16 @@ int main() {
     std::error_code error;
     std::filesystem::create_directories(assetRoot, error);
     std::filesystem::create_directories(libraryRoot, error);
-    if (error || !FILE_SYSTEM.mountDirectory("asset", assetRoot) ||
+    if (error || !FILE_SYSTEM.mountDirectory("assets", assetRoot) ||
         !FILE_SYSTEM.mountDirectory("library", libraryRoot)) {
         return 1;
     }
 
-    const VirtualPath shaderPath{"asset://shaders/import_test.shader.json"};
-    const VirtualPath vertexPath{"asset://shaders/import_test.vert"};
-    const VirtualPath fragmentPath{"asset://shaders/import_test.frag"};
-    const VirtualPath commonPath{"asset://shaders/include/common.glsl"};
-    const VirtualPath nestedPath{"asset://shaders/include/nested.glsl"};
+    const VirtualPath shaderPath{"assets://shaders/import_test.shader.json"};
+    const VirtualPath vertexPath{"assets://shaders/import_test.vert"};
+    const VirtualPath fragmentPath{"assets://shaders/import_test.frag"};
+    const VirtualPath commonPath{"assets://shaders/include/common.glsl"};
+    const VirtualPath nestedPath{"assets://shaders/include/nested.glsl"};
     const std::string shaderSource = R"({
   "$schemaVersion": 1,
   "name": "Importer/Test",
@@ -78,7 +78,7 @@ int main() {
     if (!FILE_SYSTEM.writeText(shaderPath, shaderSource) ||
         !FILE_SYSTEM.writeText(vertexPath, "#include \"include/common.glsl\"\nvoid main() {}\n") ||
         !FILE_SYSTEM.writeText(fragmentPath, "void main() {}\n") ||
-        !FILE_SYSTEM.writeText(commonPath, "#include \"asset://shaders/include/nested.glsl\"\n") ||
+        !FILE_SYSTEM.writeText(commonPath, "#include \"assets://shaders/include/nested.glsl\"\n") ||
         !FILE_SYSTEM.writeText(nestedPath, "const float nested = 1.0;\n")) {
         return 2;
     }
@@ -106,7 +106,7 @@ int main() {
         return 6;
     }
 
-    const VirtualPath meshPath{"asset://meshes/import_test.mesh.json"};
+    const VirtualPath meshPath{"assets://meshes/import_test.mesh.json"};
     constexpr std::array positions{
         math::Vec3{-1.0F, -1.0F, 0.0F},
         math::Vec3{1.0F, -1.0F, 0.0F},
@@ -146,7 +146,7 @@ int main() {
         return 8;
     }
 
-    const VirtualPath proceduralPath{"asset://meshes/procedural_test.mesh.json"};
+    const VirtualPath proceduralPath{"assets://meshes/procedural_test.mesh.json"};
     const nlohmann::json proceduralJson{
         {"name", "ProceduralImporterMesh"},
         {"keep_cpu_copy", true},
@@ -196,7 +196,7 @@ int main() {
         return 6;
     }
 
-    const VirtualPath texturePath{"asset://textures/import_test.ktx"};
+    const VirtualPath texturePath{"assets://textures/import_test.ktx"};
     std::vector<std::byte> ktx(84U);
     constexpr std::array<std::uint8_t, 12> ktxIdentifier{
         0xAB, 0x4B, 0x54, 0x58, 0x20, 0x31, 0x31, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A};
@@ -223,9 +223,9 @@ int main() {
     for (std::size_t index = 68; index < ktx.size(); ++index)
         ktx[index] = static_cast<std::byte>(index);
     if (!FILE_SYSTEM.writeBinary(texturePath, ktx) ||
-        inferAssetType(VirtualPath{"asset://textures/color.png"}) != AssetType::Texture ||
-        inferAssetType(VirtualPath{"asset://textures/color.jpg"}) != AssetType::Texture ||
-        inferAssetType(VirtualPath{"asset://textures/color.ktx2"}) != AssetType::Texture) {
+        inferAssetType(VirtualPath{"assets://textures/color.png"}) != AssetType::Texture ||
+        inferAssetType(VirtualPath{"assets://textures/color.jpg"}) != AssetType::Texture ||
+        inferAssetType(VirtualPath{"assets://textures/color.ktx2"}) != AssetType::Texture) {
         return 11;
     }
     const AssetMeta textureMeta{1, AssetId::generate(), AssetType::Texture};
@@ -269,13 +269,13 @@ int main() {
                asset.desc.format == TextureFormat::Rgba8Srgb && asset.mipData.size() == 2 &&
                asset.mipData[0].bytes.size() == 16 && asset.mipData[1].bytes.size() == 4;
     };
-    if (!verifyImageImport(VirtualPath{"asset://textures/import_test.png"}, png)) {
+    if (!verifyImageImport(VirtualPath{"assets://textures/import_test.png"}, png)) {
         return 13;
     }
-    if (!verifyImageImport(VirtualPath{"asset://textures/import_test.jpg"}, jpg))
+    if (!verifyImageImport(VirtualPath{"assets://textures/import_test.jpg"}, jpg))
         return 14;
 
-    (void)FILE_SYSTEM.unmount("asset");
+    (void)FILE_SYSTEM.unmount("assets");
     (void)FILE_SYSTEM.unmount("library");
     std::filesystem::remove_all(root, error);
     return error ? 9 : 0;

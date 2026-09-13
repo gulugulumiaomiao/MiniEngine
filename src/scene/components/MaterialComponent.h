@@ -14,7 +14,9 @@ struct MaterialComponentAsset final : public Transferable {
     std::vector<VirtualPath> materials;
     bool enabled{true};
 
-    bool operator==(const MaterialComponentAsset&) const = default;
+    bool operator==(const MaterialComponentAsset& other) const {
+        return materials == other.materials && enabled == other.enabled;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 

@@ -34,6 +34,9 @@ public:
     [[nodiscard]] std::uint32_t width() const override { return extent_.width; }
     [[nodiscard]] std::uint32_t height() const override { return extent_.height; }
     [[nodiscard]] std::uint32_t frameIndex() const override { return currentFrame_; }
+    [[nodiscard]] std::uint32_t imageCount() const override {
+        return static_cast<std::uint32_t>(images_.size());
+    }
 
 private:
     static constexpr std::uint32_t kFramesInFlight = 2;

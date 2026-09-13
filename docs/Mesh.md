@@ -141,7 +141,7 @@ Scene 依赖 GPU/RHI，`MeshManager` 在资源销毁时发送生命周期通知�
 }
 ```
 
-四元数顺序是 `[x,y,z,w]`；`box`/`cube`、`sphere`/`uv_sphere` 是等价别名；省略变换时使用单位变换。完整示例见 `assets/meshes/procedural_showcase.mesh.json`。
+四元数顺序是 `[x,y,z,w]`；`box`/`cube`、`sphere`/`uv_sphere` 是等价别名；省略变换时使用单位变换。完整示例见 `builtin/samples/meshes/procedural_showcase.mesh.json`。
 
 导入流程如下：
 

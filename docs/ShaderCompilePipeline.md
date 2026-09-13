@@ -39,7 +39,7 @@ scheme 必须已经挂载到 `FileSystem`，并且目录必须存在。预处理
 ```cpp
 ShaderCompilePipelineConfig config;
 config.preprocessorConfig.includeSearchPaths = {
-    VirtualPath{"asset://shaders/include"},
+    VirtualPath{"assets://shaders/include"},
     VirtualPath{"engine-shader://include"},
 };
 ```

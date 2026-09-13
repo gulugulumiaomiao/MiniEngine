@@ -1,4 +1,4 @@
-#include "asset/manager/AssetManager.h"
+﻿#include "asset/manager/AssetManager.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderGenerator.h"
 #include "core/filesystem/FileSystem.h"
@@ -37,7 +37,7 @@ int main() {
     if (!test::initializeAssetEnvironment(fixtures))
         return 8;
     const std::shared_ptr<ShaderAsset> shaderOwner =
-        ASSET_MANAGER.loadAsset<ShaderAsset>(VirtualPath{"asset://material_values.shader.json"});
+        ASSET_MANAGER.loadAsset<ShaderAsset>(VirtualPath{"assets://material_values.shader.json"});
     if (!shaderOwner)
         return 5;
     const Shader shader{*shaderOwner};
@@ -54,7 +54,7 @@ int main() {
     }
 
     const std::shared_ptr<ShaderAsset> interfaceShaderOwner = ASSET_MANAGER.loadAsset<ShaderAsset>(
-        VirtualPath{"asset://shader_interface_valid.shader.json"});
+        VirtualPath{"assets://shader_interface_valid.shader.json"});
     if (!interfaceShaderOwner)
         return 6;
     const Shader interfaceShader{*interfaceShaderOwner};

@@ -70,6 +70,7 @@ template <typename T> bool readUnsigned(const Json* source, T& value) {
 struct JsonWriter::Impl {
     Json root;
     std::vector<Json*> stack;
+    std::vector<std::size_t> valueScopes;
 };
 
 JsonWriter::JsonWriter() : impl_(std::make_unique<Impl>()) {}
@@ -79,6 +80,21 @@ JsonWriter& JsonWriter::operator=(JsonWriter&&) noexcept = default;
 
 std::string JsonWriter::toString(int indent) const {
     return impl_->root.dump(indent);
+}
+
+bool JsonWriter::beginValue(std::string_view name) {
+    Json* value = selectWrite(impl_->root, impl_->stack, name);
+    impl_->valueScopes.push_back(impl_->stack.size());
+    impl_->stack.push_back(value);
+    return true;
+}
+
+bool JsonWriter::endValue() {
+    if (impl_->valueScopes.empty())
+        return fail("JSON value stack is empty");
+    impl_->stack.resize(impl_->valueScopes.back());
+    impl_->valueScopes.pop_back();
+    return true;
 }
 
 bool JsonWriter::beginObject(std::string_view name) {
@@ -160,6 +176,7 @@ bool JsonWriter::transferBytes(std::string_view name, std::vector<std::byte>& va
 struct JsonReader::Impl {
     Json root;
     std::vector<const Json*> stack;
+    std::vector<std::size_t> valueScopes;
 };
 
 JsonReader::JsonReader(std::string_view source) : impl_(std::make_unique<Impl>()) {
@@ -170,6 +187,23 @@ JsonReader::JsonReader(std::string_view source) : impl_(std::make_unique<Impl>()
 JsonReader::~JsonReader() = default;
 JsonReader::JsonReader(JsonReader&&) noexcept = default;
 JsonReader& JsonReader::operator=(JsonReader&&) noexcept = default;
+
+bool JsonReader::beginValue(std::string_view name) {
+    const Json* value = selectRead(impl_->root, impl_->stack, name);
+    if (!value)
+        return fail("JSON value is missing");
+    impl_->valueScopes.push_back(impl_->stack.size());
+    impl_->stack.push_back(value);
+    return true;
+}
+
+bool JsonReader::endValue() {
+    if (impl_->valueScopes.empty())
+        return fail("JSON value stack is empty");
+    impl_->stack.resize(impl_->valueScopes.back());
+    impl_->valueScopes.pop_back();
+    return true;
+}
 
 bool JsonReader::beginObject(std::string_view name) {
     const Json* value = selectRead(impl_->root, impl_->stack, name);

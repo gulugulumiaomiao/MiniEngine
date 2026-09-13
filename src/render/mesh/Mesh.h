@@ -70,7 +70,11 @@ struct MeshBuildRecipe final : public Transferable {
     MeshUsage usage{MeshUsage::Static};
     bool keepCpuCopy{};
 
-    bool operator==(const MeshBuildRecipe&) const = default;
+    bool operator==(const MeshBuildRecipe& other) const {
+        return name == other.name && parts == other.parts && vertexLayout == other.vertexLayout &&
+               indexPolicy == other.indexPolicy && usage == other.usage &&
+               keepCpuCopy == other.keepCpuCopy;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
@@ -83,7 +87,9 @@ struct VertexBinding final : public Transferable {
     std::uint32_t stride{};
     VertexInputRate inputRate{VertexInputRate::Vertex};
 
-    bool operator==(const VertexBinding&) const = default;
+    bool operator==(const VertexBinding& other) const {
+        return binding == other.binding && stride == other.stride && inputRate == other.inputRate;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
@@ -103,7 +109,10 @@ struct VertexAttribute final : public Transferable {
     std::uint32_t binding{};
     std::uint32_t offset{};
 
-    bool operator==(const VertexAttribute&) const = default;
+    bool operator==(const VertexAttribute& other) const {
+        return semantic == other.semantic && format == other.format && location == other.location &&
+               binding == other.binding && offset == other.offset;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
@@ -111,7 +120,9 @@ struct VertexLayout final : public Transferable {
     std::vector<VertexBinding> bindings;
     std::vector<VertexAttribute> attributes;
 
-    bool operator==(const VertexLayout&) const = default;
+    bool operator==(const VertexLayout& other) const {
+        return bindings == other.bindings && attributes == other.attributes;
+    }
 
     [[nodiscard]] const VertexBinding* findBinding(std::uint32_t binding) const;
     [[nodiscard]] const VertexAttribute* find(VertexSemantic semantic) const;
@@ -130,7 +141,9 @@ struct Aabb final : public Transferable {
     [[nodiscard]] math::Vec3 center() const { return (minimum + maximum) * 0.5F; }
     [[nodiscard]] math::Vec3 extent() const { return (maximum - minimum) * 0.5F; }
 
-    bool operator==(const Aabb&) const = default;
+    bool operator==(const Aabb& other) const {
+        return minimum == other.minimum && maximum == other.maximum;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
@@ -141,7 +154,9 @@ struct BoundingSphere final : public Transferable {
     math::Vec3 center{0.0F};
     float radius{};
 
-    bool operator==(const BoundingSphere&) const = default;
+    bool operator==(const BoundingSphere& other) const {
+        return center == other.center && radius == other.radius;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
@@ -153,7 +168,9 @@ struct MeshBounds final : public Transferable {
     Aabb aabb;
     BoundingSphere sphere;
 
-    bool operator==(const MeshBounds&) const = default;
+    bool operator==(const MeshBounds& other) const {
+        return aabb == other.aabb && sphere == other.sphere;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
@@ -173,7 +190,11 @@ struct SubMesh final : public Transferable {
     std::uint32_t materialSlot{};
     MeshBounds bounds;
 
-    bool operator==(const SubMesh&) const = default;
+    bool operator==(const SubMesh& other) const {
+        return firstIndex == other.firstIndex && indexCount == other.indexCount &&
+               vertexOffset == other.vertexOffset && materialSlot == other.materialSlot &&
+               bounds == other.bounds;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
@@ -195,7 +216,9 @@ struct VertexStream final : public Transferable {
     std::uint32_t vertexCount{};
     std::vector<std::byte> bytes;
 
-    bool operator==(const VertexStream&) const = default;
+    bool operator==(const VertexStream& other) const {
+        return binding == other.binding && vertexCount == other.vertexCount && bytes == other.bytes;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 

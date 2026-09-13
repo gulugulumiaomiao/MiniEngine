@@ -2,6 +2,7 @@
 
 #include "core/filesystem/VirtualPath.h"
 #include "core/math/Math.h"
+#include "core/serialization/Transferable.h"
 
 #include <cstddef>
 #include <concepts>
@@ -68,15 +69,13 @@ public:
         return true;
     }
 
-    template <typename T>
-        requires requires(Transfer& archive, T& value) {
-            { value.transfer(archive) } -> std::same_as<bool>;
-        }
-    bool transfer(std::string_view name, T& value) {
-        if (!beginObject(name))
+    // 只定位字段；对象的 beginObject/endObject 由 Transferable 实现负责。
+    bool transfer(std::string_view name, Transferable& value) {
+        if (!valid() || !beginValue(name))
             return false;
         const bool result = value.transfer(*this);
-        return result && endObject();
+        const bool ended = endValue();
+        return result && ended && valid();
     }
 
     template <typename T> bool transfer(std::string_view name, std::vector<T>& values) {
@@ -97,9 +96,22 @@ public:
     }
 
     template <typename T> bool transfer(std::string_view name, std::optional<T>& value) {
-        if (!beginObject(name))
-            return false;
-        bool present = writing() && value.has_value();
+        // When reading, check if the field exists first
+        if (reading()) {
+            // Try to begin the object - if it fails, the field is missing
+            if (!beginObject(name)) {
+                // Field is missing, leave optional as nullopt
+                clearError();  // Clear the error from failed beginObject
+                value.reset();
+                return true;
+            }
+        } else {
+            // Writing: always create the object
+            if (!beginObject(name))
+                return false;
+        }
+        
+        bool present = writing() ? value.has_value() : true;
         if (!transfer("has_value", present))
             return false;
         if (reading()) {
@@ -132,6 +144,10 @@ public:
 
     [[nodiscard]] virtual std::uint32_t maxCollectionSize() const { return 1U << 20U; }
 
+    // Resets a pending parse error so an optional field failure can be treated as
+    // "field absent" instead of aborting the whole document.
+    void clearError() { error_.clear(); }
+
 protected:
     bool fail(std::string message);
 
@@ -148,6 +164,10 @@ private:
             return emplaceVariant<Index + 1>(value, index);
         }
     }
+
+    // 字段作用域不创建对象；结束时恢复进入前的位置，包括读取失败的情况。
+    virtual bool beginValue(std::string_view name) = 0;
+    virtual bool endValue() = 0;
 
     virtual bool transferBool(std::string_view name, bool& value) = 0;
     virtual bool transferInt8(std::string_view name, std::int8_t& value) = 0;

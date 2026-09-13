@@ -24,7 +24,7 @@ Stage E 落地两项渲染效率基础设施：
 批内每个实例对应一个 DrawItem；顶点着色器不再直接用 `gl_InstanceIndex` 索引对象数组，而是经过实例表间接寻址：
 
 ```glsl
-// assets/shaders/include/objects.glsl
+// builtin/core/shaders/include/objects.glsl
 layout(std430, set = 0, binding = 1) readonly buffer ObjectBuffer
 {
     mat4 transforms[];
@@ -88,6 +88,6 @@ MiniForwardPipeline::render
 - `src/render/gpu/frame/FrameGpuManager.h/.cpp` 实例表缓冲与上传
 - `src/render/gpu/material/*` 材质常驻三级路径
 - `src/render/pipeline/passes/RenderPassUtils.cpp` 批次命令编码
-- `assets/shaders/include/objects.glsl` 共享的对象/实例表声明
+- `builtin/core/shaders/include/objects.glsl` 共享的对象/实例表声明
 - `tests/DrawBatcherTest.cpp` 合并规则测试
 - `tests/RenderCacheTest.cpp` 材质缓存常驻/LRU 测试

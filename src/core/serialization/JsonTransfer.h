@@ -23,6 +23,9 @@ public:
     bool endArray() override;
 
 private:
+    bool beginValue(std::string_view name) override;
+    bool endValue() override;
+
     bool transferBool(std::string_view name, bool& value) override;
     bool transferInt8(std::string_view name, std::int8_t& value) override;
     bool transferUInt8(std::string_view name, std::uint8_t& value) override;
@@ -56,6 +59,9 @@ public:
     bool endArray() override;
 
 private:
+    bool beginValue(std::string_view name) override;
+    bool endValue() override;
+
     bool transferBool(std::string_view name, bool& value) override;
     bool transferInt8(std::string_view name, std::int8_t& value) override;
     bool transferUInt8(std::string_view name, std::uint8_t& value) override;

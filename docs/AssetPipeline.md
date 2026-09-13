@@ -7,7 +7,7 @@
 ## 总体数据流
 
 ```text
-asset:// 源文件
+assets:// 源文件
   -> AssetMeta（稳定 AssetId + AssetType）
   -> AssetImportPipeline
        -> ShaderAssetImporter / MaterialAssetImporter
@@ -23,7 +23,7 @@ asset:// 源文件
 
 `ShaderAssetImporter` 解析 ShaderLab JSON，遍历 SubShader/Pass，收集 vertex、fragment 及递归 `#include` 依赖。导入阶段不运行 glslc；SPIR-V 仍保持按需生成。
 
-`MaterialAssetImporter` 解析名称、Shader 虚拟路径、Properties、Keywords 和可选 RenderQueue。导入 Material 前，管线保证它引用的 Shader 已导入，然后从 Shader Artifact 读取声明并验证属性。成功结果把 Shader 的 `asset://` 路径写入依赖表。
+`MaterialAssetImporter` 解析名称、Shader 虚拟路径、Properties、Keywords 和可选 RenderQueue。导入 Material 前，管线保证它引用的 Shader 已导入，然后从 Shader Artifact 读取声明并验证属性。成功结果把 Shader 的 `assets://` 路径写入依赖表。
 
 Artifact 使用通用 `MART` 二进制信封保存身份和类型，内部 Payload 由资源自行定义。Shader 使用 `SHDR` Payload，Material 使用 `MATL` Payload；两者分别实现序列化和反序列化并维护自己的格式版本。AssetManager 读取信封后按 `AssetType` 调用对应反序列化逻辑，不再解析源 JSON。
 
@@ -44,7 +44,7 @@ Artifact 使用通用 `MART` 二进制信封保存身份和类型，内部 Paylo
 
 ## FileWatcher
 
-通过 `FILE_WATCHER` 使用全局单例。后台线程只扫描 `asset://`，产生 `Added`、`Modified`、`Removed`、`Renamed` 四种事件并放入队列，不执行导入。主线程每帧调用 `AssetImportPipeline::processFileEvents()` 消费事件。
+通过 `FILE_WATCHER` 使用全局单例。后台线程只扫描 `assets://`，产生 `Added`、`Modified`、`Removed`、`Renamed` 四种事件并放入队列，不执行导入。主线程每帧调用 `AssetImportPipeline::processFileEvents()` 消费事件。
 
 事件使用 100–300 ms 的 debounce 窗口，默认 200 ms；同一路径的重复事件会合并，临时文件、隐藏文件、编辑器交换文件会忽略。重命名在轮询实现中通过相同大小和时间戳的删除/新增项配对。
 
@@ -110,7 +110,7 @@ Engine 让 Renderer 等待 GPU 空闲后，先关闭 Material、GraphicsPipeline
 4. 停止 AssetImportPipeline
 5. 停止 FileWatcher
 6. 关闭 AssetDatabase
-7. 卸载 FileSystem 的 `asset://`、`library://`
+7. 卸载 FileSystem 的 `assets://`、`library://`
 
 这组操作由 `ASSET_MANAGER.shutdown()` 统一编排，避免调用者遗漏单例。
 

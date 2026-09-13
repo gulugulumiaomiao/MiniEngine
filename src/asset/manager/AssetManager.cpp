@@ -1,5 +1,6 @@
-#include "asset/manager/AssetManager.h"
+﻿#include "asset/manager/AssetManager.h"
 
+#include "asset/base/AssetMeta.h"
 #include "asset/derived_data/AssetArtifact.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/importer/AssetImportPipeline.h"
@@ -30,8 +31,8 @@ bool AssetManager::initialize() {
 bool AssetManager::initialize(AssetManagerMode mode) {
     shutdown();
     mode_ = mode;
-    if (!FILE_SYSTEM.isDirectory(VirtualPath{"asset://"})) {
-        Log::error("AssetManager", "asset:// must be mounted before initialization");
+    if (!FILE_SYSTEM.isDirectory(VirtualPath{"assets://"})) {
+        Log::error("AssetManager", "assets:// must be mounted before initialization");
         return false;
     }
 
@@ -107,7 +108,7 @@ bool AssetManager::ensureImported(const VirtualPath& path) {
 }
 
 std::shared_ptr<Asset> AssetManager::loadAsset(const VirtualPath& path) {
-    if (!path.valid() || path.scheme() != "asset") {
+    if (!path.valid() || !isAssetScheme(path.scheme())) {
         Log::error("AssetManager", "Invalid Asset path: %s", path.string().c_str());
         return {};
     }

@@ -1,4 +1,4 @@
-#include "asset/importer/AssetImportPipeline.h"
+﻿#include "asset/importer/AssetImportPipeline.h"
 
 #include "core/filesystem/FileDependencyGraph.h"
 #include "core/hash.h"
@@ -73,7 +73,7 @@ bool AssetImportPipeline::scanAll() {
         return false;
     }
     std::vector<VirtualPath> sources;
-    for (const VirtualPath& path : FILE_SYSTEM.listFiles(VirtualPath{"asset://"}, true)) {
+    for (const VirtualPath& path : FILE_SYSTEM.listFiles(VirtualPath{"assets://"}, true)) {
         if (isSourceAsset(path))
             sources.push_back(path);
     }
@@ -136,7 +136,7 @@ bool AssetImportPipeline::ensureMaterialDependenciesImported(const VirtualPath& 
             continue;
         VirtualPath texturePath{*textureReference};
         if (!texturePath.valid())
-            texturePath = VirtualPath{"asset://" + *textureReference};
+            texturePath = VirtualPath{"assets://" + *textureReference};
         if (!texturePath.valid() || inferAssetType(texturePath) != AssetType::Texture ||
             !importAssetInternal(texturePath, false)) {
             Log::error("AssetImportPipeline",
@@ -167,8 +167,21 @@ bool AssetImportPipeline::importAssetInternal(const VirtualPath& sourcePath, boo
 
     const AssetType inferredType = inferAssetType(sourcePath);
     const VirtualPath metaPath = assetMetaPath(sourcePath);
-    std::optional<AssetMeta> meta =
-        FILE_SYSTEM.isFile(metaPath) ? loadAssetMeta(metaPath) : createAssetMeta(sourcePath);
+    std::optional<AssetMeta> meta;
+    if (FILE_SYSTEM.isFile(metaPath)) {
+        meta = loadAssetMeta(metaPath);
+        if (!meta) {
+            // A Meta that exists but does not parse is stale or foreign (e.g. a
+            // placeholder left by a different Scheme). Regenerate it so the asset stays
+            // importable instead of failing on an unusable sidecar.
+            Log::warn("AssetImportPipeline",
+                      "Discarding invalid Meta for %s; regenerating",
+                      key.c_str());
+            meta = createAssetMeta(sourcePath);
+        }
+    } else {
+        meta = createAssetMeta(sourcePath);
+    }
     if (!meta || meta->assetType != inferredType) {
         Log::error("AssetImportPipeline", "Invalid Meta for asset: %s", key.c_str());
         return false;

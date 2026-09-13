@@ -46,66 +46,77 @@ bool valid(MeshTopology value) {
 } // namespace
 
 bool VertexSemantic::transfer(Transfer& archive) {
-    return archive.transfer("type", type) && archive.transfer("index", index);
+    return archive.beginObject({}) && archive.transfer("type", type) &&
+           archive.transfer("index", index) && archive.endObject();
 }
 
 bool VertexBinding::transfer(Transfer& archive) {
-    return archive.transfer("binding", binding) && archive.transfer("stride", stride) &&
-           archive.transfer("input_rate", inputRate);
+    return archive.beginObject({}) && archive.transfer("binding", binding) &&
+           archive.transfer("stride", stride) && archive.transfer("input_rate", inputRate) &&
+           archive.endObject();
 }
 
 bool VertexAttribute::transfer(Transfer& archive) {
-    return archive.transfer("semantic", semantic) && archive.transfer("format", format) &&
-           archive.transfer("location", location) && archive.transfer("binding", binding) &&
-           archive.transfer("offset", offset);
+    return archive.beginObject({}) && archive.transfer("semantic", semantic) &&
+           archive.transfer("format", format) && archive.transfer("location", location) &&
+           archive.transfer("binding", binding) && archive.transfer("offset", offset) &&
+           archive.endObject();
 }
 
 bool VertexLayout::transfer(Transfer& archive) {
-    return archive.transfer("bindings", bindings) && archive.transfer("attributes", attributes);
+    return archive.beginObject({}) && archive.transfer("bindings", bindings) &&
+           archive.transfer("attributes", attributes) && archive.endObject();
 }
 
 bool Aabb::transfer(Transfer& archive) {
-    return archive.transfer("minimum", minimum) && archive.transfer("maximum", maximum);
+    return archive.beginObject({}) && archive.transfer("minimum", minimum) &&
+           archive.transfer("maximum", maximum) && archive.endObject();
 }
 
 bool BoundingSphere::transfer(Transfer& archive) {
-    return archive.transfer("center", center) && archive.transfer("radius", radius);
+    return archive.beginObject({}) && archive.transfer("center", center) &&
+           archive.transfer("radius", radius) && archive.endObject();
 }
 
 bool MeshBounds::transfer(Transfer& archive) {
-    return archive.transfer("aabb", aabb) && archive.transfer("sphere", sphere);
+    return archive.beginObject({}) && archive.transfer("aabb", aabb) &&
+           archive.transfer("sphere", sphere) && archive.endObject();
 }
 
 bool SubMesh::transfer(Transfer& archive) {
-    return archive.transfer("first_index", firstIndex) &&
+    return archive.beginObject({}) && archive.transfer("first_index", firstIndex) &&
            archive.transfer("index_count", indexCount) &&
            archive.transfer("vertex_offset", vertexOffset) &&
-           archive.transfer("material_slot", materialSlot) && archive.transfer("bounds", bounds);
+           archive.transfer("material_slot", materialSlot) && archive.transfer("bounds", bounds) &&
+           archive.endObject();
 }
 
 bool MeshDesc::transfer(Transfer& archive) {
-    return archive.transfer("debug_name", debugName) &&
+    return archive.beginObject({}) && archive.transfer("debug_name", debugName) &&
            archive.transfer("vertex_layout", vertexLayout) &&
            archive.transfer("index_type", indexType) && archive.transfer("usage", usage) &&
            archive.transfer("topology", topology) && archive.transfer("sub_meshes", subMeshes) &&
-           archive.transfer("bounds", bounds) && archive.transfer("keep_cpu_copy", keepCpuCopy);
+           archive.transfer("bounds", bounds) && archive.transfer("keep_cpu_copy", keepCpuCopy) &&
+           archive.endObject();
 }
 
 bool MeshBuildRecipe::transfer(Transfer& archive) {
-    return archive.transfer("name", name) && archive.transfer("parts", parts) &&
-           archive.transfer("vertex_layout", vertexLayout) &&
+    return archive.beginObject({}) && archive.transfer("name", name) &&
+           archive.transfer("parts", parts) && archive.transfer("vertex_layout", vertexLayout) &&
            archive.transfer("index_policy", indexPolicy) && archive.transfer("usage", usage) &&
-           archive.transfer("keep_cpu_copy", keepCpuCopy);
+           archive.transfer("keep_cpu_copy", keepCpuCopy) && archive.endObject();
 }
 
 bool VertexStream::transfer(Transfer& archive) {
-    return archive.transfer("binding", binding) && archive.transfer("vertex_count", vertexCount) &&
-           archive.transfer("bytes", bytes);
+    return archive.beginObject({}) && archive.transfer("binding", binding) &&
+           archive.transfer("vertex_count", vertexCount) && archive.transfer("bytes", bytes) &&
+           archive.endObject();
 }
 
 bool MeshData::transfer(Transfer& archive) {
-    return archive.transfer("vertex_streams", vertexStreams) &&
-           archive.transfer("indices", indices) && archive.transfer("index_count", indexCount);
+    return archive.beginObject({}) && archive.transfer("vertex_streams", vertexStreams) &&
+           archive.transfer("indices", indices) && archive.transfer("index_count", indexCount) &&
+           archive.endObject();
 }
 
 bool transferMeshAsset(Transfer& archive, MeshAsset& value) {

@@ -8,8 +8,8 @@ class Transferable {
 public:
     virtual ~Transferable() = default;
 
+    // 实现自行管理 beginObject({})/endObject()；命名子对象通过 archive.transfer 访问。
     [[nodiscard]] virtual bool transfer(Transfer& archive) = 0;
-    bool operator==(const Transferable&) const { return true; }
 
 protected:
     Transferable() = default;

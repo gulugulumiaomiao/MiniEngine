@@ -1,4 +1,4 @@
-#include "render/material/Material.h"
+﻿#include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/shader/ShaderManager.h"
 #include "asset/manager/AssetManager.h"
@@ -27,20 +27,20 @@ int main() {
     if (!test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR))
         return 22;
     const auto cachedShaderA =
-        assets.loadAsset<ShaderAsset>(VirtualPath{"asset://shaders/vertex_color.shader.json"});
+        assets.loadAsset<ShaderAsset>(VirtualPath{"assets://shaders/vertex_color.shader.json"});
     const auto cachedShaderB = assets.loadAsset<ShaderAsset>(
-        VirtualPath{"asset://shaders/../shaders/vertex_color.shader.json"});
+        VirtualPath{"assets://shaders/../shaders/vertex_color.shader.json"});
     const auto cachedMaterialA = assets.loadAsset<MaterialAsset>(
-        VirtualPath{"asset://materials/warm_vertex_color.material.json"});
+        VirtualPath{"assets://materials/warm_vertex_color.material.json"});
     const auto cachedMaterialB = assets.loadAsset<MaterialAsset>(
-        VirtualPath{"asset://materials/./warm_vertex_color.material.json"});
+        VirtualPath{"assets://materials/./warm_vertex_color.material.json"});
     if (cachedShaderA != cachedShaderB || cachedMaterialA != cachedMaterialB ||
-        cachedMaterialA->shader.string() != "asset://shaders/vertex_color.shader.json") {
+        cachedMaterialA->shader.string() != "assets://shaders/vertex_color.shader.json") {
         return 17;
     }
     const MaterialHandle warm = materials.load(cachedMaterialA->assetPath());
     const MaterialHandle coolShared =
-        materials.load(VirtualPath{"asset://materials/cool_vertex_color.material.json"});
+        materials.load(VirtualPath{"assets://materials/cool_vertex_color.material.json"});
     Material& warmData = *materials.find(warm);
     if (materials.load(cachedMaterialA->assetPath()) != warm ||
         materials.find(cachedMaterialA->assetPath()) != &warmData || materials.size() != 2) {
@@ -49,7 +49,7 @@ int main() {
     const MaterialHandle errorMaterial = materials.errorMaterial();
     const Material* errorData = materials.find(errorMaterial);
     const MaterialHandle failedMaterial =
-        materials.load(VirtualPath{"asset://shaders/builtin_color.shader.json"});
+        materials.load(VirtualPath{"assets://shaders/builtin_color.shader.json"});
     if (!errorData || failedMaterial != errorMaterial ||
         errorData->shaderHandle() != SHADER_MANAGER.builtinColor() ||
         errorData->shader().properties().size() != 1 ||
@@ -84,7 +84,7 @@ int main() {
     }
     materials.destroy(coolShared);
     const MaterialHandle reused =
-        materials.load(VirtualPath{"asset://materials/cool_vertex_color.material.json"});
+        materials.load(VirtualPath{"assets://materials/cool_vertex_color.material.json"});
     if (reused.index != coolShared.index || reused.generation == coolShared.generation) {
         return 10;
     }
@@ -99,20 +99,24 @@ int main() {
     if (!test::initializeAssetEnvironment(fixtureCopy))
         return 23;
     MaterialManager& valueMaterials = MATERIAL_MANAGER;
+    // A Material that fails to import resolves to the built-in Error Material. That
+    // fallback is always reachable because the Error Material and the built-in Shader
+    // ship inside the fixture asset root (assets://), exactly as they ship in every
+    // project's assets/ after the built-in content copy.
     const MaterialHandle invalid =
-        valueMaterials.load(VirtualPath{"asset://material_invalid.material.json"});
-    if (invalid) {
+        valueMaterials.load(VirtualPath{"assets://material_invalid.material.json"});
+    if (!invalid || invalid != valueMaterials.errorMaterial()) {
         return 14;
     }
     const MaterialHandle values =
-        valueMaterials.load(VirtualPath{"asset://material_values.material.json"});
+        valueMaterials.load(VirtualPath{"assets://material_values.material.json"});
     Material& valueData = *valueMaterials.find(values);
     if (valueData.getFloat("FloatValue") != 2.5F || valueData.getFloat("RangeValue") != 0.25F ||
         !valueData.getBool("Enabled") || valueData.getVec2("Uv") != math::Vec2{1.0F, 2.0F} ||
         valueData.getVec3("Direction") != math::Vec3{4.0F, 5.0F, 6.0F} ||
         valueData.getVec4("Params") != math::Vec4{1.0F, 2.0F, 3.0F, 4.0F} ||
         valueData.getVec4("Tint") != math::Vec4{0.25F, 0.5F, 0.75F, 1.0F} ||
-        valueData.getTexture("MainTexture") != "asset://textures/black.png") {
+        valueData.getTexture("MainTexture") != "assets://textures/black.png") {
         return 5;
     }
     valueData.markClean();
@@ -153,7 +157,7 @@ int main() {
     }
 
     const std::uint64_t versionBeforeShaderSwitch = valueData.version();
-    valueMaterials.setShader(values, VirtualPath{"asset://material_switch.shader.json"});
+    valueMaterials.setShader(values, VirtualPath{"assets://material_switch.shader.json"});
     if (valueData.shader().name() != "Tests/MaterialSwitch" ||
         valueData.getFloat("RangeValue") != 0.75F ||
         valueData.getVec3("Direction") != math::Vec3{7.0F, 8.0F, 9.0F} ||

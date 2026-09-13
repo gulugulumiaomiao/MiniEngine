@@ -38,6 +38,8 @@ void ForwardPass::execute(RenderContext& context,
         return;
     }
 
+    context.markBackBufferWritten();
+
     // Sort opaque front-to-back by queue/state, then transparent back-to-front by camera distance.
     std::vector<DrawItem> opaque;
     std::vector<DrawItem> transparent;

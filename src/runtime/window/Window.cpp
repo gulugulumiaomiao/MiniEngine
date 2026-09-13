@@ -92,6 +92,9 @@ LRESULT CALLBACK Window::windowProc(HWND handle, UINT message, WPARAM wParam, LP
         SetWindowLongPtrA(handle, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
     }
     if (self) {
+        if (self->messageHandler_) {
+            self->messageHandler_(handle, message, wParam, lParam);
+        }
         if (message == WM_SIZE) {
             self->resized_ = true;
             return 0;

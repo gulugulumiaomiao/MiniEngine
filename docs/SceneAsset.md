@@ -45,7 +45,7 @@ Importer 不创建运行时 Scene，也不持有运行时资源。
 `AssetManager::loadAsset<SceneAsset>(path)` 的路径为：
 
 ```text
-asset://scenes/example.scene.json
+assets://scenes/example.scene.json
   -> AssetDatabase
   -> Scene Artifact
   -> BinaryReader

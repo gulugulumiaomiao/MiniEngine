@@ -148,6 +148,54 @@
       "dependsOn": "CMake: Build Publish",
       "dependsOrder": "sequence",
       "problemMatcher": "$gcc"
+    },
+    {
+      "label": "CMake: Build MiniEditor Debug",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/tools/dev/Invoke-CMake.ps1",
+        "--build",
+        "--preset",
+        "clang-debug",
+        "--target",
+        "MiniEditor",
+        "--parallel"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "dependsOn": "CMake: Configure Debug",
+      "dependsOrder": "sequence",
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "CMake: Build MiniEditor Release",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/tools/dev/Invoke-CMake.ps1",
+        "--build",
+        "--preset",
+        "clang-release",
+        "--target",
+        "MiniEditor",
+        "--parallel"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "dependsOn": "CMake: Configure Release",
+      "dependsOrder": "sequence",
+      "problemMatcher": "$gcc"
     }
   ]
 }

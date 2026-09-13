@@ -1,4 +1,4 @@
-#include "render/gpu/shader/ShaderGpuManager.h"
+﻿#include "render/gpu/shader/ShaderGpuManager.h"
 
 #include "core/base/BuildConfig.h"
 #include "core/logging/Log.h"
@@ -25,7 +25,7 @@ bool ShaderGpuManager::initialize(rhi::IDevice& device) {
 #else
     config.mode = ShaderCompileMode::DevelopmentRuntime;
 #endif
-    config.preprocessorConfig.includeSearchPaths = {VirtualPath{"asset://shaders/include"}};
+    config.preprocessorConfig.includeSearchPaths = {VirtualPath{"assets://shaders/include"}};
     config.compilerOptions.compilerVersion = MINI_GLSLC_EXECUTABLE;
 #if !defined(NDEBUG)
     config.compilerOptions.optimization = ShaderOptimization::Debug;

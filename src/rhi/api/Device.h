@@ -51,6 +51,10 @@ public:
     virtual void destroyBindGroup(BindGroupHandle handle) = 0;
 
     [[nodiscard]] virtual VkDevice device() const = 0;
+    [[nodiscard]] virtual VkInstance instance() const = 0;
+    [[nodiscard]] virtual VkPhysicalDevice physicalDevice() const = 0;
+    [[nodiscard]] virtual VkQueue graphicsQueue() const = 0;
+    [[nodiscard]] virtual std::uint32_t graphicsQueueFamily() const = 0;
     [[nodiscard]] virtual VkBuffer resolveBuffer(BufferHandle handle) const = 0;
     [[nodiscard]] virtual VkImage resolveTexture(TextureHandle handle) const = 0;
     [[nodiscard]] virtual VkImageView resolveTextureView(TextureViewHandle handle) const = 0;

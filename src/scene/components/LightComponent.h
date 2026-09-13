@@ -20,7 +20,12 @@ struct LightComponentAsset final : public Transferable {
     std::uint32_t cullingMask{0xFFFFFFFFU};
     bool enabled{true};
 
-    bool operator==(const LightComponentAsset&) const = default;
+    bool operator==(const LightComponentAsset& other) const {
+        return type == other.type && color == other.color && intensity == other.intensity &&
+               range == other.range && innerSpotAngle == other.innerSpotAngle &&
+               outerSpotAngle == other.outerSpotAngle && castShadow == other.castShadow &&
+               cullingMask == other.cullingMask && enabled == other.enabled;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 

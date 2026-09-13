@@ -39,7 +39,7 @@ Texture 系统覆盖源文件导入、CPU 资产与运行时实例、GPU 延迟�
 4. 用 `BinaryWriter` 序列化 `TextureAsset`，再包装为 `AssetArtifact` 写入 Library。
 5. 在 `AssetDatabase` 中登记源 hash、Importer 版本、Artifact 路径和导入状态。
 
-Material Importer 会解析 Shader 的 `Texture2D` 属性，将非空的相对引用规范化为 `asset://` 路径，并把纹理加入统一资产依赖列表。纹理源文件变化后，现有 `FileDependencyGraph` 会使依赖材质进入重新导入流程；没有单独的纹理依赖图。
+Material Importer 会解析 Shader 的 `Texture2D` 属性，将非空的相对引用规范化为 `assets://` 路径，并把纹理加入统一资产依赖列表。纹理源文件变化后，现有 `FileDependencyGraph` 会使依赖材质进入重新导入流程；没有单独的纹理依赖图。
 
 ## 4. 运行时加载与默认纹理
 
@@ -52,7 +52,7 @@ Material Importer 会解析 Shader 的 `Texture2D` 属性，将非空的相对�
 - `defaultNormal()`：1x1 Linear `(128, 128, 255, 255)` 法线。
 - `errorTexture()`：2x2 SRGB 黑色/品红棋盘；路径无效或加载失败时使用它。
 
-这些资源使用 `builtin://textures/...` 虚拟路径，也通过正常的 `TextureHandle`、Cache 和 Uploader 流程上传。`TextureManager::clear()` 会同时清除内建 Handle 状态和所有运行时实例。
+这些资源的像素由 `createBuiltin()` 直接构造，不读任何文件，但同样走正常的 `TextureHandle`、Cache 和 Uploader 流程上传。它们的路径形如 `engine://textures/white`、`engine://textures/error`，但 `engine://` **从不被挂载**——这只是 `KeyedHandleRegistry` 的 key 命名空间，用来把程序化纹理与 `assets://` 下的真实资产区分开（引擎内建内容的**文件**则位于项目的 `assets://`，见 Editor.md）。`TextureManager::clear()` 会同时清除内建 Handle 状态和所有运行时实例。
 
 ## 5. GPU 上传
 
@@ -84,7 +84,7 @@ Shader JSON 中以 `Texture2D` 声明属性：
 
 `MaterialGpuManager` 按 Shader 属性顺序取得材质纹理字符串，并通过 `TextureGpuManager` 执行路径规范化、`TextureManager::load()`、错误纹理回退和 Texture Cache 查询；未命中时调用 `TextureGpuFactory`。最后由 `MaterialGpuFactory` 把 TextureView 与 Sampler 写入 `SampledTexture` descriptor。材质只保存稳定的虚拟路径，不保存 Texture 或 Vulkan 对象。
 
-示例 `BlinnPhong` Shader 使用 `BaseMap` 采样并与 `BaseColor` 相乘；`blinn_gold.material.json` 引用了 `asset://textures/checker.png`，其他未指定贴图的材质会自动绑定 Manager 创建的白纹理。
+示例 `BlinnPhong` Shader 使用 `BaseMap` 采样并与 `BaseColor` 相乘；`blinn_gold.material.json` 引用了 `assets://textures/checker.png`，其他未指定贴图的材质会自动绑定 Manager 创建的白纹理。
 
 ## 7. 生命周期顺序
 

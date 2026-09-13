@@ -27,12 +27,17 @@ src/
 │   ├── api/               后端无关的 GPU 句柄与命令接口
 │   └── vulkan/            Vulkan Buffer、Image、Sampler、Descriptor 等封装
 ├── render/
-│   ├── cache/             Mesh、Material、Shader 与 Pipeline 的 GPU 缓存
+│   ├── gpu/               Mesh、Material、Shader、Pipeline 与帧资源的 GPU Manager
 │   ├── shader/            Shader、SubShader、Pass、生成、编译和反射
 │   ├── material/          MaterialAsset 与运行时 Material
 │   ├── mesh/              MeshAsset、Mesh、VertexLayout 和 Bounds
+│   ├── texture/           TextureAsset 与运行时 Texture
+│   ├── pipeline/          RenderPipeline、RenderContext 与各 RenderPass
+│   ├── queue/             RenderQueue 收集与排序
 │   ├── render_graph/      RenderGraph 基础设施
-│   └── renderer/          RenderScene、DrawList 和 Renderer
+│   ├── render_target/     RenderTarget
+│   ├── renderer/          DrawList、Renderer 和 IFrameOverlay
+│   └── scene/             RenderScene 与光照数据
 ├── asset/
 │   ├── base/              Asset、AssetId 和 AssetMeta
 │   ├── database/          AssetDatabase
@@ -46,8 +51,14 @@ src/
 └── runtime/
     ├── application/       Application 与 GameApplication
     ├── engine/            Engine 生命周期和系统组装
+    ├── project/           项目配置、项目模板与编辑器配置（仅 MINI_EDITOR 变体）
     ├── window/            Win32 Window
     └── main.cpp           程序入口
+
+tools/
+├── editor/                MiniEditor：Dear ImGui 场景编辑器与 RHI UI 后端
+├── shader_compiler/       MiniShaderCompiler：ShaderLab 离线编译
+└── asset_cooker/          MiniAssetCooker：资产烘焙
 ```
 
 主要依赖方向为：
@@ -62,6 +73,7 @@ Core → RHI → Render → Asset / Scene → Runtime
 - Asset 负责磁盘资产、导入、Artifact、缓存和热重载通知。
 - Scene 负责 Root Node、层级、组件以及渲染快照提取。
 - Runtime 负责初始化各层、运行主循环并按顺序关闭系统。
+- 编辑器位于 Runtime 之上，只能通过 RHI 与 `IFrameOverlay` 接触渲染层。
 
 更完整的目录规则见 [源码目录与依赖约定](docs/SourceLayout.md)。
 
@@ -78,7 +90,7 @@ Core → RHI → Render → Asset / Scene → Runtime
 
 ### 文件与资产系统
 
-- `VirtualPath` 和目录挂载；引擎资源统一通过 `asset://`、派生数据通过
+- `VirtualPath` 和目录挂载；引擎资源统一通过 `assets://`、派生数据通过
   `library://` 访问。
 - `AssetDatabase` 记录资产身份、类型、依赖、导入状态和 Artifact 路径。
 - Shader、Material、Mesh、Scene 四类 Importer。
@@ -124,6 +136,23 @@ Core → RHI → Render → Asset / Scene → Runtime
 - 窗口 resize、最小化、out-of-date 和 suboptimal 时安全重建 Swapchain。
 - Renderer 只通过 RHI 接口提交绘制，不依赖 Vulkan 类型。
 
+### 编辑器（MiniEditor）
+
+- Unity 风格的 Dear ImGui 编辑器，作为独立可执行文件运行在引擎运行时之上。
+- 项目管理：最近项目列表、新建项目（生成标准目录、`project.json` 并复制内建
+  内容）、原生文件夹浏览、从注册表移除和删除到回收站；切换项目时在进程内
+  重建挂载表、资产系统和 GPU 上下文。
+- 场景编辑：`assets://` 资产树浏览、Hierarchy 选择与重命名、Inspector 编辑
+  Transform/Mesh/Material/Camera/Light、组件增删、`Ctrl+S` 保存与另存为。
+- UI 绘制由 `ImGuiRenderer` 经 RHI 完成，取代官方 `imgui_impl_vulkan` 后端；
+  `ImGuiLayer` 实现 `IFrameOverlay`，在渲染管线之后向同一命令缓冲区追加绘制。
+- 引擎窗口本身就是场景视图：Dock 布局把中央节点留成穿透空洞，面板叠加在
+  引擎输出之上，布局持久化到 `imgui.ini`。
+- 编辑器专属的引擎能力（项目管理、`editor.json`）由 `MINI_EDITOR` 宏隔离，
+  只编入 `MiniEngineEditor` 库变体，游戏运行时不包含这些代码。
+
+详见[编辑器文档](docs/Editor.md)。
+
 ## 运行流程
 
 ### 1. 启动
@@ -132,7 +161,7 @@ Core → RHI → Render → Asset / Scene → Runtime
 main
   → 创建 GameApplication
   → Engine::run(Application)
-  → 挂载 asset:// 与 library://
+  → 挂载 assets:// 与 library://
   → 初始化 AssetManager / AssetDatabase / ImportPipeline
   → 创建 Window
   → 创建 Renderer 和 VulkanBackend
@@ -141,13 +170,13 @@ main
 
 Debug 与 Release 构建会扫描源资产并启动 FileWatcher；Publish 构建直接读取 Cooker
 生成的数据库和 Artifact。示例 `GameApplication::onStart()` 直接加载
-`asset://scenes/blinn_phong_showcase.scene.json`，场景中已包含地面、几何体、
+`assets://scenes/blinn_phong_showcase.scene.json`，场景中已包含地面、几何体、
 Camera、Directional Light 和 Point Light 组件。
 
 ### 2. 资产加载
 
 ```text
-asset:// 虚拟路径
+assets:// 虚拟路径
   → AssetManager 查询内存缓存
   → AssetDatabase 查询资产记录
   → Debug 缺失时调用对应 Importer
@@ -244,6 +273,13 @@ cmake --build --preset clang-publish --target MiniShaderPackagedShaders
 ./build/clang-publish/MiniVulkanEngine.exe
 ```
 
+编辑器（Debug 与 Release 均可直接运行，首次启动会弹出项目选择框）：
+
+```powershell
+cmake --build --preset clang-debug --target MiniEditor
+./build/clang-debug/MiniEditor.exe
+```
+
 运行全部测试：
 
 ```powershell
@@ -266,7 +302,8 @@ ctest --test-dir build/clang-debug --output-on-failure
 VS Code 会自动执行 Debug configure 和 build。选择
 `Run MiniVulkanEngine Release` 可启动 Release，选择
 `Run MiniVulkanEngine Publish` 可启动 Publish；`Ctrl+Shift+B` 只执行默认
-Debug 构建任务。
+Debug 构建任务。调试编辑器选择 `Debug MiniEditor (CodeLLDB)` 或
+`Run MiniEditor Release`。
 
 更完整的新电脑安装和调试说明见 [Getting Started](docs/GettingStarted.md)。
 
@@ -285,3 +322,4 @@ Debug 构建任务。
 - [RHI Command System](docs/RhiCommandSystem.md)
 - [Transfer 序列化](docs/Transfer.md)
 - [日志系统](docs/Logging.md)
+- [编辑器](docs/Editor.md)

@@ -1,4 +1,4 @@
-#include "asset/importer/FileWatcher.h"
+﻿#include "asset/importer/FileWatcher.h"
 
 #include "core/logging/Log.h"
 #include "core/filesystem/FileSystem.h"
@@ -36,9 +36,9 @@ bool FileWatcher::start(const VirtualPath& root,
                         std::chrono::milliseconds debounce,
                         bool background) {
     stop();
-    if (!root.valid() || root.scheme() != "asset" || !FILE_SYSTEM.isDirectory(root)) {
+    if (!root.valid() || root.scheme() != "assets" || !FILE_SYSTEM.isDirectory(root)) {
         Log::error(
-            "FileWatcher", "Only an asset:// directory can be watched: %s", root.string().c_str());
+            "FileWatcher", "Only an assets:// directory can be watched: %s", root.string().c_str());
         return false;
     }
     root_ = root;
@@ -81,7 +81,7 @@ bool FileWatcher::running() const {
 }
 
 void FileWatcher::enqueue(FileChangeEvent event) {
-    if (!event.path.valid() || event.path.scheme() != "asset" || ignored(event.path)) {
+    if (!event.path.valid() || event.path.scheme() != "assets" || ignored(event.path)) {
         return;
     }
     std::scoped_lock lock{mutex_};

@@ -64,7 +64,6 @@ private:
                                                PreprocessedShader& result);
 
     ShaderPreprocessorConfig config_;
-    bool configValid_{true};
     std::unordered_map<Hash64, std::shared_ptr<PreprocessedShader>> cache_;
 };
 

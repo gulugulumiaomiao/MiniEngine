@@ -77,15 +77,19 @@ public:
 
     void waitIdle() override;
 
-    [[nodiscard]] VkInstance instance() const { return instance_; }
+    [[nodiscard]] VkInstance instance() const override { return instance_; }
     [[nodiscard]] VkSurfaceKHR surface() const { return surface_; }
-    [[nodiscard]] VkPhysicalDevice physicalDevice() const { return physicalDevice_; }
+    [[nodiscard]] VkPhysicalDevice physicalDevice() const override {
+        return physicalDevice_;
+    }
     [[nodiscard]] VkDevice device() const override { return device_; }
-    [[nodiscard]] VkQueue graphicsQueue() const { return graphicsQueue_; }
+    [[nodiscard]] VkQueue graphicsQueue() const override { return graphicsQueue_; }
     [[nodiscard]] VkQueue presentQueue() const { return presentQueue_; }
     [[nodiscard]] VkCommandPool commandPool() const { return commandPool_; }
     [[nodiscard]] VmaAllocator allocator() const;
-    [[nodiscard]] std::uint32_t graphicsQueueFamily() const { return graphicsQueueFamily_; }
+    [[nodiscard]] std::uint32_t graphicsQueueFamily() const override {
+        return graphicsQueueFamily_;
+    }
     [[nodiscard]] std::uint32_t presentQueueFamily() const { return presentQueueFamily_; }
 
     [[nodiscard]] VkBuffer resolveBuffer(BufferHandle handle) const override;

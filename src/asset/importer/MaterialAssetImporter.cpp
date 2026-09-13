@@ -1,4 +1,4 @@
-#include "asset/importer/MaterialAssetImporter.h"
+﻿#include "asset/importer/MaterialAssetImporter.h"
 
 #include "asset/derived_data/AssetArtifact.h"
 #include "asset/database/AssetDatabase.h"
@@ -61,7 +61,7 @@ AssetImportResult MaterialAssetImporter::import(const AssetImportContext& contex
             continue;
         VirtualPath texturePath{*reference};
         if (!texturePath.valid())
-            texturePath = VirtualPath{"asset://" + *reference};
+            texturePath = VirtualPath{"assets://" + *reference};
         const auto textureRecord = ASSET_DATABASE.findByPath(texturePath);
         if (!texturePath.valid() || !textureRecord ||
             textureRecord->status != AssetImportStatus::Imported ||

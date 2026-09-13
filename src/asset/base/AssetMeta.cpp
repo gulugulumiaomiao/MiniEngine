@@ -1,4 +1,4 @@
-#include "asset/base/AssetMeta.h"
+﻿#include "asset/base/AssetMeta.h"
 
 #include "core/logging/Log.h"
 #include "core/filesystem/FileSystem.h"
@@ -11,6 +11,10 @@ namespace {
 using Json = nlohmann::json;
 
 } // namespace
+
+bool isAssetScheme(std::string_view scheme) {
+    return scheme == "assets";
+}
 
 AssetType inferAssetType(const VirtualPath& sourcePath) {
     const std::string& path = sourcePath.relativePath();

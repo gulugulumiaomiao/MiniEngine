@@ -7,9 +7,10 @@
 namespace engine {
 
 bool SceneNodeAsset::transfer(Transfer& archive) {
-    return archive.transfer("id", id) && archive.transfer("parent", parent) &&
-           archive.transfer("name", name) && archive.transfer("active", active) &&
-           archive.transfer("components", components);
+    return archive.beginObject({}) && archive.transfer("id", id) &&
+           archive.transfer("parent", parent) && archive.transfer("name", name) &&
+           archive.transfer("active", active) && archive.transfer("components", components) &&
+           archive.endObject();
 }
 
 void Node::initialize(NodeHandle handle) {

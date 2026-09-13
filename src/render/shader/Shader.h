@@ -57,7 +57,7 @@ private:
 
 using ShaderValue = std::variant<float, bool, math::Vec2, math::Vec3, math::Vec4, std::string>;
 
-struct ShaderPropertyDesc {
+struct ShaderPropertyDesc : public Transferable {
     std::string name;
     std::string displayName;
     ShaderPropertyType type{ShaderPropertyType::Float};
@@ -65,10 +65,10 @@ struct ShaderPropertyDesc {
     std::optional<math::Vec2> range;
     std::vector<std::string> attributes;
 
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct RenderStateDesc {
+struct RenderStateDesc : public Transferable {
     CullMode cull{CullMode::Back};
     FrontFace frontFace{FrontFace::Clockwise};
     FillMode fill{FillMode::Solid};
@@ -78,17 +78,17 @@ struct RenderStateDesc {
     BlendMode blend{BlendMode::Off};
     std::string colorMask{"RGBA"};
 
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct ShaderInterfaceVariable {
+struct ShaderInterfaceVariable : public Transferable {
     std::string name;
     std::string semantic;
     ShaderValueType type{ShaderValueType::Float};
     std::uint32_t location{};
     ShaderInterpolation interpolation{ShaderInterpolation::Smooth};
 
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
 struct ShaderProgramDesc {
@@ -110,20 +110,20 @@ struct ShaderPassDesc {
     std::vector<std::string> features;
 };
 
-struct ShaderPassAsset {
+struct ShaderPassAsset : public Transferable {
     ShaderPassDesc pass;
     RenderStateDesc renderState;
 
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct SubShaderDesc {
+struct SubShaderDesc : public Transferable {
     std::string renderPipeline{"MiniForward"};
     int renderQueue{2000};
     std::vector<ShaderPassAsset> passes;
 
     [[nodiscard]] const ShaderPassDesc& requirePass(ShaderPassType type) const;
-    [[nodiscard]] bool transfer(Transfer& archive);
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
 class ShaderAsset final : public Asset {

@@ -4,6 +4,7 @@
 
 #include <span>
 #include <string_view>
+#include <vulkan/vulkan.h>
 
 namespace engine::rhi {
 
@@ -14,6 +15,9 @@ public:
     virtual void resourceBarriers(std::span<const TextureBarrier> barriers) = 0;
     virtual void beginRendering(const RenderingInfo& info) = 0;
     virtual void endRendering() = 0;
+    // Raw Vulkan command buffer for adjacent tooling (e.g. editor UI overlays) that
+    // records into the same buffer outside of the RHI abstraction.
+    [[nodiscard]] virtual VkCommandBuffer nativeCommandBuffer() const = 0;
     virtual void setViewport(const Viewport& viewport) = 0;
     virtual void setScissor(const Rect& scissor) = 0;
     virtual void bindPipeline(GraphicsPipelineHandle pipeline) = 0;

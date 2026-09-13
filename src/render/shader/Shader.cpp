@@ -32,33 +32,36 @@ bool transferShaderEnum(Transfer& archive, std::string_view name, Enum& value, E
 } // namespace
 
 bool ShaderInterfaceVariable::transfer(Transfer& archive) {
-    return archive.transfer("name", name) && archive.transfer("semantic", semantic) &&
+    return archive.beginObject({}) && archive.transfer("name", name) &&
+           archive.transfer("semantic", semantic) &&
            transferShaderEnum(archive, "type", type, ShaderValueType::Vec4) &&
            archive.transfer("location", location) &&
            transferShaderEnum(
-               archive, "interpolation", interpolation, ShaderInterpolation::NoPerspective);
+               archive, "interpolation", interpolation, ShaderInterpolation::NoPerspective) &&
+           archive.endObject();
 }
 
 bool RenderStateDesc::transfer(Transfer& archive) {
-    return transferShaderEnum(archive, "cull", cull, CullMode::Back) &&
+    return archive.beginObject({}) && transferShaderEnum(archive, "cull", cull, CullMode::Back) &&
            transferShaderEnum(archive, "front_face", frontFace, FrontFace::CounterClockwise) &&
            transferShaderEnum(archive, "fill", fill, FillMode::Wireframe) &&
            transferShaderEnum(archive, "topology", topology, PrimitiveTopology::LineList) &&
            archive.transfer("depth_write", depthWrite) &&
            transferShaderEnum(archive, "depth_test", depthTest, DepthCompare::Always) &&
            transferShaderEnum(archive, "blend", blend, BlendMode::PremultipliedAlpha) &&
-           archive.transfer("color_mask", colorMask);
+           archive.transfer("color_mask", colorMask) && archive.endObject();
 }
 
 bool ShaderPropertyDesc::transfer(Transfer& archive) {
-    return archive.transfer("name", name) && archive.transfer("display_name", displayName) &&
+    return archive.beginObject({}) && archive.transfer("name", name) &&
+           archive.transfer("display_name", displayName) &&
            transferShaderEnum(archive, "property_type", type, ShaderPropertyType::Boolean) &&
            archive.transfer("default_value", defaultValue) && archive.transfer("range", range) &&
-           archive.transfer("attributes", attributes);
+           archive.transfer("attributes", attributes) && archive.endObject();
 }
 
 bool ShaderPassAsset::transfer(Transfer& archive) {
-    return archive.transfer("name", pass.name) &&
+    return archive.beginObject({}) && archive.transfer("name", pass.name) &&
            transferShaderEnum(archive, "pass_type", pass.type, ShaderPassType::ShadowCaster) &&
            archive.transfer("vertex_source", pass.program.vertexSource) &&
            archive.transfer("fragment_source", pass.program.fragmentSource) &&
@@ -66,12 +69,13 @@ bool ShaderPassAsset::transfer(Transfer& archive) {
            archive.transfer("varyings", pass.varyings) &&
            archive.transfer("fragment_outputs", pass.fragmentOutputs) &&
            archive.transfer("features", pass.features) &&
-           archive.transfer("render_state", renderState);
+           archive.transfer("render_state", renderState) && archive.endObject();
 }
 
 bool SubShaderDesc::transfer(Transfer& archive) {
-    return archive.transfer("render_pipeline", renderPipeline) &&
-           archive.transfer("render_queue", renderQueue) && archive.transfer("passes", passes);
+    return archive.beginObject({}) && archive.transfer("render_pipeline", renderPipeline) &&
+           archive.transfer("render_queue", renderQueue) && archive.transfer("passes", passes) &&
+           archive.endObject();
 }
 
 bool ShaderAsset::transfer(Transfer& archive) {
@@ -622,7 +626,10 @@ MaterialAsset parseMaterialAssetValue(const VirtualPath& path, std::string_view 
     const std::string shaderPath = required<std::string>(root, "shader", path, "$");
     material.shader = VirtualPath{shaderPath};
     if (!material.shader.valid()) {
-        material.shader = VirtualPath{"asset://" + shaderPath};
+        // A reference without a scheme resolves inside the mount that owns the material,
+        // so the built-in Error Material under assets:// finds the built-in Shader in the
+        // same project assets instead of looking for it in the currently mounted project.
+        material.shader = VirtualPath{path.scheme() + "://" + shaderPath};
     }
     if (!material.shader.valid()) {
         fail(path, "$.shader", "invalid Shader virtual path");

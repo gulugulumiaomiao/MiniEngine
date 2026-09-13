@@ -8,7 +8,7 @@
 namespace engine {
 
 bool MeshComponentAsset::transfer(Transfer& archive) {
-    if (!archive.transfer("source_type", sourceType))
+    if (!archive.beginObject({}) || !archive.transfer("source_type", sourceType))
         return false;
     if (sourceType == MeshComponentSourceType::Asset) {
         if (!archive.transfer("mesh", mesh))
@@ -22,7 +22,7 @@ bool MeshComponentAsset::transfer(Transfer& archive) {
     return archive.transfer("enabled", enabled) && archive.transfer("visible", visible) &&
            archive.transfer("cast_shadow", castShadow) &&
            archive.transfer("receive_shadow", receiveShadow) &&
-           archive.transfer("layer_mask", layerMask);
+           archive.transfer("layer_mask", layerMask) && archive.endObject();
 }
 
 void MeshComponent::setAssetMesh(MeshHandle mesh) {

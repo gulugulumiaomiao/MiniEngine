@@ -43,7 +43,7 @@ TextureHandle TextureManager::defaultWhite() {
         constexpr std::array pixels{
             std::byte{0xff}, std::byte{0xff}, std::byte{0xff}, std::byte{0xff}};
         defaultWhite_ = createBuiltin(
-            VirtualPath{"builtin://textures/white"}, 1, 1, pixels, TextureColorSpace::Srgb);
+            VirtualPath{"engine://textures/white"}, 1, 1, pixels, TextureColorSpace::Srgb);
     }
     return defaultWhite_;
 }
@@ -53,7 +53,7 @@ TextureHandle TextureManager::defaultBlack() {
         constexpr std::array pixels{
             std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0xff}};
         defaultBlack_ = createBuiltin(
-            VirtualPath{"builtin://textures/black"}, 1, 1, pixels, TextureColorSpace::Srgb);
+            VirtualPath{"engine://textures/black"}, 1, 1, pixels, TextureColorSpace::Srgb);
     }
     return defaultBlack_;
 }
@@ -63,7 +63,7 @@ TextureHandle TextureManager::defaultNormal() {
         constexpr std::array pixels{
             std::byte{0x80}, std::byte{0x80}, std::byte{0xff}, std::byte{0xff}};
         defaultNormal_ = createBuiltin(
-            VirtualPath{"builtin://textures/normal"}, 1, 1, pixels, TextureColorSpace::Linear);
+            VirtualPath{"engine://textures/normal"}, 1, 1, pixels, TextureColorSpace::Linear);
     }
     return defaultNormal_;
 }
@@ -87,7 +87,7 @@ TextureHandle TextureManager::errorTexture() {
                                     std::byte{0xff},
                                     std::byte{0xff}};
         errorTexture_ = createBuiltin(
-            VirtualPath{"builtin://textures/error"}, 2, 2, pixels, TextureColorSpace::Srgb);
+            VirtualPath{"engine://textures/error"}, 2, 2, pixels, TextureColorSpace::Srgb);
     }
     return errorTexture_;
 }

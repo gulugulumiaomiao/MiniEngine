@@ -87,7 +87,7 @@ Pipeline key 包含：
 - `set = 1, binding = 0`：材质 uniform buffer；
 - `set = 1, binding = 1..16`：按 Shader properties 声明顺序排列的 Texture2D。
 
-场景 uniform buffer（`SceneDrawData`，std140，224 字节）布局：`viewProjection`(0)、`cameraPosition`(64)、`directionalLightDirection`(80)、`directionalLightColorIntensity`(96)、`pointLightPositionRange`(112)、`pointLightColorIntensity`(128)、`lightSpaceMatrix`(144)、`shadowParams`(208)；`shadowParams = {strength, depthBias, normalOffset, texelSize}`，shader 侧声明见 `assets/shaders/include/scene.glsl`。
+场景 uniform buffer（`SceneDrawData`，std140，224 字节）布局：`viewProjection`(0)、`cameraPosition`(64)、`directionalLightDirection`(80)、`directionalLightColorIntensity`(96)、`pointLightPositionRange`(112)、`pointLightColorIntensity`(128)、`lightSpaceMatrix`(144)、`shadowParams`(208)；`shadowParams = {strength, depthBias, normalOffset, texelSize}`，shader 侧声明见 `builtin/core/shaders/include/scene.glsl`。
 
 每个 in-flight frame 有独立的材质 uniform buffer 和 BindGroup。`MaterialBindingCache` 让槽位跨帧常驻：`MaterialGpuFactory` 通过
 `rhi::IDevice` 创建 Buffer 和 BindGroup，不接触 Vulkan descriptor。`Material::version()`
@@ -118,7 +118,7 @@ ShadowCaster → DepthOnly → Forward
 
 | 缓存 | 键 | 值 |
 |---|---|---|
-| AssetManager | 规范化 `asset://` 路径 | `weak_ptr<Asset>`（当前为 ShaderAsset / MaterialAsset） |
+| AssetManager | 规范化 `assets://` 路径 | `weak_ptr<Asset>`（当前为 ShaderAsset / MaterialAsset） |
 | CompiledShaderCache | SPIR-V 内容 + stage + entry + Variant | CompiledShader |
 | ShaderProgramCache | vertex CompileID + fragment CompileID + Variant | ShaderProgram |
 | ShaderModuleCache | CompileID | RHI Shader handle |

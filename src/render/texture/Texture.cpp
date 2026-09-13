@@ -29,14 +29,16 @@ bool rgbaByteSize(std::uint32_t width, std::uint32_t height, std::size_t& result
 } // namespace
 
 bool TextureMipData::transfer(Transfer& archive) {
-    return archive.transfer("width", width) && archive.transfer("height", height) &&
-           archive.transfer("bytes", bytes);
+    return archive.beginObject({}) && archive.transfer("width", width) &&
+           archive.transfer("height", height) && archive.transfer("bytes", bytes) &&
+           archive.endObject();
 }
 
 bool TextureDesc::transfer(Transfer& archive) {
-    return archive.transfer("type", type) && archive.transfer("format", format) &&
-           archive.transfer("color_space", colorSpace) && archive.transfer("width", width) &&
-           archive.transfer("height", height) && archive.transfer("mip_count", mipCount);
+    return archive.beginObject({}) && archive.transfer("type", type) &&
+           archive.transfer("format", format) && archive.transfer("color_space", colorSpace) &&
+           archive.transfer("width", width) && archive.transfer("height", height) &&
+           archive.transfer("mip_count", mipCount) && archive.endObject();
 }
 
 bool validateTexture(const TextureDesc& desc, std::span<const TextureMipData> mipData) {

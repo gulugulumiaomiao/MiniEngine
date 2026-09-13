@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -11,6 +12,10 @@ namespace engine {
 
 class Window final {
 public:
+    // Observes raw Win32 messages before built-in window handling. The return value is
+    // informational only: built-in handling still runs so resize/close tracking stays intact.
+    using NativeMessageHandler = std::function<void(HWND, UINT, WPARAM, LPARAM)>;
+
     Window(std::uint32_t width, std::uint32_t height, std::string_view title);
     ~Window();
 
@@ -24,6 +29,7 @@ public:
     [[nodiscard]] bool consumeResize();
     void pollEvents();
     void waitForUsableFramebuffer();
+    void setMessageHandler(NativeMessageHandler handler) { messageHandler_ = std::move(handler); }
 
 private:
     static LRESULT CALLBACK windowProc(HWND handle, UINT message, WPARAM wParam, LPARAM lParam);
@@ -31,6 +37,7 @@ private:
     static constexpr const char* kWindowClass = "MiniVulkanEngineWindow";
     HINSTANCE instance_{};
     HWND handle_{};
+    NativeMessageHandler messageHandler_;
     bool resized_{};
     bool shouldClose_{};
 };

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "asset/base/Asset.h"
 
@@ -13,6 +13,11 @@ struct AssetMeta {
     AssetId assetId;
     AssetType assetType{AssetType::Unknown};
 };
+
+// Virtual path schemes that hold importable source assets. The only asset scope is the
+// active project (assets://): the engine's built-in content ships inside every project's
+// assets/ (copied at creation and at open), so it imports exactly like any user asset.
+[[nodiscard]] bool isAssetScheme(std::string_view scheme);
 
 [[nodiscard]] AssetType inferAssetType(const VirtualPath& sourcePath);
 [[nodiscard]] VirtualPath assetMetaPath(const VirtualPath& sourcePath);

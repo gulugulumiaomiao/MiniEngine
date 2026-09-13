@@ -1,4 +1,4 @@
-#include "asset/manager/AssetManager.h"
+﻿#include "asset/manager/AssetManager.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/logging/Log.h"
 #include "render/shader/Shader.h"
@@ -18,7 +18,7 @@ public:
         ASSET_MANAGER.shutdown();
         (void)FILE_SYSTEM.unmount("shader-bin");
         (void)FILE_SYSTEM.unmount("shader-cache");
-        (void)FILE_SYSTEM.unmount("asset");
+        (void)FILE_SYSTEM.unmount("assets");
         (void)FILE_SYSTEM.unmount("library");
     }
 };
@@ -39,7 +39,7 @@ int main(int argc, char** argv) {
     const std::filesystem::path output = std::filesystem::absolute(argv[4]).lexically_normal();
     const std::filesystem::path toolLibrary =
         output / ".shader-tool-library" / shaderPath.filename();
-    if (!FILE_SYSTEM.mountDirectory("asset", assetRoot, false) ||
+    if (!FILE_SYSTEM.mountDirectory("assets", assetRoot, false) ||
         !FILE_SYSTEM.mountDirectory("library", toolLibrary, false) ||
         !ASSET_MANAGER.initialize(engine::AssetManagerMode::Development)) {
         engine::Log::error(
@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
     AssetRuntimeScope assetRuntime;
 
     const auto shaderVirtualPath = FILE_SYSTEM.toVirtualPath(shaderPath);
-    if (!shaderVirtualPath || shaderVirtualPath->scheme() != "asset") {
+    if (!shaderVirtualPath || shaderVirtualPath->scheme() != "assets") {
         engine::Log::error("MiniShaderCompiler",
                            "Shader is outside the mounted asset root: %s",
                            shaderPath.string().c_str());
@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
 
     engine::ShaderCompilePipelineConfig config;
     config.mode = engine::ShaderCompileMode::OfflineTool;
-    config.preprocessorConfig.includeSearchPaths = {engine::VirtualPath{"asset://shaders/include"}};
+    config.preprocessorConfig.includeSearchPaths = {engine::VirtualPath{"assets://shaders/include"}};
     config.compilerOptions.compilerVersion = MINI_GLSLC_EXECUTABLE;
 #if defined(MINI_SHADER_RELEASE)
     config.compilerOptions.optimization = engine::ShaderOptimization::Release;

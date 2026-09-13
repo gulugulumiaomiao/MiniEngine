@@ -1,4 +1,4 @@
-#include "render/shader/ShaderPreprocessor.h"
+﻿#include "render/shader/ShaderPreprocessor.h"
 
 #include "core/filesystem/FileDependencyGraph.h"
 #include "core/filesystem/FileSystem.h"
@@ -110,20 +110,23 @@ bool ShaderPreprocessor::preprocessSource(const VirtualPath& path,
 
 ShaderPreprocessor::ShaderPreprocessor(ShaderPreprocessorConfig config)
     : config_(std::move(config)) {
-    for (const VirtualPath& root : config_.includeSearchPaths) {
-        if (!root.valid() || !FILE_SYSTEM.isMounted(root.scheme()) ||
-            !FILE_SYSTEM.isDirectory(root)) {
-            configValid_ = false;
-            Log::error("ShaderPreprocessor",
-                       "Include search path is not a mounted directory: %s",
-                       root.string().c_str());
-        }
-    }
+    // Drop include search paths that are not mounted yet.  The editor boots
+    // without a project (assets:// is not mounted); openProject() reinitializes
+    // the GPU managers, which reconstructs the pipeline with the now-mounted
+    // paths.  Keeping only valid entries avoids spurious log noise while still
+    // allowing project-local includes to be resolved at process time.
+    auto& paths = config_.includeSearchPaths;
+    paths.erase(
+        std::remove_if(paths.begin(), paths.end(), [](const VirtualPath& root) {
+            return !root.valid() || !FILE_SYSTEM.isMounted(root.scheme()) ||
+                   !FILE_SYSTEM.isDirectory(root);
+        }),
+        paths.end());
 }
 
 std::shared_ptr<PreprocessedShader>
 ShaderPreprocessor::process(const ShaderPreprocessRequest& request) {
-    if (!configValid_ || !request.sourcePath.valid() || request.source.empty()) {
+    if (!request.sourcePath.valid() || request.source.empty()) {
         Log::error("ShaderPreprocessor", "Shader stage source is missing");
         return {};
     }
@@ -147,11 +150,8 @@ ShaderPreprocessor::process(const ShaderPreprocessRequest& request) {
     result->sourcePath = request.sourcePath;
     result->stage = request.stage;
     std::unordered_set<std::string> visiting;
-    if (!preprocessSource(request.sourcePath,
-                          request.source,
-                          config_.includeSearchPaths,
-                          visiting,
-                          *result)) {
+    if (!preprocessSource(
+            request.sourcePath, request.source, config_.includeSearchPaths, visiting, *result)) {
         return {};
     }
     std::string defineSource;

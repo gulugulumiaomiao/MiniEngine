@@ -18,12 +18,17 @@ namespace {
 constexpr std::uint32_t kMaterialAssetMagic = 0x4c54414dU;
 constexpr std::uint16_t kMaterialAssetVersion = 2;
 
-struct MaterialPropertyEntry {
+struct MaterialPropertyEntry : public Transferable {
     std::string name;
     ShaderValue value;
 
-    [[nodiscard]] bool transfer(Transfer& archive) {
-        return archive.transfer("name", name) && archive.transfer("value", value);
+    MaterialPropertyEntry() = default;
+    MaterialPropertyEntry(std::string name, ShaderValue value)
+        : name(std::move(name)), value(std::move(value)) {}
+
+    [[nodiscard]] bool transfer(Transfer& archive) override {
+        return archive.beginObject({}) && archive.transfer("name", name) &&
+               archive.transfer("value", value) && archive.endObject();
     }
 };
 

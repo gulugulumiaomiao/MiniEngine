@@ -11,7 +11,7 @@ MaterialManager → AssetManager → FileSystem → DirectoryMount → 操作系
 `VirtualPath` 使用 `scheme://relative/path`：
 
 ```text
-asset://shaders/vertex_color.shader.json
+assets://shaders/vertex_color.shader.json
 engine://textures/white.png
 cache://shaders/vertex_color.vert.spv
 user://settings.json
@@ -24,7 +24,7 @@ Scheme 会转成小写，分隔符统一为 `/`，`.` 和可安全消解的 `..`
 `IFileMount` 是存储后端接口，第一版实现了 `DirectoryMount`。挂载点可以只读，也可以被同 Scheme 的新挂载替换：
 
 ```cpp
-FILE_SYSTEM.mountDirectory("asset", assetRoot, true);
+FILE_SYSTEM.mountDirectory("assets", assetRoot, true);
 FILE_SYSTEM.mountDirectory("cache", cacheRoot, false);
 ```
 
@@ -40,6 +40,6 @@ FILE_SYSTEM.mountDirectory("cache", cacheRoot, false);
 
 ## AssetManager 集成
 
-物理目录挂载由 Renderer、工具或测试等启动层负责；启动层挂载 `asset://` 和 `library://` 后调用 `AssetManager::initialize()`。AssetManager 的公开加载接口只接收完整的 `VirtualPath`，不再接受相对路径、绝对路径或执行物理路径转换。
+物理目录挂载由 Renderer、工具或测试等启动层负责；启动层挂载 `assets://` 和 `library://` 后调用 `AssetManager::initialize()`。AssetManager 的公开加载接口只接收完整的 `VirtualPath`，不再接受相对路径、绝对路径或执行物理路径转换。
 
-缓存键使用规范化后的虚拟路径，因此 `asset://shaders/../shaders/a.json` 和 `asset://shaders/a.json` 会命中同一个 Asset。
+缓存键使用规范化后的虚拟路径，因此 `assets://shaders/../shaders/a.json` 和 `assets://shaders/a.json` 会命中同一个 Asset。

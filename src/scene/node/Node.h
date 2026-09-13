@@ -50,7 +50,10 @@ struct SceneNodeAsset final : public Transferable {
     bool active{true};
     std::vector<SceneComponentAsset> components;
 
-    bool operator==(const SceneNodeAsset&) const = default;
+    bool operator==(const SceneNodeAsset& other) const {
+        return id == other.id && parent == other.parent && name == other.name &&
+               active == other.active && components == other.components;
+    }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 

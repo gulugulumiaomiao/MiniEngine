@@ -1,4 +1,4 @@
-#include "asset/manager/AssetManager.h"
+﻿#include "asset/manager/AssetManager.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderCompilePipeline.h"
 #include "render/shader/ShaderGenerator.h"
@@ -29,6 +29,17 @@ int main() {
         processed->source.find("BuildColor") == std::string::npos || processed->sourceHash == 0) {
         return 1;
     }
+    // A not-yet-mounted include search path (project scheme while the editor boots)
+    // must not disable the preprocessor: resolution is deferred to process().
+    ShaderPreprocessor deferred{{{VirtualPath{"assets://shaders/include"}}}};
+    ShaderPreprocessRequest deferredRequest;
+    deferredRequest.sourcePath = request.sourcePath;
+    deferredRequest.stage = request.stage;
+    deferredRequest.source = *rootSource;
+    deferredRequest.defines = request.defines;
+    const auto deferredOutput = deferred.process(deferredRequest);
+    if (!deferredOutput || deferredOutput->dependencies.size() != 2)
+        return 19;
     if (preprocessor.process({})) {
         return 7;
     }
@@ -61,7 +72,7 @@ int main() {
     if (!test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR))
         return 11;
     const std::shared_ptr<ShaderAsset> assetOwner = ASSET_MANAGER.loadAsset<ShaderAsset>(
-        VirtualPath{"asset://shaders/vertex_color.shader.json"});
+        VirtualPath{"assets://shaders/vertex_color.shader.json"});
     if (!assetOwner)
         return 10;
     const ShaderAsset& asset = *assetOwner;
@@ -82,7 +93,7 @@ int main() {
     }
     ShaderCompilePipelineConfig offlineConfig;
     offlineConfig.mode = ShaderCompileMode::OfflineTool;
-    offlineConfig.preprocessorConfig.includeSearchPaths = {VirtualPath{"asset://shaders/include"}};
+    offlineConfig.preprocessorConfig.includeSearchPaths = {VirtualPath{"assets://shaders/include"}};
     offlineConfig.packagedRoot = VirtualPath{"shader-bin://"};
     ShaderCompilePipeline offlinePipeline{std::move(offlineConfig)};
     if (!offlinePipeline.getOrCreate(runtimeShader, pass)) {

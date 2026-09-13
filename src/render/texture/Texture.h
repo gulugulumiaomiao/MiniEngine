@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace engine {
@@ -17,15 +18,19 @@ enum class TextureType { Texture2D };
 enum class TextureFormat { Rgba8Unorm, Rgba8Srgb };
 enum class TextureColorSpace { Linear, Srgb };
 
-struct TextureMipData {
+struct TextureMipData : public Transferable {
     std::uint32_t width{};
     std::uint32_t height{};
     std::vector<std::byte> bytes;
 
-    [[nodiscard]] bool transfer(Transfer& archive);
+    TextureMipData() = default;
+    TextureMipData(std::uint32_t width, std::uint32_t height, std::vector<std::byte> bytes)
+        : width(width), height(height), bytes(std::move(bytes)) {}
+
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct TextureDesc {
+struct TextureDesc : public Transferable {
     TextureType type{TextureType::Texture2D};
     TextureFormat format{TextureFormat::Rgba8Srgb};
     TextureColorSpace colorSpace{TextureColorSpace::Srgb};
@@ -33,7 +38,17 @@ struct TextureDesc {
     std::uint32_t height{};
     std::uint32_t mipCount{1};
 
-    [[nodiscard]] bool transfer(Transfer& archive);
+    TextureDesc() = default;
+    TextureDesc(TextureType type,
+                TextureFormat format,
+                TextureColorSpace colorSpace,
+                std::uint32_t width,
+                std::uint32_t height,
+                std::uint32_t mipCount = 1)
+        : type(type), format(format), colorSpace(colorSpace), width(width), height(height),
+          mipCount(mipCount) {}
+
+    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
 class Texture final {
