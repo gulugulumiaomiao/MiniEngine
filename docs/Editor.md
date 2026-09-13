@@ -59,20 +59,21 @@ main()
        -> Engine::initialize
             // MINI_EDITOR 分支：不挂载任何 scheme，不初始化资产系统
             -> 按 engine.json -> editor.json 合并窗口配置并创建窗口
-            -> 创建 Renderer 与 GPU Managers（pipeline cache 留在内存）
+            -> 创建 Renderer 与 GPU Managers（不启用 pipeline cache）
        -> EditorApplication::onStart
             -> imguiLayer_.attach(renderer, window)
             -> installSceneChangeListener()          // 抢占 AssetManager 的单槽监听
             -> 无项目时 projectPicker_.show()
        -> 每帧 EditorApplication::onUpdate
-       -> EditorApplication::onStop -> ENGINE.saveEditorConfig() + imguiLayer_.detach()
+       -> EditorApplication::onStop -> imguiLayer_.detach()
+       -> Engine::shutdown -> 保存编辑器配置及当前项目配置，再释放资源
 ```
 
 编辑器启动时处于“无项目”状态：`assets://` 等 scheme 尚未挂载，资产系统未初始化，
 因此 UI 是唯一可见内容。`onUpdate` 的顺序是固定的：
 
 ```text
-消费 pendingProjectRoot_（若有）
+消费 pendingProjectClose_ / pendingProjectRoot_（若有）
   -> imguiLayer_.beginFrame()
   -> projectPicker_.draw() 为真则 endFrame 并返回
   -> 无项目则提示文本 + endFrame 返回
@@ -100,15 +101,14 @@ main()
 
 ```text
 imguiLayer_.detach()                      // 先摘掉绑定旧 renderer/device 的 UI
-ENGINE.closeProject()（若已有项目）+ 文档清空
 ENGINE.openProject(root)
-  -> teardownProjectSubsystems()          // 幂等：编辑器启动路径也要先释放 GPU 上下文
+  -> releaseProject()                    // 保存旧项目配置，再卸载旧 GPU 上下文和挂载
   -> syncEngineContractIntoProject()      // 只修复引擎契约资源，不碰示例内容
   -> ProjectConfig::load()
   -> 挂载 assets:// library:// shader-cache:// shader-bin://
   -> initializeProjectSubsystems()        // AssetManager + Engine 自己的场景重载监听
   -> ensureProjectMainScene()
-  -> 合并 engine -> editor -> project 窗口配置，尺寸变化时重建窗口
+  -> 合并 engine -> editor -> project 窗口配置，尺寸变化时重建窗口，否则直接更新标题
   -> initializeGpuManagers(contextFactory) // 打开项目后默认启用管线缓存
   -> selectProjectScene({}) 并 loadScene
 installSceneChangeListener()              // 抢回单槽监听，见下方第三处顺序约束
@@ -118,6 +118,13 @@ registry.addProject(root, 项目名)
 document_.open(activeScenePath) 或 createEmpty()
 ENGINE.saveEditorConfig()
 ```
+
+窗口标题来自 `WindowConfig::name`：引擎默认 `Mini Engine`，编辑器默认 `Mini Editor`。
+编辑器打开项目后显示 `Mini Editor: 项目名称`，切换时同步更新（包括中文名称）。
+`File > Close Project` 延迟到下一帧执行：保存 `project.json`（含当前有效窗口尺寸和名称），
+卸载项目并重建禁用管线缓存的启动界面，标题恢复编辑器名称。
+打开项目失败时也恢复启动界面。退出编辑器时由 `Engine::shutdown()` 保存编辑器配置和
+仍打开的项目配置；项目窗口的名称和尺寸不会覆盖编辑器的启动偏好。缺少 `name` 的旧配置沿用默认值。
 
 三处顺序约束值得强调：
 

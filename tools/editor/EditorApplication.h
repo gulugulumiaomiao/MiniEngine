@@ -38,6 +38,7 @@ private:
     void onStop() override;
 
     void openProject(const std::filesystem::path& root);
+    void closeProject();
     void openScene(const VirtualPath& path);
     // Claims AssetManager's single change-listener slot for SceneDocument. Must be
     // re-run after every successful openProject: bringing the project subsystems up
@@ -80,6 +81,7 @@ private:
     // context (access violation in e.g. SameLine). onUpdate consumes it before
     // beginFrame, i.e. with no ImGui frame open.
     std::optional<std::filesystem::path> pendingProjectRoot_;
+    bool pendingProjectClose_{};
 };
 
 } // namespace engine::editor

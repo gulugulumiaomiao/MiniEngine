@@ -50,6 +50,20 @@ void Engine::loadEditorConfig(const std::filesystem::path& path) {
 }
 
 void Engine::saveEditorConfig() {
+    if (editorConfigPath_.empty())
+        return;
+    // 项目窗口只写 project.json，不能污染启动界面的偏好和标题。
+    if (window_ && projectRoot_.empty()) {
+        if (!editorConfig_.window)
+            editorConfig_.window.emplace();
+        const auto [width, height] = window_->framebufferSize();
+        if (width != 0 && height != 0) {
+            editorConfig_.window->width = width;
+            editorConfig_.window->height = height;
+        }
+        editorConfig_.window->vsync = activeWindowConfig_.vsync;
+        editorConfig_.window->name = activeWindowConfig_.name;
+    }
     if (!editorConfig_.save(editorConfigPath_))
         Log::warn("Engine", "Cannot save editor config");
 }
@@ -58,17 +72,24 @@ void Engine::saveEditorConfig() {
 WindowConfig Engine::effectiveWindowConfig() const {
     WindowConfig effective = config_.window;
 #if defined(MINI_EDITOR)
+    effective.name = "Mini Editor";
     if (editorConfig_.window.has_value()) {
         effective.width = editorConfig_.window->width;
         effective.height = editorConfig_.window->height;
         effective.vsync = editorConfig_.window->vsync;
+        effective.name = editorConfig_.window->name;
     }
 #endif
     if (projectConfig_.window.has_value()) {
         effective.width = projectConfig_.window->width;
         effective.height = projectConfig_.window->height;
         effective.vsync = projectConfig_.window->vsync;
+        effective.name = projectConfig_.window->name;
     }
+#if defined(MINI_EDITOR)
+    if (!projectRoot_.empty())
+        effective.name = "Mini Editor: " + projectConfig_.name;
+#endif
     return effective;
 }
 Engine::~Engine() = default;
@@ -188,7 +209,8 @@ void Engine::applyWindowConfig(const WindowConfig& effective) {
     window_.reset();
 
     // Create new window
-    window_ = std::make_unique<Window>(effective.width, effective.height, "Mini Engine");
+    activeWindowConfig_ = effective;
+    window_ = std::make_unique<Window>(effective.width, effective.height, effective.name);
     Log::info("Engine",
               "Window: %ux%u vsync=%s",
               effective.width,
@@ -212,7 +234,7 @@ bool Engine::initializeGpuManagers(const rhi::IContextFactory& contextFactory,
         .surface = {.windowSystem = rhi::WindowSystem::Win32,
                     .nativeDisplay = window_->nativeInstance(),
                     .nativeWindow = window_->nativeHandle()},
-        .swapchain = {.width = width, .height = height, .vsync = config_.window.vsync},
+        .swapchain = {.width = width, .height = height, .vsync = activeWindowConfig_.vsync},
         .enablePipelineCache = enablePipelineCache,
     });
     renderer_ = std::make_unique<Renderer>(*window_, std::move(context));
@@ -291,6 +313,8 @@ void Engine::loop(Application& application) {
         previousTime = currentTime;
 
         application.onUpdate(deltaTime_);
+        if (shouldQuit_)
+            break;
         scene_->update(deltaTime_);
         const auto [width, height] = window_->framebufferSize();
         const float aspectRatio =
@@ -298,11 +322,15 @@ void Engine::loop(Application& application) {
         scene_->buildRenderScene(renderScene_, aspectRatio);
         renderer_->renderFrame(renderScene_);
     }
-    renderer_->waitIdle();
+    if (renderer_)
+        renderer_->waitIdle();
 }
 
 void Engine::shutdown() {
-    teardownProjectSubsystems();
+#if defined(MINI_EDITOR)
+    saveEditorConfig();
+#endif
+    releaseProject();
     window_.reset();
     scene_ = std::make_unique<Scene>("Main Scene");
     activeScenePath_ = {};
@@ -379,14 +407,16 @@ bool Engine::openProject(const std::filesystem::path& projectRoot) {
     // releasing it first, initializeGpuManagers stacks a second live swapchain on
     // the same window and vkCreateSwapchainKHR fails. teardownProjectSubsystems() is
     // idempotent, so both paths are safe here.
-    if (projectOpen_)
-        closeProject();
-    else
-        teardownProjectSubsystems();
+#if defined(MINI_EDITOR)
+    if (!projectOpen_)
+        saveEditorConfig();
+#endif
+    releaseProject();
     const std::filesystem::path normalized =
         std::filesystem::absolute(projectRoot).lexically_normal();
     if (!isProjectDirectory(normalized)) {
         Log::error("Engine", "Not a valid project directory: %s", normalized.string().c_str());
+        closeProject();
         return false;
     }
 
@@ -400,6 +430,7 @@ bool Engine::openProject(const std::filesystem::path& projectRoot) {
     if (!editor::syncEngineContractIntoProject(normalized, syncError)) {
         Log::error("Engine", "Cannot copy the built-in content into the project: %s",
                    syncError.c_str());
+        closeProject();
         return false;
     }
 #endif
@@ -409,9 +440,11 @@ bool Engine::openProject(const std::filesystem::path& projectRoot) {
         ProjectConfig::load(projectConfigPath(normalized), error);
     if (!loaded) {
         Log::error("Engine", "Cannot load project configuration: %s", error.c_str());
+        closeProject();
         return false;
     }
     projectConfig_ = *loaded;
+    projectRoot_ = normalized;
 
     // Mount project schemes (hardcoded).
     for (const ProjectMount& mount : projectMounts(normalized)) {
@@ -454,6 +487,9 @@ bool Engine::openProject(const std::filesystem::path& projectRoot) {
                   effectiveWindow.width,
                   effectiveWindow.height);
         applyWindowConfig(effectiveWindow);
+    } else {
+        activeWindowConfig_ = effectiveWindow;
+        window_->setTitle(effectiveWindow.name);
     }
 
     if (!initializeGpuManagers(*contextFactory_)) {
@@ -475,17 +511,44 @@ bool Engine::openProject(const std::filesystem::path& projectRoot) {
     return true;
 }
 
-void Engine::closeProject() {
-    if (!projectOpen_)
-        return;
+void Engine::releaseProject() {
+    if (projectOpen_) {
+        // 在窗口和挂载销毁前保存；最小化产生的零尺寸不覆盖有效配置。
+        WindowConfig savedWindow = activeWindowConfig_;
+        const auto [width, height] = window_->framebufferSize();
+        if (width != 0 && height != 0) {
+            savedWindow.width = width;
+            savedWindow.height = height;
+        }
+        projectConfig_.window = std::move(savedWindow);
+        std::string error;
+        if (!projectConfig_.save(projectConfigPath(projectRoot_), error))
+            Log::warn("Engine", "Cannot save project configuration: %s", error.c_str());
+    }
     teardownProjectSubsystems();
-    // Unmount project schemes (hardcoded list).
-    for (const char* scheme : {"assets", "library", "shader-cache", "shader-bin"}) {
-        (void)FILE_SYSTEM.unmount(scheme);
+    if (!projectRoot_.empty()) {
+        for (const char* scheme : {"assets", "library", "shader-cache", "shader-bin"})
+            (void)FILE_SYSTEM.unmount(scheme);
     }
     projectOpen_ = false;
+    projectRoot_.clear();
     projectConfig_ = {};
-    scene_ = std::make_unique<Scene>("Main Scene");
+}
+
+void Engine::closeProject() {
+    if (!window_ || !contextFactory_ || (projectRoot_.empty() && renderer_))
+        return;
+    releaseProject();
+    applyWindowConfig(effectiveWindowConfig());
+#if defined(MINI_EDITOR)
+    constexpr bool enablePipelineCache = false;
+#else
+    constexpr bool enablePipelineCache = true;
+#endif
+    if (!initializeGpuManagers(*contextFactory_, enablePipelineCache)) {
+        Log::error("Engine", "Cannot restore the window after closing the project");
+        requestQuit();
+    }
     Log::info("Engine", "Closed the active project");
 }
 

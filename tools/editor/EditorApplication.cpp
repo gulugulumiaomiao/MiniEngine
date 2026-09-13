@@ -100,6 +100,10 @@ void EditorApplication::onUpdate(float deltaTime) {
     (void)deltaTime;
     // A picker click deferred its work here so the ImGui layer (and the renderer it
     // binds to) can be torn down and rebuilt with no ImGui frame open.
+    if (pendingProjectClose_) {
+        pendingProjectClose_ = false;
+        closeProject();
+    }
     if (pendingProjectRoot_) {
         const std::filesystem::path root = *pendingProjectRoot_;
         pendingProjectRoot_.reset();
@@ -140,7 +144,7 @@ void EditorApplication::onUpdate(float deltaTime) {
 }
 
 void EditorApplication::onStop() {
-    ENGINE.saveEditorConfig();
+    // 先释放依赖 Renderer 的界面资源；Engine::shutdown 统一保存配置。
     imguiLayer_.detach();
 }
 
@@ -165,14 +169,11 @@ void EditorApplication::openProject(const std::filesystem::path& root) {
     // swapchain backbuffer in an undefined layout.
     imguiLayer_.detach();
 
-    if (ENGINE.isProjectOpen()) {
-        ENGINE.saveEditorConfig();
-        ENGINE.closeProject();
+    if (!ENGINE.openProject(root)) {
         document_.createEmpty();
         hierarchyPanel_.select({});
-    }
-
-    if (!ENGINE.openProject(root)) {
+        imguiLayer_.attach(ENGINE.renderer(), ENGINE.window());
+        installSceneChangeListener();
         statusMessage_ = "Failed to open project: " + root.string();
         Log::error("EditorApplication", "Failed to open project: %s", root.string().c_str());
         projectPicker_.show();
@@ -203,6 +204,20 @@ void EditorApplication::openProject(const std::filesystem::path& root) {
     hierarchyPanel_.select({});
     ENGINE.saveEditorConfig();
     statusMessage_.clear();
+}
+
+void EditorApplication::closeProject() {
+    // 在帧外切换 Renderer，返回选择界面后仍能继续绘制和打开项目。
+    imguiLayer_.detach();
+    ENGINE.closeProject();
+    document_.createEmpty();
+    hierarchyPanel_.select({});
+    imguiLayer_.attach(ENGINE.renderer(), ENGINE.window());
+    installSceneChangeListener();
+    dockLayoutApplied_ = false;
+    forceApplyDefaultLayout_ = false;
+    statusMessage_.clear();
+    projectPicker_.show();
 }
 
 void EditorApplication::openScene(const VirtualPath& path) {
@@ -258,6 +273,8 @@ void EditorApplication::drawMenuBar() {
         ImGui::Separator();
         if (ImGui::MenuItem("Open Project..."))
             projectPicker_.show();
+        if (ImGui::MenuItem("Close Project", nullptr, false, ENGINE.isProjectOpen()))
+            pendingProjectClose_ = true;
         ImGui::Separator();
         if (ImGui::MenuItem("Exit", "Alt+F4"))
             ENGINE.requestQuit();

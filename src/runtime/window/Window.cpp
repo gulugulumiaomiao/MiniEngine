@@ -8,24 +8,39 @@
 #include <tuple>
 
 namespace engine {
+namespace {
+
+// 配置和项目名称使用 UTF-8，Win32 标题统一使用 UTF-16。
+std::wstring wideTitle(std::string_view title) {
+    if (title.empty())
+        return {};
+    const int size = MultiByteToWideChar(CP_UTF8, 0, title.data(),
+                                         static_cast<int>(title.size()), nullptr, 0);
+    std::wstring result(static_cast<std::size_t>(size), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, title.data(), static_cast<int>(title.size()),
+                       result.data(), size);
+    return result;
+}
+
+} // namespace
 
 Window::Window(std::uint32_t width, std::uint32_t height, std::string_view title) {
-    instance_ = GetModuleHandleA(nullptr);
-    WNDCLASSEXA windowClass{};
+    instance_ = GetModuleHandleW(nullptr);
+    WNDCLASSEXW windowClass{};
     windowClass.cbSize = sizeof(windowClass);
     windowClass.style = CS_HREDRAW | CS_VREDRAW;
     windowClass.lpfnWndProc = windowProc;
     windowClass.hInstance = instance_;
     windowClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
     windowClass.lpszClassName = kWindowClass;
-    if (RegisterClassExA(&windowClass) == 0) {
+    if (RegisterClassExW(&windowClass) == 0) {
         Log::fatal("Window", "Win32 window class registration failed");
     }
 
     RECT rectangle{0, 0, static_cast<LONG>(width), static_cast<LONG>(height)};
     AdjustWindowRect(&rectangle, WS_OVERLAPPEDWINDOW, FALSE);
-    const std::string ownedTitle(title);
-    handle_ = CreateWindowExA(0,
+    const std::wstring ownedTitle = wideTitle(title);
+    handle_ = CreateWindowExW(0,
                               kWindowClass,
                               ownedTitle.c_str(),
                               WS_OVERLAPPEDWINDOW,
@@ -38,7 +53,7 @@ Window::Window(std::uint32_t width, std::uint32_t height, std::string_view title
                               instance_,
                               this);
     if (!handle_) {
-        UnregisterClassA(kWindowClass, instance_);
+        UnregisterClassW(kWindowClass, instance_);
         Log::fatal("Window", "Win32 window creation failed");
     }
     ShowWindow(handle_, SW_SHOW);
@@ -48,7 +63,13 @@ Window::~Window() {
     if (handle_) {
         DestroyWindow(handle_);
     }
-    UnregisterClassA(kWindowClass, instance_);
+    UnregisterClassW(kWindowClass, instance_);
+}
+
+void Window::setTitle(std::string_view title) {
+    const std::wstring ownedTitle = wideTitle(title);
+    if (!SetWindowTextW(handle_, ownedTitle.c_str()))
+        Log::warn("Window", "Cannot update window title");
 }
 
 bool Window::consumeResize() {
@@ -59,12 +80,12 @@ bool Window::consumeResize() {
 
 void Window::pollEvents() {
     MSG message{};
-    while (PeekMessageA(&message, nullptr, 0, 0, PM_REMOVE)) {
+    while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
         if (message.message == WM_QUIT) {
             shouldClose_ = true;
         }
         TranslateMessage(&message);
-        DispatchMessageA(&message);
+        DispatchMessageW(&message);
     }
 }
 
@@ -85,11 +106,11 @@ void Window::waitForUsableFramebuffer() {
 }
 
 LRESULT CALLBACK Window::windowProc(HWND handle, UINT message, WPARAM wParam, LPARAM lParam) {
-    Window* self = reinterpret_cast<Window*>(GetWindowLongPtrA(handle, GWLP_USERDATA));
+    Window* self = reinterpret_cast<Window*>(GetWindowLongPtrW(handle, GWLP_USERDATA));
     if (message == WM_NCCREATE) {
-        const auto* create = reinterpret_cast<CREATESTRUCTA*>(lParam);
+        const auto* create = reinterpret_cast<CREATESTRUCTW*>(lParam);
         self = static_cast<Window*>(create->lpCreateParams);
-        SetWindowLongPtrA(handle, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
+        SetWindowLongPtrW(handle, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
     }
     if (self) {
         if (self->messageHandler_) {
@@ -104,7 +125,7 @@ LRESULT CALLBACK Window::windowProc(HWND handle, UINT message, WPARAM wParam, LP
             return 0;
         }
     }
-    return DefWindowProcA(handle, message, wParam, lParam);
+    return DefWindowProcW(handle, message, wParam, lParam);
 }
 
 } // namespace engine

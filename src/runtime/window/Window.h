@@ -27,6 +27,7 @@ public:
     [[nodiscard]] HINSTANCE nativeInstance() const { return instance_; }
     [[nodiscard]] std::pair<std::uint32_t, std::uint32_t> framebufferSize() const;
     [[nodiscard]] bool consumeResize();
+    void setTitle(std::string_view title);
     void pollEvents();
     void waitForUsableFramebuffer();
     void setMessageHandler(NativeMessageHandler handler) { messageHandler_ = std::move(handler); }
@@ -34,7 +35,7 @@ public:
 private:
     static LRESULT CALLBACK windowProc(HWND handle, UINT message, WPARAM wParam, LPARAM lParam);
 
-    static constexpr const char* kWindowClass = "MiniVulkanEngineWindow";
+    static constexpr const wchar_t* kWindowClass = L"MiniVulkanEngineWindow";
     HINSTANCE instance_{};
     HWND handle_{};
     NativeMessageHandler messageHandler_;

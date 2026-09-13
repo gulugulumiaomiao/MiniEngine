@@ -10,9 +10,16 @@
 namespace engine {
 
 bool WindowConfig::transfer(Transfer& archive) {
-    return archive.beginObject({}) && archive.transfer("width", width) &&
-           archive.transfer("height", height) && archive.transfer("vsync", vsync) &&
-           archive.endObject();
+    if (!archive.beginObject({}) || !archive.transfer("width", width) ||
+        !archive.transfer("height", height) || !archive.transfer("vsync", vsync))
+        return false;
+    // 兼容尚无窗口名称的配置，保留类型的默认名称。
+    if (!archive.transfer("name", name)) {
+        if (archive.writing())
+            return false;
+        archive.clearError();
+    }
+    return archive.endObject();
 }
 
 bool RenderConfig::transfer(Transfer& archive) {

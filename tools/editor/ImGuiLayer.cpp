@@ -81,6 +81,7 @@ void ImGuiLayer::detach() {
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
     initialized_ = false;
+    Log::info("ImGuiLayer", "ImGui editor layer detached");
 }
 
 void ImGuiLayer::handleNativeMessage(HWND handle, UINT message, WPARAM wParam, LPARAM lParam) {

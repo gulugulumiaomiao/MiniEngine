@@ -5,6 +5,10 @@
 #include "tools/editor/EditorConfig.h"
 #endif
 #include "core/serialization/JsonTransfer.h"
+#include "core/filesystem/FileSystem.h"
+#include "runtime/window/Window.h"
+#include "rhi/vulkan/VulkanFactory.h"
+#include "scene/scene/SceneAsset.h"
 #include <concepts>
 #include <nlohmann/json.hpp>
 
@@ -101,7 +105,8 @@ template <typename T> bool checkConfigScopes(T source) {
 bool testConfigScopes([[maybe_unused]] const std::filesystem::path& root) {
     using namespace engine;
     EngineConfig engineConfig = EngineConfig::createDefault();
-    if (!checkConfigScopes(engineConfig) || !checkConfigScopes(engineConfig.render))
+    if (engineConfig.window.name != "Mini Engine" ||
+        !checkConfigScopes(engineConfig) || !checkConfigScopes(engineConfig.render))
         return false;
     // 缓存路径不再序列化；旧配置中的该字段仍可忽略并正常读取。
     for (const char* json : {
@@ -115,6 +120,15 @@ bool testConfigScopes([[maybe_unused]] const std::filesystem::path& root) {
                 nlohmann::json{{"pipeline", "MiniForward"}})
             return false;
     }
+    WindowConfig named{800, 600, false, "Custom Window"};
+    WindowConfig other = named;
+    other.name = "Another Window";
+    if (named == other || !checkConfigScopes(named))
+        return false;
+    WindowConfig legacy;
+    JsonReader legacyReader{R"({"width":800,"height":600,"vsync":true})"};
+    if (!legacy.transfer(legacyReader) || !legacyReader.valid() || legacy.name != "Mini Engine")
+        return false;
     ProjectConfig project;
     project.name = "Scope";
     if (!checkConfigScopes(project))
@@ -127,10 +141,17 @@ bool testConfigScopes([[maybe_unused]] const std::filesystem::path& root) {
         return false;
     const auto projectTree = nlohmann::json::parse(writer.toString());
     if (projectTree.at("window") !=
-        nlohmann::json{{"width", 1920}, {"height", 1080}, {"vsync", false}})
+        nlohmann::json{{"width", 1920}, {"height", 1080}, {"vsync", false}, {"name", "Mini Engine"}})
         return false;
 #if defined(MINI_EDITOR)
     EditorConfig editor = EditorConfig::createDefault();
+    if (!editor.window || editor.window->name != "Mini Editor")
+        return false;
+    JsonReader legacyEditor{R"({"width":800,"height":600,"vsync":true,"x":-1,"y":-1,"maximized":false})"};
+    EditorConfig::WindowPreference preference;
+    if (!preference.transfer(legacyEditor) || !legacyEditor.valid() || preference.name != "Mini Editor")
+        return false;
+    editor.window->name = "Custom Editor";
     editor.registry.setLastScene(root, "assets://scenes/example.scene.json");
     engine::editor::RecentProjectEntry entry{root, "Scope"};
     if (!checkConfigScopes(editor) || !checkConfigScopes(*editor.window) ||
@@ -152,6 +173,166 @@ bool testConfigScopes([[maybe_unused]] const std::filesystem::path& root) {
 #else
     return true;
 #endif
+}
+
+// 使用真实 Win32 窗口和 Vulkan 上下文验证标题、切换和退出时的配置落盘。
+class WindowSession final : public engine::Application {
+public:
+    explicit WindowSession(std::filesystem::path root, bool projects = false)
+        : root_(std::move(root)), projects_(projects) {}
+    bool passed{true};
+
+private:
+    bool title(std::wstring_view expected) {
+        wchar_t text[256]{};
+        GetWindowTextW(ENGINE.window().nativeHandle(), text, 256);
+        return text == expected;
+    }
+    void check(bool result) {
+        if (!result) {
+            std::fprintf(stderr, "窗口生命周期验证失败，步骤 %d\n", step_);
+            passed = false;
+            ENGINE.requestQuit();
+        }
+    }
+    void onStart() override {
+#if defined(MINI_EDITOR)
+        check(title(L"Mini Editor") && ENGINE.windowConfig().name == "Mini Editor");
+#else
+        check(title(L"Mini Engine") && ENGINE.windowConfig().name == "Mini Engine");
+#endif
+        if (!projects_)
+            ENGINE.requestQuit();
+    }
+    void onUpdate(float) override {
+#if defined(MINI_EDITOR)
+        using namespace engine;
+        const auto a = root_ / "a";
+        const auto b = root_ / "b";
+        std::string error;
+        switch (step_++) {
+        case 0: {
+            const HWND previous = ENGINE.window().nativeHandle();
+            check(ENGINE.openProject(a));
+            if (!passed) return;
+            check(title(L"Mini Editor: 测试项目甲") && ENGINE.window().nativeHandle() == previous);
+            // 改尺寸后切换，确认保存的是项目 A 的配置，不是 B 的。
+            RECT rectangle{0, 0, 520, 360};
+            AdjustWindowRect(&rectangle, WS_OVERLAPPEDWINDOW, FALSE);
+            SetWindowPos(ENGINE.window().nativeHandle(), nullptr, 0, 0,
+                         rectangle.right - rectangle.left, rectangle.bottom - rectangle.top,
+                         SWP_NOMOVE | SWP_NOZORDER);
+            break;
+        }
+        case 1: {
+            check(ENGINE.openProject(b));
+            if (!passed) return;
+            check(title(L"Mini Editor: Project B"));
+            const auto saved = ProjectConfig::load(projectConfigPath(a), error);
+            check(saved && saved->window && saved->window->name == "Mini Editor: 测试项目甲" &&
+                  saved->window->width == 520 && saved->window->height == 360);
+            break;
+        }
+        case 2: {
+            ENGINE.closeProject();
+            check(!ENGINE.isProjectOpen() && title(L"Mini Editor"));
+            check(ENGINE.windowConfig().width == 480 && ENGINE.windowConfig().height == 320);
+            check(!FILE_SYSTEM.resolvePhysicalPath(VirtualPath{"assets://scenes/main.scene.json"}));
+            const auto saved = ProjectConfig::load(projectConfigPath(b), error);
+            check(saved && saved->window && saved->window->name == "Mini Editor: Project B");
+            break;
+        }
+        case 3:
+            // 失败后必须仍有可绘制的启动界面，而不是残留旧标题或空 Renderer。
+            check(!ENGINE.openProject(root_ / "missing") && title(L"Mini Editor"));
+            break;
+        case 4:
+            check(ENGINE.openProject(a));
+            if (!passed) return;
+            check(title(L"Mini Editor: 测试项目甲"));
+            ShowWindow(ENGINE.window().nativeHandle(), SW_MINIMIZE);
+            ENGINE.requestQuit();
+            break;
+        default:
+            check(false);
+        }
+#endif
+    }
+    void onStop() override {
+#if defined(MINI_EDITOR)
+        // shutdown 必须保存 onStop 后的最终编辑器状态。
+        ENGINE.editorConfig().registry.setLastScene(root_, "assets://scenes/final.scene.json");
+#endif
+    }
+    std::filesystem::path root_;
+    bool projects_{};
+    int step_{};
+};
+
+bool testWindowSession(const std::filesystem::path& root) {
+    using namespace engine;
+    const auto previousDirectory = std::filesystem::current_path();
+    const auto session = root / "window-session";
+    std::filesystem::create_directories(session);
+    EngineConfig config = EngineConfig::createDefault();
+    config.workingDirectory = session.string();
+    config.window = WindowConfig{480, 320, false};
+    std::string error;
+    if (!config.save(session / "engine.json", error))
+        return false;
+#if defined(MINI_EDITOR)
+    EditorConfig editor = EditorConfig::createDefault();
+    editor.window->width = 480;
+    editor.window->height = 320;
+    editor.window->vsync = false;
+    const auto editorPath = session / "editor.json";
+    if (!editor.save(editorPath))
+        return false;
+    ENGINE.loadEditorConfig(editorPath);
+    for (const char* directory : {"a", "b"}) {
+        const auto projectRoot = session / directory;
+        for (const auto& mount : projectMounts(projectRoot))
+            std::filesystem::create_directories(mount.directory);
+        std::filesystem::create_directories(projectRoot / "assets/scenes");
+        SceneAsset scene;
+        JsonWriter writer;
+        if (!scene.transfer(writer) ||
+            !writeText(projectRoot / "assets/scenes/main.scene.json", writer.toString()))
+            return false;
+        ProjectConfig project;
+        project.name = directory[0] == 'a' ? "测试项目甲" : "Project B";
+        project.window = directory[0] == 'a' ? WindowConfig{480, 320, false} : WindowConfig{640, 400, false};
+        if (!project.save(projectConfigPath(projectRoot), error))
+            return false;
+    }
+    WindowSession app{session, true};
+#else
+    for (const auto& mount : projectMounts(session))
+        std::filesystem::create_directories(mount.directory);
+    WindowSession app{session};
+#endif
+    const rhi::vulkan::VulkanFactory factory;
+    const int result = ENGINE.run(app, factory, session / "engine.json");
+    std::filesystem::current_path(previousDirectory);
+    if (result != 0 || !app.passed)
+        return false;
+#if defined(MINI_EDITOR)
+    const auto saved = ProjectConfig::load(projectConfigPath(session / "a"), error);
+    const auto savedEditor = EditorConfig::load(editorPath);
+    if (!saved || !saved->window || saved->window->name != "Mini Editor: 测试项目甲" ||
+        saved->window->width != 520 || saved->window->height != 360 || !savedEditor ||
+        !savedEditor->window || savedEditor->window->name != "Mini Editor" ||
+        savedEditor->window->width != 480 || savedEditor->window->height != 320 ||
+        savedEditor->registry.lastScene(session) != "assets://scenes/final.scene.json")
+        return false;
+    ENGINE.loadEditorConfig(editorPath);
+    WindowSession reopened{session};
+    const int reopenedResult = ENGINE.run(reopened, factory, session / "engine.json");
+    std::filesystem::current_path(previousDirectory);
+    if (reopenedResult != 0 || !reopened.passed)
+        return false;
+#endif
+    return true;
 }
 
 } // namespace
@@ -296,6 +477,8 @@ int main() {
     if (isProjectMountScheme("builtin"))
         return 19;
 
+    if (!testWindowSession(root))
+        return 27;
     std::error_code cleanupError;
     std::filesystem::remove_all(root, cleanupError);
     return 0;

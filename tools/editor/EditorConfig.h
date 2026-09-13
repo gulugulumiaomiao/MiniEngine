@@ -21,6 +21,7 @@ struct EditorConfig : public Transferable {
         std::uint32_t width{1280};
         std::uint32_t height{720};
         bool vsync{true};
+        std::string name{"Mini Editor"};
         std::int32_t x{-1};   // -1 = system default
         std::int32_t y{-1};
         bool maximized{};

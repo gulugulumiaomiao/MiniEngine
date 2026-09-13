@@ -35,7 +35,7 @@ public:
 
     [[nodiscard]] bool running() const { return running_; }
     [[nodiscard]] float deltaTime() const { return deltaTime_; }
-    [[nodiscard]] const WindowConfig& windowConfig() const { return config_.window; }
+    [[nodiscard]] const WindowConfig& windowConfig() const { return activeWindowConfig_; }
     [[nodiscard]] Window& window();
     [[nodiscard]] Renderer& renderer();
     [[nodiscard]] Scene& scene() { return *scene_; }
@@ -65,10 +65,8 @@ public:
     // loads the selected scene. When another project is already open it is closed
     // first. Returns false and leaves the engine without an open project on failure.
     [[nodiscard]] bool openProject(const std::filesystem::path& projectRoot);
-    // Tears down the asset system, the GPU resource managers and the renderer, then
-    // unmounts the project schemes. Only the window stays alive, so the editor must
-    // re-attach its overlay to the renderer built by the next openProject(). No-op
-    // when no project is open.
+    // 保存项目配置并卸载资源，恢复无项目窗口和 Renderer。
+    // 编辑器须在调用前 detach ImGui，调用后重新 attach；无项目时不做任何操作。
     void closeProject();
     [[nodiscard]] bool isProjectOpen() const { return projectOpen_; }
     [[nodiscard]] const ProjectConfig& projectConfig() const { return projectConfig_; }
@@ -90,6 +88,8 @@ private:
     // Shuts down every subsystem that depends on the active project, the renderer
     // included; only the window survives. Called by both closeProject() and shutdown().
     void teardownProjectSubsystems();
+    // 切换与退出共用保存/卸载流程，不重建启动界面。
+    void releaseProject();
     // Brings up the asset system after project mounts are in place.
     [[nodiscard]] bool initializeProjectSubsystems();
     // Creates the renderer and GPU managers. Called by initialize() and openProject().
@@ -103,6 +103,7 @@ private:
     [[nodiscard]] WindowConfig effectiveWindowConfig() const;
 
     EngineConfig config_;
+    WindowConfig activeWindowConfig_;
     std::unique_ptr<Window> window_;
     std::unique_ptr<Renderer> renderer_;
     std::unique_ptr<Scene> scene_{std::make_unique<Scene>("Main Scene")};
@@ -117,6 +118,7 @@ private:
     EditorConfig editorConfig_;
 #endif
     ProjectConfig projectConfig_;
+    std::filesystem::path projectRoot_;
     bool projectOpen_{};
     const rhi::IContextFactory* contextFactory_{};
 };

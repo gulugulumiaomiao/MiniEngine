@@ -19,14 +19,17 @@ struct WindowConfig : public Transferable {
     std::uint32_t width{1280};
     std::uint32_t height{720};
     bool vsync{true};
+    std::string name{"Mini Engine"};
 
     WindowConfig() = default;
-    WindowConfig(std::uint32_t width, std::uint32_t height, bool vsync = true)
-        : width(width), height(height), vsync(vsync) {}
+    WindowConfig(std::uint32_t width, std::uint32_t height, bool vsync = true,
+                 std::string name = "Mini Engine")
+        : width(width), height(height), vsync(vsync), name(std::move(name)) {}
 
     bool transfer(Transfer& archive) override;
     [[nodiscard]] bool operator==(const WindowConfig& other) const {
-        return width == other.width && height == other.height && vsync == other.vsync;
+        return width == other.width && height == other.height && vsync == other.vsync &&
+                       name == other.name;
     }
     [[nodiscard]] bool operator!=(const WindowConfig& other) const {
         return !(*this == other);

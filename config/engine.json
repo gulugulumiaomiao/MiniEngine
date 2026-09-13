@@ -2,6 +2,7 @@
   "schema_version": 1,
   "working_directory": "../..",
   "window": {
+    "name": "Mini Engine",
     "width": 1280,
     "height": 720,
     "vsync": true

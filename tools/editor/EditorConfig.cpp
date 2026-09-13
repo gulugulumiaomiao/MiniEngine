@@ -11,10 +11,18 @@
 namespace engine {
 
 bool EditorConfig::WindowPreference::transfer(Transfer& archive) {
-    return archive.beginObject({}) && archive.transfer("width", width) &&
-           archive.transfer("height", height) && archive.transfer("vsync", vsync) &&
-           archive.transfer("x", x) && archive.transfer("y", y) &&
-           archive.transfer("maximized", maximized) && archive.endObject();
+    if (!archive.beginObject({}) || !archive.transfer("width", width) ||
+        !archive.transfer("height", height) || !archive.transfer("vsync", vsync) ||
+        !archive.transfer("x", x) || !archive.transfer("y", y) ||
+        !archive.transfer("maximized", maximized))
+        return false;
+    // 旧 editor.json 缺少名称时沿用 Mini Editor。
+    if (!archive.transfer("name", name)) {
+        if (archive.writing())
+            return false;
+        archive.clearError();
+    }
+    return archive.endObject();
 }
 
 bool EditorConfig::transfer(Transfer& archive) {

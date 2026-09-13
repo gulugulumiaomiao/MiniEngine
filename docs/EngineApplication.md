@@ -15,6 +15,7 @@
   "schema_version": 1,
   "working_directory": "../..",
   "window": {
+    "name": "Mini Engine",
     "width": 1280,
     "height": 720,
     "vsync": true
@@ -66,6 +67,9 @@ main()
        -> Engine::shutdown()
 ```
 
-`Engine::shutdown()` 只做 `teardownProjectSubsystems()`（释放 GPU managers 与 Renderer、`ASSET_MANAGER.shutdown()`、重建空 `Scene`）并销毁窗口，**不卸载任何 mount**；游戏运行时进程随即退出，挂载表交给操作系统回收。只有编辑器的 `Engine::closeProject()` 会在 teardown 之后按硬编码列表卸载 `assets`、`library`、`shader-cache`、`shader-bin`，因为编辑器要在同一进程内换项目重新挂载。
+`Engine::shutdown()` 在释放窗口之前保存当前项目配置；编辑器变体还保存编辑器配置。
+项目切换、关闭与 shutdown 共用 `releaseProject()`，在 GPU 缓存保存后卸载已打开项目的四个 scheme。
+`closeProject()` 随后恢复无项目窗口和 Renderer，编辑器需重新 attach ImGui；shutdown 不重建它们。
+`windowConfig()` 返回当前应用的窗口配置（包括名称和 vsync），不是未合并的引擎默认值。
 
 工具与测试是独立进程，会为自己的隔离环境建立 mount；引擎运行时的 mount 则集中在 `Engine::initialize()`（游戏）或 `Engine::openProject()`（编辑器）。
