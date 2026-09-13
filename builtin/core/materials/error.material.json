@@ -1,0 +1,9 @@
+{
+  "$schemaVersion": 1,
+  "name": "Error",
+  "shader": "shaders/builtin_color.shader.json",
+  "properties": {
+    "Color": [1.0, 0.0, 1.0, 1.0]
+  },
+  "keywords": []
+}

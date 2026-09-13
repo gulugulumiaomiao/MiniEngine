@@ -1,0 +1,12 @@
+{
+  "$schemaVersion": 1,
+  "name": "Builtin Blinn-Phong",
+  "shader": "shaders/blinn_phong.shader.json",
+  "properties": {
+    "BaseColor": [0.72, 0.72, 0.72, 1.0],
+    "SpecularColor": [1.0, 1.0, 1.0, 1.0],
+    "AmbientColor": [0.04, 0.04, 0.04, 1.0],
+    "Shininess": 48.0
+  },
+  "keywords": ["RECEIVE_SHADOWS"]
+}
