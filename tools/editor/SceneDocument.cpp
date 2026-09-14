@@ -29,6 +29,7 @@ bool SceneDocument::open(const VirtualPath& scenePath) {
 
 void SceneDocument::createEmpty() {
     ENGINE.resetScene("Untitled Scene");
+    ++revision_;
     sourcePath_ = {};
     displayName_ = "Untitled";
     attached_ = true;
@@ -114,6 +115,7 @@ Scene& SceneDocument::scene() const {
 }
 
 void SceneDocument::applyLoaded(VirtualPath path) {
+    ++revision_;
     sourcePath_ = std::move(path);
     displayName_ = sourcePath_.filename();
     attached_ = true;

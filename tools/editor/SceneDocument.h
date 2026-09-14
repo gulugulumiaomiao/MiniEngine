@@ -2,6 +2,7 @@
 
 #include "core/filesystem/VirtualPath.h"
 
+#include <cstdint>
 #include <string>
 
 namespace engine {
@@ -46,6 +47,8 @@ public:
     // Marks the document as modified; called after any editor mutation.
     void markDirty() { dirty_ = true; }
 
+    // 场景替换时递增，用于丢弃旧场景的选择和拖放请求；保存不改变代次。
+    [[nodiscard]] std::uint64_t revision() const { return revision_; }
     [[nodiscard]] bool valid() const { return attached_; }
     [[nodiscard]] Scene& scene() const;
     [[nodiscard]] const VirtualPath& sourcePath() const { return sourcePath_; }
@@ -57,6 +60,7 @@ public:
 private:
     void applyLoaded(VirtualPath path);
 
+    std::uint64_t revision_{};
     VirtualPath sourcePath_;
     std::string displayName_{"Untitled"};
     bool attached_{};

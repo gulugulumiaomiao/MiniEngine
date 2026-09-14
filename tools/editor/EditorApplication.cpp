@@ -115,6 +115,7 @@ void EditorApplication::onUpdate(float deltaTime) {
     }
 
     imguiLayer_.beginFrame();
+    hierarchyPanel_.syncDocument();
 
     if (projectPicker_.draw()) {
         imguiLayer_.endFrame();
@@ -137,6 +138,7 @@ void EditorApplication::onUpdate(float deltaTime) {
     drawSaveAsPopup();
     if (showProject_)
         projectPanel_.draw();
+    hierarchyPanel_.syncDocument();
     if (showHierarchy_)
         hierarchyPanel_.draw();
     if (showInspector_)

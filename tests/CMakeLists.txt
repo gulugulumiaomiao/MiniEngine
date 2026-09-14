@@ -51,6 +51,12 @@ mini_add_test(MeshTest)
 mini_add_test(TextureTest)
 mini_add_test(RenderCacheTest)
 mini_add_test(SceneTest)
+mini_add_editor_test(SceneHierarchyEditorTest)
+mini_add_editor_test(HierarchyPanelTest
+    ${PROJECT_SOURCE_DIR}/tools/editor/HierarchyPanel.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/SceneDocument.cpp
+)
+target_link_libraries(HierarchyPanelTest PRIVATE MiniImGui)
 mini_add_test(SceneAssetTest)
 mini_add_test(SceneExportTest)
 target_compile_definitions(SceneExportTest PRIVATE

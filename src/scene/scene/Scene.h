@@ -12,6 +12,10 @@ namespace engine {
 
 class RenderScene;
 
+#if defined(MINI_EDITOR)
+enum class NodeMoveResult { Rejected, Unchanged, Changed };
+#endif
+
 class Scene final {
 public:
     explicit Scene(std::string name = "Scene");
@@ -28,6 +32,14 @@ public:
     [[nodiscard]] NodeHandle createNode(std::string name = "Node");
     [[nodiscard]] bool destroyNode(NodeHandle node);
     void clear();
+
+#if defined(MINI_EDITOR)
+    // finalIndex 是从目标子列表排除源节点后的插入位置，换父节点时保持世界变换。
+    [[nodiscard]] bool
+    canMoveNode(NodeHandle node, NodeHandle parent, std::size_t finalIndex, std::string& error);
+    [[nodiscard]] NodeMoveResult
+    moveNode(NodeHandle node, NodeHandle parent, std::size_t finalIndex, std::string& error);
+#endif
 
     [[nodiscard]] Node* findNode(NodeHandle node) { return nodes_.find(node); }
     [[nodiscard]] const Node* findNode(NodeHandle node) const { return nodes_.find(node); }
