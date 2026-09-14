@@ -151,7 +151,7 @@ Core → RHI → Render → Asset / Scene → Runtime
 - 编辑器专属的引擎能力（项目管理、`editor.json`）由 `MINI_EDITOR` 宏隔离，
   只编入 `MiniEngineEditor` 库变体，游戏运行时不包含这些代码。
 
-详见[编辑器文档](docs/Editor.md)。
+详见[编辑器文档](docs/editor/Editor.md)。
 
 ## 运行流程
 
@@ -322,4 +322,4 @@ Debug 构建任务。调试编辑器选择 `Debug MiniEditor (CodeLLDB)` 或
 - [RHI Command System](docs/RhiCommandSystem.md)
 - [Transfer 序列化](docs/Transfer.md)
 - [日志系统](docs/Logging.md)
-- [编辑器](docs/Editor.md)
+- [编辑器](docs/editor/Editor.md)

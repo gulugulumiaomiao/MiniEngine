@@ -52,7 +52,7 @@ Material Importer 会解析 Shader 的 `Texture2D` 属性，将非空的相对�
 - `defaultNormal()`：1x1 Linear `(128, 128, 255, 255)` 法线。
 - `errorTexture()`：2x2 SRGB 黑色/品红棋盘；路径无效或加载失败时使用它。
 
-这些资源的像素由 `createBuiltin()` 直接构造，不读任何文件，但同样走正常的 `TextureHandle`、Cache 和 Uploader 流程上传。它们的路径形如 `engine://textures/white`、`engine://textures/error`，但 `engine://` **从不被挂载**——这只是 `KeyedHandleRegistry` 的 key 命名空间，用来把程序化纹理与 `assets://` 下的真实资产区分开（引擎内建内容的**文件**则位于项目的 `assets://`，见 Editor.md）。`TextureManager::clear()` 会同时清除内建 Handle 状态和所有运行时实例。
+这些资源的像素由 `createBuiltin()` 直接构造，不读任何文件，但同样走正常的 `TextureHandle`、Cache 和 Uploader 流程上传。它们的路径形如 `engine://textures/white`、`engine://textures/error`，但 `engine://` **从不被挂载**——这只是 `KeyedHandleRegistry` 的 key 命名空间，用来把程序化纹理与 `assets://` 下的真实资产区分开（引擎内建内容的**文件**则位于项目的 `assets://`，见 editor/Editor.md）。`TextureManager::clear()` 会同时清除内建 Handle 状态和所有运行时实例。
 
 ## 5. GPU 上传
 

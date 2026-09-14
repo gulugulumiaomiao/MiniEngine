@@ -54,7 +54,7 @@ powershell -ExecutionPolicy Bypass -File tools/dev/Invoke-CMake.ps1 --build --pr
 
 首次启动会在 `build/clang-debug/editor/config/` 下生成 `editor.json` 与 `imgui.ini`，
 并弹出项目选择框；新建或选定的项目目录会自己持有 `assets/`、`library/` 和
-`generated-shaders/`。详见[编辑器文档](Editor.md)。
+`generated-shaders/`。详见[编辑器文档](editor/Editor.md)。
 
 ## 仓库内容约定
 

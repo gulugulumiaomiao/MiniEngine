@@ -125,7 +125,7 @@ Core 被所有层使用，不反向依赖其他层。
 - `asset` 负责磁盘资产、导入、数据库、派生数据和资产对象缓存。
 - `runtime` 负责挂载文件系统并组装资产、场景、GPU Manager 和 Renderer。
 - `tools/editor` 位于 Runtime 之上，只能通过 RHI 和 `IFrameOverlay` 接触渲染层；
-  `src/render` 不引入任何 ImGui 头文件，详见[编辑器文档](Editor.md)。
+  `src/render` 不引入任何 ImGui 头文件，详见[编辑器文档](editor/Editor.md)。
 
 新增代码时应优先放入其所属子系统，不建立 `Managers/`、`Utils/`、`Misc/`
 等跨职责目录，也不要为了绕过静态库链接顺序把某个类的成员函数放进其他类的
