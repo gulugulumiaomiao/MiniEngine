@@ -1,3 +1,22 @@
+include(GoogleTest)
+
+# Google Test is vendored under third_party/googletest and built the same way as
+# MiniImGui: the amalgamated translation units go into a static library, skipping
+# upstream's CMake project (install rules, package exports, its own test suite).
+add_library(MiniGTest STATIC
+    ${PROJECT_SOURCE_DIR}/third_party/googletest/googletest/src/gtest-all.cc
+    ${PROJECT_SOURCE_DIR}/third_party/googletest/googletest/src/gtest_main.cc
+)
+target_include_directories(MiniGTest SYSTEM PUBLIC
+    ${PROJECT_SOURCE_DIR}/third_party/googletest/googletest/include
+)
+# gtest-all.cc includes its siblings as "src/gtest-*.cc", so the library root must
+# be on the include path while compiling gtest itself.
+target_include_directories(MiniGTest PRIVATE
+    ${PROJECT_SOURCE_DIR}/third_party/googletest/googletest
+)
+set_target_properties(MiniGTest PROPERTIES FOLDER ThirdParty)
+
 function(mini_add_test target)
     add_executable(${target} ${target}.cpp)
     target_link_libraries(${target} PRIVATE MiniEngine)
@@ -6,6 +25,19 @@ function(mini_add_test target)
     mini_link_mingw_runtime(${target})
     set_target_properties(${target} PROPERTIES FOLDER Tests)
     add_test(NAME ${target} COMMAND ${target})
+endfunction()
+
+# gtest counterpart of mini_add_test: gtest_main supplies main(), and
+# gtest_discover_tests registers every TEST() as its own CTest entry so failures
+# are reported down to the individual case instead of a bare exit code.
+function(mini_add_gtest target)
+    add_executable(${target} ${target}.cpp)
+    target_link_libraries(${target} PRIVATE MiniEngine MiniGTest)
+    target_compile_definitions(${target} PRIVATE MINI_TEST_BUILTIN_DIR="${PROJECT_SOURCE_DIR}/builtin")
+    mini_enable_warnings(${target})
+    mini_link_mingw_runtime(${target})
+    set_target_properties(${target} PROPERTIES FOLDER Tests)
+    gtest_discover_tests(${target})
 endfunction()
 
 # Tests that exercise editor-only engine features link the MiniEngineEditor variant and
@@ -24,7 +56,7 @@ endfunction()
 
 mini_add_test(BuildConfigTest)
 mini_add_editor_test(BuildConfigEditorTest)
-mini_add_test(HashTest)
+mini_add_gtest(HashTest)
 mini_add_test(ShaderCompilerTest)
 target_compile_definitions(ShaderCompilerTest PRIVATE
     MINI_TEST_ASSET_DIR="${CMAKE_BINARY_DIR}/assets"
@@ -40,9 +72,10 @@ target_compile_definitions(AssetImporterTest PRIVATE
     MINI_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
 )
 
-mini_add_test(LogTest)
-add_test(NAME LogFatalTest COMMAND LogTest fatal)
-set_tests_properties(LogFatalTest PROPERTIES WILL_FAIL TRUE)
+# The fatal-path check lives inside LogTest as a gtest death test: the child
+# process reruns the binary and EXPECT_EXIT asserts both the exit code and the
+# fatal record on stderr, replacing the old WILL_FAIL command-line hack.
+mini_add_gtest(LogTest)
 
 mini_add_test(HandlePoolTest)
 mini_add_test(FrustumTest)

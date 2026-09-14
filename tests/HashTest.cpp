@@ -2,68 +2,87 @@
 
 #include "core/filesystem/FileSystem.h"
 
+#include <gtest/gtest.h>
+
 #include <array>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
-#include <iostream>
 #include <string>
 
 namespace {
 
 enum class Example : std::uint16_t { Value = 0x1234 };
 
-int fail(const char* message) {
-    std::cerr << message << '\n';
-    return 1;
-}
+// "hello" as raw bytes; kept out of the assertion macros because a braced
+// initializer list inside EXPECT_* would split on its commas at preprocessing.
+constexpr std::array kFileBytes{
+    std::byte{0x68}, std::byte{0x65}, std::byte{0x6c}, std::byte{0x6c}, std::byte{0x6f}};
 
 } // namespace
 
-int main() {
-    using namespace engine;
+TEST(HashTest, FnvVectorsMatch) {
+    EXPECT_EQ(engine::hashString(""), 0xcbf29ce484222325ULL);
+    EXPECT_EQ(engine::hashString("a"), 0xaf63dc4c8601ec8cULL);
+    EXPECT_EQ(engine::hashString("hello"), 0xa430d84680aabd0bULL);
+}
 
-    if (hashString("") != 0xcbf29ce484222325ULL || hashString("a") != 0xaf63dc4c8601ec8cULL ||
-        hashString("hello") != 0xa430d84680aabd0bULL) {
-        return fail("FNV-1a test vectors do not match");
-    }
+TEST(HashTest, IncrementalMatchesContiguous) {
+    engine::Hash64 incremental = engine::hashString("hel");
+    incremental = engine::hashString("lo", incremental);
+    EXPECT_EQ(incremental, engine::hashString("hello"));
+}
 
-    Hash64 incremental = hashString("hel");
-    incremental = hashString("lo", incremental);
-    if (incremental != hashString("hello"))
-        return fail("Incremental string hashing does not match contiguous hashing");
-
-    Hash64 typed = kFnv1a64OffsetBasis;
-    hashAppend(typed, std::uint16_t{0x1234});
-    hashAppend(typed, Example::Value);
-    hashAppend(typed, true);
+TEST(HashTest, TypedHashingEncodesLittleEndian) {
+    engine::Hash64 typed = engine::kFnv1a64OffsetBasis;
+    engine::hashAppend(typed, std::uint16_t{0x1234});
+    engine::hashAppend(typed, Example::Value);
+    engine::hashAppend(typed, true);
     const std::array expectedBytes{
         std::byte{0x34}, std::byte{0x12}, std::byte{0x34}, std::byte{0x12}, std::byte{0x01}};
-    if (typed != hashBytes(expectedBytes))
-        return fail("Typed hashing is not deterministic little-endian encoding");
+    EXPECT_EQ(typed, engine::hashBytes(expectedBytes));
+}
 
-    if (hashToHex(0x1234ULL) != "0000000000001234")
-        return fail("Hash hex formatting is invalid");
-    if (mixHash64(1) == 1 || combineHash(10, 20) == 10)
-        return fail("Hash mixing did not change its input");
+TEST(HashTest, HexFormattingIsZeroPadded) {
+    EXPECT_EQ(engine::hashToHex(0x1234ULL), "0000000000001234");
+}
 
-    const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
-    const std::filesystem::path root = std::filesystem::temp_directory_path() /
-                                       ("mini-engine-hash-test-" + std::to_string(unique));
-    std::error_code error;
-    std::filesystem::create_directories(root, error);
-    if (error)
-        return fail("Cannot create hash test directory");
-    if (!FILE_SYSTEM.mountDirectory("hash-test", root))
-        return fail("Cannot mount hash test directory");
-    const VirtualPath file{"hash-test://content.bin"};
-    const std::array fileBytes{
-        std::byte{0x68}, std::byte{0x65}, std::byte{0x6c}, std::byte{0x6c}, std::byte{0x6f}};
-    if (!FILE_SYSTEM.writeBinaryAtomic(file, fileBytes))
-        return fail("Cannot write hash test file");
-    const auto fileHash = hashFile(file);
-    if (!fileHash || *fileHash != hashBytes(fileBytes))
-        return fail("File and memory hashing do not match");
-    std::filesystem::remove(root / "content.bin", error);
-    std::filesystem::remove(root, error);
-    return 0;
+TEST(HashTest, MixingChangesItsInput) {
+    EXPECT_NE(engine::mixHash64(1), 1ULL);
+    EXPECT_NE(engine::combineHash(10, 20), 10ULL);
+}
+
+class HashFileTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
+        root = std::filesystem::temp_directory_path() /
+               ("mini-engine-hash-test-" + std::to_string(unique));
+        std::error_code error;
+        std::filesystem::create_directories(root, error);
+        ASSERT_FALSE(error) << "Cannot create hash test directory";
+        // FILE_SYSTEM is a macro that expands to a fully qualified call,
+        // so it must not carry an extra engine:: prefix.
+        ASSERT_TRUE(FILE_SYSTEM.mountDirectory("hash-test", root))
+            << "Cannot mount hash test directory";
+    }
+
+    void TearDown() override {
+        // Best-effort cleanup: TearDown also runs when SetUp bailed out before
+        // the mount succeeded, so an unmount failure here must not fail the test.
+        (void)FILE_SYSTEM.unmount("hash-test");
+        std::error_code error;
+        std::filesystem::remove_all(root, error);
+    }
+
+    std::filesystem::path root;
+};
+
+TEST_F(HashFileTest, FileHashMatchesMemoryHash) {
+    const engine::VirtualPath file{"hash-test://content.bin"};
+    ASSERT_TRUE(FILE_SYSTEM.writeBinaryAtomic(file, kFileBytes))
+        << "Cannot write hash test file";
+    const auto fileHash = engine::hashFile(file);
+    ASSERT_TRUE(fileHash.has_value());
+    EXPECT_EQ(*fileHash, engine::hashBytes(kFileBytes));
 }
