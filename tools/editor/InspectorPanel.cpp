@@ -70,7 +70,7 @@ int assetCombo(const char* label, const std::vector<VirtualPath>& paths,
 
 } // namespace
 
-void InspectorPanel::draw(NodeHandle selection) {
+void InspectorPanel::draw(const SelectionSet<NodeHandle>& selection) {
     if (!ImGui::Begin("Inspector", nullptr, ImGuiWindowFlags_NoCollapse)) {
         ImGui::End();
         return;
@@ -83,24 +83,136 @@ void InspectorPanel::draw(NodeHandle selection) {
         return;
     }
 
-    Node* node = document_.scene().findNode(selection);
-    if (node == nullptr) {
+    if (selection.empty()) {
         ImGui::TextUnformatted("Nothing selected");
         ImGui::End();
         return;
     }
 
-    drawNodeHeader(*node);
-    drawTransform(*node);
-    drawMesh(*node);
-    drawMaterial(*node);
-    drawCamera(*node);
-    drawLight(*node);
-    drawAddComponent(*node);
+    if (selection.size() == 1) {
+        Node* node = document_.scene().findNode(selection.primary());
+        if (node == nullptr) {
+            ImGui::TextUnformatted("Nothing selected");
+            ImGui::End();
+            return;
+        }
+
+        drawNodeHeader(*node);
+        drawTransform(*node);
+        drawMesh(*node);
+        drawMaterial(*node);
+        drawCamera(*node);
+        drawLight(*node);
+        drawAddComponent(*node);
+    } else {
+        // 多选视图只展示共有字段；编辑同步写入所有选中节点。
+        drawMultiHeader(selection);
+        drawMultiActive(selection);
+        drawMultiTransform(selection);
+    }
 
     if (!statusMessage_.empty())
         ImGui::TextUnformatted(statusMessage_.c_str());
     ImGui::End();
+}
+
+std::vector<Node*> InspectorPanel::collectNodes(const SelectionSet<NodeHandle>& selection) const {
+    std::vector<Node*> nodes;
+    for (const NodeHandle handle : selection.items())
+        if (Node* node = document_.scene().findNode(handle))
+            nodes.push_back(node);
+    return nodes;
+}
+
+void InspectorPanel::drawMultiHeader(const SelectionSet<NodeHandle>& selection) {
+    ImGui::Text("%u nodes selected", static_cast<unsigned>(selection.size()));
+    ImGui::Separator();
+}
+
+void InspectorPanel::drawMultiActive(const SelectionSet<NodeHandle>& selection) {
+    const std::vector<Node*> nodes = collectNodes(selection);
+    if (nodes.empty())
+        return;
+    bool anyActive = false, anyInactive = false;
+    for (const Node* node : nodes)
+        node->activeSelf() ? anyActive = true : anyInactive = true;
+    if (anyActive && anyInactive) {
+        // 混合状态：MixedValue 标志让复选框渲染三态方块（数值取自 imgui_internal.h，
+        // 编辑器代码不包含内部头）。本地值取 false，首次点击把整组统一为激活，
+        // 再次点击统一取消。
+        ImGui::PushItemFlag(1 << 12 /* ImGuiItemFlags_MixedValue */, true);
+        bool active = false;
+        if (ImGui::Checkbox("Active", &active)) {
+            for (Node* node : nodes)
+                node->setActive(active);
+            document_.markDirty();
+        }
+        ImGui::PopItemFlag();
+    } else {
+        bool active = anyActive;
+        if (ImGui::Checkbox("Active", &active)) {
+            for (Node* node : nodes)
+                node->setActive(active);
+            document_.markDirty();
+        }
+    }
+    ImGui::Separator();
+}
+
+void InspectorPanel::drawMultiTransform(const SelectionSet<NodeHandle>& selection) {
+    if (!ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
+        return;
+    ImGui::PushID("Transform");
+    const std::vector<Node*> nodes = collectNodes(selection);
+    if (nodes.empty()) {
+        ImGui::PopID();
+        return;
+    }
+    std::vector<TransformComponent*> transforms;
+    transforms.reserve(nodes.size());
+    for (Node* node : nodes)
+        transforms.push_back(&node->transform());
+
+    // 各组值一致时显示公共值并把编辑写入所有节点；混合值显示灰色占位。
+    math::Vec3 position = transforms.front()->localPosition();
+    if (std::ranges::all_of(transforms, [&](const TransformComponent* transform) {
+            return transform->localPosition() == position;
+        })) {
+        if (dragVec3("Position", position)) {
+            for (TransformComponent* transform : transforms)
+                transform->setLocalPosition(position);
+            document_.markDirty();
+        }
+    } else {
+        ImGui::TextDisabled("Position  -");
+    }
+
+    math::Quat rotation = transforms.front()->localRotation();
+    if (std::ranges::all_of(transforms, [&](const TransformComponent* transform) {
+            return transform->localRotation() == rotation;
+        })) {
+        if (dragEuler("Rotation", rotation)) {
+            for (TransformComponent* transform : transforms)
+                transform->setLocalRotation(rotation);
+            document_.markDirty();
+        }
+    } else {
+        ImGui::TextDisabled("Rotation  -");
+    }
+
+    math::Vec3 scale = transforms.front()->localScale();
+    if (std::ranges::all_of(transforms, [&](const TransformComponent* transform) {
+            return transform->localScale() == scale;
+        })) {
+        if (dragVec3("Scale", scale)) {
+            for (TransformComponent* transform : transforms)
+                transform->setLocalScale(scale);
+            document_.markDirty();
+        }
+    } else {
+        ImGui::TextDisabled("Scale  -");
+    }
+    ImGui::PopID();
 }
 
 void InspectorPanel::drawNodeHeader(Node& node) {

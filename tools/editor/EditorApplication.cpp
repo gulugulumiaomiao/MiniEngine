@@ -142,7 +142,7 @@ void EditorApplication::onUpdate(float deltaTime) {
     if (showHierarchy_)
         hierarchyPanel_.draw();
     if (showInspector_)
-        inspectorPanel_.draw(hierarchyPanel_.selection());
+        inspectorPanel_.draw(hierarchyPanel_.selectionSet());
     if (showScene_)
         sceneViewPanel_.draw();
 

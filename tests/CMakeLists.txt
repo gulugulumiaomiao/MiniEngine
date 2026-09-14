@@ -57,6 +57,18 @@ mini_add_editor_test(HierarchyPanelTest
     ${PROJECT_SOURCE_DIR}/tools/editor/SceneDocument.cpp
 )
 target_link_libraries(HierarchyPanelTest PRIVATE MiniImGui)
+mini_add_editor_test(InspectorPanelTest
+    ${PROJECT_SOURCE_DIR}/tools/editor/InspectorPanel.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/SceneDocument.cpp
+)
+target_link_libraries(InspectorPanelTest PRIVATE MiniImGui)
+# SelectionSet 是纯模板逻辑，测试只需要头文件，不链接引擎库。
+add_executable(SelectionSetTest SelectionSetTest.cpp)
+target_include_directories(SelectionSetTest PRIVATE ${PROJECT_SOURCE_DIR})
+mini_enable_warnings(SelectionSetTest)
+mini_link_mingw_runtime(SelectionSetTest)
+set_target_properties(SelectionSetTest PROPERTIES FOLDER Tests)
+add_test(NAME SelectionSetTest COMMAND SelectionSetTest)
 mini_add_test(SceneAssetTest)
 mini_add_test(SceneExportTest)
 target_compile_definitions(SceneExportTest PRIVATE

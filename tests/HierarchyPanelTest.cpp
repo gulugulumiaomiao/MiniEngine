@@ -48,6 +48,11 @@ struct Harness {
         frame();
         frame();
     }
+    // 推进模拟时间越过双击窗口，防止连续同位置的单击被合并成双击。
+    void advance(int frames = 22) {
+        for (int i = 0; i < frames; ++i)
+            frame();
+    }
     ImVec2 row(int index, float fraction = 0.5F) const {
         const ImGuiWindow* window = ImGui::FindWindowByName("Hierarchy");
         return {100,
@@ -71,8 +76,7 @@ struct Harness {
     }
     void drag(ImVec2 from, ImVec2 to) {
         // 不把连续拖动起点的单击误合并成双击重命名。
-        for (int i = 0; i < 22; ++i)
-            frame();
+        advance();
         move(from);
         button(0, true);
         move({from.x + 10, from.y});
@@ -95,6 +99,17 @@ struct Harness {
         frame();
         ImGui::GetIO().AddKeyEvent(key, false);
         frame();
+    }
+    void modClick(ImGuiKey modifier, ImVec2 position, int mouseButton = 0) {
+        // 按下修饰键完成一次点击再释放，模拟 Ctrl/Shift+点击。
+        move(position);
+        ImGui::GetIO().AddKeyEvent(modifier, true);
+        frame();
+        button(mouseButton, true);
+        button(mouseButton, false);
+        ImGui::GetIO().AddKeyEvent(modifier, false);
+        frame();
+        settle();
     }
 };
 
@@ -239,8 +254,118 @@ bool staleDocument() {
     return true;
 }
 
+bool multiSelection() {
+    Harness ui;
+    auto& scene = ui.document.scene();
+    const auto a = scene.createNode("A"), b = scene.createNode("B"),
+               c = scene.createNode("C"), d = scene.createNode("D");
+    ui.settle();
+    // Ctrl 加选；selection() 兼容视图指向 primary（首个选中项）。
+    ui.click(ui.row(1));
+    CHECK(ui.panel.selection() == a && ui.panel.selectionSet().size() == 1);
+    ui.modClick(ImGuiKey_ModCtrl, ui.row(3));
+    CHECK(ui.panel.selectionSet().size() == 2);
+    CHECK(ui.panel.selectionSet().contains(a) && ui.panel.selectionSet().contains(c));
+    CHECK(ui.panel.selection() == a);
+    // Ctrl 点击已选项把它移出选择。
+    ui.modClick(ImGuiKey_ModCtrl, ui.row(1));
+    CHECK(ui.panel.selectionSet().size() == 1 && !ui.panel.selectionSet().contains(a));
+    CHECK(ui.panel.selection() == c);
+    // Shift 从 anchor 起选择连续范围。
+    ui.click(ui.row(2));
+    ui.modClick(ImGuiKey_ModShift, ui.row(4));
+    CHECK(ui.panel.selectionSet().size() == 3);
+    CHECK(ui.panel.selectionSet().contains(b) && ui.panel.selectionSet().contains(c) &&
+          ui.panel.selectionSet().contains(d));
+    // 无修饰点击替换为单选。
+    ui.click(ui.row(1));
+    CHECK(ui.panel.selectionSet().size() == 1 && ui.panel.selection() == a);
+    // Ctrl+双击只影响选择，不进入重命名。
+    ui.modClick(ImGuiKey_ModCtrl, ui.row(2));
+    ui.modClick(ImGuiKey_ModCtrl, ui.row(2));
+    CHECK(scene.findNode(b)->name() == "B");
+    CHECK(ui.panel.selectionSet().size() == 1 && ui.panel.selection() == a);
+    // 右键组外节点恢复单选，菜单回到单项形态。
+    ui.click(ui.row(3), 1);
+    CHECK(ui.panel.selectionSet().size() == 1 && ui.panel.selection() == c);
+    CHECK(ui.menuItem(0));
+    CHECK(scene.findNode(c)->children().size() == 1);
+    ui.key(ImGuiKey_Escape);
+    // 多选右键菜单：批量激活/停用整组。
+    ui.click(ui.row(1));
+    ui.modClick(ImGuiKey_ModCtrl, ui.row(2));
+    CHECK(ui.panel.selectionSet().size() == 2);
+    ui.click(ui.row(1), 1);
+    CHECK(ui.panel.selectionSet().size() == 2);
+    CHECK(ui.menuItem(1));
+    CHECK(scene.findNode(a)->activeSelf() && scene.findNode(b)->activeSelf());
+    CHECK(ui.document.dirty());
+    ui.click(ui.row(2), 1);
+    CHECK(ui.menuItem(2));
+    CHECK(!scene.findNode(a)->activeSelf() && !scene.findNode(b)->activeSelf());
+    // 多选删除：整组消失，全删光时选择回到 Scene Root。
+    ui.click(ui.row(1), 1);
+    CHECK(ui.menuItem(0));
+    CHECK(!scene.findNode(a) && !scene.findNode(b));
+    CHECK(ui.panel.selection() == scene.rootHandle());
+    return true;
+}
+
+bool multiDrag() {
+    Harness ui;
+    auto& scene = ui.document.scene();
+    const auto a = scene.createNode("A"), b = scene.createNode("B"),
+               c = scene.createNode("C"), d = scene.createNode("D");
+    ui.settle();
+    // Ctrl 选 A、B 后拖 A：整组随行落在 D 之后，拖动后选择保持整组。
+    ui.click(ui.row(1));
+    ui.modClick(ImGuiKey_ModCtrl, ui.row(2));
+    CHECK(ui.panel.selectionSet().size() == 2);
+    ui.drag(ui.row(1), ui.row(4, 0.9F));
+    CHECK((scene.root().children() == std::vector<NodeHandle>{c, d, a, b}));
+    CHECK(ui.panel.selectionSet().size() == 2 && ui.panel.selectionSet().contains(a));
+    // 选择仍为 {A,B}，再拖 A 到 D 中央：整组成为 D 的子节点并保持相对顺序。
+    ui.drag(ui.row(3), ui.row(2, 0.5F));
+    CHECK((scene.findNode(d)->children() == std::vector<NodeHandle>{a, b}));
+    CHECK((scene.root().children() == std::vector<NodeHandle>{c, d}));
+    // 点击箭头展开 D（会清掉选择），重新组选后拖回根层顶部：跨父级批量且世界位置不变。
+    ui.click({15, ui.row(2).y});
+    ui.click(ui.row(3));
+    ui.modClick(ImGuiKey_ModCtrl, ui.row(4));
+    scene.findNode(b)->transform().setLocalPosition({3, 0, 0});
+    const auto worldBefore = scene.findNode(b)->transform().worldPosition();
+    ui.drag(ui.row(3), ui.row(1, 0.1F));
+    CHECK((scene.root().children() == std::vector<NodeHandle>{a, b, c, d}));
+    CHECK(scene.findNode(d)->children().empty());
+    CHECK(scene.findNode(b)->transform().worldPosition() == worldBefore);
+    // 目标是拖动集合成员（Before B / Into B）时整组拒绝，树不变。
+    ui.drag(ui.row(1), ui.row(2, 0.1F));
+    CHECK((scene.root().children() == std::vector<NodeHandle>{a, b, c, d}));
+    ui.drag(ui.row(1), ui.row(2, 0.5F));
+    CHECK((scene.root().children() == std::vector<NodeHandle>{a, b, c, d}));
+    // Shift 范围选择后从组内拖 B 到 D 之后：整组按可见顺序落在 D 后。
+    // 与上一拖动起点同位置的快速单击会构成双击进入重命名（重命名框占据额外一行，
+    // 后续行整体下移），先推进时间打破双击窗口。
+    ui.advance();
+    ui.click(ui.row(1));
+    ui.modClick(ImGuiKey_ModShift, ui.row(3));
+    CHECK(ui.panel.selectionSet().size() == 3);
+    ui.drag(ui.row(2), ui.row(4, 0.9F));
+    CHECK((scene.root().children() == std::vector<NodeHandle>{d, a, b, c}));
+    // 无修饰点击组外节点后拖动只携带该节点（单拖回归）。
+    ui.click(ui.row(1));
+    CHECK(ui.panel.selectionSet().size() == 1);
+    ui.drag(ui.row(1), ui.row(3, 0.1F));
+    CHECK((scene.root().children() == std::vector<NodeHandle>{a, d, b, c}));
+    CHECK(ui.panel.selectionSet().size() == 1 && ui.panel.selection() == d);
+    return true;
+}
+
 } // namespace
 
 int main() {
-    return dragging() && menusAndRename() && hoverAndScroll() && staleDocument() ? 0 : 1;
+    return dragging() && menusAndRename() && hoverAndScroll() && staleDocument() && multiSelection() &&
+                   multiDrag()
+               ? 0
+               : 1;
 }

@@ -2,6 +2,7 @@
 
 #include "core/filesystem/VirtualPath.h"
 #include "scene/node/SceneHandles.h"
+#include "tools/editor/SelectionSet.h"
 
 #include <string>
 #include <vector>
@@ -16,15 +17,20 @@ namespace editor {
 class SceneDocument;
 
 // Inspector for the selected node: name, active flag and per-component editors for
-// Transform, Mesh, Material, Camera and Light using the existing runtime API.
+// Transform, Mesh, Material, Camera and Light using the existing runtime API. With a
+// multi-selection it shows only the shared fields and edits apply to every node.
 class InspectorPanel {
 public:
     explicit InspectorPanel(SceneDocument& document) : document_(document) {}
 
-    void draw(NodeHandle selection);
+    void draw(const SelectionSet<NodeHandle>& selection);
 
 private:
     void drawNodeHeader(Node& node);
+    void drawMultiHeader(const SelectionSet<NodeHandle>& selection);
+    void drawMultiActive(const SelectionSet<NodeHandle>& selection);
+    void drawMultiTransform(const SelectionSet<NodeHandle>& selection);
+    [[nodiscard]] std::vector<Node*> collectNodes(const SelectionSet<NodeHandle>& selection) const;
     void drawTransform(Node& node);
     void drawMesh(Node& node);
     void drawMaterial(Node& node);
