@@ -60,4 +60,4 @@ Renderer 每帧从 Material 选择 `Shader -> SubShader -> ShaderPass`，生成 
 - Material BindGroup 准备失败时，提交前切换为 Error Material 的 Pipeline 和 BindGroup。
 - Error Material 自身不可用时才跳过 DrawItem，避免递归回退。
 
-完整资产导入和热重载流程见 [AssetPipeline.md](AssetPipeline.md)。
+完整资产导入和热重载流程见 [asset/Pipeline.md](asset/Pipeline.md)。

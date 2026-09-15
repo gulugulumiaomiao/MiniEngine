@@ -309,10 +309,8 @@ Debug 构建任务。调试编辑器选择 `Debug MiniEditor (CodeLLDB)` 或
 
 ## 进一步阅读
 
-- [资产流水线](docs/AssetPipeline.md)
+- [资产系统](docs/asset/README.md)：身份与引用、存储、源格式、Importer、导入管线、运行时加载
 - [文件系统](docs/FileSystem.md)
-- [资产基础设施](docs/AssetFoundation.md)
-- [Importer](docs/AssetImporters.md)
 - [Scene 系统](docs/SceneSystem.md)
 - [SceneAsset](docs/SceneAsset.md)
 - [Shader/Material Pipeline](docs/ShaderMaterialPipeline.md)

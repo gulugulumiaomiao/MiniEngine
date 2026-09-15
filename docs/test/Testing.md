@@ -103,6 +103,6 @@ build\clang-debug\HashTest.exe --gtest_filter="HashFileTest.*"         # gtest �
 引擎文档：
 
 - [SourceLayout.md](../SourceLayout.md)：目录结构与 CMake 分工
-- [AssetPipeline.md](../AssetPipeline.md)：构建/发布流程与资产测试覆盖
+- [asset/ 文档案](../asset/README.md)：资产系统架构与导入管线、构建/发布流程
 - [Editor.md](../Editor.md)：编辑器测试与 `MiniEngineEditor` 变体
 - [Logging.md](../Logging.md)：日志级别与 `fatal` 退出行为（死亡测试的断言依据）

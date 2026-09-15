@@ -1,6 +1,6 @@
 # 资产测试环境
 
-资产、Shader、材质、场景类测试都依赖引擎的虚拟文件系统与 `AssetManager` 单例。本文说明环境搭建、fixture 组织与构建期依赖。总览见 [Testing.md](Testing.md)，资产管线本身见 [../AssetPipeline.md](../AssetPipeline.md)。
+资产、Shader、材质、场景类测试都依赖引擎的虚拟文件系统与 `AssetManager` 单例。本文说明环境搭建、fixture 组织与构建期依赖。总览见 [Testing.md](Testing.md)，资产系统文档见 [../asset/README.md](../asset/README.md)。
 
 ## TestAssetEnvironment.h
 

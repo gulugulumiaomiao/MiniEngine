@@ -39,7 +39,8 @@ std::unique_ptr<Scene> SceneAsset::instantiate(
 4. 使用 `BinaryWriter` 调用 `SceneAsset::transfer`。
 5. 将二进制载荷写入 Scene Artifact。
 
-Importer 不创建运行时 Scene，也不持有运行时资源。
+Importer 不创建运行时 Scene，也不持有运行时资源。导入器接口与依赖调度详见
+[asset/Importer.md](asset/Importer.md) 与 [asset/Pipeline.md](asset/Pipeline.md)。
 
 ## 3. AssetManager
 
