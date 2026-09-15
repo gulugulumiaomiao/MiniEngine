@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+"""Generate deterministic guid:// references for Material and Scene source files.
+
+This script walks the given asset roots, computes the MiniEngine AssetId that
+AssetId::fromPath() would produce for each referenced VirtualPath, and rewrites
+the source JSON so that cross-asset references use guid://<AssetId>.
+"""
+
+import json
+import sys
+from pathlib import Path
+
+FNV1A_64_OFFSET = 14695981039346656037
+FNV1A_64_PRIME = 1099511628211
+
+
+def fnv1a_64(data: bytes, seed: int = FNV1A_64_OFFSET) -> int:
+    h = seed
+    for byte in data:
+        h ^= byte
+        h = (h * FNV1A_64_PRIME) & 0xFFFFFFFFFFFFFFFF
+    return h
+
+
+def mix_hash64(value: int) -> int:
+    value &= 0xFFFFFFFFFFFFFFFF
+    value = (value ^ (value >> 30)) * 0xBF58476D1CE4E5B9 & 0xFFFFFFFFFFFFFFFF
+    value = (value ^ (value >> 27)) * 0x94D049BB133111EB & 0xFFFFFFFFFFFFFFFF
+    return value ^ (value >> 31) & 0xFFFFFFFFFFFFFFFF
+
+
+def is_valid_guid(value: str) -> bool:
+    parts = value.split("-")
+    return len(parts) == 5 and len(parts[0]) == 8 and len(parts[1]) == 4 and len(
+        parts[2]) == 4 and len(parts[3]) == 4 and len(parts[4]) == 12
+
+
+def asset_id_from_path(path: str) -> str:
+    key = path.encode("utf-8")
+    high = fnv1a_64(key, FNV1A_64_OFFSET)
+    low = fnv1a_64(key, high)
+    high = mix_hash64(high)
+    low = mix_hash64(low)
+    # RFC 4122 version-4 / variant bits, matching AssetId::generate/fromPath.
+    high = (high & 0xFFFFFFFFFFFF0FFF) | 0x0000000000004000
+    low = (low & 0x3FFFFFFFFFFFFFFF) | 0x8000000000000000
+    if high == 0 and low == 0:
+        low = 1
+    # Match AssetId::toString formatting: 8-4-4-4-12 groups.
+    return (f"{high >> 32 & 0xFFFFFFFF:08x}-"
+            f"{high >> 16 & 0xFFFF:04x}-"
+            f"{high & 0xFFFF:04x}-"
+            f"{low >> 48 & 0xFFFF:04x}-"
+            f"{low & 0xFFFFFFFFFFFF:012x}")
+
+
+def resolve_material_reference(owner: str, ref: str) -> str:
+    """Material references without a scheme resolve relative to the scheme root.
+
+    This matches MaterialAssetParser: VirtualPath{scheme + "://" + ref}.
+    """
+    if ref.startswith("guid://"):
+        return ref
+    if "://" in ref:
+        return ref
+    scheme = owner.split("://", 1)[0]
+    return f"{scheme}://{ref}"
+
+
+def _normalize_path_parts(parts: list[str]) -> list[str]:
+    result: list[str] = []
+    for part in parts:
+        if part == "..":
+            if result:
+                result.pop()
+        elif part and part != ".":
+            result.append(part)
+    return result
+
+
+def resolve_scene_reference(owner: str, ref: str) -> str:
+    """Scene references without a scheme resolve relative to the owner's parent.
+
+    This matches SceneAssetParser::readAssetPath: owner.parent().joined(ref).
+    """
+    if ref.startswith("guid://"):
+        return ref
+    if "://" in ref:
+        return ref
+    owner_parts = [p for p in owner.replace("assets://", "").split("/") if p and p != "."]
+    owner_parts = owner_parts[:-1]  # drop the file name
+    ref_parts = [p for p in ref.split("/") if p]
+    normalized = _normalize_path_parts(owner_parts + ref_parts)
+    return f"assets://{'/'.join(normalized)}"
+
+
+def guid_for(owner: str, ref: str, resolver=resolve_material_reference) -> str:
+    target = resolver(owner, ref)
+    return f"guid://{asset_id_from_path(target)}"
+
+
+def source_path_for_meta(file_path: Path, root: Path) -> str:
+    """Return the VirtualPath of the source asset that owns a .meta sidecar."""
+    rel = file_path.relative_to(root).as_posix()
+    if root.name == "builtin" and (rel.startswith("core/") or rel.startswith("samples/")):
+        rel = rel.split("/", 1)[1]
+    if rel.endswith(".meta"):
+        rel = rel[:-5]
+    return f"assets://{rel}"
+
+
+def rewrite_meta(file_path: Path, root: Path) -> bool:
+    """Ensure a .meta sidecar carries the deterministic AssetId for its source path."""
+    text = file_path.read_text(encoding="utf-8")
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(data, dict):
+        return False
+    source_path = source_path_for_meta(file_path, root)
+    expected = asset_id_from_path(source_path)
+    current = data.get("asset_id")
+    if current == expected:
+        return False
+    data["asset_id"] = expected
+    file_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return True
+
+
+def rewrite_material(file_path: Path, owner: str, guid_to_path: dict[str, str]) -> bool:
+    text = file_path.read_text(encoding="utf-8")
+    data = json.loads(text)
+    changed = False
+
+    def ensure_guid(ref: str) -> str:
+        if not ref.startswith("guid://") or not is_valid_guid(ref[7:]):
+            return guid_for(owner, ref, resolve_material_reference)
+        path = guid_to_path.get(ref[7:])
+        if path is None:
+            return ref
+        expected = f"guid://{asset_id_from_path(path)}"
+        return expected if expected != ref else ref
+
+    shader = data.get("shader")
+    if isinstance(shader, str):
+        new_shader = ensure_guid(shader)
+        if new_shader != shader:
+            data["shader"] = new_shader
+            changed = True
+
+    properties = data.get("properties", {})
+    for name, value in properties.items():
+        if isinstance(value, str):
+            # Heuristic: treat anything with a slash or a common texture extension as an asset ref.
+            lower = value.lower()
+            if "/" in value or lower.endswith((".png", ".jpg", ".jpeg", ".ktx", ".ktx2", ".tga")):
+                new_value = ensure_guid(value)
+                if new_value != value:
+                    properties[name] = new_value
+                    changed = True
+
+    if changed:
+        file_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return changed
+
+
+def rewrite_scene(file_path: Path, owner: str, guid_to_path: dict[str, str]) -> bool:
+    text = file_path.read_text(encoding="utf-8")
+    data = json.loads(text)
+    changed = False
+
+    def ensure_guid(ref: str) -> str:
+        if not ref.startswith("guid://") or not is_valid_guid(ref[7:]):
+            return guid_for(owner, ref, resolve_scene_reference)
+        path = guid_to_path.get(ref[7:])
+        if path is None:
+            return ref
+        expected = f"guid://{asset_id_from_path(path)}"
+        return expected if expected != ref else ref
+
+    for node in data.get("nodes", []):
+        for component in node.get("components", []):
+            ctype = component.get("type")
+            if ctype == "Mesh":
+                mesh = component.get("mesh")
+                if isinstance(mesh, str):
+                    new_mesh = ensure_guid(mesh)
+                    if new_mesh != mesh:
+                        component["mesh"] = new_mesh
+                        changed = True
+            elif ctype == "Material":
+                materials = component.get("materials", [])
+                new_materials = []
+                for material in materials:
+                    if isinstance(material, str):
+                        new_material = ensure_guid(material)
+                        if new_material != material:
+                            changed = True
+                        new_materials.append(new_material)
+                    else:
+                        new_materials.append(material)
+                component["materials"] = new_materials
+
+    if changed:
+        file_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return changed
+
+
+def owner_path_for(file_path: Path, root: Path, prefix: str) -> str:
+    rel = file_path.relative_to(root).as_posix()
+    # builtin/core and builtin/samples are flattened into the project's assets/ root.
+    if root.name == "builtin" and (rel.startswith("core/") or rel.startswith("samples/")):
+        rel = rel.split("/", 1)[1]
+    return f"{prefix}://{rel}"
+
+
+def collect_asset_guids(roots: list[Path]) -> dict[str, str]:
+    """Build a map from AssetId string to canonical assets:// path for every source asset."""
+    guid_to_path: dict[str, str] = {}
+    asset_suffixes = (
+        ".material.json", ".scene.json", ".shader.json", ".mesh.json", ".texture.json",
+        ".png", ".jpg", ".jpeg", ".ktx", ".ktx2", ".tga"
+    )
+    for root in roots:
+        if not root.exists():
+            continue
+        for file_path in root.rglob("*"):
+            if not file_path.is_file() or not file_path.name.lower().endswith(asset_suffixes):
+                continue
+            if file_path.name.endswith(".meta"):
+                continue
+            owner = owner_path_for(file_path, root, "assets")
+            guid_to_path[asset_id_from_path(owner)] = owner
+    return guid_to_path
+
+
+def main() -> int:
+    roots = [Path(p) for p in sys.argv[1:]]
+    if not roots:
+        roots = [Path("builtin"), Path("tests/assets")]
+
+    guid_to_path = collect_asset_guids(roots)
+
+    for root in roots:
+        if not root.exists():
+            print(f"Skipping missing root: {root}")
+            continue
+        for material in root.rglob("*.material.json"):
+            owner = owner_path_for(material, root, "assets")
+            if rewrite_material(material, owner, guid_to_path):
+                print(f"Updated {material}")
+        for scene in root.rglob("*.scene.json"):
+            owner = owner_path_for(scene, root, "assets")
+            if rewrite_scene(scene, owner, guid_to_path):
+                print(f"Updated {scene}")
+        for meta in root.rglob("*.meta"):
+            if rewrite_meta(meta, root):
+                print(f"Updated {meta}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

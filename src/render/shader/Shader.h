@@ -138,12 +138,7 @@ public:
     [[nodiscard]] Shader instantiate() const;
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
-
-namespace detail {
-
-[[nodiscard]] std::shared_ptr<ShaderAsset> parseShaderAsset(const VirtualPath& path,
-                                                            std::string_view source);
-} // namespace detail
+// Source .shader.json parsing lives in asset/format/ShaderAssetFormat.
 
 struct UniformMemberLayout {
     std::string name;

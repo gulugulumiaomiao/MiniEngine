@@ -83,7 +83,13 @@ library://AssetDatabase.json
 ```
 
 `AssetRecord` 保存源路径、Meta 路径、Artifact 路径、版本、哈希、依赖、导入状态
-和最后错误。依赖与资产文件内部引用一样，只保存规范化的虚拟路径。
+和最后错误。哈希包括源文件/Meta/Artifact 三份，以及重导入判定用的
+`settingsHash`（ImportSettings 的 hash）与 `dependencyHashes`（与依赖列表一一对应的
+依赖源文件哈希快照）：任一依赖源文件当前哈希与快照不一致，或设置哈希变化，都会
+强制重导入。依赖与资产文件内部引用一样，只保存规范化的虚拟路径。
+
+数据库 JSON 保持 version 1，不做旧记录兼容：缺 `settings_hash` / `dependency_hashes`
+的旧格式记录在加载时直接丢弃（warn 日志），由下一次导入重新生成完整记录。
 
 数据库写入使用原子替换。它属于可重建缓存；Meta 才是 AssetId 的持久化来源。
 

@@ -58,7 +58,7 @@ std::optional<AssetArtifact> parseAssetArtifact(const VirtualPath& artifactPath,
     if (!assetId.valid() ||
         (assetType != AssetType::Shader && assetType != AssetType::Material &&
          assetType != AssetType::Mesh && assetType != AssetType::Texture &&
-         assetType != AssetType::Scene) ||
+         assetType != AssetType::Scene && assetType != AssetType::Generic) ||
         !parsedSource.valid() || !reader.finished()) {
         Log::error(
             "AssetArtifact", "Invalid binary Artifact contents: %s", artifactPath.string().c_str());

@@ -89,12 +89,15 @@ bool saveAssetMeta(const VirtualPath& metaPath, const AssetMeta& meta) {
 }
 
 std::optional<AssetMeta> createAssetMeta(const VirtualPath& sourcePath) {
-    const AssetType type = inferAssetType(sourcePath);
+    return createAssetMeta(sourcePath, inferAssetType(sourcePath));
+}
+
+std::optional<AssetMeta> createAssetMeta(const VirtualPath& sourcePath, AssetType type) {
     if (!sourcePath.valid() || type == AssetType::Unknown) {
         Log::error("AssetMeta", "Cannot infer asset type: %s", sourcePath.string().c_str());
         return std::nullopt;
     }
-    AssetMeta meta{1, AssetId::generate(), type};
+    AssetMeta meta{1, AssetId::fromPath(sourcePath), type};
     if (!saveAssetMeta(assetMetaPath(sourcePath), meta)) {
         return std::nullopt;
     }

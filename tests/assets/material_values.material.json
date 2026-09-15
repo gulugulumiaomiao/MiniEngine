@@ -1,12 +1,21 @@
 {
   "$schemaVersion": 1,
   "name": "Material Values",
-  "shader": "material_values.shader.json",
+  "shader": "guid://2760db58-be3b-46f8-92b7-853b6c21fc06",
   "properties": {
     "FloatValue": 2.5,
     "Enabled": true,
-    "Direction": [4.0, 5.0, 6.0],
-    "Tint": [0.25, 0.5, 0.75, 1.0],
-    "MainTexture": "textures/black.png"
+    "Direction": [
+      4.0,
+      5.0,
+      6.0
+    ],
+    "Tint": [
+      0.25,
+      0.5,
+      0.75,
+      1.0
+    ],
+    "MainTexture": "guid://66521740-9f08-4c1e-99b5-a141e121946f"
   }
 }

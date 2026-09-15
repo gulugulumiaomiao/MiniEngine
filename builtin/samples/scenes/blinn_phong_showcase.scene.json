@@ -8,16 +8,32 @@
       "components": [
         {
           "type": "Transform",
-          "position": [0.0, 0.0, 0.0],
-          "rotation": [0.0, 0.0, 0.0, 1.0],
-          "scale": [1.0, 1.0, 1.0]
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
         },
         {
           "type": "Mesh",
           "primitive": {
             "type": "plane",
             "parameters": {
-              "size": [8.0, 8.0],
+              "size": [
+                8.0,
+                8.0
+              ],
               "segments_x": 4,
               "segments_z": 4
             }
@@ -28,7 +44,7 @@
         {
           "type": "Material",
           "materials": [
-            "../materials/blinn_ground.material.json"
+            "guid://80c127c5-38ee-4530-8924-3b0153eb73cf"
           ]
         }
       ]
@@ -39,8 +55,17 @@
       "components": [
         {
           "type": "Transform",
-          "position": [0.0, 3.5, 9.0],
-          "rotation": [-0.17364818, 0.0, 0.0, 0.98480775]
+          "position": [
+            0.0,
+            3.5,
+            9.0
+          ],
+          "rotation": [
+            -0.17364818,
+            0.0,
+            0.0,
+            0.98480775
+          ]
         },
         {
           "type": "Camera",
@@ -48,7 +73,12 @@
           "field_of_view": 48.0,
           "near_plane": 0.1,
           "far_plane": 100.0,
-          "clear_color": [0.015, 0.025, 0.055, 1.0],
+          "clear_color": [
+            0.015,
+            0.025,
+            0.055,
+            1.0
+          ],
           "primary": true,
           "priority": 100
         }
@@ -60,12 +90,21 @@
       "components": [
         {
           "type": "Transform",
-          "rotation": [-0.32494, 0.32494, 0.0, 0.88807]
+          "rotation": [
+            -0.32494,
+            0.32494,
+            0.0,
+            0.88807
+          ]
         },
         {
           "type": "Light",
           "light_type": "directional",
-          "color": [1.0, 0.86, 0.72],
+          "color": [
+            1.0,
+            0.86,
+            0.72
+          ],
           "intensity": 0.9,
           "cast_shadow": true
         }
@@ -77,12 +116,20 @@
       "components": [
         {
           "type": "Transform",
-          "position": [2.5, 2.4, 2.5]
+          "position": [
+            2.5,
+            2.4,
+            2.5
+          ]
         },
         {
           "type": "Light",
           "light_type": "point",
-          "color": [0.35, 0.58, 1.0],
+          "color": [
+            0.35,
+            0.58,
+            1.0
+          ],
           "intensity": 4.0,
           "range": 8.0,
           "cast_shadow": false
@@ -93,17 +140,32 @@
       "id": 5,
       "name": "Runtime Box",
       "components": [
-        {"type": "Transform", "position": [-2.0, 0.6, 0.0]},
+        {
+          "type": "Transform",
+          "position": [
+            -2.0,
+            0.6,
+            0.0
+          ]
+        },
         {
           "type": "Mesh",
           "primitive": {
             "type": "box",
-            "parameters": {"size": [1.2, 1.2, 1.2]}
+            "parameters": {
+              "size": [
+                1.2,
+                1.2,
+                1.2
+              ]
+            }
           }
         },
         {
           "type": "Material",
-          "materials": ["../materials/blinn_red.material.json"]
+          "materials": [
+            "guid://a76c3266-c4eb-4238-85d5-55fa3befca8a"
+          ]
         }
       ]
     },
@@ -111,7 +173,14 @@
       "id": 6,
       "name": "Runtime Sphere",
       "components": [
-        {"type": "Transform", "position": [0.0, 0.75, 0.0]},
+        {
+          "type": "Transform",
+          "position": [
+            0.0,
+            0.75,
+            0.0
+          ]
+        },
         {
           "type": "Mesh",
           "primitive": {
@@ -125,7 +194,9 @@
         },
         {
           "type": "Material",
-          "materials": ["../materials/blinn_blue.material.json"]
+          "materials": [
+            "guid://2084d722-c726-43ad-99d4-aed663b6334e"
+          ]
         }
       ]
     },
@@ -133,7 +204,14 @@
       "id": 7,
       "name": "Runtime Cylinder",
       "components": [
-        {"type": "Transform", "position": [2.0, 0.75, 0.0]},
+        {
+          "type": "Transform",
+          "position": [
+            2.0,
+            0.75,
+            0.0
+          ]
+        },
         {
           "type": "Mesh",
           "primitive": {
@@ -151,7 +229,9 @@
         },
         {
           "type": "Material",
-          "materials": ["../materials/blinn_gold.material.json"]
+          "materials": [
+            "guid://e033897b-3e4d-4c6e-9b34-ec7008008303"
+          ]
         }
       ]
     }

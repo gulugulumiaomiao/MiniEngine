@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/filesystem/VirtualPath.h"
 #include "core/hash.h"
 
 #include <cstdint>
@@ -16,6 +17,7 @@ public:
     constexpr AssetId(std::uint64_t high, std::uint64_t low) : high_(high), low_(low) {}
 
     [[nodiscard]] static AssetId generate();
+    [[nodiscard]] static AssetId fromPath(const VirtualPath& path);
     [[nodiscard]] static std::optional<AssetId> parse(std::string_view text);
 
     [[nodiscard]] constexpr bool valid() const { return high_ != 0 || low_ != 0; }

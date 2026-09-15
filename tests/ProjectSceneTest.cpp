@@ -1,4 +1,8 @@
-﻿#include "core/filesystem/FileSystem.h"
+﻿#include "asset/base/AssetId.h"
+#include "asset/base/GuidResolver.h"
+#include "asset/format/SceneAssetFormat.h"
+#include "core/filesystem/FileSystem.h"
+#include "core/filesystem/VirtualPath.h"
 #include "runtime/config/ProjectConfig.h"
 #include "tools/editor/ProjectTemplate.h"
 #include "scene/scene/SceneAsset.h"
@@ -8,9 +12,53 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <system_error>
+#include <unordered_map>
 
 namespace {
+
+// Resolves GUIDs using the deterministic AssetId that the import pipeline would assign
+// to each built-in asset after it is flattened into assets://. This lets tests parse
+// shipped Scene files without bringing up the full AssetDatabase / import pipeline.
+class BuiltinGuidResolver final : public engine::GuidResolver {
+public:
+    explicit BuiltinGuidResolver(const std::filesystem::path& builtinRoot) {
+        using namespace engine;
+        std::error_code error;
+        for (std::filesystem::recursive_directory_iterator it(builtinRoot, error), end;
+             !error && it != end; ++it) {
+            if (!it->is_regular_file(error) || it->path().extension() == ".meta")
+                continue;
+            const std::filesystem::path relative =
+                std::filesystem::relative(it->path(), builtinRoot, error);
+            if (error)
+                continue;
+            std::string rel = relative.generic_string();
+            std::string_view prefix =
+                rel.starts_with("core/") ? "core/" : (rel.starts_with("samples/") ? "samples/" : "");
+            if (!prefix.empty())
+                rel = rel.substr(prefix.size());
+            const VirtualPath sourcePath{std::string{"assets://"} + rel};
+            guidToPath_.emplace(AssetId::fromPath(sourcePath), sourcePath);
+        }
+    }
+
+    [[nodiscard]] std::optional<engine::VirtualPath>
+    findPath(const engine::AssetId& guid) const override {
+        const auto it = guidToPath_.find(guid);
+        return it == guidToPath_.end() ? std::nullopt
+                                       : std::optional<engine::VirtualPath>{it->second};
+    }
+
+    [[nodiscard]] std::optional<engine::AssetId>
+    findGuid(const engine::VirtualPath& path) const override {
+        return engine::AssetId::fromPath(path);
+    }
+
+private:
+    std::unordered_map<engine::AssetId, engine::VirtualPath> guidToPath_;
+};
 
 std::filesystem::path makeProjectRoot() {
     const std::filesystem::path root =
@@ -71,8 +119,9 @@ int main() {
     const std::optional<std::string> defaultContents = FILE_SYSTEM.readText(defaultScene);
     if (!defaultContents)
         return 6;
+    const BuiltinGuidResolver resolver{builtinSource};
     const std::shared_ptr<SceneAsset> parsed =
-        detail::parseSceneAsset(defaultScene, *defaultContents);
+        format::parseSceneAsset(defaultScene, *defaultContents, resolver);
     if (!parsed || parsed->name != "Scene" || parsed->nodes.size() != 3)
         return 7;
     // Verify the default scene contains camera, light, and plane.
@@ -84,7 +133,7 @@ int main() {
     }
     if (!hasCamera || !hasLight || !hasPlane)
         return 7;
-    if (!validateSceneAsset(*parsed, defaultScene))
+    if (!format::validateSceneAsset(*parsed, defaultScene))
         return 8;
 
     // --- selection resolves to the first scene in the project ---

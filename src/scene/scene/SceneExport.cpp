@@ -1,5 +1,8 @@
 ﻿#include "scene/scene/SceneExport.h"
 
+#include "asset/base/AssetReference.h"
+#include "asset/database/AssetDatabase.h"
+#include "asset/format/SceneAssetFormat.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/logging/Log.h"
 #include "render/material/Material.h"
@@ -218,7 +221,7 @@ std::unique_ptr<SceneAsset> exportSceneToAsset(const Scene& scene,
             return nullptr;
     }
 
-    if (!validateSceneAsset(*asset, targetPath)) {
+    if (!format::validateSceneAsset(*asset, targetPath)) {
         error = error.empty() ? "exported Scene failed validation" : error;
         return nullptr;
     }
@@ -253,7 +256,10 @@ std::string writeSceneAssetJson(const SceneAsset& asset) {
                     } else if constexpr (std::is_same_v<T, MeshComponentAsset>) {
                         serializedComponent["type"] = "Mesh";
                         if (value.sourceType == MeshComponentSourceType::Asset) {
-                            serializedComponent["mesh"] = value.mesh.string();
+                            const auto meshGuid = ASSET_DATABASE.findGuid(value.mesh);
+                            serializedComponent["mesh"] =
+                                meshGuid ? AssetReference{*meshGuid}.toString()
+                                         : value.mesh.string();
                         } else {
                             Json primitive;
                             writePrimitiveParameters(primitive, value.primitiveRecipe.parts.front());
@@ -267,8 +273,11 @@ std::string writeSceneAssetJson(const SceneAsset& asset) {
                     } else if constexpr (std::is_same_v<T, MaterialComponentAsset>) {
                         serializedComponent["type"] = "Material";
                         Json materials = Json::array();
-                        for (const VirtualPath& material : value.materials)
-                            materials.push_back(material.string());
+                        for (const VirtualPath& material : value.materials) {
+                            const auto materialGuid = ASSET_DATABASE.findGuid(material);
+                            materials.push_back(materialGuid ? AssetReference{*materialGuid}.toString()
+                                                             : material.string());
+                        }
                         serializedComponent["materials"] = std::move(materials);
                         serializedComponent["enabled"] = value.enabled;
                     } else if constexpr (std::is_same_v<T, CameraComponentAsset>) {

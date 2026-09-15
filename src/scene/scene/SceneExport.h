@@ -18,8 +18,8 @@ class SceneAsset;
                                                              const VirtualPath& targetPath,
                                                              std::string& error);
 
-// Serializes a SceneAsset into the source scene JSON format that detail::parseSceneAsset
-// reads. Asset paths are written as absolute assets:// virtual paths.
+// Serializes a SceneAsset into the source scene JSON format that
+// format::parseSceneAsset reads. Asset paths are written as absolute assets:// virtual paths.
 [[nodiscard]] std::string writeSceneAssetJson(const SceneAsset& asset);
 
 // Exports the runtime Scene, validates it and atomically writes the source JSON to

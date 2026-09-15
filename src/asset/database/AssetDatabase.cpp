@@ -72,7 +72,8 @@ using Json = nlohmann::json;
     if (!readUnsigned(value, "importer_version", importerVersion) || importerVersion > UINT32_MAX ||
         !readUnsigned(value, "source_hash", record.sourceHash) ||
         !readUnsigned(value, "meta_hash", record.metaHash) ||
-        !readUnsigned(value, "artifact_hash", record.artifactHash)) {
+        !readUnsigned(value, "artifact_hash", record.artifactHash) ||
+        !readUnsigned(value, "settings_hash", record.settingsHash)) {
         return std::nullopt;
     }
     record.importerVersion = static_cast<std::uint32_t>(importerVersion);
@@ -86,6 +87,11 @@ using Json = nlohmann::json;
     }
     record.status = importStatusFromName(status->get_ref<const std::string&>());
     record.lastError = error->get_ref<const std::string&>();
+    const auto dependencyHashes = value.find("dependency_hashes");
+    if (dependencyHashes == value.end() || !dependencyHashes->is_array() ||
+        dependencyHashes->size() != dependencies->size()) {
+        return std::nullopt;
+    }
     for (const Json& dependencyValue : *dependencies) {
         if (!dependencyValue.is_string()) {
             return std::nullopt;
@@ -96,13 +102,24 @@ using Json = nlohmann::json;
         }
         record.dependencies.push_back(std::move(dependency));
     }
+    record.dependencyHashes.reserve(dependencyHashes->size());
+    for (const Json& hashValue : *dependencyHashes) {
+        if (!hashValue.is_number_unsigned()) {
+            return std::nullopt;
+        }
+        record.dependencyHashes.push_back(hashValue.get<std::uint64_t>());
+    }
     return record;
 }
 
 [[nodiscard]] Json serializeRecord(const AssetRecord& record) {
     Json dependencies = Json::array();
-    for (const VirtualPath& dependency : record.dependencies) {
-        dependencies.push_back(dependency.string());
+    Json dependencyHashes = Json::array();
+    for (std::size_t index = 0; index < record.dependencies.size(); ++index) {
+        dependencies.push_back(record.dependencies[index].string());
+        dependencyHashes.push_back(record.dependencyHashes.size() == record.dependencies.size()
+                                        ? record.dependencyHashes[index]
+                                        : 0);
     }
     return Json{{"asset_id", record.id.toString()},
                 {"asset_type", assetTypeName(record.type)},
@@ -113,7 +130,9 @@ using Json = nlohmann::json;
                 {"source_hash", record.sourceHash},
                 {"meta_hash", record.metaHash},
                 {"artifact_hash", record.artifactHash},
+                {"settings_hash", record.settingsHash},
                 {"dependencies", std::move(dependencies)},
+                {"dependency_hashes", std::move(dependencyHashes)},
                 {"status", importStatusName(record.status)},
                 {"last_error", record.lastError}};
 }
@@ -177,6 +196,14 @@ std::optional<VirtualPath> AssetDatabase::pathFromAssetId(AssetId id) const {
     const auto found = records_.find(id);
     return found == records_.end() ? std::nullopt
                                    : std::optional<VirtualPath>{found->second.sourcePath};
+}
+
+std::optional<VirtualPath> AssetDatabase::findPath(const AssetId& guid) const {
+    return pathFromAssetId(guid);
+}
+
+std::optional<AssetId> AssetDatabase::findGuid(const VirtualPath& path) const {
+    return assetIdFromPath(path);
 }
 
 std::vector<VirtualPath> AssetDatabase::dependenciesOf(const VirtualPath& path) const {
@@ -272,8 +299,14 @@ bool AssetDatabase::load() {
     std::unordered_map<std::string, AssetId> paths;
     for (const Json& value : *assets) {
         auto record = parseRecord(value);
-        if (!record || loaded.contains(record->id) || paths.contains(record->sourcePath.string())) {
-            Log::error("AssetDatabase", "Invalid or duplicate AssetRecord");
+        if (!record) {
+            // 缺 settings_hash / dependency_hashes 的记录是旧格式数据：直接丢弃，
+            // 由 scanAll 重新导入生成新字段（不做旧版本兼容）。
+            Log::warn("AssetDatabase", "Discarding legacy AssetRecord; it will be reimported");
+            continue;
+        }
+        if (loaded.contains(record->id) || paths.contains(record->sourcePath.string())) {
+            Log::error("AssetDatabase", "Duplicate AssetRecord");
             return false;
         }
         paths.emplace(record->sourcePath.string(), record->id);

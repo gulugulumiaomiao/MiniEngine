@@ -32,17 +32,7 @@ public:
     [[nodiscard]] Material instantiate(ShaderHandle shaderHandle) const;
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
-
-namespace detail {
-
-[[nodiscard]] std::shared_ptr<MaterialAsset> parseMaterialAsset(const VirtualPath& path,
-                                                                std::string_view source);
-
-} // namespace detail
-
-[[nodiscard]] bool validateMaterialAsset(const MaterialAsset& material,
-                                         const ShaderAsset& shader,
-                                         const VirtualPath& materialPath);
+// Source .material.json parsing and validation live in asset/format/MaterialAssetFormat.
 
 class Material final {
 public:

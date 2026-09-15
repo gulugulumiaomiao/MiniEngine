@@ -2,6 +2,7 @@
 #include "asset/derived_data/AssetArtifact.h"
 #include "asset/importer/AssetImporterRegistry.h"
 #include "asset/importer/BuiltinAssetImporters.h"
+#include "asset/importer/TextureAssetImporter.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/serialization/BinaryTransfer.h"
 #include "render/mesh/Mesh.h"
@@ -90,11 +91,34 @@ int main() {
         registry.find(AssetType::Unknown)) {
         return 3;
     }
+    const VirtualPath probePath{"assets://probe.shader.json"};
+    for (const AssetType type :
+         {AssetType::Shader, AssetType::Material, AssetType::Mesh, AssetType::Texture,
+          AssetType::Scene}) {
+        const AssetImporter* importer = registry.find(type);
+        const std::unique_ptr<AssetImportSettings> settings =
+            importer->createDefaultSettings(probePath);
+        if (!importer || !importer->supports(probePath) || !settings) {
+            return 3;
+        }
+    }
 
     const AssetMeta meta{1, AssetId::generate(), AssetType::Shader};
     const VirtualPath artifactPath = ASSET_DATABASE.artifactPath(meta.assetId);
     const AssetImportContext context{meta, shaderPath, assetMetaPath(shaderPath), artifactPath};
-    const AssetImportResult result = registry.find(AssetType::Shader)->import(context);
+    const AssetImporter* shaderImporter = registry.find(AssetType::Shader);
+    const std::unique_ptr<AssetImportSettings> shaderSettings =
+        shaderImporter->createDefaultSettings(shaderPath);
+    if (!shaderSettings ||
+        shaderSettings->hash() != shaderImporter->createDefaultSettings(shaderPath)->hash()) {
+        return 4;
+    }
+    const std::unique_ptr<AssetImportSettings> clonedSettings = shaderSettings->clone();
+    if (!clonedSettings || clonedSettings->hash() != shaderSettings->hash() ||
+        !shaderImporter->gatherDependencies(context, *shaderSettings).empty()) {
+        return 4;
+    }
+    const AssetImportResult result = shaderImporter->import(context, *shaderSettings);
     if (!result.success || result.type != AssetType::Shader ||
         result.artifactPath.string() != artifactPath.string() || !result.dependencies.empty()) {
         return 4;
@@ -135,7 +159,13 @@ int main() {
     const VirtualPath meshArtifactPath = ASSET_DATABASE.artifactPath(meshMeta.assetId);
     const AssetImportContext meshContext{
         meshMeta, meshPath, assetMetaPath(meshPath), meshArtifactPath};
-    const AssetImportResult meshResult = registry.find(AssetType::Mesh)->import(meshContext);
+    const AssetImporter* meshImporter = registry.find(AssetType::Mesh);
+    const std::unique_ptr<AssetImportSettings> meshSettings =
+        meshImporter->createDefaultSettings(meshPath);
+    if (!meshSettings || !meshImporter->gatherDependencies(meshContext, *meshSettings).empty()) {
+        return 8;
+    }
+    const AssetImportResult meshResult = meshImporter->import(meshContext, *meshSettings);
     const auto meshArtifact = loadAssetArtifact(meshArtifactPath);
     MeshAsset mesh;
     mesh.setAssetPath(meshPath);
@@ -173,7 +203,7 @@ int main() {
     const AssetImportContext proceduralContext{
         proceduralMeta, proceduralPath, assetMetaPath(proceduralPath), proceduralArtifactPath};
     const AssetImportResult proceduralResult =
-        registry.find(AssetType::Mesh)->import(proceduralContext);
+        registry.find(AssetType::Mesh)->import(proceduralContext, *meshSettings);
     const auto proceduralArtifact = loadAssetArtifact(proceduralArtifactPath);
     MeshAsset proceduralMesh;
     BinaryReader proceduralReader{proceduralArtifact ? proceduralArtifact->payload
@@ -232,8 +262,15 @@ int main() {
     const VirtualPath textureArtifactPath = ASSET_DATABASE.artifactPath(textureMeta.assetId);
     const AssetImportContext textureContext{
         textureMeta, texturePath, assetMetaPath(texturePath), textureArtifactPath};
+    const AssetImporter* textureImporter = registry.find(AssetType::Texture);
+    const std::unique_ptr<AssetImportSettings> textureSettings =
+        textureImporter->createDefaultSettings(texturePath);
+    if (!textureSettings ||
+        !textureImporter->gatherDependencies(textureContext, *textureSettings).empty()) {
+        return 12;
+    }
     const AssetImportResult textureResult =
-        registry.find(AssetType::Texture)->import(textureContext);
+        textureImporter->import(textureContext, *textureSettings);
     const auto textureArtifact = loadAssetArtifact(textureArtifactPath);
     TextureAsset texture;
     BinaryReader textureReader{textureArtifact ? textureArtifact->payload
@@ -260,7 +297,12 @@ int main() {
         const AssetMeta meta{1, AssetId::generate(), AssetType::Texture};
         const VirtualPath artifactPath = ASSET_DATABASE.artifactPath(meta.assetId);
         const AssetImportContext context{meta, sourcePath, assetMetaPath(sourcePath), artifactPath};
-        const AssetImportResult result = registry.find(AssetType::Texture)->import(context);
+        const AssetImporter* importer = registry.find(AssetType::Texture);
+        const std::unique_ptr<AssetImportSettings> settings =
+            importer->createDefaultSettings(sourcePath);
+        if (!settings)
+            return false;
+        const AssetImportResult result = importer->import(context, *settings);
         const auto artifact = loadAssetArtifact(artifactPath);
         TextureAsset asset;
         BinaryReader reader{artifact ? artifact->payload : std::span<const std::byte>{}};
@@ -274,6 +316,102 @@ int main() {
     }
     if (!verifyImageImport(VirtualPath{"assets://textures/import_test.jpg"}, jpg))
         return 14;
+
+    // generateMipmaps=false：普通图片仅导入 base mip，且设置参与 hash。
+    const VirtualPath singleMipPath{"assets://textures/import_single_mip.png"};
+    const AssetMeta singleMipMeta{1, AssetId::generate(), AssetType::Texture};
+    const VirtualPath singleMipArtifactPath = ASSET_DATABASE.artifactPath(singleMipMeta.assetId);
+    const AssetImportContext singleMipContext{
+        singleMipMeta, singleMipPath, assetMetaPath(singleMipPath), singleMipArtifactPath};
+    TextureImportSettings singleMipSettings;
+    singleMipSettings.generateMipmaps = false;
+    if (singleMipSettings.hash() == TextureImportSettings{}.hash() ||
+        !FILE_SYSTEM.writeBinary(singleMipPath, png)) {
+        return 17;
+    }
+    const AssetImportResult singleMipResult =
+        registry.find(AssetType::Texture)->import(singleMipContext, singleMipSettings);
+    const auto singleMipArtifact = loadAssetArtifact(singleMipArtifactPath);
+    TextureAsset singleMip;
+    BinaryReader singleMipReader{singleMipArtifact ? singleMipArtifact->payload
+                                                   : std::span<const std::byte>{}};
+    if (!singleMipResult.success || !singleMipArtifact ||
+        !singleMip.transfer(singleMipReader) || !singleMipReader.finished() ||
+        singleMip.desc.mipCount != 1 || singleMip.mipData.size() != 1 ||
+        singleMip.mipData.front().bytes.size() != 16) {
+        return 17;
+    }
+
+    // gatherDependencies：Material 声明 Shader 与实际引用的 Texture（只解析源文件）。
+    const VirtualPath textureShaderPath{"assets://shaders/import_tex.shader.json"};
+    if (!FILE_SYSTEM.writeText(textureShaderPath, R"({
+  "$schemaVersion": 1,
+  "name": "Importer/Tex",
+  "properties": [{
+    "name": "MainTex", "type": "Texture2D", "default": "textures/ref.png"
+  }],
+  "subShaders": [{
+    "passes": [{
+      "name": "Forward",
+      "lightMode": "Forward",
+      "program": { "vertex": "import_test.vert", "frag": "import_test.frag" }
+    }]
+  }]
+})")) {
+        return 18;
+    }
+    const VirtualPath materialPath{"assets://materials/import_test.material.json"};
+    if (!FILE_SYSTEM.writeText(materialPath, R"({
+  "$schemaVersion": 1,
+  "name": "Importer/Material",
+  "shader": "shaders/import_tex.shader.json",
+  "properties": { "MainTex": "textures/override.png" },
+  "keywords": [],
+  "renderQueue": 2450
+})")) {
+        return 18;
+    }
+    const AssetMeta materialMeta{1, AssetId::generate(), AssetType::Material};
+    const AssetImportContext materialContext{
+        materialMeta, materialPath, assetMetaPath(materialPath), VirtualPath{}};
+    const AssetImporter* materialImporter = registry.find(AssetType::Material);
+    const std::unique_ptr<AssetImportSettings> materialSettings =
+        materialImporter->createDefaultSettings(materialPath);
+    if (!materialSettings ||
+        materialImporter->gatherDependencies(materialContext, *materialSettings) !=
+            std::vector<VirtualPath>{
+                textureShaderPath, VirtualPath{"assets://textures/override.png"}}) {
+        return 18;
+    }
+
+    // gatherDependencies：Scene 声明 Mesh / Material 组件引用的源资产。
+    const VirtualPath scenePath{"assets://scenes/import_test.scene.json"};
+    if (!FILE_SYSTEM.writeText(scenePath, R"({
+  "$schemaVersion": 1,
+  "name": "Importer Scene",
+  "nodes": [{
+    "id": 1,
+    "name": "Triangle",
+    "components": [
+      {"type": "Transform"},
+      {"type": "Mesh", "mesh": "../meshes/import_test.mesh.json"},
+      {"type": "Material", "materials": ["../materials/import_test.material.json"]}
+    ]
+  }]
+})")) {
+        return 19;
+    }
+    const AssetMeta sceneMeta{1, AssetId::generate(), AssetType::Scene};
+    const AssetImportContext sceneContext{
+        sceneMeta, scenePath, assetMetaPath(scenePath), VirtualPath{}};
+    const AssetImporter* sceneImporter = registry.find(AssetType::Scene);
+    const std::unique_ptr<AssetImportSettings> sceneSettings =
+        sceneImporter->createDefaultSettings(scenePath);
+    if (!sceneSettings ||
+        sceneImporter->gatherDependencies(sceneContext, *sceneSettings) !=
+            std::vector<VirtualPath>{meshPath, materialPath}) {
+        return 19;
+    }
 
     (void)FILE_SYSTEM.unmount("assets");
     (void)FILE_SYSTEM.unmount("library");

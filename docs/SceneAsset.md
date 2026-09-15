@@ -33,7 +33,8 @@ std::unique_ptr<Scene> SceneAsset::instantiate(
 `SceneAssetImporter` 负责：
 
 1. 读取 `.scene.json`。
-2. 调用 `parseSceneAsset` 完成格式解析与验证。
+2. 调用 `format::parseSceneAsset`（`src/asset/format/SceneAssetFormat`）完成格式解析与验证；
+   运行时模块 `SceneAsset.cpp` 只保留二进制 transfer 与实例化，不再包含源文件解析。
 3. 收集 Mesh 和 Material 虚拟路径，排序并去重后写入 AssetDatabase 依赖。
 4. 使用 `BinaryWriter` 调用 `SceneAsset::transfer`。
 5. 将二进制载荷写入 Scene Artifact。

@@ -1,5 +1,9 @@
 ﻿#include "asset/derived_data/AssetArtifact.h"
+#include "asset/base/AssetId.h"
 #include "asset/base/AssetMeta.h"
+#include "asset/base/AssetReference.h"
+#include "asset/base/GuidResolver.h"
+#include "asset/format/SceneAssetFormat.h"
 #include "core/serialization/BinaryTransfer.h"
 #include "render/mesh/MeshManager.h"
 #include "scene/scene/SceneAsset.h"
@@ -10,13 +14,40 @@
 
 #include <cstddef>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <type_traits>
+#include <unordered_map>
 #include <variant>
 
 namespace {
 
-constexpr std::string_view kSceneJson = R"json(
+class MockGuidResolver final : public engine::GuidResolver {
+public:
+    void map(const engine::AssetId& guid, const engine::VirtualPath& path) {
+        guidToPath_[guid] = path;
+        pathToGuid_[path] = guid;
+    }
+
+    [[nodiscard]] std::optional<engine::VirtualPath>
+    findPath(const engine::AssetId& guid) const override {
+        const auto it = guidToPath_.find(guid);
+        return it != guidToPath_.end() ? std::make_optional(it->second) : std::nullopt;
+    }
+
+    [[nodiscard]] std::optional<engine::AssetId>
+    findGuid(const engine::VirtualPath& path) const override {
+        const auto it = pathToGuid_.find(path);
+        return it != pathToGuid_.end() ? std::make_optional(it->second) : std::nullopt;
+    }
+
+private:
+    std::unordered_map<engine::AssetId, engine::VirtualPath> guidToPath_;
+    std::unordered_map<engine::VirtualPath, engine::AssetId, engine::VirtualPathHash> pathToGuid_;
+};
+
+std::string makeSceneJson(std::string_view meshGuid, std::string_view materialGuid) {
+    std::string json = R"sceneJson(
 {
   "$schemaVersion": 1,
   "name": "Example Scene",
@@ -33,13 +64,13 @@ constexpr std::string_view kSceneJson = R"json(
         },
         {
           "type": "Mesh",
-          "mesh": "../meshes/cube.mesh.json",
+          "mesh": "@MESH@",
           "cast_shadow": false,
           "layer_mask": 3
         },
         {
           "type": "Material",
-          "materials": ["assets://materials/default.material.json"]
+          "materials": ["@MATERIAL@"]
         }
       ]
     },
@@ -97,7 +128,17 @@ constexpr std::string_view kSceneJson = R"json(
     }
   ]
 }
-)json";
+)sceneJson";
+    const auto replace = [&json](std::string_view placeholder, std::string_view value) {
+        const auto position = json.find(placeholder);
+        if (position != std::string::npos) {
+            json.replace(position, placeholder.size(), value);
+        }
+    };
+    replace("@MESH@", meshGuid);
+    replace("@MATERIAL@", materialGuid);
+    return json;
+}
 
 } // namespace
 
@@ -117,7 +158,18 @@ int main() {
         std::string_view{assetTypeName(AssetType::Scene)} != "Scene") {
         return 10;
     }
-    std::shared_ptr<SceneAsset> asset = detail::parseSceneAsset(scenePath, kSceneJson);
+
+    MockGuidResolver resolver;
+    const VirtualPath meshPath{"assets://meshes/cube.mesh.json"};
+    const VirtualPath materialPath{"assets://materials/default.material.json"};
+    resolver.map(AssetId::fromPath(meshPath), meshPath);
+    resolver.map(AssetId::fromPath(materialPath), materialPath);
+
+    const std::string meshGuid = AssetReference{AssetId::fromPath(meshPath)}.toString();
+    const std::string materialGuid = AssetReference{AssetId::fromPath(materialPath)}.toString();
+    const std::string sceneJson = makeSceneJson(meshGuid, materialGuid);
+
+    std::shared_ptr<SceneAsset> asset = format::parseSceneAsset(scenePath, sceneJson, resolver);
     if (!asset || asset->type() != AssetType::Scene || asset->assetPath() != scenePath ||
         asset->name != "Example Scene" || asset->nodes.size() != 4) {
         return 1;
@@ -242,20 +294,20 @@ int main() {
     SceneAsset missingTransform;
     missingTransform.name = "Invalid";
     missingTransform.nodes.push_back(SceneNodeAsset{1, std::nullopt, "Node", true, {}});
-    if (validateSceneAsset(missingTransform, scenePath))
+    if (format::validateSceneAsset(missingTransform, scenePath))
         return 7;
 
     SceneAsset badParent;
     badParent.name = "Invalid";
     badParent.nodes.push_back(SceneNodeAsset{1, 99, "Node", true, {TransformComponentAsset{}}});
-    if (validateSceneAsset(badParent, scenePath))
+    if (format::validateSceneAsset(badParent, scenePath))
         return 8;
 
     SceneAsset cycle;
     cycle.name = "Invalid";
     cycle.nodes.push_back(SceneNodeAsset{1, 2, "A", true, {TransformComponentAsset{}}});
     cycle.nodes.push_back(SceneNodeAsset{2, 1, "B", true, {TransformComponentAsset{}}});
-    if (validateSceneAsset(cycle, scenePath))
+    if (format::validateSceneAsset(cycle, scenePath))
         return 9;
 
     return 0;

@@ -36,6 +36,24 @@ AssetId AssetId::generate() {
     return {high, low};
 }
 
+AssetId AssetId::fromPath(const VirtualPath& path) {
+    // Deterministic GUID derived from the canonical VirtualPath. This lets source
+    // files reference each other by guid:// without shipping .meta sidecars, while
+    // still keeping the option to switch to random GUIDs stored in .meta later.
+    const std::string key = path.string();
+    std::uint64_t high = hashString(key, kFnv1a64OffsetBasis);
+    std::uint64_t low = hashString(key, high);
+    high = mixHash64(high);
+    low = mixHash64(low);
+
+    high = (high & 0xffffffffffff0fffULL) | 0x0000000000004000ULL;
+    low = (low & 0x3fffffffffffffffULL) | 0x8000000000000000ULL;
+    if (high == 0 && low == 0) {
+        low = 1;
+    }
+    return {high, low};
+}
+
 std::optional<AssetId> AssetId::parse(std::string_view text) {
     if (text.size() != 36 || text[8] != '-' || text[13] != '-' || text[18] != '-' ||
         text[23] != '-') {

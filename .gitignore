@@ -9,3 +9,7 @@
 *.user
 *.suo
 *.log
+
+# Local agent/IDE caches and Python bytecode
+/.qoder/
+__pycache__/

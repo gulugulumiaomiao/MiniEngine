@@ -1,9 +1,11 @@
 {
   "$schemaVersion": 1,
   "name": "Invalid Material",
-  "shader": "material_values.shader.json",
+  "shader": "guid://2760db58-be3b-46f8-92b7-853b6c21fc06",
   "properties": {
     "UnknownProperty": 1.0
   },
-  "keywords": ["UNKNOWN_KEYWORD"]
+  "keywords": [
+    "UNKNOWN_KEYWORD"
+  ]
 }

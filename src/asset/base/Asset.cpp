@@ -18,6 +18,9 @@ AssetType assetTypeFromName(std::string_view name) {
     if (name == "Scene") {
         return AssetType::Scene;
     }
+    if (name == "Generic") {
+        return AssetType::Generic;
+    }
     return AssetType::Unknown;
 }
 

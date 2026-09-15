@@ -15,6 +15,7 @@ src/
 │   ├── base/              Asset、AssetId 和 AssetMeta
 │   ├── database/          AssetDatabase
 │   ├── derived_data/      Artifact 和派生数据
+│   ├── format/            源格式解析与验证（Shader/Material/Scene AssetFormat）
 │   ├── importer/          Importer、导入流水线和文件监视
 │   └── manager/           运行时 AssetManager
 ├── rhi/

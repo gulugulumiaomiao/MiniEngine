@@ -1,6 +1,7 @@
 ﻿#include "asset/manager/AssetManager.h"
 
 #include "asset/base/AssetMeta.h"
+#include "asset/base/GenericAsset.h"
 #include "asset/derived_data/AssetArtifact.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/importer/AssetImportPipeline.h"
@@ -132,6 +133,7 @@ std::shared_ptr<Asset> AssetManager::loadAsset(const VirtualPath& path) {
     case AssetType::Mesh: asset = std::make_shared<MeshAsset>(); break;
     case AssetType::Texture: asset = std::make_shared<TextureAsset>(); break;
     case AssetType::Scene: asset = std::make_shared<SceneAsset>(); break;
+    case AssetType::Generic: asset = std::make_shared<GenericAsset>(); break;
     default:
         Log::error("AssetManager", "Unsupported Asset type for: %s", path.string().c_str());
         return {};

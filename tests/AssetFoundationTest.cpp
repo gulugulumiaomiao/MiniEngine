@@ -70,6 +70,7 @@ int main() {
     shaderRecord.sourceHash = 10;
     shaderRecord.metaHash = 20;
     shaderRecord.artifactHash = 30;
+    shaderRecord.settingsHash = 40;
     shaderRecord.status = AssetImportStatus::Imported;
 
     AssetRecord materialRecord;
@@ -80,6 +81,8 @@ int main() {
     materialRecord.artifactPath = database.artifactPath(materialMeta->assetId);
     materialRecord.importerVersion = 1;
     materialRecord.dependencies.push_back(shaderPath);
+    materialRecord.dependencyHashes.push_back(10);
+    materialRecord.settingsHash = 50;
     if (!database.addOrUpdate(shaderRecord) || !database.addOrUpdate(materialRecord) ||
         !database.save()) {
         return 7;

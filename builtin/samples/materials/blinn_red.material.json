@@ -1,12 +1,29 @@
 {
   "$schemaVersion": 1,
   "name": "Blinn Red",
-  "shader": "shaders/blinn_phong.shader.json",
+  "shader": "guid://c3ee93d0-ad89-495a-b49a-0768bbdd2fbe",
   "properties": {
-    "BaseColor": [0.72, 0.12, 0.08, 1.0],
-    "SpecularColor": [1.0, 0.72, 0.55, 1.0],
-    "AmbientColor": [0.08, 0.05, 0.04, 1.0],
+    "BaseColor": [
+      0.72,
+      0.12,
+      0.08,
+      1.0
+    ],
+    "SpecularColor": [
+      1.0,
+      0.72,
+      0.55,
+      1.0
+    ],
+    "AmbientColor": [
+      0.08,
+      0.05,
+      0.04,
+      1.0
+    ],
     "Shininess": 64.0
   },
-  "keywords": ["RECEIVE_SHADOWS"]
+  "keywords": [
+    "RECEIVE_SHADOWS"
+  ]
 }

@@ -1,4 +1,4 @@
-#include "asset/importer/IAssetImporter.h"
+#include "asset/importer/AssetImporter.h"
 
 #include <utility>
 
@@ -20,6 +20,10 @@ AssetImportResult AssetImportResult::succeeded(AssetType type,
     result.artifactPath = std::move(artifactPath);
     result.dependencies = std::move(dependencies);
     return result;
+}
+
+bool AssetImporter::supports(const VirtualPath&) const {
+    return true;
 }
 
 } // namespace engine

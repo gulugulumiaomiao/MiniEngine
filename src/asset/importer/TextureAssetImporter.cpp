@@ -1,9 +1,9 @@
 #include "asset/importer/TextureAssetImporter.h"
 
-#include "asset/derived_data/AssetArtifact.h"
+#include "asset/importer/AssetImportHelpers.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/logging/Log.h"
-#include "core/serialization/BinaryTransfer.h"
+#include "core/serialization/Transfer.h"
 #include "render/texture/Texture.h"
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -92,7 +92,7 @@ std::vector<TextureMipData> generateMipChain(TextureMipData base) {
     return result;
 }
 
-std::shared_ptr<TextureAsset> decodeImage(std::span<const std::byte> source) {
+std::shared_ptr<TextureAsset> decodeImage(std::span<const std::byte> source, bool generateMipmaps) {
     if (source.empty() || source.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
         return {};
     int width{};
@@ -116,7 +116,11 @@ std::shared_ptr<TextureAsset> decodeImage(std::span<const std::byte> source) {
                         std::vector<std::byte>(static_cast<std::size_t>(byteSize))};
     std::memcpy(base.bytes.data(), pixels.get(), base.bytes.size());
     auto asset = std::make_shared<TextureAsset>();
-    asset->mipData = generateMipChain(std::move(base));
+    if (generateMipmaps) {
+        asset->mipData = generateMipChain(std::move(base));
+    } else {
+        asset->mipData.push_back(std::move(base));
+    }
     asset->desc = {TextureType::Texture2D,
                    TextureFormat::Rgba8Srgb,
                    TextureColorSpace::Srgb,
@@ -223,7 +227,28 @@ std::shared_ptr<TextureAsset> decodeKtx2(std::span<const std::byte> source) {
 
 } // namespace
 
-AssetImportResult TextureAssetImporter::import(const AssetImportContext& context) const {
+bool TextureImportSettings::transfer(Transfer& archive) {
+    return archive.transfer("generate_mipmaps", generateMipmaps);
+}
+
+Hash64 TextureImportSettings::hash() const {
+    Hash64 hash = hashString("TextureImportSettings");
+    hashAppend(hash, generateMipmaps);
+    return hash;
+}
+
+std::unique_ptr<AssetImportSettings>
+TextureAssetImporter::createDefaultSettings(const VirtualPath&) const {
+    return std::make_unique<TextureImportSettings>();
+}
+
+std::vector<VirtualPath> TextureAssetImporter::gatherDependencies(const AssetImportContext&,
+                                                                 const AssetImportSettings&) const {
+    return {};
+}
+
+AssetImportResult TextureAssetImporter::import(const AssetImportContext& context,
+                                              const AssetImportSettings& settings) const {
     const auto fail = [](std::string error) {
         Log::error("TextureAssetImporter", "%s", error.c_str());
         return AssetImportResult::failed(AssetType::Texture, std::move(error));
@@ -231,6 +256,10 @@ AssetImportResult TextureAssetImporter::import(const AssetImportContext& context
     if (context.meta.assetType != AssetType::Texture || !context.meta.assetId.valid() ||
         !context.sourcePath.valid() || !context.artifactPath.valid()) {
         return fail("Invalid Texture import context");
+    }
+    const auto* textureSettings = dynamic_cast<const TextureImportSettings*>(&settings);
+    if (!textureSettings) {
+        return fail("Invalid Texture import settings");
     }
     const auto source = FILE_SYSTEM.readBinary(context.sourcePath);
     if (!source)
@@ -245,17 +274,10 @@ AssetImportResult TextureAssetImporter::import(const AssetImportContext& context
     else if (path.ends_with(".ktx2"))
         texture = decodeKtx2(*source);
     else
-        texture = decodeImage(*source);
+        texture = decodeImage(*source, textureSettings->generateMipmaps);
     if (!texture || !validateTexture(texture->desc, texture->mipData))
         return fail("Unsupported or invalid Texture: " + context.sourcePath.string());
-    BinaryWriter writer;
-    if (!texture->transfer(writer))
-        return fail("Cannot serialize Texture Artifact: " + context.sourcePath.string());
-    const AssetArtifact artifact{
-        1, context.meta.assetId, AssetType::Texture, context.sourcePath, writer.takeBytes()};
-    if (!saveAssetArtifact(context.artifactPath, artifact))
-        return fail("Cannot save Texture Artifact: " + context.artifactPath.string());
-    return AssetImportResult::succeeded(AssetType::Texture, context.artifactPath);
+    return writeAssetArtifact(context, *texture, AssetType::Texture);
 }
 
 } // namespace engine

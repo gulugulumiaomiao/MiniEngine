@@ -1,10 +1,9 @@
 #include "asset/importer/ShaderAssetImporter.h"
 
-#include "asset/derived_data/AssetArtifact.h"
-#include "core/logging/Log.h"
-#include "core/serialization/BinaryTransfer.h"
+#include "asset/format/ShaderAssetFormat.h"
+#include "asset/importer/AssetImportHelpers.h"
 #include "core/filesystem/FileSystem.h"
-#include "render/shader/Shader.h"
+#include "core/logging/Log.h"
 #include <utility>
 
 namespace engine {
@@ -17,7 +16,27 @@ namespace {
 
 } // namespace
 
-AssetImportResult ShaderAssetImporter::import(const AssetImportContext& context) const {
+bool ShaderImportSettings::transfer(Transfer& archive) {
+    (void)archive;
+    return true;
+}
+
+Hash64 ShaderImportSettings::hash() const {
+    return hashString("ShaderImportSettings");
+}
+
+std::unique_ptr<AssetImportSettings>
+ShaderAssetImporter::createDefaultSettings(const VirtualPath&) const {
+    return std::make_unique<ShaderImportSettings>();
+}
+
+std::vector<VirtualPath> ShaderAssetImporter::gatherDependencies(const AssetImportContext&,
+                                                                 const AssetImportSettings&) const {
+    return {};
+}
+
+AssetImportResult ShaderAssetImporter::import(const AssetImportContext& context,
+                                              const AssetImportSettings&) const {
     if (context.meta.assetType != AssetType::Shader || !context.meta.assetId.valid() ||
         !context.sourcePath.valid() || !context.artifactPath.valid()) {
         return failImport("Invalid Shader import context");
@@ -27,25 +46,12 @@ AssetImportResult ShaderAssetImporter::import(const AssetImportContext& context)
         return failImport("Cannot read ShaderAsset: " + context.sourcePath.string());
     }
     const std::shared_ptr<ShaderAsset> shader =
-        detail::parseShaderAsset(context.sourcePath, *source);
+        format::parseShaderAsset(context.sourcePath, *source);
     if (!shader) {
         return failImport("Cannot parse ShaderAsset: " + context.sourcePath.string());
     }
 
-    if (!FILE_SYSTEM.createDirectories(context.artifactPath.parent())) {
-        return failImport("Cannot create Shader Artifact directory: " +
-                          context.artifactPath.parent().string());
-    }
-    BinaryWriter writer;
-    if (!shader->transfer(writer)) {
-        return failImport("Cannot serialize Shader Artifact: " + context.sourcePath.string());
-    }
-    const AssetArtifact artifact{
-        1, context.meta.assetId, AssetType::Shader, context.sourcePath, writer.takeBytes()};
-    if (!saveAssetArtifact(context.artifactPath, artifact)) {
-        return failImport("Cannot save Shader Artifact: " + context.artifactPath.string());
-    }
-    return AssetImportResult::succeeded(AssetType::Shader, context.artifactPath);
+    return writeAssetArtifact(context, *shader, AssetType::Shader);
 }
 
 } // namespace engine

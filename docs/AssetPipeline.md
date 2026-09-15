@@ -23,7 +23,7 @@ assets:// 源文件
 
 `ShaderAssetImporter` 解析 ShaderLab JSON，遍历 SubShader/Pass，收集 vertex、fragment 及递归 `#include` 依赖。导入阶段不运行 glslc；SPIR-V 仍保持按需生成。
 
-`MaterialAssetImporter` 解析名称、Shader 虚拟路径、Properties、Keywords 和可选 RenderQueue。导入 Material 前，管线保证它引用的 Shader 已导入，然后从 Shader Artifact 读取声明并验证属性。成功结果把 Shader 的 `assets://` 路径写入依赖表。
+`MaterialAssetImporter` 解析名称、Shader 虚拟路径、Properties、Keywords 和可选 RenderQueue。导入 Material 前，管线通过 Importer 的 `gatherDependencies` 声明 Shader 与引用的 Texture，并递归先导入它们；Material Importer 随后从 Shader Artifact 读取声明并验证属性。成功结果把依赖路径写入依赖表。该调度对所有资产类型通用，不针对 Material 特殊处理。
 
 Artifact 使用通用 `MART` 二进制信封保存身份和类型，内部 Payload 由资源自行定义。Shader 使用 `SHDR` Payload，Material 使用 `MATL` Payload；两者分别实现序列化和反序列化并维护自己的格式版本。AssetManager 读取信封后按 `AssetType` 调用对应反序列化逻辑，不再解析源 JSON。
 
@@ -33,11 +33,15 @@ Artifact 使用通用 `MART` 二进制信封保存身份和类型，内部 Paylo
 
 通过 `ASSET_IMPORT_PIPELINE` 使用全局单例，提供：
 
-- `scanAll()`：扫描全部受支持资产，先 Shader 后 Material，并清理已删除记录。
-- `importAsset()`：按 Hash、Importer 版本和 Artifact 状态执行增量导入。
+- `scanAll()`：扫描全部受支持资产（内置类型 + ScriptedImporter 接管的扩展名），先
+  Shader/Texture/Mesh 后 Material 再 Scene，并清理已删除记录；未知扩展名不做兑底扫描。
+- `importAsset()`：按路由（ScriptedImporter 扩展名 > 内置类型 > DefaultImporter 透传）
+  选取 Importer，再按 Hash、Importer 版本、ImportSettings 哈希、依赖哈希快照和 Artifact
+  状态执行增量导入。
 - `reimportAsset()`：强制重新导入。
 - `removeAsset()`：删除 Artifact 和数据库记录。
 - `importDependencies()`：导入记录中的资产依赖。
+- `registerScriptedImporter()`：注册接管特定源扩展名的脚本导入器。
 - `processFileEvents()`：在主线程消费 FileWatcher 事件，并沿反向依赖级联重导入。
 
 管线维护正在导入的路径集合。路径再次进入集合时判定为循环依赖，记录错误并终止当前导入链。

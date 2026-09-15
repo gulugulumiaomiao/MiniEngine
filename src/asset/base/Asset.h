@@ -15,6 +15,8 @@ enum class AssetType {
     Mesh,
     Scene,
     Texture,
+    // ScriptedImporter/DefaultImporter 产出的免转换资产（源字节透传）。
+    Generic,
 };
 
 [[nodiscard]] constexpr const char* assetTypeName(AssetType type) {
@@ -24,6 +26,7 @@ enum class AssetType {
     case AssetType::Mesh: return "Mesh";
     case AssetType::Texture: return "Texture";
     case AssetType::Scene: return "Scene";
+    case AssetType::Generic: return "Generic";
     default: return "Unknown";
     }
 }

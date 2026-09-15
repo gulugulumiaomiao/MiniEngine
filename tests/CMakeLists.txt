@@ -67,10 +67,12 @@ add_dependencies(ShaderCompilerTest MiniCopyBuiltin)
 
 mini_add_test(FileSystemTest)
 mini_add_test(AssetFoundationTest)
+mini_add_gtest(AssetReferenceTest)
 mini_add_test(AssetImporterTest)
 target_compile_definitions(AssetImporterTest PRIVATE
     MINI_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
 )
+target_compile_options(AssetImporterTest PRIVATE -Wno-missing-field-initializers)
 
 # The fatal-path check lives inside LogTest as a gtest death test: the child
 # process reruns the binary and EXPECT_EXIT asserts both the exit code and the
@@ -188,6 +190,18 @@ target_compile_definitions(ShaderGeneratorTest PRIVATE
 )
 
 mini_add_test(AssetPipelineTest)
+
+# Dependency-driven scheduling: importing an asset must recursively import its
+# gatherDependencies-declared dependencies first (gtest per Testing.md).
+mini_add_gtest(AssetDependencySchedulerTest)
+
+# Reimport decision: settingsHash / dependencyHashes snapshots and legacy-record
+# discard (gtest per Testing.md).
+mini_add_gtest(AssetReimportDecisionTest)
+
+# ScriptedImporter registration point and DefaultImporter passthrough fallback
+# (gtest per Testing.md).
+mini_add_gtest(AssetScriptedImporterTest)
 
 mini_add_test(AssetReleaseTest)
 # The packaged-release test cooks its assets from the build-local copy of builtin

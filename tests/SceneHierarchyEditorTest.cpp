@@ -1,3 +1,4 @@
+#include "asset/format/SceneAssetFormat.h"
 #include "scene/scene/Scene.h"
 #include "scene/scene/SceneAsset.h"
 #include "scene/scene/SceneExport.h"
@@ -224,7 +225,7 @@ bool roundtrip() {
     CHECK(asset->nodes[0].name == "B" && asset->nodes[1].name == "A" &&
           asset->nodes[2].name == "D" && asset->nodes[3].name == "E" &&
           asset->nodes[4].name == "C");
-    const auto parsed = detail::parseSceneAsset(path, writeSceneAssetJson(*asset));
+    const auto parsed = format::parseSceneAsset(path, writeSceneAssetJson(*asset));
     CHECK(parsed && parsed->nodes == asset->nodes);
     const auto runtime = parsed->instantiate({});
     CHECK(runtime && sameTree(scene.root(), runtime->root()));

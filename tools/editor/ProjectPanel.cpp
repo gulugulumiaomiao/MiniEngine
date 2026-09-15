@@ -101,6 +101,7 @@ void ProjectPanel::drawDirectory(const VirtualPath& directory) {
         case AssetType::Mesh: icon = "T "; break;
         case AssetType::Shader: icon = "R "; break;
         case AssetType::Texture: icon = "P "; break;
+        case AssetType::Generic: icon = "G "; break;
         default: break;
         }
         const std::string label = std::string{icon} + entry.name;

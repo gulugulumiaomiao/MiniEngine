@@ -1,9 +1,8 @@
 #include "asset/importer/MeshAssetImporter.h"
 
-#include "asset/derived_data/AssetArtifact.h"
+#include "asset/importer/AssetImportHelpers.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/logging/Log.h"
-#include "core/serialization/BinaryTransfer.h"
 #include "render/mesh/Mesh.h"
 #include "render/mesh/MeshBuilder.h"
 
@@ -370,7 +369,27 @@ std::shared_ptr<MeshAsset> parseMesh(const VirtualPath& path, std::string_view t
 
 } // namespace
 
-AssetImportResult MeshAssetImporter::import(const AssetImportContext& context) const {
+bool MeshImportSettings::transfer(Transfer& archive) {
+    (void)archive;
+    return true;
+}
+
+Hash64 MeshImportSettings::hash() const {
+    return hashString("MeshImportSettings");
+}
+
+std::unique_ptr<AssetImportSettings>
+MeshAssetImporter::createDefaultSettings(const VirtualPath&) const {
+    return std::make_unique<MeshImportSettings>();
+}
+
+std::vector<VirtualPath> MeshAssetImporter::gatherDependencies(const AssetImportContext&,
+                                                               const AssetImportSettings&) const {
+    return {};
+}
+
+AssetImportResult MeshAssetImporter::import(const AssetImportContext& context,
+                                            const AssetImportSettings&) const {
     const auto fail = [](std::string error) {
         Log::error("MeshAssetImporter", "%s", error.c_str());
         return AssetImportResult::failed(AssetType::Mesh, std::move(error));
@@ -384,19 +403,7 @@ AssetImportResult MeshAssetImporter::import(const AssetImportContext& context) c
     const auto mesh = parseMesh(context.sourcePath, *source);
     if (!mesh)
         return fail("Cannot parse MeshAsset: " + context.sourcePath.string());
-    if (!FILE_SYSTEM.createDirectories(context.artifactPath.parent())) {
-        return fail("Cannot prepare Mesh Artifact: " + context.artifactPath.string());
-    }
-    BinaryWriter writer;
-    if (!mesh->transfer(writer)) {
-        return fail("Cannot serialize Mesh Artifact: " + context.sourcePath.string());
-    }
-    const AssetArtifact artifact{
-        1, context.meta.assetId, AssetType::Mesh, context.sourcePath, writer.takeBytes()};
-    if (!saveAssetArtifact(context.artifactPath, artifact)) {
-        return fail("Cannot save Mesh Artifact: " + context.artifactPath.string());
-    }
-    return AssetImportResult::succeeded(AssetType::Mesh, context.artifactPath);
+    return writeAssetArtifact(context, *mesh, AssetType::Mesh);
 }
 
 } // namespace engine

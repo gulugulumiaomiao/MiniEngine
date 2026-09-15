@@ -1,6 +1,7 @@
 #pragma once
 
 #include "asset/base/Asset.h"
+#include "asset/base/GuidResolver.h"
 #include "core/base/Singleton.h"
 
 #include <cstdint>
@@ -29,12 +30,16 @@ struct AssetRecord {
     std::uint64_t sourceHash{};
     std::uint64_t metaHash{};
     std::uint64_t artifactHash{};
+    // ImportSettings 的 hash 快照；与依赖一一对应的 sourceHash 快照。任一与当前值
+    // 不一致都会强制重导入（改 Shader 必须重导 Material 的可靠触发）。
+    std::uint64_t settingsHash{};
+    std::vector<std::uint64_t> dependencyHashes;
     std::vector<VirtualPath> dependencies;
     AssetImportStatus status{AssetImportStatus::NotImported};
     std::string lastError;
 };
 
-class AssetDatabase final : public Singleton<AssetDatabase> {
+class AssetDatabase final : public Singleton<AssetDatabase>, public GuidResolver {
 public:
     [[nodiscard]] bool initialize();
     void shutdown();
@@ -43,6 +48,10 @@ public:
     [[nodiscard]] std::optional<AssetRecord> findByPath(const VirtualPath& path) const;
     [[nodiscard]] std::optional<AssetId> assetIdFromPath(const VirtualPath& path) const;
     [[nodiscard]] std::optional<VirtualPath> pathFromAssetId(AssetId id) const;
+
+    // GuidResolver
+    [[nodiscard]] std::optional<VirtualPath> findPath(const AssetId& guid) const override;
+    [[nodiscard]] std::optional<AssetId> findGuid(const VirtualPath& path) const override;
     [[nodiscard]] std::vector<VirtualPath> dependenciesOf(const VirtualPath& path) const;
     [[nodiscard]] std::vector<VirtualPath> dependentsOf(const VirtualPath& path) const;
     [[nodiscard]] std::vector<AssetRecord> records() const;

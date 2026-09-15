@@ -8,9 +8,22 @@
       "components": [
         {
           "type": "Transform",
-          "position": [0.0, 3.5, 9.0],
-          "rotation": [-0.17364818, 0.0, 0.0, 0.98480775],
-          "scale": [1.0, 1.0, 1.0]
+          "position": [
+            0.0,
+            3.5,
+            9.0
+          ],
+          "rotation": [
+            -0.17364818,
+            0.0,
+            0.0,
+            0.98480775
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
         },
         {
           "type": "Camera",
@@ -18,7 +31,12 @@
           "field_of_view": 48.0,
           "near_plane": 0.1,
           "far_plane": 100.0,
-          "clear_color": [0.015, 0.025, 0.055, 1.0],
+          "clear_color": [
+            0.015,
+            0.025,
+            0.055,
+            1.0
+          ],
           "primary": true,
           "priority": 100
         }
@@ -30,13 +48,26 @@
       "components": [
         {
           "type": "Transform",
-          "rotation": [-0.32494, 0.32494, 0.0, 0.88807],
-          "scale": [1.0, 1.0, 1.0]
+          "rotation": [
+            -0.32494,
+            0.32494,
+            0.0,
+            0.88807
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
         },
         {
           "type": "Light",
           "light_type": "directional",
-          "color": [1.0, 0.95, 0.85],
+          "color": [
+            1.0,
+            0.95,
+            0.85
+          ],
           "intensity": 1.0,
           "cast_shadow": true
         }
@@ -48,16 +79,32 @@
       "components": [
         {
           "type": "Transform",
-          "position": [0.0, 0.0, 0.0],
-          "rotation": [0.0, 0.0, 0.0, 1.0],
-          "scale": [1.0, 1.0, 1.0]
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
         },
         {
           "type": "Mesh",
           "primitive": {
             "type": "plane",
             "parameters": {
-              "size": [8.0, 8.0],
+              "size": [
+                8.0,
+                8.0
+              ],
               "segments_x": 4,
               "segments_z": 4
             }
@@ -68,7 +115,7 @@
         {
           "type": "Material",
           "materials": [
-            "../materials/builtin_blinn_phong.material.json"
+            "guid://278e83ea-dc12-4273-9564-7fafbec62758"
           ]
         }
       ]

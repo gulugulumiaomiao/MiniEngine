@@ -27,5 +27,7 @@ struct AssetMeta {
 [[nodiscard]] std::optional<AssetMeta> loadAssetMeta(const VirtualPath& metaPath);
 [[nodiscard]] bool saveAssetMeta(const VirtualPath& metaPath, const AssetMeta& meta);
 [[nodiscard]] std::optional<AssetMeta> createAssetMeta(const VirtualPath& sourcePath);
+// 显式指定类型的变体：ScriptedImporter 接管的扩展名（如 .obj）无法从路径推断。
+[[nodiscard]] std::optional<AssetMeta> createAssetMeta(const VirtualPath& sourcePath, AssetType type);
 
 } // namespace engine
