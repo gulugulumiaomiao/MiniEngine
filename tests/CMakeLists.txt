@@ -203,6 +203,18 @@ mini_add_gtest(AssetReimportDecisionTest)
 # (gtest per Testing.md).
 mini_add_gtest(AssetScriptedImporterTest)
 
+# 对称 exporter 体系：注册表路由、Material/Scene/Generic 写回与省略语义
+# (gtest per Testing.md)。
+mini_add_gtest(AssetExporterTest)
+
+# 内存 zip 封装（vendored miniz）：条目 roundtrip、压缩、损坏数据拒绝
+# (gtest per Testing.md)。
+mini_add_gtest(ZipArchiveTest)
+
+# .mepackage 导出：依赖闭包收集（数据库依赖图 + Shader 伴随文件 + GLSL
+# include 递归）、包布局与失败路径（gtest per Testing.md）。
+mini_add_gtest(AssetPackageTest)
+
 mini_add_test(AssetReleaseTest)
 # The packaged-release test cooks its assets from the build-local copy of builtin
 # (MiniCopyBuiltin, meta-free) into the build-local library: cooking against the source

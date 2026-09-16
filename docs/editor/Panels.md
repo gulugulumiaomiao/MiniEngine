@@ -25,7 +25,7 @@ ProjectPanel -> HierarchyPanel -> InspectorPanel -> SceneViewPanel
 |---|---|
 | `open(path)` | 校验 scheme 为 `assets` 且后缀为 `.scene.json`，交给 `ENGINE.loadScene`（失败时保留前一个场景），成功后清空 dirty |
 | `createEmpty()` | 无来源路径的空文档 |
-| `save(error)` | `saveSceneToFile` -> `reimportAsset` -> `invalidate` -> 清 dirty -> `suppressNextChange_ = true` |
+| `save(error)` | `exportSceneToAsset` -> `ASSET_EXPORT_PIPELINE.exportAsset` -> `reimportAsset` -> `invalidate` -> 清 dirty -> `suppressNextChange_ = true` |
 | `saveAs(path, error)` | 先切换来源路径再走 `save`，成功后更新显示名 |
 | `handleExternalChange(path, removed)` | 只处理当前来源路径。干净文档自动重载；脏文档置 `conflictPending_` |
 | `markDirty()` | 任何面板写操作后调用，菜单栏显示 dirty 星号 |

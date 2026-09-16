@@ -2,7 +2,9 @@
 
 `src/asset/format/`（命名空间 `engine::format`）集中管理人类可读源格式的解析与
 验证：`.shader.json`、`.material.json`、`.scene.json`。Importer 只负责编排
-（读文件、调用 format 解析、写 Artifact）；未来的 Exporter 同样复用这些单元。
+（读文件、调用 format 解析、写 Artifact）；[Exporter.md](Exporter.md) 的写回
+体系同样复用这些单元（Material 写回走 `writeMaterialAssetJson`，Scene 写回
+走 scene 模块的 `writeSceneAssetJson`）。
 运行时类（`Shader.cpp` / `Material.cpp` / `SceneAsset.cpp`）只保留二进制 transfer
 与运行时行为，不再包含源文件解析。
 
@@ -49,7 +51,7 @@ Pipeline 也都在 Shader 参与绘制时按需生成。语法细节见
 
 `asset/format/MaterialAssetFormat.h` / `MaterialAssetFormat.cpp`
 
-**作用**：`.material.json` → `MaterialAsset`，以及跨资产校验。
+**作用**：`.material.json` ↔ `MaterialAsset`，以及跨资产校验。
 
 **运转流程**：
 
@@ -57,13 +59,21 @@ Pipeline 也都在 Shader 参与绘制时按需生成。语法细节见
   解析名称、shader 引用、properties 属性值、keywords 与可选 renderQueue。shader
   与 texture 引用经 `AssetReference` 处理：`guid://` 形态需要 resolver 定位，
   路径形态按所属挂载解析。
+- `writeMaterialAssetJson(material, resolver)`：写回编码（与 parse 同 TU 对称）。
+  `ordered_json` 保字段顺序，`dump(2) + "\n"`；shader 与 texture 属性值经
+  `resolver.findGuid(path)` 命中写 `guid://...`，未命中回退绝对路径
+  （parse 双形态均支持，SceneExport 同模式）；JSON 值形态：Float/Range→number、
+  Boolean→bool、Vec2/3/4 与 Color→数组、Texture2D→string。字段省略：
+  renderQueue 无 override 省略、keywords 空省略、properties 空省略。
 - `validateMaterialAsset(material, shader, materialPath)`：跨资产校验——每个
   property 与 keyword 必须由引用的 Shader 声明，属性值类型必须匹配声明。
 
 **设计意图**：解析与校验拆分：解析产出 `MaterialAsset`（不依赖 Shader 已导入），
 校验需要 Shader 的属性声明，由 importer 在依赖（Shader Artifact）就绪后调用
 （见 [Importer.md](Importer.md) 的 MaterialAssetImporter）。属性值类型系统
-（`ShaderValue`：标量/布尔/字符串/VecN）与 Shader 声明共享。
+（`ShaderValue`：标量/布尔/字符串/VecN）与 Shader 声明共享。写侧的省略语义与
+属性按名排序保证：等值的 MaterialAsset 序列化出等值字节，字段只在有真实语义
+时出现（空纹理槽不写、override 缺省不写），详见 [Exporter.md](Exporter.md)。
 
 ## SceneAssetFormat
 
@@ -91,6 +101,7 @@ Pipeline 也都在 Shader 参与绘制时按需生成。语法细节见
 - **解析是纯函数**：输入 = 路径 + 文本 + 可选 `GuidResolver`，输出 = Asset 或
   `nullptr`。不写数据库、不落 Artifact，便于单测与 Importer / Exporter 双向复用。
 - **依赖注入**：GUID 解析经 `GuidResolver` 接口，格式层不绑定 `AssetDatabase`
-  单例；编辑器、离线 cooker 与测试可以注入不同的解析环境。
+  单例；编辑器、离线 cooker 与测试可以注入不同的解析环境。写侧同样只依赖
+  `GuidResolver`（路径 → GUID 反查），保持双向对称。
 - **失败语义统一**：任何违反 schema 的输入返回空结果并记录 `Log::error`，绝不
   fatal、绝不部分产出。

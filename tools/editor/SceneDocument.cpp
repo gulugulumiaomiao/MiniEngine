@@ -1,11 +1,13 @@
 ﻿#include "tools/editor/SceneDocument.h"
 
+#include "asset/exporter/AssetExportPipeline.h"
 #include "asset/importer/AssetImportPipeline.h"
 #include "asset/manager/AssetManager.h"
 #include "core/logging/Log.h"
 #include "runtime/engine/Engine.h"
 #include "scene/scene/Scene.h"
-#include "scene/scene/SceneExport.h"
+#include "scene/scene/SceneAsset.h"
+#include "scene/scene/SceneRuntimeSerializer.h"
 
 namespace engine::editor {
 
@@ -47,7 +49,8 @@ bool SceneDocument::save(std::string& error) {
         return false;
     }
 
-    if (!saveSceneToFile(ENGINE.scene(), sourcePath_, error)) {
+    const std::unique_ptr<SceneAsset> asset = exportSceneToAsset(ENGINE.scene(), sourcePath_, error);
+    if (!asset || !ASSET_EXPORT_PIPELINE.exportAsset(*asset, sourcePath_, error)) {
         Log::error("SceneDocument", "Cannot save Scene: %s", error.c_str());
         return false;
     }

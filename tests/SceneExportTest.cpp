@@ -1,5 +1,6 @@
 ﻿#include "TestAssetEnvironment.h"
 
+#include "asset/database/AssetDatabase.h"
 #include "asset/format/SceneAssetFormat.h"
 #include "asset/importer/FileWatcher.h"
 #include "render/material/Material.h"
@@ -13,7 +14,7 @@
 #include "scene/components/MeshComponent.h"
 #include "scene/scene/Scene.h"
 #include "scene/scene/SceneAsset.h"
-#include "scene/scene/SceneExport.h"
+#include "scene/scene/SceneRuntimeSerializer.h"
 
 #include <array>
 #include <cstddef>
@@ -188,8 +189,8 @@ int main() {
     }
 
     // --- writeSceneAssetJson + parseSceneAsset roundtrip ---
-    const std::string json = writeSceneAssetJson(*asset);
-    const std::shared_ptr<SceneAsset> reparsed = format::parseSceneAsset(targetPath, json);
+    const std::string roundtripJson = format::writeSceneAssetJson(*asset, ASSET_DATABASE);
+    const std::shared_ptr<SceneAsset> reparsed = format::parseSceneAsset(targetPath, roundtripJson);
     if (!reparsed || reparsed->name != asset->name || reparsed->nodes != asset->nodes)
         return 9;
 
@@ -276,14 +277,7 @@ int main() {
         }
     }
 
-    // --- saveSceneToFile: rejects invalid target paths ---
-    error.clear();
-    if (saveSceneToFile(*scene, VirtualPath{"assets://scenes/wrong.json"}, error) ||
-        error.empty()) {
-        return 16;
-    }
-
-    // --- saveSceneToFile: atomically writes and the file parses back ---
+    // --- writeSceneAssetJson + writeTextAtomic: roundtrip ---
     FILE_WATCHER.stop();
     ASSET_MANAGER.shutdown();
     (void)FILE_SYSTEM.unmount("assets");
@@ -297,8 +291,10 @@ int main() {
     if (!FILE_SYSTEM.mountDirectory("assets", root, false))
         return 17;
 
-    error.clear();
-    if (!saveSceneToFile(*scene, targetPath, error))
+    const std::string json = format::writeSceneAssetJson(*asset, ASSET_DATABASE);
+    if (json.empty())
+        return 18;
+    if (!FILE_SYSTEM.writeTextAtomic(targetPath, json))
         return 18;
     const std::optional<std::string> written = FILE_SYSTEM.readText(targetPath);
     if (!written)

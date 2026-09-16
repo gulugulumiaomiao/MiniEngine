@@ -46,6 +46,11 @@ public:
     [[nodiscard]] const VirtualPath& assetPath() const { return assetPath_; }
     [[nodiscard]] const Shader& shader() const;
     [[nodiscard]] ShaderHandle shaderHandle() const { return shaderHandle_; }
+    // 写回专用：只暴露 override（nullopt = 沿用 shader 默认），生效值 renderQueue
+    // 字段是派生状态，写回时不得显式化。
+    [[nodiscard]] std::optional<int> renderQueueOverride() const {
+        return renderQueueOverride_;
+    }
     void setShader(ShaderHandle shader);
 
     [[nodiscard]] float getFloat(std::string_view name) const;

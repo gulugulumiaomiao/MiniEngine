@@ -4,6 +4,7 @@
 #include "asset/base/GenericAsset.h"
 #include "asset/derived_data/AssetArtifact.h"
 #include "asset/database/AssetDatabase.h"
+#include "asset/exporter/AssetExportPipeline.h"
 #include "asset/importer/AssetImportPipeline.h"
 #include "asset/importer/FileWatcher.h"
 #include "core/logging/Log.h"
@@ -52,6 +53,13 @@ bool AssetManager::initialize(AssetManagerMode mode) {
     if (!ASSET_IMPORT_PIPELINE.scanAll()) {
         Log::error("AssetManager", "Initial asset import completed with errors");
     }
+    // 写回管线与导入管线对称挂载：同样的 Development-only 生命周期（Packaged 只读，
+    // 不提供写回）。
+    if (!ASSET_EXPORT_PIPELINE.initialize()) {
+        Log::error("AssetManager", "Cannot initialize asset export pipeline");
+        shutdown();
+        return false;
+    }
     ASSET_IMPORT_PIPELINE.setListener([this](const AssetImportNotification& notification) {
         if (!notification.success)
             return;
@@ -84,6 +92,7 @@ void AssetManager::shutdown() {
     changeListener_ = {};
     clear();
     ASSET_IMPORT_PIPELINE.shutdown();
+    ASSET_EXPORT_PIPELINE.shutdown();
     FILE_WATCHER.stop();
     ASSET_DATABASE.shutdown();
 }

@@ -1,4 +1,7 @@
-﻿#pragma once
+#pragma once
+
+// 运行时 Scene -> SceneAsset 提取。这是 scene 模块的运行时序列化辅助，与
+// asset/format/SceneAssetFormat 的源格式解析/编码对称。
 
 #include "core/filesystem/VirtualPath.h"
 
@@ -17,15 +20,5 @@ class SceneAsset;
 [[nodiscard]] std::unique_ptr<SceneAsset> exportSceneToAsset(const Scene& scene,
                                                              const VirtualPath& targetPath,
                                                              std::string& error);
-
-// Serializes a SceneAsset into the source scene JSON format that
-// format::parseSceneAsset reads. Asset paths are written as absolute assets:// virtual paths.
-[[nodiscard]] std::string writeSceneAssetJson(const SceneAsset& asset);
-
-// Exports the runtime Scene, validates it and atomically writes the source JSON to
-// targetPath. error receives a human readable reason on failure.
-[[nodiscard]] bool saveSceneToFile(const Scene& scene,
-                                   const VirtualPath& targetPath,
-                                   std::string& error);
 
 } // namespace engine

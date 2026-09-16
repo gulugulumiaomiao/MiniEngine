@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(MiniVulkanEngine VERSION 0.1.0 LANGUAGES CXX)
+project(MiniVulkanEngine VERSION 0.1.0 LANGUAGES C CXX)
 
 # Publish is the shipping configuration: Release-level code generation plus the
 # engine's publish behavior (MINI_PUBLISH). CMake only predefines flags for its

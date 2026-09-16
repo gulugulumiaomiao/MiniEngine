@@ -21,6 +21,8 @@ AssetManager 在运行时按需加载，领域 Manager 再实例化为运行时�
   见 [Storage.md](Storage.md)。
 - **导入即纯转换**：Importer 把源文件验证并写成 Artifact，不更新数据库、不创建
   运行时对象；数据库更新、依赖顺序和失败状态由 `AssetImportPipeline` 统一处理。
+- **写回对称导入**：写回体系与 importer 同构（基类 + 注册表 + 管线单例），
+  见 [Exporter.md](Exporter.md)；资产分发走文件级镜像包，见 [Package.md](Package.md)。
 
 ## 模块地图
 
@@ -33,6 +35,8 @@ src/asset/
 ├── format/          源格式解析与验证（Shader/Material/Scene AssetFormat）
 ├── importer/        AssetImporter 接口、内置与 Scripted/Default 导入器、
 │                    AssetImporterRegistry、AssetImportPipeline、FileWatcher
+├── exporter/        写回体系（AssetExporter / Registry / Pipeline）与
+│                    资产包 AssetPackage（.mepackage 导入/导出）
 └── manager/         AssetManager（运行时加载与弱缓存）
 ```
 
@@ -46,6 +50,14 @@ assets:// 源文件（+ .meta 侧车）
   -> AssetManager（weak_ptr<Asset> 缓存）
   -> ShaderManager / MeshManager / ...（KeyedHandleRegistry -> Handle）
   -> GPU 资源（Shader 编译、Texture 上传等按需执行）
+
+运行时编辑（Material 改属性 / Scene 改节点）
+  -> AssetExportPipeline（exportMaterialToAsset 提取 -> 路由）
+  -> 写回 assets:// 源文件（FileWatcher 触发级联重导入）
+
+分发（选中资产 → 依赖闭包 → .mepackage 单文件）
+  -> exportAssetPackage（闭包收集 + zip 写出）
+  -> importAssetPackage（校验 -> 冲突策略 -> 落盘 -> 重建）
 ```
 
 ## 文档导航
@@ -57,6 +69,8 @@ assets:// 源文件（+ .meta 侧车）
 | [SourceFormats.md](SourceFormats.md) | 源格式模块 asset/format |
 | [Importer.md](Importer.md) | AssetImporter 接口体系、注册表、内置与扩展导入器 |
 | [Pipeline.md](Pipeline.md) | AssetImportPipeline / FileWatcher：路由、调度、增量、热重载 |
+| [Exporter.md](Exporter.md) | 写回体系：AssetExporter / Registry / Pipeline，Material/Scene/Generic 写回 |
+| [Package.md](Package.md) | 资产包 .mepackage：格式规范、闭包收集、冲突策略 |
 | [Manager.md](Manager.md) | AssetManager：运行时加载、缓存与生命周期 |
 
 相关文档：[FileSystem.md](../FileSystem.md)（虚拟路径与挂载）、
@@ -75,6 +89,9 @@ assets:// 源文件（+ .meta 侧车）
 | `AssetReimportDecisionTest` | settingsHash / dependencyHashes 快照、旧记录丢弃（gtest） |
 | `AssetScriptedImporterTest` | ScriptedImporter 注册与路由、DefaultImporter 透传（gtest） |
 | `AssetPipelineTest` | 管线集成：Meta、反向依赖、热重载、失败回退 |
+| `AssetExporterTest` | 写回体系：路由、Material/Scene/Generic 写回与省略语义（gtest） |
+| `ZipArchiveTest` | miniz 封装：条目 roundtrip、压缩、损坏数据拒绝（gtest） |
+| `AssetPackageTest` | 资产包：闭包收集、导入往返、冲突三策略、拒绝损坏包（gtest） |
 | `AssetReleaseTest` | Publish 打包后的只读加载 |
 
 测试环境约定见 [test/AssetEnvironment.md](../test/AssetEnvironment.md)。

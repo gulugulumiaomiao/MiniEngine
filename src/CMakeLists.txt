@@ -6,11 +6,14 @@ file(GLOB_RECURSE MINI_ENGINE_SOURCES CONFIGURE_DEPENDS
 )
 list(REMOVE_ITEM MINI_ENGINE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/runtime/main.cpp")
 
-set(MINI_SPIRV_CROSS_SOURCES
+# Vendored third-party sources compiled straight into the engine archive
+# (spirv-cross: C++; miniz: C, hence the C language in the root project()).
+set(MINI_THIRD_PARTY_SOURCES
     ${PROJECT_SOURCE_DIR}/third_party/spirv-cross/spirv_cross.cpp
     ${PROJECT_SOURCE_DIR}/third_party/spirv-cross/spirv_parser.cpp
     ${PROJECT_SOURCE_DIR}/third_party/spirv-cross/spirv_cross_parsed_ir.cpp
     ${PROJECT_SOURCE_DIR}/third_party/spirv-cross/spirv_cfg.cpp
+    ${PROJECT_SOURCE_DIR}/third_party/miniz/miniz.c
 )
 
 # The engine is built twice per configuration. Editor-only engine features are guarded
@@ -21,11 +24,11 @@ set(MINI_SPIRV_CROSS_SOURCES
 function(mini_add_engine_library target)
     add_library(${target} STATIC
         ${MINI_ENGINE_SOURCES}
-        ${MINI_SPIRV_CROSS_SOURCES}
+        ${MINI_THIRD_PARTY_SOURCES}
     )
     source_group(TREE "${PROJECT_SOURCE_DIR}" FILES
         ${MINI_ENGINE_SOURCES}
-        ${MINI_SPIRV_CROSS_SOURCES}
+        ${MINI_THIRD_PARTY_SOURCES}
     )
     target_include_directories(${target} PUBLIC
         ${PROJECT_SOURCE_DIR}/src
@@ -38,6 +41,7 @@ function(mini_add_engine_library target)
         ${PROJECT_SOURCE_DIR}/third_party/spirv-cross
         ${PROJECT_SOURCE_DIR}/third_party/stb
         ${PROJECT_SOURCE_DIR}/third_party/vma/include
+        ${PROJECT_SOURCE_DIR}/third_party/miniz
     )
     target_compile_definitions(${target} PUBLIC
         VK_USE_PLATFORM_WIN32_KHR

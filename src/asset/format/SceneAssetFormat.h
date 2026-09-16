@@ -20,6 +20,12 @@ namespace engine::format {
 [[nodiscard]] std::shared_ptr<SceneAsset> parseSceneAsset(
     const VirtualPath& path, std::string_view source, const GuidResolver& resolver);
 
+// Serializes a SceneAsset back into the source .scene.json format that
+// parseSceneAsset reads. Asset paths are written as GUID references when the
+// resolver can find them, otherwise as absolute assets:// virtual paths.
+[[nodiscard]] std::string writeSceneAssetJson(const SceneAsset& asset,
+                                              const GuidResolver& resolver);
+
 // Structural validation: node identity and hierarchy (acyclic, existing
 // parents), one Transform per node, no duplicate component types and
 // per-component value ranges.

@@ -20,9 +20,11 @@ ASSET_MANAGER.initialize(AssetManagerMode::Packaged);  // 显式指定（工具/
 ```
 
 - `Development`（Debug/Release 默认）：初始化 `AssetImportPipeline`、执行
-  `scanAll()`、启动 `FileWatcher`，并订阅导入通知驱动热重载。
+  `scanAll()`、挂载 `AssetExportPipeline`（见 [Exporter.md](Exporter.md)）、
+  启动 `FileWatcher`，并订阅导入通知驱动热重载。
 - `Packaged`（Publish 或 `MINI_PUBLISH` 构建）：只加载已 Cook 的
-  `AssetDatabase` 与 Artifact，缺失即返回失败，不执行任何运行时导入。
+  `AssetDatabase` 与 Artifact，缺失即返回失败，不执行任何运行时导入，也不
+  初始化写回管线（只读包上写回无意义）。
 
 初始化前，启动层必须统一完成文件系统挂载（`assets://` 在导入阶段需可写以生成
 Meta；Publish 运行时可挂只读；`library://` 可写）：
@@ -109,8 +111,9 @@ GraphicsPipeline、Shader、Texture、Mesh），再由 `ASSET_MANAGER.shutdown()
 ```text
 1. 清空 changeListener_ 与 AssetManager 缓存
 2. AssetImportPipeline::shutdown()（保存数据库、清理注册表）
-3. FILE_WATCHER.stop()
-4. ASSET_DATABASE.shutdown()
+3. AssetExportPipeline::shutdown()（清理写回注册表）
+4. FILE_WATCHER.stop()
+5. ASSET_DATABASE.shutdown()
 ```
 
 文件系统挂载（`assets://` / `library://`）随后由启动层卸载。集中编排避免调用方

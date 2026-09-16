@@ -26,4 +26,13 @@ namespace engine::format {
                                          const ShaderAsset& shader,
                                          const VirtualPath& materialPath);
 
+// Serializes a MaterialAsset back into the .material.json source format that
+// parseMaterialAsset reads. References (shader + texture properties) are written
+// as GUID strings when the resolver knows the path, falling back to absolute
+// virtual paths. Optional fields (renderQueue/keywords/properties) are omitted
+// when unset/empty so a round trip preserves source-level omission semantics.
+// Property order is by name, so equal assets serialize to equal bytes.
+[[nodiscard]] std::string writeMaterialAssetJson(const MaterialAsset& material,
+                                                 const GuidResolver& resolver);
+
 } // namespace engine::format

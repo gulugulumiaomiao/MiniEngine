@@ -4,13 +4,17 @@
 #include "asset/format/AssetFormatJson.h"
 #include "core/logging/Log.h"
 
+#include <algorithm>
 #include <set>
 #include <utility>
+#include <vector>
 
 namespace engine::format {
 namespace {
 
 constexpr const char* kCategory = "MaterialAsset";
+
+using OrderedJson = nlohmann::ordered_json;
 
 ShaderValue parseMaterialValue(const Json& value, const VirtualPath& file, const std::string& path) {
     try {
@@ -193,6 +197,67 @@ bool validateMaterialAsset(const MaterialAsset& material,
         }
     }
     return valid;
+}
+
+namespace {
+
+// GUID 引用优先：resolver 认识的路径写成 guid://，否则退回绝对虚拟路径。两个
+// 形态 parseMaterialAsset 都接受；SceneExport 的引用写出是同一模式。
+[[nodiscard]] std::string referenceString(const VirtualPath& path, const GuidResolver& resolver) {
+    if (const auto guid = resolver.findGuid(path))
+        return AssetReference{*guid}.toString();
+    return path.string();
+}
+
+[[nodiscard]] OrderedJson encodeShaderValue(const ShaderValue& value, const GuidResolver& resolver) {
+    // 注意：nlohmann 的花括号构造（Json{scalar}）会被解释为数组；标量必须用圆括号
+    // 构造或赋值。
+    if (const float* scalar = std::get_if<float>(&value))
+        return OrderedJson(*scalar);
+    if (const bool* flag = std::get_if<bool>(&value))
+        return OrderedJson(*flag);
+    if (const math::Vec2* vector = std::get_if<math::Vec2>(&value))
+        return OrderedJson::array({vector->x, vector->y});
+    if (const math::Vec3* vector = std::get_if<math::Vec3>(&value))
+        return OrderedJson::array({vector->x, vector->y, vector->z});
+    if (const math::Vec4* vector = std::get_if<math::Vec4>(&value))
+        return OrderedJson::array({vector->x, vector->y, vector->z, vector->w});
+    const std::string& reference = std::get<std::string>(value);
+    return OrderedJson(referenceString(VirtualPath{reference}, resolver));
+}
+
+} // namespace
+
+std::string writeMaterialAssetJson(const MaterialAsset& material, const GuidResolver& resolver) {
+    // 与 parseMaterialAssetValue 的读取顺序对应；可选字段（renderQueue/keywords/
+    // properties）省略时保持省略，往返不把派生值显式化。
+    OrderedJson root;
+    root["$schemaVersion"] = 1;
+    root["name"] = material.name;
+    root["shader"] = referenceString(material.shader, resolver);
+    if (material.renderQueue)
+        root["renderQueue"] = *material.renderQueue;
+    if (!material.keywords.empty()) {
+        OrderedJson keywords = OrderedJson::array();
+        for (const std::string& keyword : material.keywords)
+            keywords.push_back(keyword);
+        root["keywords"] = std::move(keywords);
+    }
+    if (!material.properties.empty()) {
+        // unordered_map 遍历序不稳定；按属性名排序保证等值资产序列化为等值字节。
+        std::vector<const std::pair<const std::string, ShaderValue>*> entries;
+        entries.reserve(material.properties.size());
+        for (const auto& entry : material.properties)
+            entries.push_back(&entry);
+        std::ranges::sort(entries, {}, [](const auto* entry) -> const std::string& {
+            return entry->first;
+        });
+        OrderedJson properties = OrderedJson::object();
+        for (const auto* entry : entries)
+            properties[entry->first] = encodeShaderValue(entry->second, resolver);
+        root["properties"] = std::move(properties);
+    }
+    return root.dump(2) + "\n";
 }
 
 } // namespace engine::format

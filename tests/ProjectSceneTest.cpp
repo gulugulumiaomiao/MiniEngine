@@ -1,12 +1,13 @@
 ﻿#include "asset/base/AssetId.h"
 #include "asset/base/GuidResolver.h"
+#include "asset/database/AssetDatabase.h"
 #include "asset/format/SceneAssetFormat.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/filesystem/VirtualPath.h"
 #include "runtime/config/ProjectConfig.h"
 #include "tools/editor/ProjectTemplate.h"
 #include "scene/scene/SceneAsset.h"
-#include "scene/scene/SceneExport.h"
+#include "asset/format/SceneAssetFormat.h"
 
 #include <filesystem>
 #include <memory>
@@ -160,7 +161,7 @@ int main() {
     edited.name = "Edited";
     edited.nodes.push_back(
         SceneNodeAsset{1, std::nullopt, "Node", true, {TransformComponentAsset{}}});
-    if (!FILE_SYSTEM.writeTextAtomic(other, writeSceneAssetJson(edited)))
+    if (!FILE_SYSTEM.writeTextAtomic(other, format::writeSceneAssetJson(edited, ASSET_DATABASE)))
         return 15;
     if (selectProjectScene(other) != other)
         return 16;
