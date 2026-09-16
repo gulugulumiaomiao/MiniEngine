@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/hash.h"
+#include "core/math/hash.h"
 #include "render/shader/ShaderPreprocessor.h"
 
 #include <filesystem>

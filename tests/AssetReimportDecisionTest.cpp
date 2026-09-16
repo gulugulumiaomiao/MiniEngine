@@ -3,10 +3,10 @@
 #include "asset/base/AssetMeta.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/importer/AssetImportPipeline.h"
-#include "asset/importer/FileWatcher.h"
+#include "core/filesystem/FileWatcher.h"
 #include "asset/importer/MaterialAssetImporter.h"
 #include "core/filesystem/FileSystem.h"
-#include "core/hash.h"
+#include "core/math/hash.h"
 #include "TestAssetEnvironment.h"
 
 #include <chrono>

@@ -2,7 +2,7 @@
 #include "render/mesh/MeshManager.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/manager/AssetManager.h"
-#include "asset/importer/FileWatcher.h"
+#include "core/filesystem/FileWatcher.h"
 #include "TestAssetEnvironment.h"
 
 #include <gtest/gtest.h>

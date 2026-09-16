@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "core/base/Singleton.h"
 #include "core/filesystem/VirtualPath.h"

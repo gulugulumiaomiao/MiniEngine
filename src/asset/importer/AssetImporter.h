@@ -1,7 +1,7 @@
 #pragma once
 
 #include "asset/base/AssetMeta.h"
-#include "core/hash.h"
+#include "core/math/hash.h"
 #include "core/serialization/Transferable.h"
 
 #include <cstdint>

@@ -3,7 +3,7 @@
 #include "render/shader/ShaderManager.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/manager/AssetManager.h"
-#include "asset/importer/FileWatcher.h"
+#include "core/filesystem/FileWatcher.h"
 #include "TestAssetEnvironment.h"
 
 #include <cstring>

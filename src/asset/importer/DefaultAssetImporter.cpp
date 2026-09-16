@@ -3,7 +3,7 @@
 #include "asset/base/GenericAsset.h"
 #include "asset/importer/AssetImportHelpers.h"
 #include "core/filesystem/FileSystem.h"
-#include "core/hash.h"
+#include "core/math/hash.h"
 #include "core/logging/Log.h"
 #include "core/serialization/Transfer.h"
 

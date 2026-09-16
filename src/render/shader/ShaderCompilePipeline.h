@@ -2,7 +2,7 @@
 
 #include "core/base/Handle.h"
 #include "core/base/KeyedHandleRegistry.h"
-#include "core/hash.h"
+#include "core/math/hash.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderCompiler.h"
 #include "render/shader/ShaderGenerator.h"

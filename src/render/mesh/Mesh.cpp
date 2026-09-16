@@ -1,6 +1,6 @@
 #include "render/mesh/Mesh.h"
 
-#include "core/hash.h"
+#include "core/math/hash.h"
 #include "core/logging/Log.h"
 #include "core/serialization/Transfer.h"
 

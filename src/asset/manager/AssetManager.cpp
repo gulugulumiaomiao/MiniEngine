@@ -6,7 +6,7 @@
 #include "asset/database/AssetDatabase.h"
 #include "asset/exporter/AssetExportPipeline.h"
 #include "asset/importer/AssetImportPipeline.h"
-#include "asset/importer/FileWatcher.h"
+#include "core/filesystem/FileWatcher.h"
 #include "core/logging/Log.h"
 #include "core/serialization/BinaryTransfer.h"
 #include "core/filesystem/FileSystem.h"

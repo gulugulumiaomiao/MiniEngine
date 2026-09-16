@@ -3,7 +3,7 @@
 #include "asset/base/AssetMeta.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/importer/AssetImportPipeline.h"
-#include "asset/importer/FileWatcher.h"
+#include "core/filesystem/FileWatcher.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/math/Math.h"
 #include "TestAssetEnvironment.h"

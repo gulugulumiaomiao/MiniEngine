@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/filesystem/VirtualPath.h"
-#include "core/hash.h"
+#include "core/math/hash.h"
 
 #include <cstdint>
 #include <functional>

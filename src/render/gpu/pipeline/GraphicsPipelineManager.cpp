@@ -1,6 +1,6 @@
 #include "render/gpu/pipeline/GraphicsPipelineManager.h"
 
-#include "core/hash.h"
+#include "core/math/hash.h"
 #include "core/logging/Log.h"
 #include "render/gpu/pipeline/GraphicsPipelineGpuFactory.h"
 #include "render/gpu/shader/ShaderGpuManager.h"

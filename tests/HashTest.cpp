@@ -1,4 +1,4 @@
-#include "core/hash.h"
+#include "core/math/hash.h"
 
 #include "core/filesystem/FileSystem.h"
 

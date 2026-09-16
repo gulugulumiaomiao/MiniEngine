@@ -8,7 +8,7 @@
 #include "asset/exporter/GenericAssetExporter.h"
 #include "asset/exporter/MaterialAssetExporter.h"
 #include "asset/exporter/SceneAssetExporter.h"
-#include "asset/importer/FileWatcher.h"
+#include "core/filesystem/FileWatcher.h"
 #include "asset/manager/AssetManager.h"
 #include "core/filesystem/FileSystem.h"
 #include "render/material/Material.h"

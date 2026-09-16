@@ -2,7 +2,7 @@
 
 #include "core/filesystem/FileDependencyGraph.h"
 #include "core/filesystem/FileSystem.h"
-#include "core/hash.h"
+#include "core/math/hash.h"
 #include "core/logging/Log.h"
 
 #include <algorithm>

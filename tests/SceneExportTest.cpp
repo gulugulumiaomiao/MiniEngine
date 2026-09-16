@@ -2,7 +2,7 @@
 
 #include "asset/database/AssetDatabase.h"
 #include "asset/format/SceneAssetFormat.h"
-#include "asset/importer/FileWatcher.h"
+#include "core/filesystem/FileWatcher.h"
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"

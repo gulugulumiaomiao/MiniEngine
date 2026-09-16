@@ -1,11 +1,11 @@
 ﻿#include "asset/importer/AssetImportPipeline.h"
 
 #include "core/filesystem/FileDependencyGraph.h"
-#include "core/hash.h"
+#include "core/math/hash.h"
 
 #include "asset/derived_data/AssetArtifact.h"
 #include "asset/base/AssetMeta.h"
-#include "asset/importer/FileWatcher.h"
+#include "core/filesystem/FileWatcher.h"
 #include "asset/importer/BuiltinAssetImporters.h"
 #include "core/logging/Log.h"
 #include "core/filesystem/FileSystem.h"

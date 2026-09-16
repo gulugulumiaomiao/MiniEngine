@@ -3,7 +3,7 @@
 #include "asset/base/AssetId.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/exporter/AssetPackage.h"
-#include "asset/importer/FileWatcher.h"
+#include "core/filesystem/FileWatcher.h"
 #include "asset/manager/AssetManager.h"
 #include "core/archive/ZipArchive.h"
 #include "core/filesystem/FileSystem.h"

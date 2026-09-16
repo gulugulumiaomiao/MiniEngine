@@ -1,6 +1,6 @@
 #include "asset/base/AssetId.h"
 
-#include "core/hash.h"
+#include "core/math/hash.h"
 
 #include <array>
 #include <atomic>

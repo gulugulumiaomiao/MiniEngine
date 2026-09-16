@@ -1,7 +1,7 @@
 ﻿#include "asset/database/AssetDatabase.h"
 #include "asset/importer/AssetImportPipeline.h"
 #include "asset/base/AssetMeta.h"
-#include "asset/importer/FileWatcher.h"
+#include "core/filesystem/FileWatcher.h"
 #include "core/filesystem/FileSystem.h"
 #include "asset/manager/AssetManager.h"
 #include "render/material/Material.h"
