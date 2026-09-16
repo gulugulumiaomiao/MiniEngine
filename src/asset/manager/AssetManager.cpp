@@ -65,9 +65,10 @@ bool AssetManager::initialize(AssetManagerMode mode) {
             return;
         invalidate(notification.path);
         if (notification.type == AssetType::Shader && !notification.removed) {
-            if (SHADER_MANAGER.find(notification.path) &&
+            const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(notification.path);
+            if (assetId && SHADER_MANAGER.find(*assetId) &&
                 SHADER_MANAGER.replace(notification.path)) {
-                MATERIAL_MANAGER.refreshShader(notification.path);
+                MATERIAL_MANAGER.refreshShader(*assetId);
             }
         } else if (notification.type == AssetType::Mesh && !notification.removed &&
                    MESH_MANAGER.find(notification.path)) {

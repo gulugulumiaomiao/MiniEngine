@@ -18,7 +18,7 @@ public:
     void refreshAsset(const AssetId& assetId);
     void refreshAsset(const VirtualPath& materialPath);
     void setShader(MaterialHandle handle, const VirtualPath& shaderPath);
-    void refreshShader(const VirtualPath& shaderPath);
+    void refreshShader(const AssetId& shaderAssetId);
 
 private:
     friend class Singleton<MaterialManager>;

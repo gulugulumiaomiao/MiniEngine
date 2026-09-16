@@ -1,6 +1,7 @@
 #pragma once
 
 #include "asset/base/Asset.h"
+#include "asset/base/AssetId.h"
 #include "core/filesystem/VirtualPath.h"
 #include "core/math/Math.h"
 #include "render/base/RenderHandle.h"
@@ -263,9 +264,15 @@ public:
     [[nodiscard]] bool declaresKeyword(std::string_view keyword) const;
     [[nodiscard]] std::uint64_t revision() const { return revision_; }
 
+    [[nodiscard]] AssetId assetId() const { return assetId_; }
+    [[nodiscard]] bool isAssetBacked() const { return assetId_.valid(); }
+    [[nodiscard]] Shader clone() const;
+    void rebuildFromAsset(const ShaderAsset& asset);
+
 private:
     friend class ShaderManager;
     VirtualPath assetPath_;
+    AssetId assetId_;
     std::string name_;
     std::vector<ShaderPropertyDesc> properties_;
     UniformBlockLayout uniformBlockLayout_;

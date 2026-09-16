@@ -164,9 +164,9 @@ void MaterialManager::setShader(MaterialHandle handle, const VirtualPath& shader
     material->setShader(shader);
 }
 
-void MaterialManager::refreshShader(const VirtualPath& shaderPath) {
-    forEach([&shaderPath](Material& material) {
-        if (material.shader().assetPath() == shaderPath) {
+void MaterialManager::refreshShader(const AssetId& shaderAssetId) {
+    forEach([&shaderAssetId](Material& material) {
+        if (material.shader().assetId() == shaderAssetId) {
             material.setShader(material.shaderHandle());
         }
     });

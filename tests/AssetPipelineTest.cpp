@@ -40,10 +40,8 @@ static_assert(std::is_base_of_v<engine::Singleton<engine::ShaderManager>, engine
 static_assert(
     std::is_base_of_v<engine::Singleton<engine::MaterialManager>, engine::MaterialManager>);
 static_assert(std::is_base_of_v<engine::Singleton<engine::MeshManager>, engine::MeshManager>);
-using ShaderRegistry = engine::KeyedHandleRegistry<engine::Shader,
-                                                   engine::ShaderHandle,
-                                                   engine::VirtualPath,
-                                                   engine::VirtualPathHash>;
+using ShaderRegistry =
+    engine::KeyedHandleRegistry<engine::Shader, engine::ShaderHandle, engine::AssetId>;
 using MaterialRegistry = engine::KeyedHandleRegistry<engine::Material,
                                                      engine::MaterialHandle,
                                                      engine::AssetId>;
@@ -188,8 +186,10 @@ int main() {
         return 51;
 
     const VirtualPath meshPath{"assets://meshes/test.mesh.json"};
-    if (!FILE_SYSTEM.writeText(meshPath, meshSource(-1.0F)))
+    if (!FILE_SYSTEM.writeText(meshPath, meshSource(-1.0F)) ||
+        !ASSET_IMPORT_PIPELINE.importAsset(meshPath)) {
         return 25;
+    }
     const MeshHandle meshHandle = MESH_MANAGER.load(meshPath);
     const auto meshAsset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
     Mesh* runtimeMesh = MESH_MANAGER.find(meshHandle);
@@ -309,7 +309,7 @@ int main() {
     FILE_WATCHER.scanNow();
     waitForEvents();
     ASSET_IMPORT_PIPELINE.processFileEvents();
-    if (SHADER_MANAGER.find(firstPath) != SHADER_MANAGER.find(firstHandleA) ||
+    if (SHADER_MANAGER.findHandle(firstPath) != firstHandleA ||
         SHADER_MANAGER.find(firstHandleA)->revision() != oldRevision + 1 ||
         SHADER_MANAGER.find(firstHandleA)->name() != "Tests/First Reloaded") {
         return 10;
@@ -373,8 +373,8 @@ int main() {
         return 24;
     }
 
-    SHADER_MANAGER.destroy(firstHandleA);
-    const ShaderHandle reused = SHADER_MANAGER.insert(shaderAssetA->instantiate());
+    (void)SHADER_MANAGER.destroy(firstHandleA);
+    const ShaderHandle reused = SHADER_MANAGER.insertUnkeyed(shaderAssetA->instantiate());
     if (!reused || reused.index != firstHandleA.index ||
         reused.generation == firstHandleA.generation ||
         SHADER_MANAGER.find(firstHandleA) != nullptr) {

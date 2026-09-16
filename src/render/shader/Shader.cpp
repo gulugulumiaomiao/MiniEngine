@@ -259,6 +259,21 @@ Shader::Shader(const ShaderAsset& asset)
     }
 }
 
+Shader Shader::clone() const {
+    Shader copy = *this;
+    copy.assetId_ = AssetId{};
+    return copy;
+}
+
+void Shader::rebuildFromAsset(const ShaderAsset& asset) {
+    if (revision_ == std::numeric_limits<std::uint64_t>::max()) {
+        Log::fatal("Shader", "Shader revision overflow");
+    }
+    const std::uint64_t nextRevision = revision_ + 1;
+    *this = asset.instantiate();
+    revision_ = nextRevision;
+}
+
 Shader ShaderAsset::instantiate() const {
     return Shader{*this};
 }

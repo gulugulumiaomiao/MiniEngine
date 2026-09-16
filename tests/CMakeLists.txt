@@ -195,6 +195,12 @@ target_compile_definitions(ShaderAssetTest PRIVATE
 )
 add_dependencies(ShaderAssetTest MiniCopyBuiltin)
 
+mini_add_gtest(ShaderGuidIdentityTest)
+target_compile_definitions(ShaderGuidIdentityTest PRIVATE
+    MINI_TEST_ASSET_DIR="${CMAKE_BINARY_DIR}/assets"
+)
+add_dependencies(ShaderGuidIdentityTest MiniCopyBuiltin)
+
 mini_add_test(ShaderLayoutTest)
 target_compile_definitions(ShaderLayoutTest PRIVATE
     MINI_TEST_ASSET_DIR="${CMAKE_BINARY_DIR}/assets"
