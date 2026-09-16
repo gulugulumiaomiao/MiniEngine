@@ -369,6 +369,30 @@ bool validateMesh(const MeshDesc& desc, const MeshData& data) {
     return true;
 }
 
+Mesh Mesh::clone() const {
+    Mesh copy;
+    copy.assetPath_ = assetPath_;
+    copy.desc_ = desc_;
+    copy.data_ = data_;
+    copy.buildRecipe_ = buildRecipe_;
+    copy.vertexLayoutHash_ = vertexLayoutHash_;
+    copy.version_ = version_;
+    copy.dirty_ = true;
+    // assetId_ stays empty: a clone is detached from its source asset.
+    return copy;
+}
+
+void Mesh::rebuildFromAsset(const MeshAsset& asset) {
+    if (!validateMesh(asset.desc, asset.meshData))
+        return;
+    desc_ = asset.desc;
+    data_ = asset.meshData;
+    buildRecipe_ = asset.buildRecipe;
+    cacheVertexLayoutHash();
+    ++version_;
+    dirty_ = true;
+}
+
 Mesh MeshAsset::instantiate() const {
     Mesh result;
     if (!validateMesh(desc, meshData))

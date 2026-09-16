@@ -207,14 +207,12 @@ int main() {
     if (decoded.transfer(invalidReader) || decoded.desc.debugName != originalName) {
         return 7;
     }
-    const MeshHandle handle = MESH_MANAGER.insert(decoded.instantiate());
-    if (!handle || MESH_MANAGER.find(handle) == nullptr ||
-        MESH_MANAGER.find(source.assetPath()) != MESH_MANAGER.find(handle) ||
-        MESH_MANAGER.size() != 1) {
+    const MeshHandle handle = MESH_MANAGER.insertUnkeyed(decoded.instantiate());
+    if (!handle || MESH_MANAGER.find(handle) == nullptr || MESH_MANAGER.size() != 1) {
         return 8;
     }
     if (!MESH_MANAGER.destroy(handle) || MESH_MANAGER.find(handle) != nullptr ||
-        MESH_MANAGER.find(source.assetPath()) != nullptr) {
+        MESH_MANAGER.size() != 0) {
         return 9;
     }
 

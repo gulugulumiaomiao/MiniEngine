@@ -96,6 +96,14 @@ protected:
         pool_.forEach(std::forward<Function>(function));
     }
 
+    template <typename Function> void forEachHandle(Function&& function) {
+        pool_.forEachHandle(std::forward<Function>(function));
+    }
+
+    template <typename Function> void forEachHandle(Function&& function) const {
+        pool_.forEachHandle(std::forward<Function>(function));
+    }
+
     template <typename Function> void forEachEntry(Function&& function) {
         for (const auto& [key, handle] : keyIndex_) {
             if (Resource* resource = pool_.find(handle))

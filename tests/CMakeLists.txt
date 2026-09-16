@@ -83,6 +83,11 @@ mini_add_test(HandlePoolTest)
 mini_add_test(FrustumTest)
 mini_add_test(TransferTest)
 mini_add_test(MeshTest)
+mini_add_gtest(MeshGuidIdentityTest)
+target_compile_definitions(MeshGuidIdentityTest PRIVATE
+    MINI_TEST_ASSET_DIR="${CMAKE_BINARY_DIR}/assets"
+)
+add_dependencies(MeshGuidIdentityTest MiniCopyBuiltin)
 mini_add_test(TextureTest)
 mini_add_test(RenderCacheTest)
 mini_add_test(SceneTest)

@@ -53,7 +53,7 @@ using namespace engine;
         !validateMesh(source.desc, source.meshData)) {
         return {};
     }
-    return MESH_MANAGER.insert(source.instantiate());
+    return MESH_MANAGER.insertUnkeyed(source.instantiate());
 }
 
 [[nodiscard]] std::unique_ptr<Scene> buildExportScene(MeshHandle mesh, MaterialHandle material) {
@@ -199,9 +199,9 @@ int main() {
     std::vector<VirtualPath> requestedMaterials;
     const SceneInstantiationContext context{
         .loadMesh =
-            [&requestedMeshes](const VirtualPath& path) {
+            [&requestedMeshes, meshHandle](const VirtualPath& path) {
                 requestedMeshes.push_back(path);
-                return MESH_MANAGER.findHandle(path);
+                return meshHandle;
             },
         .loadMaterial =
             [&requestedMaterials, materialHandle](const VirtualPath& path) {

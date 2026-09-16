@@ -1,6 +1,7 @@
 #pragma once
 
 #include "asset/base/Asset.h"
+#include "asset/base/AssetId.h"
 #include "core/math/Math.h"
 #include "core/serialization/Transferable.h"
 #include "render/mesh/MeshPrimitive.h"
@@ -17,6 +18,7 @@
 
 namespace engine {
 
+class MeshAsset;
 class MeshManager;
 
 enum class VertexSemanticType {
@@ -268,6 +270,11 @@ public:
     [[nodiscard]] bool dirty() const { return dirty_; }
     void markClean() { dirty_ = false; }
 
+    [[nodiscard]] AssetId assetId() const { return assetId_; }
+    [[nodiscard]] bool isAssetBacked() const { return assetId_.valid(); }
+    [[nodiscard]] Mesh clone() const;
+    void rebuildFromAsset(const MeshAsset& asset);
+
     [[nodiscard]] bool updateVertexData(std::uint32_t binding,
                                         std::uint32_t firstVertex,
                                         std::span<const std::byte> source);
@@ -281,6 +288,7 @@ private:
     void cacheVertexLayoutHash() { vertexLayoutHash_ = desc_.vertexLayout.hash(); }
 
     VirtualPath assetPath_;
+    AssetId assetId_;
     MeshDesc desc_;
     MeshData data_;
     std::optional<MeshBuildRecipe> buildRecipe_;
