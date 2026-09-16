@@ -7,12 +7,14 @@
 namespace engine {
 
 class TextureManager final : public Singleton<TextureManager>,
-                             public KeyedHandleRegistry<Texture,
-                                                        TextureHandle,
-                                                        VirtualPath,
-                                                        VirtualPathHash> {
+                             public KeyedHandleRegistry<Texture, TextureHandle, AssetId> {
 public:
+    [[nodiscard]] TextureHandle load(const AssetId& assetId);
     [[nodiscard]] TextureHandle load(const VirtualPath& texturePath);
+    [[nodiscard]] TextureHandle clone(TextureHandle source);
+    void refreshAsset(const AssetId& assetId);
+    void refreshAsset(const VirtualPath& texturePath);
+
     [[nodiscard]] TextureHandle defaultWhite();
     [[nodiscard]] TextureHandle defaultBlack();
     [[nodiscard]] TextureHandle defaultNormal();
@@ -25,10 +27,11 @@ private:
     friend class Singleton<TextureManager>;
     TextureManager() = default;
 
-    [[nodiscard]] VirtualPath keyOf(const Texture& texture) const override {
-        return texture.assetPath();
+    [[nodiscard]] AssetId keyOf(const Texture& texture) const override {
+        return texture.assetId();
     }
     [[nodiscard]] bool validate(const Texture& texture) const override;
+    [[nodiscard]] TextureHandle loadFromPath(const VirtualPath& path, const AssetId& assetId);
     [[nodiscard]] TextureHandle createBuiltin(const VirtualPath& path,
                                               std::uint32_t width,
                                               std::uint32_t height,

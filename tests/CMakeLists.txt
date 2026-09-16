@@ -177,6 +177,12 @@ target_compile_definitions(MaterialGuidIdentityTest PRIVATE
 )
 add_dependencies(MaterialGuidIdentityTest MiniCopyBuiltin)
 
+mini_add_gtest(TextureGuidIdentityTest)
+target_compile_definitions(TextureGuidIdentityTest PRIVATE
+    MINI_TEST_ASSET_DIR="${CMAKE_BINARY_DIR}/assets"
+)
+add_dependencies(TextureGuidIdentityTest MiniCopyBuiltin)
+
 mini_add_test(ShaderAssetTest)
 target_compile_definitions(ShaderAssetTest PRIVATE
     MINI_TEST_ASSET_DIR="${CMAKE_BINARY_DIR}/assets"

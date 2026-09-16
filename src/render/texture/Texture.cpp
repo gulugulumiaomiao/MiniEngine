@@ -64,6 +64,26 @@ bool validateTexture(const TextureDesc& desc, std::span<const TextureMipData> mi
     return true;
 }
 
+Texture Texture::clone() const {
+    Texture copy;
+    copy.assetPath_ = assetPath_;
+    copy.desc_ = desc_;
+    copy.mipData_ = mipData_;
+    copy.version_ = version_;
+    copy.dirty_ = true;
+    // assetId_ stays empty: a clone is detached from its source asset.
+    return copy;
+}
+
+void Texture::rebuildFromAsset(const TextureAsset& asset) {
+    if (!validateTexture(asset.desc, asset.mipData))
+        return;
+    desc_ = asset.desc;
+    mipData_ = asset.mipData;
+    ++version_;
+    dirty_ = true;
+}
+
 Texture TextureAsset::instantiate() const {
     Texture result;
     if (!validateTexture(desc, mipData))

@@ -72,9 +72,11 @@ bool AssetManager::initialize(AssetManagerMode mode) {
         } else if (notification.type == AssetType::Mesh && !notification.removed &&
                    MESH_MANAGER.find(notification.path)) {
             (void)MESH_MANAGER.replace(notification.path);
-        } else if (notification.type == AssetType::Texture && !notification.removed &&
-                   TEXTURE_MANAGER.find(notification.path)) {
-            (void)TEXTURE_MANAGER.replace(notification.path);
+        } else if (notification.type == AssetType::Texture && !notification.removed) {
+            const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(notification.path);
+            if (assetId && TEXTURE_MANAGER.find(*assetId)) {
+                (void)TEXTURE_MANAGER.replace(notification.path);
+            }
         }
         if (changeListener_) {
             changeListener_(notification.path, notification.type, notification.removed);

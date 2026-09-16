@@ -1,6 +1,7 @@
 #pragma once
 
 #include "asset/base/Asset.h"
+#include "asset/base/AssetId.h"
 #include "render/base/RenderHandle.h"
 
 #include <cstddef>
@@ -60,11 +61,17 @@ public:
     [[nodiscard]] bool dirty() const { return dirty_; }
     void markClean() { dirty_ = false; }
 
+    [[nodiscard]] AssetId assetId() const { return assetId_; }
+    [[nodiscard]] bool isAssetBacked() const { return assetId_.valid(); }
+    [[nodiscard]] Texture clone() const;
+    void rebuildFromAsset(const TextureAsset& asset);
+
 private:
     friend class TextureAsset;
     friend class TextureManager;
 
     VirtualPath assetPath_;
+    AssetId assetId_;
     TextureDesc desc_;
     std::vector<TextureMipData> mipData_;
     std::uint64_t version_{1};
