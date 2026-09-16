@@ -46,8 +46,7 @@ using ShaderRegistry = engine::KeyedHandleRegistry<engine::Shader,
                                                    engine::VirtualPathHash>;
 using MaterialRegistry = engine::KeyedHandleRegistry<engine::Material,
                                                      engine::MaterialHandle,
-                                                     engine::VirtualPath,
-                                                     engine::VirtualPathHash>;
+                                                     engine::AssetId>;
 static_assert(std::is_base_of_v<ShaderRegistry, engine::ShaderManager>);
 static_assert(std::is_base_of_v<MaterialRegistry, engine::MaterialManager>);
 static_assert(std::is_abstract_v<ShaderRegistry>);

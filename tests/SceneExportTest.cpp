@@ -204,9 +204,9 @@ int main() {
                 return MESH_MANAGER.findHandle(path);
             },
         .loadMaterial =
-            [&requestedMaterials](const VirtualPath& path) {
+            [&requestedMaterials, materialHandle](const VirtualPath& path) {
                 requestedMaterials.push_back(path);
-                return MATERIAL_MANAGER.findHandle(path);
+                return materialHandle;
             },
     };
     std::unique_ptr<Scene> runtime = reparsed->instantiate(context);

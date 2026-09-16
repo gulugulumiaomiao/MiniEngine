@@ -1,5 +1,6 @@
 ﻿#include "render/material/Material.h"
 
+#include "asset/database/AssetDatabase.h"
 #include "core/logging/Log.h"
 #include "core/serialization/Transfer.h"
 #include "render/shader/ShaderManager.h"
@@ -193,10 +194,12 @@ ShaderValue Material::propertyValue(const ShaderPropertyDesc& property) const {
     assert(false && "Unsupported shader property type");
 }
 
-void Material::initialize(VirtualPath assetPath,
+void Material::initialize(AssetId assetId,
+                          VirtualPath assetPath,
                           std::string materialName,
                           ShaderHandle shader,
                           std::optional<int> renderQueueOverride) {
+    assetId_ = assetId;
     assetPath_ = std::move(assetPath);
     name = std::move(materialName);
     renderQueueOverride_ = renderQueueOverride;
@@ -235,6 +238,7 @@ void Material::rebuildForShader(ShaderHandle newShaderHandle, bool preserveValue
     }
 
     Material replacement;
+    replacement.assetId_ = assetId_;
     replacement.assetPath_ = assetPath_;
     replacement.name = name;
     replacement.shaderHandle_ = newShaderHandle;
@@ -271,7 +275,8 @@ void Material::rebuildForShader(ShaderHandle newShaderHandle, bool preserveValue
 
 Material MaterialAsset::instantiate(ShaderHandle shaderHandle) const {
     Material material;
-    material.initialize(assetPath(), name, shaderHandle, renderQueue);
+    const AssetId assetId = ASSET_DATABASE.findGuid(assetPath()).value_or(AssetId{});
+    material.initialize(assetId, assetPath(), name, shaderHandle, renderQueue);
     const Shader* shader = SHADER_MANAGER.find(shaderHandle);
     if (!shader)
         return material;
@@ -454,6 +459,68 @@ void Material::markChanged() {
     }
     ++version_;
     dirty_ = true;
+}
+
+Material Material::clone() const {
+    Material copy;
+    copy.assetId_ = AssetId{}; // Detached from source asset.
+    copy.assetPath_ = assetPath_;
+    copy.name = name;
+    copy.uniformLayout = uniformLayout;
+    copy.uniformData = uniformData;
+    copy.textures = textures;
+    copy.keywords = keywords;
+    copy.renderQueue = renderQueue;
+    copy.shaderHandle_ = shaderHandle_;
+    copy.shaderRevision_ = shaderRevision_;
+    copy.renderQueueOverride_ = renderQueueOverride_;
+    copy.suppressChanges_ = false;
+    copy.dirty_ = true;
+    copy.version_ = version_;
+    return copy;
+}
+
+void Material::rebuildFromAsset(const MaterialAsset& asset, ShaderHandle newShader) {
+    const Shader* newShaderValue = SHADER_MANAGER.find(newShader);
+    if (!newShaderValue) {
+        Log::error("Material", "ShaderHandle must be valid");
+        return;
+    }
+
+    // Keep identity in sync with the latest database record.
+    if (const auto resolvedId = ASSET_DATABASE.findGuid(asset.assetPath())) {
+        assetId_ = *resolvedId;
+    }
+    assetPath_ = asset.assetPath();
+    name = asset.name;
+    renderQueueOverride_ = asset.renderQueue;
+
+    // Rebuild layout if the shader changed, preserving compatible overrides.
+    if (shaderHandle_ != newShader || shaderRevision_ != newShaderValue->revision()) {
+        rebuildForShader(newShader, true);
+    }
+
+    // Apply authoritative asset values.
+    suppressChanges_ = true;
+    for (const auto& [propertyName, value] : asset.properties) {
+        setPropertyValue(propertyName, value);
+    }
+
+    keywords.clear();
+    for (const std::string& keyword : asset.keywords) {
+        if (newShaderValue->declaresKeyword(keyword)) {
+            keywords.push_back(keyword);
+        } else {
+            Log::warn("Material",
+                      "Keyword is not declared by shader: %s (%s)",
+                      keyword.c_str(),
+                      name.c_str());
+        }
+    }
+    suppressChanges_ = false;
+
+    renderQueue = renderQueueOverride_.value_or(newShaderValue->defaultSubShader().renderQueue());
+    markChanged();
 }
 
 } // namespace engine

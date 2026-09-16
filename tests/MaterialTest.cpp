@@ -1,6 +1,7 @@
 ﻿#include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/shader/ShaderManager.h"
+#include "asset/database/AssetDatabase.h"
 #include "asset/manager/AssetManager.h"
 #include "asset/importer/FileWatcher.h"
 #include "TestAssetEnvironment.h"
@@ -42,8 +43,9 @@ int main() {
     const MaterialHandle coolShared =
         materials.load(VirtualPath{"assets://materials/cool_vertex_color.material.json"});
     Material& warmData = *materials.find(warm);
-    if (materials.load(cachedMaterialA->assetPath()) != warm ||
-        materials.find(cachedMaterialA->assetPath()) != &warmData || materials.size() != 2) {
+    const auto warmAssetId = ASSET_DATABASE.findGuid(cachedMaterialA->assetPath());
+    if (!warmAssetId || materials.load(cachedMaterialA->assetPath()) != warm ||
+        materials.find(*warmAssetId) != &warmData || materials.size() != 2) {
         return 24;
     }
     const MaterialHandle errorMaterial = materials.errorMaterial();
@@ -92,7 +94,7 @@ int main() {
         return 20;
     }
     materials.clear();
-    if (materials.find(cachedMaterialA->assetPath()) || materials.size() != 0) {
+    if (materials.find(*warmAssetId) || materials.size() != 0) {
         return 25;
     }
     FILE_WATCHER.stop();

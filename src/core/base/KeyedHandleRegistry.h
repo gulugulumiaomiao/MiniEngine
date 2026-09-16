@@ -33,6 +33,15 @@ public:
         return handle;
     }
 
+    // Inserts a resource that is not reachable through the primary key index.
+    // Useful for runtime clones or temporary instances that must not collide
+    // with asset-backed resources or be returned by findHandle(key).
+    [[nodiscard]] HandleType insertUnkeyed(Resource resource) {
+        if (!validate(resource))
+            return {};
+        return pool_.insert(std::move(resource));
+    }
+
     [[nodiscard]] Resource* find(HandleType handle) { return pool_.find(handle); }
 
     [[nodiscard]] const Resource* find(HandleType handle) const { return pool_.find(handle); }

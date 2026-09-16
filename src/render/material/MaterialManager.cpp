@@ -1,5 +1,6 @@
 #include "render/material/MaterialManager.h"
 
+#include "asset/database/AssetDatabase.h"
 #include "asset/manager/AssetManager.h"
 #include "core/logging/Log.h"
 #include "render/shader/ShaderManager.h"
@@ -14,14 +15,46 @@ const VirtualPath kErrorMaterialPath{"assets://materials/error.material.json"};
 
 } // namespace
 
-MaterialHandle MaterialManager::load(const VirtualPath& materialPath) {
-    if (!materialPath.valid()) {
-        Log::error("MaterialManager", "Invalid Material path: %s", materialPath.string().c_str());
+MaterialHandle MaterialManager::load(const AssetId& assetId) {
+    if (!assetId.valid()) {
+        Log::error("MaterialManager", "Invalid Material AssetId");
         return errorMaterial();
     }
-    if (const MaterialHandle existing = findHandle(materialPath); existing) {
+    if (const MaterialHandle existing = findHandle(assetId); existing) {
         return existing;
     }
+    const std::optional<VirtualPath> path = ASSET_DATABASE.findPath(assetId);
+    if (!path) {
+        Log::error("MaterialManager",
+                   "Unknown Material AssetId: %s",
+                   assetId.toString().c_str());
+        return errorMaterial();
+    }
+    return loadFromPath(*path, assetId);
+}
+
+MaterialHandle MaterialManager::load(const VirtualPath& materialPath) {
+    if (!materialPath.valid()) {
+        Log::error("MaterialManager",
+                   "Invalid Material path: %s",
+                   materialPath.string().c_str());
+        return errorMaterial();
+    }
+    const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(materialPath);
+    if (!assetId) {
+        Log::error("MaterialManager",
+                   "Material path has no AssetId: %s",
+                   materialPath.string().c_str());
+        return errorMaterial();
+    }
+    if (const MaterialHandle existing = findHandle(*assetId); existing) {
+        return existing;
+    }
+    return loadFromPath(materialPath, *assetId);
+}
+
+MaterialHandle MaterialManager::loadFromPath(const VirtualPath& materialPath,
+                                             const AssetId& assetId) {
     Log::info("Material", "Loading material: %s", materialPath.string().c_str());
     const std::shared_ptr<MaterialAsset> asset =
         ASSET_MANAGER.loadAsset<MaterialAsset>(materialPath);
@@ -29,23 +62,84 @@ MaterialHandle MaterialManager::load(const VirtualPath& materialPath) {
         return materialPath == kErrorMaterialPath ? MaterialHandle{} : errorMaterial();
     }
     const ShaderHandle shader = SHADER_MANAGER.load(asset->shader);
-    if (!shader)
+    if (!shader) {
         return materialPath == kErrorMaterialPath ? MaterialHandle{} : errorMaterial();
-    return insert(asset->instantiate(shader));
+    }
+    Material material = asset->instantiate(shader);
+    material.assetId_ = assetId;
+    return insert(std::move(material));
 }
 
 MaterialHandle MaterialManager::errorMaterial() {
-    if (const MaterialHandle existing = findHandle(kErrorMaterialPath); existing)
-        return existing;
-
-    const std::shared_ptr<MaterialAsset> asset =
-        ASSET_MANAGER.loadAsset<MaterialAsset>(kErrorMaterialPath);
-    const ShaderHandle shader = SHADER_MANAGER.builtinColor();
-    if (!asset || !shader) {
-        Log::error("MaterialManager", "Built-in Error Material is unavailable");
+    const std::optional<AssetId> errorId = ASSET_DATABASE.findGuid(kErrorMaterialPath);
+    if (!errorId) {
+        Log::error("MaterialManager",
+                   "Error Material has no AssetId; database may be uninitialized");
         return {};
     }
-    return insert(asset->instantiate(shader));
+    if (const MaterialHandle existing = findHandle(*errorId); existing)
+        return existing;
+    return load(kErrorMaterialPath);
+}
+
+MaterialHandle MaterialManager::clone(MaterialHandle source) {
+    Material* material = find(source);
+    if (!material) {
+        Log::error("MaterialManager", "Cannot clone an invalid Material");
+        return {};
+    }
+    return insertUnkeyed(material->clone());
+}
+
+void MaterialManager::refreshAsset(const AssetId& assetId) {
+    if (!assetId.valid()) {
+        Log::error("MaterialManager", "Cannot refresh an invalid AssetId");
+        return;
+    }
+    const std::optional<VirtualPath> path = ASSET_DATABASE.findPath(assetId);
+    if (!path) {
+        Log::error("MaterialManager",
+                   "Unknown Material AssetId: %s",
+                   assetId.toString().c_str());
+        return;
+    }
+    const std::shared_ptr<MaterialAsset> asset =
+        ASSET_MANAGER.loadAsset<MaterialAsset>(*path);
+    if (!asset) {
+        Log::error("MaterialManager",
+                   "Failed to reload material asset: %s",
+                   path->string().c_str());
+        return;
+    }
+    const ShaderHandle shader = SHADER_MANAGER.load(asset->shader);
+    if (!shader) {
+        Log::error("MaterialManager",
+                   "Failed to reload shader for material: %s",
+                   path->string().c_str());
+        return;
+    }
+    forEach([&assetId, &asset, shader](Material& material) {
+        if (material.assetId() == assetId) {
+            material.rebuildFromAsset(*asset, shader);
+        }
+    });
+}
+
+void MaterialManager::refreshAsset(const VirtualPath& materialPath) {
+    if (!materialPath.valid()) {
+        Log::error("MaterialManager",
+                   "Invalid Material path: %s",
+                   materialPath.string().c_str());
+        return;
+    }
+    const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(materialPath);
+    if (!assetId) {
+        Log::error("MaterialManager",
+                   "Material path has no AssetId: %s",
+                   materialPath.string().c_str());
+        return;
+    }
+    refreshAsset(*assetId);
 }
 
 bool MaterialManager::validate(const Material& material) const {

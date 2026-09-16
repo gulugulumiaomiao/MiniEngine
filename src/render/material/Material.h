@@ -1,5 +1,6 @@
 #pragma once
 
+#include "asset/base/AssetId.h"
 #include "render/base/RenderHandle.h"
 #include "render/shader/Shader.h"
 
@@ -44,6 +45,8 @@ public:
     int renderQueue{2000};
 
     [[nodiscard]] const VirtualPath& assetPath() const { return assetPath_; }
+    [[nodiscard]] AssetId assetId() const { return assetId_; }
+    [[nodiscard]] bool isAssetBacked() const { return assetId_.valid(); }
     [[nodiscard]] const Shader& shader() const;
     [[nodiscard]] ShaderHandle shaderHandle() const { return shaderHandle_; }
     // 写回专用：只暴露 override（nullopt = 沿用 shader 默认），生效值 renderQueue
@@ -52,6 +55,11 @@ public:
         return renderQueueOverride_;
     }
     void setShader(ShaderHandle shader);
+
+    // Creates a detached runtime copy. The clone is not asset-backed: changes to
+    // the source asset will not affect it, and it will not be returned by
+    // MaterialManager::findHandle(assetId).
+    [[nodiscard]] Material clone() const;
 
     [[nodiscard]] float getFloat(std::string_view name) const;
     [[nodiscard]] math::Vec2 getVec2(std::string_view name) const;
@@ -75,15 +83,18 @@ public:
 private:
     friend class MaterialManager;
     friend class MaterialAsset;
-    void initialize(VirtualPath assetPath,
+    void initialize(AssetId assetId,
+                    VirtualPath assetPath,
                     std::string materialName,
                     ShaderHandle shader,
                     std::optional<int> renderQueueOverride);
     void rebuildForShader(ShaderHandle shader, bool preserveValues);
+    void rebuildFromAsset(const MaterialAsset& asset, ShaderHandle newShader);
     [[nodiscard]] ShaderValue propertyValue(const ShaderPropertyDesc& property) const;
     void setPropertyValue(std::string_view name, const ShaderValue& value);
     void markChanged();
 
+    AssetId assetId_;
     VirtualPath assetPath_;
     ShaderHandle shaderHandle_;
     std::uint64_t shaderRevision_{};
