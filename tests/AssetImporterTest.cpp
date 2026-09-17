@@ -8,6 +8,7 @@
 #include "render/mesh/Mesh.h"
 #include "render/shader/Shader.h"
 #include "render/texture/Texture.h"
+#include "rhi/api/Sampler.h"
 
 #include <algorithm>
 #include <array>
@@ -340,6 +341,45 @@ int main() {
         singleMip.desc.mipCount != 1 || singleMip.mipData.size() != 1 ||
         singleMip.mipData.front().bytes.size() != 16) {
         return 17;
+    }
+
+    // 采样器设置：filter/wrap/aniso 参与 hash 并写入 artifact。
+    const VirtualPath samplerPath{"assets://textures/import_sampler.png"};
+    const AssetMeta samplerMeta{1, AssetId::generate(), AssetType::Texture};
+    const VirtualPath samplerArtifactPath = ASSET_DATABASE.artifactPath(samplerMeta.assetId);
+    const AssetImportContext samplerContext{
+        samplerMeta, samplerPath, assetMetaPath(samplerPath), samplerArtifactPath};
+    TextureImportSettings samplerSettings;
+    samplerSettings.filterMode = TextureFilterMode::Point;
+    samplerSettings.wrapModeU = TextureAddressMode::ClampToEdge;
+    samplerSettings.wrapModeV = TextureAddressMode::MirroredRepeat;
+    samplerSettings.anisoLevel = 4.0F;
+    if (samplerSettings.hash() == TextureImportSettings{}.hash() ||
+        !FILE_SYSTEM.writeBinary(samplerPath, png)) {
+        return 18;
+    }
+    const AssetImportResult samplerResult =
+        registry.find(AssetType::Texture)->import(samplerContext, samplerSettings);
+    const auto samplerArtifact = loadAssetArtifact(samplerArtifactPath);
+    TextureAsset samplerAsset;
+    BinaryReader samplerReader{samplerArtifact ? samplerArtifact->payload
+                                               : std::span<const std::byte>{}};
+    if (!samplerResult.success || !samplerArtifact ||
+        !samplerAsset.transfer(samplerReader) || !samplerReader.finished() ||
+        samplerAsset.desc.sampler.filterMode != TextureFilterMode::Point ||
+        samplerAsset.desc.sampler.addressModeU != TextureAddressMode::ClampToEdge ||
+        samplerAsset.desc.sampler.addressModeV != TextureAddressMode::MirroredRepeat ||
+        samplerAsset.desc.sampler.maxAnisotropy != 4.0F) {
+        return 18;
+    }
+    const rhi::SamplerDesc rhiSampler = samplerAsset.desc.sampler.toRhi();
+    if (rhiSampler.minFilter != rhi::SamplerFilter::Nearest ||
+        rhiSampler.magFilter != rhi::SamplerFilter::Nearest ||
+        rhiSampler.mipmapFilter != rhi::SamplerMipmapFilter::Nearest ||
+        rhiSampler.addressU != rhi::SamplerAddressMode::ClampToEdge ||
+        rhiSampler.addressV != rhi::SamplerAddressMode::MirroredRepeat ||
+        rhiSampler.maxAnisotropy != 4.0F) {
+        return 18;
     }
 
     // gatherDependencies：Material 声明 Shader 与实际引用的 Texture（只解析源文件）。

@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cctype>
 #include <cstring>
 #include <limits>
@@ -228,12 +229,20 @@ std::shared_ptr<TextureAsset> decodeKtx2(std::span<const std::byte> source) {
 } // namespace
 
 bool TextureImportSettings::transfer(Transfer& archive) {
-    return archive.transfer("generate_mipmaps", generateMipmaps);
+    return archive.transfer("generate_mipmaps", generateMipmaps) &&
+           archive.transfer("filter_mode", filterMode) &&
+           archive.transfer("wrap_mode_u", wrapModeU) &&
+           archive.transfer("wrap_mode_v", wrapModeV) &&
+           archive.transfer("aniso_level", anisoLevel);
 }
 
 Hash64 TextureImportSettings::hash() const {
     Hash64 hash = hashString("TextureImportSettings");
     hashAppend(hash, generateMipmaps);
+    hashAppend(hash, filterMode);
+    hashAppend(hash, wrapModeU);
+    hashAppend(hash, wrapModeV);
+    hashAppend(hash, std::bit_cast<std::uint32_t>(anisoLevel));
     return hash;
 }
 
@@ -275,7 +284,15 @@ AssetImportResult TextureAssetImporter::import(const AssetImportContext& context
         texture = decodeKtx2(*source);
     else
         texture = decodeImage(*source, textureSettings->generateMipmaps);
-    if (!texture || !validateTexture(texture->desc, texture->mipData))
+    if (!texture)
+        return fail("Unsupported or invalid Texture: " + context.sourcePath.string());
+
+    texture->desc.sampler = TextureSamplerSettings{textureSettings->filterMode,
+                                                   textureSettings->wrapModeU,
+                                                   textureSettings->wrapModeV,
+                                                   textureSettings->anisoLevel};
+
+    if (!validateTexture(texture->desc, texture->mipData))
         return fail("Unsupported or invalid Texture: " + context.sourcePath.string());
     return writeAssetArtifact(context, *texture, AssetType::Texture);
 }

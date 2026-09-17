@@ -1,13 +1,17 @@
 #pragma once
 
 #include "core/base/Singleton.h"
+#include "core/math/hash.h"
 #include "render/gpu/texture/TextureGpuCache.h"
 #include "render/texture/Texture.h"
 #include "rhi/api/ResourceDesc.h"
+#include "rhi/api/Sampler.h"
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string_view>
+#include <unordered_map>
 
 namespace engine {
 
@@ -33,11 +37,14 @@ private:
     friend class Singleton<TextureGpuManager>;
     TextureGpuManager();
 
+    [[nodiscard]] rhi::SamplerHandle resolveSampler(const rhi::SamplerDesc& desc);
+
     rhi::IDevice* device_{};
     TextureGpuCache cache_;
     std::unique_ptr<TextureGpuFactory> textureFactory_;
     std::unique_ptr<SamplerGpuFactory> samplerFactory_;
     rhi::SamplerHandle defaultSampler_;
+    std::unordered_map<std::uint64_t, rhi::SamplerHandle> samplerCache_;
 };
 
 } // namespace engine

@@ -1,6 +1,8 @@
 #include "rhi/vulkan/VulkanSampler.h"
 #include "core/logging/Log.h"
 
+#include <algorithm>
+
 namespace engine::rhi::vulkan {
 namespace {
 
@@ -19,7 +21,7 @@ VkSamplerAddressMode toVulkan(SamplerAddressMode mode) {
 
 } // namespace
 
-VulkanSampler::VulkanSampler(VkDevice device, const SamplerDesc& desc)
+VulkanSampler::VulkanSampler(VkDevice device, const SamplerDesc& desc, float maxAnisotropyLimit)
     : device_(device), desc_(desc) {
     VkSamplerCreateInfo createInfo{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
     createInfo.magFilter = toVulkan(desc.magFilter);
@@ -30,8 +32,9 @@ VulkanSampler::VulkanSampler(VkDevice device, const SamplerDesc& desc)
     createInfo.addressModeU = toVulkan(desc.addressU);
     createInfo.addressModeV = toVulkan(desc.addressV);
     createInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    createInfo.anisotropyEnable = VK_FALSE;
-    createInfo.maxAnisotropy = 1.0F;
+    createInfo.anisotropyEnable = desc.maxAnisotropy > 1.0F ? VK_TRUE : VK_FALSE;
+    createInfo.maxAnisotropy =
+        std::max(1.0F, std::min(desc.maxAnisotropy, maxAnisotropyLimit));
     createInfo.maxLod = VK_LOD_CLAMP_NONE;
     if (vkCreateSampler(device_, &createInfo, nullptr, &sampler_) != VK_SUCCESS) {
         Log::fatal("VulkanSampler", "vkCreateSampler failed");

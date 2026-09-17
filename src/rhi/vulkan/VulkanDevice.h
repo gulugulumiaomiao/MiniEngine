@@ -182,6 +182,7 @@ private:
     VkCommandPool commandPool_{VK_NULL_HANDLE};
     std::uint32_t graphicsQueueFamily_{};
     std::uint32_t presentQueueFamily_{};
+    float maxSamplerAnisotropy_{1.0F};
     HandlePool<BufferResource, BufferHandle> buffers_;
     HandlePool<ShaderResource, ShaderHandle> shaders_;
     HandlePool<PipelineResource, GraphicsPipelineHandle> pipelines_;

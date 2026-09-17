@@ -7,10 +7,25 @@
 #include "render/texture/TextureManager.h"
 #include "rhi/api/Device.h"
 
+#include <bit>
 #include <string>
 #include <utility>
 
 namespace engine {
+namespace {
+
+Hash64 hashSamplerDesc(const rhi::SamplerDesc& desc) {
+    Hash64 hash = hashString("SamplerDesc");
+    hashAppend(hash, static_cast<std::uint8_t>(desc.minFilter));
+    hashAppend(hash, static_cast<std::uint8_t>(desc.magFilter));
+    hashAppend(hash, static_cast<std::uint8_t>(desc.mipmapFilter));
+    hashAppend(hash, static_cast<std::uint8_t>(desc.addressU));
+    hashAppend(hash, static_cast<std::uint8_t>(desc.addressV));
+    hashAppend(hash, std::bit_cast<std::uint32_t>(desc.maxAnisotropy));
+    return hash;
+}
+
+} // namespace
 
 TextureGpuManager::TextureGpuManager() = default;
 TextureGpuManager::~TextureGpuManager() = default;
@@ -41,9 +56,13 @@ std::optional<rhi::TextureBinding> TextureGpuManager::resolve(TextureHandle hand
     if (!initialized() || !texture)
         return std::nullopt;
 
+    const rhi::SamplerHandle sampler = resolveSampler(texture->desc().sampler.toRhi());
+    if (!sampler)
+        return std::nullopt;
+
     const TextureGpuCacheKey key = TextureGpuCache::key(handle, texture->version());
     if (const TextureGpuResource* cached = cache_.find(key))
-        return rhi::TextureBinding{cached->view, defaultSampler_};
+        return rhi::TextureBinding{cached->view, sampler};
 
     TextureGpuResource created;
     if (!textureFactory_->create({*texture}, created))
@@ -54,7 +73,20 @@ std::optional<rhi::TextureBinding> TextureGpuManager::resolve(TextureHandle hand
     if (stored.replaced)
         textureFactory_->release(*stored.replaced);
     texture->markClean();
-    return rhi::TextureBinding{stored.stored->view, defaultSampler_};
+    return rhi::TextureBinding{stored.stored->view, sampler};
+}
+
+rhi::SamplerHandle TextureGpuManager::resolveSampler(const rhi::SamplerDesc& desc) {
+    const std::uint64_t key = hashSamplerDesc(desc);
+    if (const auto found = samplerCache_.find(key); found != samplerCache_.end())
+        return found->second;
+
+    rhi::SamplerHandle handle;
+    if (!samplerFactory_->create(desc, handle))
+        return {};
+
+    samplerCache_.emplace(key, handle);
+    return handle;
 }
 
 std::optional<rhi::TextureBinding> TextureGpuManager::resolveReference(std::string_view reference) {
@@ -89,8 +121,12 @@ void TextureGpuManager::shutdown() {
         return;
     for (auto& entry : cache_.extractAll())
         textureFactory_->release(entry.second);
-    if (samplerFactory_)
+    if (samplerFactory_) {
+        for (const auto& entry : samplerCache_)
+            samplerFactory_->release(const_cast<rhi::SamplerHandle&>(entry.second));
+        samplerCache_.clear();
         samplerFactory_->release(defaultSampler_);
+    }
     samplerFactory_.reset();
     textureFactory_.reset();
     device_ = nullptr;

@@ -11,7 +11,7 @@ namespace engine {
 namespace {
 
 constexpr std::uint32_t kTextureMagic = 0x52584554U;
-constexpr std::uint16_t kTextureVersion = 1;
+constexpr std::uint16_t kTextureVersion = 2;
 
 bool rgbaByteSize(std::uint32_t width, std::uint32_t height, std::size_t& result) {
     constexpr std::size_t channels = 4;
@@ -34,11 +34,60 @@ bool TextureMipData::transfer(Transfer& archive) {
            archive.endObject();
 }
 
+bool TextureSamplerSettings::transfer(Transfer& archive) {
+    return archive.beginObject({}) && archive.transfer("filter_mode", filterMode) &&
+           archive.transfer("address_mode_u", addressModeU) &&
+           archive.transfer("address_mode_v", addressModeV) &&
+           archive.transfer("max_anisotropy", maxAnisotropy) && archive.endObject();
+}
+
+rhi::SamplerDesc TextureSamplerSettings::toRhi() const {
+    rhi::SamplerDesc desc;
+    desc.maxAnisotropy = maxAnisotropy;
+    switch (addressModeU) {
+    case TextureAddressMode::Repeat: desc.addressU = rhi::SamplerAddressMode::Repeat; break;
+    case TextureAddressMode::MirroredRepeat:
+        desc.addressU = rhi::SamplerAddressMode::MirroredRepeat;
+        break;
+    case TextureAddressMode::ClampToEdge:
+        desc.addressU = rhi::SamplerAddressMode::ClampToEdge;
+        break;
+    }
+    switch (addressModeV) {
+    case TextureAddressMode::Repeat: desc.addressV = rhi::SamplerAddressMode::Repeat; break;
+    case TextureAddressMode::MirroredRepeat:
+        desc.addressV = rhi::SamplerAddressMode::MirroredRepeat;
+        break;
+    case TextureAddressMode::ClampToEdge:
+        desc.addressV = rhi::SamplerAddressMode::ClampToEdge;
+        break;
+    }
+    switch (filterMode) {
+    case TextureFilterMode::Point:
+        desc.minFilter = rhi::SamplerFilter::Nearest;
+        desc.magFilter = rhi::SamplerFilter::Nearest;
+        desc.mipmapFilter = rhi::SamplerMipmapFilter::Nearest;
+        break;
+    case TextureFilterMode::Bilinear:
+        desc.minFilter = rhi::SamplerFilter::Linear;
+        desc.magFilter = rhi::SamplerFilter::Linear;
+        desc.mipmapFilter = rhi::SamplerMipmapFilter::Nearest;
+        break;
+    case TextureFilterMode::Trilinear:
+        desc.minFilter = rhi::SamplerFilter::Linear;
+        desc.magFilter = rhi::SamplerFilter::Linear;
+        desc.mipmapFilter = rhi::SamplerMipmapFilter::Linear;
+        break;
+    }
+    return desc;
+}
+
 bool TextureDesc::transfer(Transfer& archive) {
     return archive.beginObject({}) && archive.transfer("type", type) &&
            archive.transfer("format", format) && archive.transfer("color_space", colorSpace) &&
            archive.transfer("width", width) && archive.transfer("height", height) &&
-           archive.transfer("mip_count", mipCount) && archive.endObject();
+           archive.transfer("mip_count", mipCount) && archive.transfer("sampler", sampler) &&
+           archive.endObject();
 }
 
 bool validateTexture(const TextureDesc& desc, std::span<const TextureMipData> mipData) {
@@ -47,7 +96,20 @@ bool validateTexture(const TextureDesc& desc, std::span<const TextureMipData> mi
         (desc.format != TextureFormat::Rgba8Unorm && desc.format != TextureFormat::Rgba8Srgb) ||
         (desc.colorSpace != TextureColorSpace::Linear &&
          desc.colorSpace != TextureColorSpace::Srgb) ||
-        (desc.format == TextureFormat::Rgba8Srgb) != (desc.colorSpace == TextureColorSpace::Srgb)) {
+        (desc.format == TextureFormat::Rgba8Srgb) != (desc.colorSpace == TextureColorSpace::Srgb) ||
+        desc.sampler.maxAnisotropy < 1.0F) {
+        return false;
+    }
+    const auto validFilter = [](TextureFilterMode value) {
+        return value == TextureFilterMode::Point || value == TextureFilterMode::Bilinear ||
+               value == TextureFilterMode::Trilinear;
+    };
+    const auto validAddress = [](TextureAddressMode value) {
+        return value == TextureAddressMode::Repeat || value == TextureAddressMode::MirroredRepeat ||
+               value == TextureAddressMode::ClampToEdge;
+    };
+    if (!validFilter(desc.sampler.filterMode) || !validAddress(desc.sampler.addressModeU) ||
+        !validAddress(desc.sampler.addressModeV)) {
         return false;
     }
     std::uint32_t width = desc.width;

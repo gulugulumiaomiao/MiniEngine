@@ -320,6 +320,9 @@ void VulkanDevice::selectPhysicalDevice() {
         Log::fatal("VulkanDevice",
                    "No Vulkan 1.3 GPU with swapchain and dynamic rendering support found");
     }
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(physicalDevice_, &properties);
+    maxSamplerAnisotropy_ = properties.limits.maxSamplerAnisotropy;
 }
 
 void VulkanDevice::createLogicalDevice() {
@@ -607,9 +610,12 @@ void VulkanDevice::destroyTextureView(TextureViewHandle handle) {
 }
 
 SamplerHandle VulkanDevice::createSampler(const SamplerDesc& desc) {
-    if (desc.maxAnisotropy != 1.0F)
-        Log::fatal("VulkanDevice", "Texture v1 does not support anisotropic sampling");
-    return samplers_.insert(SamplerResource{std::make_unique<VulkanSampler>(device_, desc)});
+    SamplerDesc clamped = desc;
+    clamped.maxAnisotropy = std::min(clamped.maxAnisotropy, maxSamplerAnisotropy_);
+    if (clamped.maxAnisotropy < 1.0F)
+        clamped.maxAnisotropy = 1.0F;
+    return samplers_.insert(SamplerResource{
+        std::make_unique<VulkanSampler>(device_, clamped, maxSamplerAnisotropy_)});
 }
 
 void VulkanDevice::destroySampler(SamplerHandle handle) {

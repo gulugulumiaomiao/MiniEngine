@@ -3,6 +3,7 @@
 #include "asset/base/Asset.h"
 #include "asset/base/AssetId.h"
 #include "render/base/RenderHandle.h"
+#include "rhi/api/Sampler.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -18,6 +19,31 @@ class TextureManager;
 enum class TextureType { Texture2D };
 enum class TextureFormat { Rgba8Unorm, Rgba8Srgb };
 enum class TextureColorSpace { Linear, Srgb };
+
+// Unity-style texture sampling settings. These live next to TextureDesc because
+// they are part of the texture asset, not the shader or material.
+enum class TextureFilterMode { Point, Bilinear, Trilinear };
+enum class TextureAddressMode { Repeat, MirroredRepeat, ClampToEdge };
+
+struct TextureSamplerSettings : public Transferable {
+    TextureFilterMode filterMode{TextureFilterMode::Bilinear};
+    TextureAddressMode addressModeU{TextureAddressMode::Repeat};
+    TextureAddressMode addressModeV{TextureAddressMode::Repeat};
+    float maxAnisotropy{1.0F};
+
+    TextureSamplerSettings() = default;
+    TextureSamplerSettings(TextureFilterMode filterMode,
+                           TextureAddressMode addressModeU,
+                           TextureAddressMode addressModeV,
+                           float maxAnisotropy)
+        : filterMode(filterMode),
+          addressModeU(addressModeU),
+          addressModeV(addressModeV),
+          maxAnisotropy(maxAnisotropy) {}
+
+    [[nodiscard]] bool transfer(Transfer& archive) override;
+    [[nodiscard]] rhi::SamplerDesc toRhi() const;
+};
 
 struct TextureMipData : public Transferable {
     std::uint32_t width{};
@@ -38,6 +64,7 @@ struct TextureDesc : public Transferable {
     std::uint32_t width{};
     std::uint32_t height{};
     std::uint32_t mipCount{1};
+    TextureSamplerSettings sampler;
 
     TextureDesc() = default;
     TextureDesc(TextureType type,
@@ -48,6 +75,21 @@ struct TextureDesc : public Transferable {
                 std::uint32_t mipCount = 1)
         : type(type), format(format), colorSpace(colorSpace), width(width), height(height),
           mipCount(mipCount) {}
+
+    TextureDesc(TextureType type,
+                TextureFormat format,
+                TextureColorSpace colorSpace,
+                std::uint32_t width,
+                std::uint32_t height,
+                std::uint32_t mipCount,
+                TextureSamplerSettings sampler)
+        : type(type),
+          format(format),
+          colorSpace(colorSpace),
+          width(width),
+          height(height),
+          mipCount(mipCount),
+          sampler(std::move(sampler)) {}
 
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };

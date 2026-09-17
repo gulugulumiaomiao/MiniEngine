@@ -8,7 +8,7 @@ namespace engine::rhi::vulkan {
 
 class VulkanSampler final : public ISampler {
 public:
-    VulkanSampler(VkDevice device, const SamplerDesc& desc);
+    VulkanSampler(VkDevice device, const SamplerDesc& desc, float maxAnisotropyLimit);
     ~VulkanSampler() override;
 
     VulkanSampler(const VulkanSampler&) = delete;
