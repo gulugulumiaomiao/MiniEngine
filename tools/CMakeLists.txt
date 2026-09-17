@@ -82,10 +82,13 @@ target_link_libraries(MiniImGui PUBLIC gdi32 dwmapi imm32)
 set_target_properties(MiniImGui PROPERTIES FOLDER ThirdParty)
 
 # 编辑器配置、项目注册与模板仅编入编辑器变体，供编辑器接口和测试复用。
+# ProjectBrowserModel 是 Project 面板的纯逻辑层（无 ImGui），编进变体库让
+# MiniEditor 与模型/面板两个测试共享同一实现。
 target_sources(MiniEngineEditor PRIVATE
     editor/EditorConfig.cpp
     editor/ProjectRegistry.cpp
     editor/ProjectTemplate.cpp
+    editor/ProjectBrowserModel.cpp
 )
 target_include_directories(MiniEngineEditor PUBLIC ${PROJECT_SOURCE_DIR})
 target_link_libraries(MiniEngineEditor PRIVATE shell32)
@@ -93,6 +96,7 @@ source_group(TREE "${PROJECT_SOURCE_DIR}" FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/editor/EditorConfig.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/editor/ProjectRegistry.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/editor/ProjectTemplate.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/editor/ProjectBrowserModel.cpp"
 )
 
 add_executable(MiniEditor

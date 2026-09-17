@@ -102,6 +102,25 @@ mini_add_editor_test(InspectorPanelTest
     ${PROJECT_SOURCE_DIR}/tools/editor/SceneDocument.cpp
 )
 target_link_libraries(InspectorPanelTest PRIVATE MiniImGui)
+
+# Project 浏览器模型是纯逻辑（导航/过滤/快照/操作），已编入 MiniEngineEditor；
+# gtest 逐用例注册，失败可定位到单个导航或操作语义。ProjectPanelTest 直接触发
+# ImGui 事件流驱动双栏视图（与 HierarchyPanelTest 同范式），额外编译 ProjectPanel.cpp。
+add_executable(ProjectBrowserModelTest ProjectBrowserModelTest.cpp)
+target_link_libraries(ProjectBrowserModelTest PRIVATE MiniEngineEditor MiniGTest)
+target_include_directories(ProjectBrowserModelTest PRIVATE ${PROJECT_SOURCE_DIR})
+target_compile_definitions(ProjectBrowserModelTest PRIVATE
+    MINI_TEST_BUILTIN_DIR="${PROJECT_SOURCE_DIR}/builtin"
+)
+mini_enable_warnings(ProjectBrowserModelTest)
+mini_link_mingw_runtime(ProjectBrowserModelTest)
+set_target_properties(ProjectBrowserModelTest PROPERTIES FOLDER Tests)
+gtest_discover_tests(ProjectBrowserModelTest)
+
+mini_add_editor_test(ProjectPanelTest
+    ${PROJECT_SOURCE_DIR}/tools/editor/ProjectPanel.cpp
+)
+target_link_libraries(ProjectPanelTest PRIVATE MiniImGui)
 # SelectionSet 是纯模板逻辑，测试只需要头文件，不链接引擎库。
 add_executable(SelectionSetTest SelectionSetTest.cpp)
 target_include_directories(SelectionSetTest PRIVATE ${PROJECT_SOURCE_DIR})
