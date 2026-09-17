@@ -222,6 +222,9 @@ mini_add_gtest(AssetDependencySchedulerTest)
 # discard (gtest per Testing.md).
 mini_add_gtest(AssetReimportDecisionTest)
 
+# GUID identity survives renaming/moving the source file as long as the .meta follows.
+mini_add_gtest(AssetRenameGuidTest)
+
 # ScriptedImporter registration point and DefaultImporter passthrough fallback
 # (gtest per Testing.md).
 mini_add_gtest(AssetScriptedImporterTest)
@@ -240,7 +243,7 @@ mini_add_gtest(AssetPackageTest)
 
 mini_add_test(AssetReleaseTest)
 # The packaged-release test cooks its assets from the build-local copy of builtin
-# (MiniCopyBuiltin, meta-free) into the build-local library: cooking against the source
+# (MiniCopyBuiltin, with .meta) into the build-local library: cooking against the source
 # tree would let the importer self-heal *.meta sidecars back into builtin/, and the
 # library output belongs under the build directory anyway.
 target_compile_definitions(AssetReleaseTest PRIVATE

@@ -128,8 +128,8 @@ set_target_properties(MiniEditor PROPERTIES FOLDER Tools)
 # content must sit next to the executable for the game to run. The editor, by contrast,
 # never mounts it: the source tree's builtin/ is copied into every project's assets/ at
 # creation and at open (see ProjectTemplate.cpp / Engine::openProject). CopyBuiltin.cmake
-# purges the target and copies everything except *.meta sidecars: builds never ship Meta
-# identities, matching what the project copy puts into assets/. The target is
+# purges the target and copies everything including *.meta sidecars so that built-in GUID
+# identities are stable and cross-asset references resolve correctly. The target is
 # always-stale, so every build refreshes the copy next to the executables.
 set(MINI_BUILTIN_SOURCE "${PROJECT_SOURCE_DIR}/builtin")
 add_custom_target(MiniCopyBuiltin
@@ -137,7 +137,7 @@ add_custom_target(MiniCopyBuiltin
             "-DMINI_BUILTIN_SOURCE=${MINI_BUILTIN_SOURCE}"
             "-DMINI_BUILTIN_DEST_PARENT=${CMAKE_BINARY_DIR}"
             "-P" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CopyBuiltin.cmake"
-    COMMENT "Copying builtin content (without .meta) next to the executables"
+    COMMENT "Copying builtin content (with .meta) next to the executables"
     VERBATIM
 )
 set_target_properties(MiniCopyBuiltin PROPERTIES FOLDER Tools)

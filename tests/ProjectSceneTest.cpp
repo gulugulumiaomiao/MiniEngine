@@ -1,4 +1,5 @@
 ﻿#include "asset/base/AssetId.h"
+#include "asset/base/AssetMeta.h"
 #include "asset/base/GuidResolver.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/format/SceneAssetFormat.h"
@@ -19,9 +20,9 @@
 
 namespace {
 
-// Resolves GUIDs using the deterministic AssetId that the import pipeline would assign
-// to each built-in asset after it is flattened into assets://. This lets tests parse
-// shipped Scene files without bringing up the full AssetDatabase / import pipeline.
+// Resolves GUIDs for built-in assets. Prefer reading the GUID from a .meta sidecar
+// when present; otherwise fall back to the legacy deterministic AssetId so tests can
+// still parse shipped Scene files that have not yet been migrated to random GUIDs.
 class BuiltinGuidResolver final : public engine::GuidResolver {
 public:
     explicit BuiltinGuidResolver(const std::filesystem::path& builtinRoot) {
@@ -41,7 +42,21 @@ public:
             if (!prefix.empty())
                 rel = rel.substr(prefix.size());
             const VirtualPath sourcePath{std::string{"assets://"} + rel};
-            guidToPath_.emplace(AssetId::fromPath(sourcePath), sourcePath);
+            const VirtualPath metaPath{sourcePath.string() + ".meta"};
+            const auto resolvedMeta = FILE_SYSTEM.resolvePhysicalPath(metaPath);
+            std::optional<AssetId> guid;
+            if (resolvedMeta) {
+                const auto text = FILE_SYSTEM.readText(metaPath);
+                if (text) {
+                    const auto meta = parseAssetMeta(metaPath, *text);
+                    if (meta)
+                        guid = meta->assetId;
+                }
+            }
+            if (!guid)
+                guid = AssetId::fromPath(sourcePath);
+            guidToPath_.emplace(*guid, sourcePath);
+            pathToGuid_.emplace(sourcePath, *guid);
         }
     }
 
@@ -54,11 +69,14 @@ public:
 
     [[nodiscard]] std::optional<engine::AssetId>
     findGuid(const engine::VirtualPath& path) const override {
-        return engine::AssetId::fromPath(path);
+        const auto it = pathToGuid_.find(path);
+        return it == pathToGuid_.end() ? std::nullopt
+                                       : std::optional<engine::AssetId>{it->second};
     }
 
 private:
     std::unordered_map<engine::AssetId, engine::VirtualPath> guidToPath_;
+    std::unordered_map<engine::VirtualPath, engine::AssetId, engine::VirtualPathHash> pathToGuid_;
 };
 
 std::filesystem::path makeProjectRoot() {

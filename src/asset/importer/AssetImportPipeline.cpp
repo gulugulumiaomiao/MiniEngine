@@ -181,15 +181,28 @@ bool AssetImportPipeline::importAssetInternal(const VirtualPath& sourcePath, boo
     std::optional<AssetMeta> meta;
     if (FILE_SYSTEM.isFile(metaPath)) {
         meta = loadAssetMeta(metaPath);
-        if (!meta || meta->assetType != assetType) {
-            // A Meta that is missing, does not parse, or disagrees with the routed
-            // type (e.g. a ScriptedImporter just took over this extension) is stale:
-            // regenerate it. GUIDs derive deterministically from the source path,
-            // so rebuilding the sidecar keeps the asset identity stable.
+        if (!meta) {
+            // Unparseable Meta: regenerate with a new random GUID.
             Log::warn("AssetImportPipeline",
                       "Discarding invalid Meta for %s; regenerating",
                       key.c_str());
             meta = createAssetMeta(sourcePath, assetType);
+        } else if (meta->assetType != assetType) {
+            // Routed type changed (e.g. ScriptedImporter took over this extension).
+            // Keep the existing GUID so the asset identity stays stable, but update
+            // the stored asset type. Any stale database record under this path is
+            // removed first so the GUID change does not collide.
+            Log::warn("AssetImportPipeline",
+                      "Updating Meta asset type for %s (%s -> %s)",
+                      key.c_str(),
+                      assetTypeName(meta->assetType),
+                      assetTypeName(assetType));
+            (void)ASSET_DATABASE.remove(sourcePath);
+            meta->assetType = assetType;
+            if (!saveAssetMeta(metaPath, *meta)) {
+                Log::error("AssetImportPipeline", "Cannot update Meta for %s", key.c_str());
+                return false;
+            }
         }
     } else {
         meta = createAssetMeta(sourcePath, assetType);
@@ -297,6 +310,51 @@ bool AssetImportPipeline::removeAsset(const VirtualPath& sourcePath) {
     return true;
 }
 
+bool AssetImportPipeline::renameAsset(const VirtualPath& oldPath, const VirtualPath& newPath) {
+    // Caller must already hold mutex_ (processFileEvents).
+    const VirtualPath oldMetaPath = assetMetaPath(oldPath);
+    const VirtualPath newMetaPath = assetMetaPath(newPath);
+
+    auto record = ASSET_DATABASE.findByPath(oldPath);
+    if (!record) {
+        // Unknown source: treat the new path as a fresh add.
+        return importAssetInternal(newPath, false);
+    }
+
+    // Move the .meta sidecar so the GUID is preserved. If the old .meta is missing
+    // and the new path already has one, trust it; otherwise regenerate (new GUID).
+    if (FILE_SYSTEM.isFile(oldMetaPath)) {
+        if (!FILE_SYSTEM.move(oldMetaPath, newMetaPath)) {
+            Log::error("AssetImportPipeline",
+                       "Cannot move Meta from %s to %s",
+                       oldMetaPath.string().c_str(),
+                       newMetaPath.string().c_str());
+            return false;
+        }
+    } else if (!FILE_SYSTEM.isFile(newMetaPath)) {
+        if (!createAssetMeta(newPath, record->type)) {
+            return false;
+        }
+    }
+
+    // Update path mappings while keeping the GUID and artifact directory intact.
+    record->sourcePath = newPath;
+    record->metaPath = newMetaPath;
+    if (!ASSET_DATABASE.addOrUpdate(*record) || !ASSET_DATABASE.save()) {
+        Log::error("AssetImportPipeline",
+                   "Cannot update AssetDatabase for renamed asset: %s -> %s",
+                   oldPath.string().c_str(),
+                   newPath.string().c_str());
+        return false;
+    }
+
+    // Re-import at the new path to refresh content hashes and notify dependents.
+    if (!importAssetInternal(newPath, true)) {
+        return false;
+    }
+    return true;
+}
+
 void AssetImportPipeline::processFileEvents() {
     std::scoped_lock lock{mutex_};
     if (!initialized_)
@@ -341,8 +399,12 @@ void AssetImportPipeline::processFileEvents() {
 
     for (const FileChangeEvent& event : FILE_WATCHER.pollEvents()) {
         if (event.type == FileChangeType::Renamed) {
-            consume(event.previousPath, FileChangeType::Removed);
-            consume(event.path, FileChangeType::Added);
+            FILE_DEPENDENCY_GRAPH.notifyChanged(event.previousPath);
+            FILE_DEPENDENCY_GRAPH.notifyChanged(event.path);
+            reimportDependents(event.previousPath);
+            if (renameAsset(event.previousPath, event.path)) {
+                reimportDependents(event.path);
+            }
         } else {
             consume(event.path, event.type);
         }

@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "asset/base/AssetId.h"
+#include "asset/base/AssetMeta.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/exporter/AssetPackage.h"
 #include "core/filesystem/FileWatcher.h"
@@ -147,6 +148,12 @@ protected:
         return it == entries.end() ? nullptr : &*it;
     }
 
+    [[nodiscard]] AssetId metaGuid(const VirtualPath& sourcePath) const {
+        const auto meta = loadAssetMeta(assetMetaPath(sourcePath));
+        EXPECT_TRUE(meta.has_value()) << sourcePath.string();
+        return meta ? meta->assetId : AssetId{};
+    }
+
     std::filesystem::path root;
     std::filesystem::path assets;
 };
@@ -165,14 +172,14 @@ TEST_F(AssetPackageTest, ClosureCollectsDatabaseAndShaderCompanionDependencies) 
     ASSERT_NE(material, nullptr);
     ASSERT_TRUE(material->isAsset());
     ASSERT_TRUE(material->guid.has_value());
-    EXPECT_EQ(*material->guid, AssetId::fromPath(materialPath));
+    EXPECT_EQ(*material->guid, metaGuid(materialPath));
     EXPECT_EQ(material->type, AssetType::Material);
 
     const VirtualPath shaderPath{"assets://shaders/export_test.shader.json"};
     const AssetPackageEntry* shader = findEntry(entries, shaderPath.string());
     ASSERT_NE(shader, nullptr);
     ASSERT_TRUE(shader->isAsset());
-    EXPECT_EQ(*shader->guid, AssetId::fromPath(shaderPath));
+    EXPECT_EQ(*shader->guid, metaGuid(shaderPath));
     EXPECT_EQ(shader->type, AssetType::Shader);
 
     const VirtualPath texturePath{"assets://textures/checker.png"};
@@ -247,8 +254,7 @@ TEST_F(AssetPackageTest, PackageLayoutMirrorsSourcesAndManifest) {
               "materials/export_test.material.json");
     EXPECT_EQ(materialEntry.at("type").get<std::string>(), "Material");
     EXPECT_EQ(materialEntry.at("guid").get<std::string>(),
-              AssetId::fromPath(VirtualPath{"assets://materials/export_test.material.json"})
-                  .toString());
+              metaGuid(VirtualPath{"assets://materials/export_test.material.json"}).toString());
 
     // 伴随文件条目（排序第二位 common.glsl）只有 path。
     const nlohmann::json& companionEntry = jsonEntries.at(1);
@@ -434,8 +440,8 @@ TEST_F(AssetPackageTest, ImportConflictPolicies) {
     }
 }
 
-// 拒绝损坏包：坏 zip、manifest 缺失、schemaVersion 不符、路径逃逸、guid 与派生
-// 值不符、zip 与 manifest 条目不对应。
+// 拒绝损坏包：坏 zip、manifest 缺失、schemaVersion 不符、路径逃逸、guid 格式
+// 非法、zip 与 manifest 条目不对应。
 TEST_F(AssetPackageTest, ImportRejectsCorruptPackages) {
     std::string error;
     std::vector<std::byte> package;
@@ -510,10 +516,10 @@ TEST_F(AssetPackageTest, ImportRejectsCorruptPackages) {
         EXPECT_FALSE(tryImport(rebuilt));
     }
 
-    // guid 与派生值不符（包被篡改）。
+    // guid 格式非法（包被篡改）。
     {
         nlohmann::json bad = manifest;
-        bad["entries"][0]["guid"] = AssetId::generate().toString();
+        bad["entries"][0]["guid"] = "not-a-valid-guid";
         const std::vector<std::byte> rebuilt = rewriteManifest(bad);
         ASSERT_FALSE(rebuilt.empty());
         EXPECT_FALSE(tryImport(rebuilt));

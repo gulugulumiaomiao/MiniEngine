@@ -353,15 +353,15 @@ bool importAssetPackage(const VirtualPath& packagePath,
         entry.path = VirtualPath{"assets://" + relative};
         const auto jsonGuid = jsonEntry.find("guid");
         if (jsonGuid != jsonEntry.end()) {
-            // 资产条目：guid 必须存在且可解析。AssetId 由路径确定性派生（单射），
-            // manifest guid 与派生值不一致说明包被篡改或来自异构系统，拒绝。
+            // 资产条目：guid 必须存在且可解析。GUID 现在由 .meta 随机生成并持久化，
+            // 不再与包内路径绑定，因此只要 GUID 合法即可（允许包内重命名）。
             if (!jsonGuid->is_string()) {
                 error = "Invalid package guid for: " + relative;
                 return false;
             }
             const auto guid = AssetId::parse(jsonGuid->get<std::string>());
-            if (!guid || *guid != AssetId::fromPath(entry.path)) {
-                error = "Package guid does not match derived path id: " + relative;
+            if (!guid) {
+                error = "Package guid is not a valid AssetId: " + relative;
                 return false;
             }
             const auto jsonType = jsonEntry.find("type");
@@ -435,7 +435,8 @@ bool importAssetPackage(const VirtualPath& packagePath,
     }
 
     // 重建：按 manifest 顺序对每个资产条目触发导入（幂等，自身递归处理依赖）；
-    // 失败记入 report 不中断其余。
+    // 失败记入 report 不中断其余。导入前清除可能存在的旧路径记录，避免本地随机
+    // GUID 与包内 .meta 的 GUID 冲突。
     for (const AssetPackageEntry& entry : entries) {
         if (!entry.isAsset())
             continue;
@@ -443,6 +444,7 @@ bool importAssetPackage(const VirtualPath& packagePath,
             report.skipped.push_back(entry.path);
             continue;
         }
+        (void)ASSET_DATABASE.remove(entry.path);
         if (!ASSET_IMPORT_PIPELINE.importAsset(entry.path)) {
             report.failed.push_back(entry.path);
             Log::error(kCategory, "Failed to import package asset: %s",

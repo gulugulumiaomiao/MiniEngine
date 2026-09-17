@@ -16,10 +16,10 @@ inline constexpr std::string_view kBuiltinSamplesDirectory = "samples";
 
 // The engine's built-in content (MINI_SOURCE_BUILTIN_DIR) is split by ownership. Both
 // subtrees flatten into the same projectRoot/assets tree, so an asset keeps the same
-// assets:// path whichever layer it came from. Companion *.meta sidecars are never
-// copied: they carry source identities and the project's import pipeline generates its
-// own Meta for each asset on first import. The engine does NOT mount the built-in
-// content as a virtual scheme; every project ships a working copy in its own assets/.
+// assets:// path whichever layer it came from. Companion *.meta sidecars are copied
+// alongside source assets so that built-in GUID identities remain stable and cross-asset
+// references resolve correctly. The engine does NOT mount the built-in content as a
+// virtual scheme; every project ships a working copy in its own assets/.
 
 // Copies builtin/core -- the assets the engine hardcodes and cannot run without (the
 // Error Material, the fallback Shader and the GLSL includes they pull in). Overwrites

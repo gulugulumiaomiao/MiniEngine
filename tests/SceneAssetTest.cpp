@@ -162,11 +162,13 @@ int main() {
     MockGuidResolver resolver;
     const VirtualPath meshPath{"assets://meshes/cube.mesh.json"};
     const VirtualPath materialPath{"assets://materials/default.material.json"};
-    resolver.map(AssetId::fromPath(meshPath), meshPath);
-    resolver.map(AssetId::fromPath(materialPath), materialPath);
+    const AssetId meshGuidValue = AssetId::generate();
+    const AssetId materialGuidValue = AssetId::generate();
+    resolver.map(meshGuidValue, meshPath);
+    resolver.map(materialGuidValue, materialPath);
 
-    const std::string meshGuid = AssetReference{AssetId::fromPath(meshPath)}.toString();
-    const std::string materialGuid = AssetReference{AssetId::fromPath(materialPath)}.toString();
+    const std::string meshGuid = AssetReference{meshGuidValue}.toString();
+    const std::string materialGuid = AssetReference{materialGuidValue}.toString();
     const std::string sceneJson = makeSceneJson(meshGuid, materialGuid);
 
     std::shared_ptr<SceneAsset> asset = format::parseSceneAsset(scenePath, sceneJson, resolver);

@@ -144,13 +144,16 @@ int main() {
     if (!std::filesystem::is_regular_file(*root / "assets" / "textures" / "checker.png"))
         return 23;
 
-    // Companion Meta files are never copied: they carry source identity placeholders
-    // and would be rejected by the project's importer; the project generates its own.
-    for (std::filesystem::recursive_directory_iterator it(*root / "assets"), end; it != end;
-         ++it) {
-        if (it->is_regular_file() && it->path().extension() == ".meta")
-            return 14;
-    }
+    // Companion Meta files are copied alongside source assets so that built-in GUID
+    // identities remain stable and cross-asset references resolve on first import.
+    if (!std::filesystem::is_regular_file(*root / "assets" / "shaders" /
+                                          "blinn_phong.shader.json.meta"))
+        return 14;
+    if (!std::filesystem::is_regular_file(*root / "assets" / "materials" /
+                                          "builtin_blinn_phong.material.json.meta"))
+        return 24;
+    if (!std::filesystem::is_regular_file(*root / "assets" / "textures" / "checker.png.meta"))
+        return 25;
 
     // --- project.json can be loaded back and carries the right name ---
     const std::optional<ProjectConfig> loaded =

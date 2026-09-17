@@ -136,8 +136,8 @@ void unmountProject() {
         (void)FILE_SYSTEM.unmount(scheme);
 }
 
-// The template must never copy *.meta sidecars into the project: they carry the source
-// identity placeholders and would fail the project's importer when it reads them.
+// The template now copies *.meta sidecars alongside source assets so that built-in GUID
+// identities remain stable and cross-asset references resolve on first import.
 bool hasMetaFile(const std::filesystem::path& assetsDir) {
     std::error_code error;
     for (std::filesystem::recursive_directory_iterator it(assetsDir, error), end;
@@ -202,8 +202,8 @@ constexpr std::string_view kDemoScenePath =
         if (!std::filesystem::is_regular_file(copiedFile))
             return 8;
     }
-    // No Meta sidecar survives the copy: the project regenerates its own on import.
-    if (hasMetaFile(projectA / "assets"))
+    // Meta sidecars ship with the copy so built-in GUID identities are stable.
+    if (!hasMetaFile(projectA / "assets"))
         return 42;
     if (!registry.addProject(projectA, "LifecycleProject") || registry.size() != 1)
         return 9;
@@ -263,7 +263,7 @@ constexpr std::string_view kDemoScenePath =
         if (!std::filesystem::is_regular_file(copiedFile))
             return 20;
     }
-    if (hasMetaFile(projectB / "assets"))
+    if (!hasMetaFile(projectB / "assets"))
         return 43;
     if (!mountProject(projectA))
         return 21;

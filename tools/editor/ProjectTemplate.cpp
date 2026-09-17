@@ -22,9 +22,8 @@ enum class BuiltinCollision { Overwrite, Skip };
 // the collision policy differ. The engine never mounts the built-in content as a virtual
 // scheme: the editor is compiled with the source tree's builtin/ directory baked in, so a
 // project reads and ships independently of the engine's location. Companion *.meta files
-// are NOT copied -- the import pipeline generates the project's own Meta for each asset on
-// first import, and a Meta carried over from the source tree would bind the project to a
-// foreign asset identity.
+// are copied so that built-in asset GUIDs are stable and cross-asset references resolve
+// correctly on first import.
 //
 // The collision policy is applied here rather than through copy_options, because on this
 // toolchain copy_file cannot replace a file that is already there: with the destination
@@ -58,8 +57,7 @@ bool copyBuiltinLayer(const std::filesystem::path& projectRoot,
         const std::filesystem::path destination = assetsTarget / relative;
         if (layerIterator->is_directory(directoryError)) {
             std::filesystem::create_directories(destination, directoryError);
-        } else if (layerIterator->is_regular_file(directoryError) &&
-                   relative.extension() != ".meta") {
+        } else if (layerIterator->is_regular_file(directoryError)) {
             std::filesystem::create_directories(destination.parent_path(), directoryError);
             if (directoryError)
                 break;

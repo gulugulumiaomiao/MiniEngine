@@ -3,9 +3,9 @@
 # core/ (assets the engine hardcodes) and samples/ (demo content); both flatten into the
 # same assets/ tree here, exactly as the editor flattens them into a project (see
 # syncEngineContractIntoProject / seedSampleContentIntoProject). The editor does not mount
-# the built-in content. Mirrors that copy: *.meta sidecars never leave the source tree, so
-# built output carries no Meta identities. The destination is purged first so stale files
-# (e.g. an older copy that still had metas) do not leak into a build.
+# the built-in content. *.meta sidecars are now shipped alongside source assets so that
+# built-in GUID identities remain stable across imports and match cross-asset references.
+# The destination is purged first so stale files do not leak into a build.
 #
 # Usage:
 #   cmake -DMINI_BUILTIN_SOURCE=<source builtin dir>
@@ -33,9 +33,6 @@ foreach(layer IN LISTS layers)
     endif()
     file(GLOB_RECURSE layerFiles RELATIVE "${layerRoot}" "${layerRoot}/*")
     foreach(layerFile IN LISTS layerFiles)
-        if(layerFile MATCHES "\\.meta$")
-            continue()
-        endif()
         list(FIND seenPaths "${layerFile}" duplicateIndex)
         if(NOT duplicateIndex EQUAL -1)
             message(FATAL_ERROR
@@ -51,10 +48,9 @@ file(MAKE_DIRECTORY "${destination}")
 foreach(layer IN LISTS layers)
     file(COPY "${MINI_BUILTIN_SOURCE}/${layer}/"
         DESTINATION "${destination}"
-        PATTERN "*.meta" EXCLUDE
     )
 endforeach()
 list(LENGTH seenPaths copiedCount)
 message(STATUS
     "Copying ${MINI_BUILTIN_SOURCE} (${layers}) -> ${destination} "
-    "(${copiedCount} files, no .meta)")
+    "(${copiedCount} files, with .meta)")

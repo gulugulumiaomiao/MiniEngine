@@ -97,7 +97,10 @@ std::optional<AssetMeta> createAssetMeta(const VirtualPath& sourcePath, AssetTyp
         Log::error("AssetMeta", "Cannot infer asset type: %s", sourcePath.string().c_str());
         return std::nullopt;
     }
-    AssetMeta meta{1, AssetId::fromPath(sourcePath), type};
+    // GUID is now randomly generated and persisted in the .meta sidecar, rather
+    // than derived from the source path. This keeps the asset identity stable
+    // when the source file is renamed or moved (as long as the .meta follows).
+    AssetMeta meta{1, AssetId::generate(), type};
     if (!saveAssetMeta(assetMetaPath(sourcePath), meta)) {
         return std::nullopt;
     }

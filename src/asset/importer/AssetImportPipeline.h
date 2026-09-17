@@ -50,6 +50,7 @@ private:
     // DefaultImporter 透传不参与扫描，只有显式 importAsset/依赖声明会路由过去。
     [[nodiscard]] bool isKnownSourceAsset(const VirtualPath& path) const;
     [[nodiscard]] bool importAssetInternal(const VirtualPath& sourcePath, bool force);
+    [[nodiscard]] bool renameAsset(const VirtualPath& oldPath, const VirtualPath& newPath);
     void notify(const AssetImportNotification& notification) const;
 
     AssetImporterRegistry registry_;

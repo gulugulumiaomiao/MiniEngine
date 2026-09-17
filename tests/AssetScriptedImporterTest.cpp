@@ -173,7 +173,7 @@ TEST_F(AssetScriptedImporterTest, ScriptedImporterOverridesBuiltinRoute) {
     EXPECT_EQ(data, std::string{kStubMarker} + "{}");
 }
 
-// 路由类型变化时 Meta 重新生成；GUID 由路径确定性派生，资产身份保持稳定。
+// 路由类型变化时 Meta 的 assetType 更新；GUID 保留自原 Meta，资产身份保持稳定。
 TEST_F(AssetScriptedImporterTest, ScriptedImporterRegeneratesMetaOnTypeChange) {
     const VirtualPath modelPath{"assets://notes/prop.model"};
     ASSERT_TRUE(FILE_SYSTEM.writeText(modelPath, "binary-ish"));
