@@ -99,6 +99,41 @@ int main() {
         return 14;
     }
 
+    // copy: file copy, existing-destination failure, and directory copy.
+    const VirtualPath copyPath{"test://folder/copy.txt"};
+    if (!fileSystem.copy(textPath, copyPath) || !fileSystem.isFile(copyPath) ||
+        fileSystem.copy(textPath, copyPath)) {
+        return 17;
+    }
+    const auto copiedText = fileSystem.readText(copyPath);
+    if (!copiedText || *copiedText != "hello filesystem") {
+        return 18;
+    }
+    if (!fileSystem.writeText(VirtualPath{"test://dupdir/nested/inner.txt"}, "inner") ||
+        !fileSystem.copy(VirtualPath{"test://dupdir"}, VirtualPath{"test://dupdir2"}) ||
+        !fileSystem.isFile(VirtualPath{"test://dupdir2/nested/inner.txt"}) ||
+        fileSystem.copy(VirtualPath{"test://dupdir"}, VirtualPath{"test://dupdir2"})) {
+        return 19;
+    }
+
+    // removeDirectory: recursive removal; missing directories fail.
+    if (!fileSystem.removeDirectory(VirtualPath{"test://folder"}) ||
+        fileSystem.exists(copyPath) || fileSystem.isDirectory(VirtualPath{"test://folder"}) ||
+        fileSystem.removeDirectory(VirtualPath{"test://missing"})) {
+        return 20;
+    }
+    if (!fileSystem.removeDirectory(VirtualPath{"test://dupdir"}) ||
+        !fileSystem.removeDirectory(VirtualPath{"test://dupdir2"})) {
+        return 21;
+    }
+    if (!fileSystem.mountDirectory("readonly", root, true) ||
+        fileSystem.copy(VirtualPath{"test://data.bin"}, VirtualPath{"readonly://x.bin"}) ||
+        fileSystem.removeDirectory(VirtualPath{"readonly://folder"})) {
+        return 22;
+    }
+    (void)fileSystem.unmount("readonly");
+    (void)fileSystem.removeFile(VirtualPath{"test://data.bin"});
+
     FileDependencyGraph& graph = FILE_DEPENDENCY_GRAPH;
     const VirtualPath generated{"test://generated/output.spv"};
     const VirtualPath intermediate{"test://generated/preprocessed.glsl"};

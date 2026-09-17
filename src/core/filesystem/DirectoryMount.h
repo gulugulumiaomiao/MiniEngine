@@ -22,7 +22,9 @@ public:
                                          std::span<const std::byte> data) override;
     [[nodiscard]] bool createDirectories(std::string_view relativePath) override;
     [[nodiscard]] bool removeFile(std::string_view relativePath) override;
+    [[nodiscard]] bool removeDirectory(std::string_view relativePath) override;
     [[nodiscard]] bool move(std::string_view from, std::string_view to) override;
+    [[nodiscard]] bool copy(std::string_view from, std::string_view to) override;
     [[nodiscard]] std::vector<std::string> listFiles(std::string_view relativePath,
                                                      bool recursive) const override;
     [[nodiscard]] std::optional<std::filesystem::path>

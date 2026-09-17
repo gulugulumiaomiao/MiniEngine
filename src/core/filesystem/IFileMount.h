@@ -33,7 +33,9 @@ public:
                                                  std::span<const std::byte> data) = 0;
     [[nodiscard]] virtual bool createDirectories(std::string_view relativePath) = 0;
     [[nodiscard]] virtual bool removeFile(std::string_view relativePath) = 0;
+    [[nodiscard]] virtual bool removeDirectory(std::string_view relativePath) = 0;
     [[nodiscard]] virtual bool move(std::string_view from, std::string_view to) = 0;
+    [[nodiscard]] virtual bool copy(std::string_view from, std::string_view to) = 0;
     [[nodiscard]] virtual std::vector<std::string> listFiles(std::string_view relativePath,
                                                              bool recursive) const = 0;
     [[nodiscard]] virtual std::optional<std::filesystem::path>

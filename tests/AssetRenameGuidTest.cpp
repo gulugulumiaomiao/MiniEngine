@@ -122,4 +122,64 @@ TEST_F(AssetRenameGuidTest, GuidPersistsAfterRename) {
     EXPECT_FALSE(ASSET_DATABASE.findByPath(shaderPath).has_value());
 }
 
+TEST_F(AssetRenameGuidTest, MoveAssetRelocatesSourceAndKeepsGuid) {
+    ASSERT_TRUE(ASSET_IMPORT_PIPELINE.importAsset(shaderPath));
+
+    const AssetId originalGuid = metaGuid(shaderPath);
+    ASSERT_TRUE(originalGuid.valid());
+    const auto beforeRecord = ASSET_DATABASE.findByPath(shaderPath);
+    ASSERT_TRUE(beforeRecord.has_value());
+
+    // Editor-initiated move: the pipeline relocates source and .meta itself and
+    // updates the database in place; no FileWatcher involvement.
+    ASSERT_TRUE(ASSET_IMPORT_PIPELINE.moveAsset(shaderPath, renamedPath));
+
+    EXPECT_FALSE(FILE_SYSTEM.isFile(shaderPath));
+    EXPECT_FALSE(FILE_SYSTEM.isFile(assetMetaPath(shaderPath)));
+    EXPECT_TRUE(FILE_SYSTEM.isFile(renamedPath));
+    EXPECT_TRUE(FILE_SYSTEM.isFile(assetMetaPath(renamedPath)));
+
+    EXPECT_EQ(metaGuid(renamedPath), originalGuid);
+    const auto afterRecord = ASSET_DATABASE.findByPath(renamedPath);
+    ASSERT_TRUE(afterRecord.has_value());
+    EXPECT_EQ(afterRecord->id, originalGuid);
+    EXPECT_EQ(afterRecord->sourcePath, renamedPath);
+    EXPECT_EQ(afterRecord->metaPath, assetMetaPath(renamedPath));
+    EXPECT_EQ(afterRecord->status, AssetImportStatus::Imported);
+    EXPECT_FALSE(ASSET_DATABASE.findByPath(shaderPath).has_value());
+}
+
+TEST_F(AssetRenameGuidTest, MoveAssetFailsWhenDestinationExists) {
+    ASSERT_TRUE(ASSET_IMPORT_PIPELINE.importAsset(shaderPath));
+    ASSERT_TRUE(
+        FILE_SYSTEM.writeText(renamedPath, std::string{kShaderJson}));
+
+    const AssetId originalGuid = metaGuid(shaderPath);
+    ASSERT_FALSE(ASSET_IMPORT_PIPELINE.moveAsset(shaderPath, renamedPath));
+
+    // Failed move leaves both files and the database untouched.
+    EXPECT_TRUE(FILE_SYSTEM.isFile(shaderPath));
+    EXPECT_EQ(metaGuid(shaderPath), originalGuid);
+    const auto record = ASSET_DATABASE.findByPath(shaderPath);
+    ASSERT_TRUE(record.has_value());
+    EXPECT_EQ(record->id, originalGuid);
+}
+
+TEST_F(AssetRenameGuidTest, MoveAssetSupportsCrossDirectoryMove) {
+    ASSERT_TRUE(FILE_SYSTEM.createDirectories(VirtualPath{"assets://nested"}));
+    ASSERT_TRUE(ASSET_IMPORT_PIPELINE.importAsset(shaderPath));
+
+    const AssetId originalGuid = metaGuid(shaderPath);
+    const VirtualPath movedPath{"assets://nested/moved_test.shader.json"};
+
+    ASSERT_TRUE(ASSET_IMPORT_PIPELINE.moveAsset(shaderPath, movedPath));
+    EXPECT_EQ(metaGuid(movedPath), originalGuid);
+
+    const auto record = ASSET_DATABASE.findByPath(movedPath);
+    ASSERT_TRUE(record.has_value());
+    EXPECT_EQ(record->id, originalGuid);
+    EXPECT_EQ(record->status, AssetImportStatus::Imported);
+    EXPECT_FALSE(ASSET_DATABASE.findByPath(shaderPath).has_value());
+}
+
 } // namespace

@@ -295,6 +295,36 @@ bool AssetImportPipeline::importDependencies(const VirtualPath& sourcePath) {
     return success;
 }
 
+bool AssetImportPipeline::moveAsset(const VirtualPath& oldPath, const VirtualPath& newPath) {
+    std::scoped_lock lock{mutex_};
+    if (!initialized_) {
+        Log::error("AssetImportPipeline", "Pipeline is not initialized");
+        return false;
+    }
+    // renameAsset only relocates the .meta sidecar and database record; the source
+    // file itself must already sit at newPath (it does on the FileWatcher Renamed
+    // path). Editor-initiated moves land here with the source still at oldPath, so
+    // relocate it first to keep moveAsset a complete single-file move. An occupied
+    // destination fails up front: renameAsset alone would relocate the Meta and
+    // repoint the database, leaving the old source orphaned on disk.
+    const bool sourceAtOld = FILE_SYSTEM.isFile(oldPath);
+    const bool sourceAtNew = FILE_SYSTEM.isFile(newPath);
+    if (sourceAtOld && sourceAtNew) {
+        Log::error("AssetImportPipeline",
+                   "Move destination already exists: %s",
+                   newPath.string().c_str());
+        return false;
+    }
+    if (sourceAtOld && !FILE_SYSTEM.move(oldPath, newPath)) {
+        Log::error("AssetImportPipeline",
+                   "Cannot move asset source: %s -> %s",
+                   oldPath.string().c_str(),
+                   newPath.string().c_str());
+        return false;
+    }
+    return renameAsset(oldPath, newPath);
+}
+
 bool AssetImportPipeline::removeAsset(const VirtualPath& sourcePath) {
     std::scoped_lock lock{mutex_};
     const auto record = ASSET_DATABASE.findByPath(sourcePath);

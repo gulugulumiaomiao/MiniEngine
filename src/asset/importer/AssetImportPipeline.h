@@ -38,6 +38,14 @@ public:
     [[nodiscard]] bool removeAsset(const VirtualPath& sourcePath);
     [[nodiscard]] bool importDependencies(const VirtualPath& sourcePath);
 
+    // Moves/renames an asset source, relocating its .meta sidecar so the GUID and
+    // artifact directory survive, updating the database in place and re-importing
+    // at the new path (cascading to dependents). The editor calls this directly so
+    // the UI reflects the move immediately; the FileWatcher Renamed path remains
+    // as a fallback and is idempotent with it (an unknown oldPath degrades to a
+    // plain import).
+    [[nodiscard]] bool moveAsset(const VirtualPath& oldPath, const VirtualPath& newPath);
+
     void setListener(Listener listener);
     void processFileEvents();
     [[nodiscard]] bool initialized() const;

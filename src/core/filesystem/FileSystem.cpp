@@ -197,6 +197,16 @@ bool FileSystem::removeFile(const VirtualPath& path) {
     return true;
 }
 
+bool FileSystem::removeDirectory(const VirtualPath& path) {
+    const auto found = lookup(path);
+    if (!found || found->mount->readOnly() ||
+        !found->mount->removeDirectory(found->relativePath)) {
+        Log::error("FileSystem", "Cannot remove directory: %s", path.string().c_str());
+        return false;
+    }
+    return true;
+}
+
 bool FileSystem::move(const VirtualPath& from, const VirtualPath& to) {
     if (!from.valid() || !to.valid() || from.scheme() != to.scheme()) {
         Log::error("FileSystem", "Move requires paths in the same mount");
@@ -209,6 +219,23 @@ bool FileSystem::move(const VirtualPath& from, const VirtualPath& to) {
         !source->mount->move(source->relativePath, destination->relativePath)) {
         Log::error(
             "FileSystem", "Cannot move file: %s -> %s", from.string().c_str(), to.string().c_str());
+        return false;
+    }
+    return true;
+}
+
+bool FileSystem::copy(const VirtualPath& from, const VirtualPath& to) {
+    if (!from.valid() || !to.valid() || from.scheme() != to.scheme()) {
+        Log::error("FileSystem", "Copy requires paths in the same mount");
+        return false;
+    }
+    const auto source = lookup(from);
+    const auto destination = lookup(to);
+    if (!source || !destination || source->mount != destination->mount ||
+        source->mount->readOnly() ||
+        !source->mount->copy(source->relativePath, destination->relativePath)) {
+        Log::error(
+            "FileSystem", "Cannot copy file: %s -> %s", from.string().c_str(), to.string().c_str());
         return false;
     }
     return true;

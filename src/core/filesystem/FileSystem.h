@@ -37,7 +37,9 @@ public:
                                          std::span<const std::byte> content);
     [[nodiscard]] bool createDirectories(const VirtualPath& path);
     [[nodiscard]] bool removeFile(const VirtualPath& path);
+    [[nodiscard]] bool removeDirectory(const VirtualPath& path);
     [[nodiscard]] bool move(const VirtualPath& from, const VirtualPath& to);
+    [[nodiscard]] bool copy(const VirtualPath& from, const VirtualPath& to);
 
     [[nodiscard]] std::vector<VirtualPath> listFiles(const VirtualPath& directory,
                                                      bool recursive = false) const;

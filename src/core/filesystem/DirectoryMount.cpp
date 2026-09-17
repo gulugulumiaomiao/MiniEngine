@@ -241,6 +241,51 @@ bool DirectoryMount::move(std::string_view from, std::string_view to) {
     return !error;
 }
 
+bool DirectoryMount::copy(std::string_view from, std::string_view to) {
+    if (readOnly_) {
+        return false;
+    }
+    const auto source = resolvePhysicalPath(from);
+    const auto destination = resolvePhysicalPath(to);
+    if (!source || !destination) {
+        return false;
+    }
+    std::error_code error;
+    // An existing destination must fail rather than copy into it: std::filesystem::copy
+    // with an existing target directory copies the source *inside* it instead.
+    if (std::filesystem::exists(*destination, error) || error) {
+        return false;
+    }
+    if (std::filesystem::is_directory(*source, error) && !error) {
+        // The error_code overload of copy() returns void (unlike copy_file), so the
+        // error flag itself is the success signal.
+        std::filesystem::copy(*source,
+                              *destination,
+                              std::filesystem::copy_options::recursive,
+                              error);
+        return !error;
+    }
+    // No overwrite flag: an existing destination fails, which callers use for
+    // conflict detection (e.g. duplicate-name probing).
+    return std::filesystem::copy_file(*source, *destination, error) && !error;
+}
+
+bool DirectoryMount::removeDirectory(std::string_view relativePath) {
+    if (readOnly_) {
+        return false;
+    }
+    const auto path = resolvePhysicalPath(relativePath);
+    if (!path) {
+        return false;
+    }
+    std::error_code error;
+    if (!std::filesystem::is_directory(*path, error) || error) {
+        return false;
+    }
+    error.clear();
+    return std::filesystem::remove_all(*path, error) > 0 && !error;
+}
+
 std::vector<std::string> DirectoryMount::listFiles(std::string_view relativePath,
                                                    bool recursive) const {
     std::vector<std::string> result;
