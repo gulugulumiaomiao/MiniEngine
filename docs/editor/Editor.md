@@ -15,7 +15,7 @@
 
 ## 职责边界
 
-- 编辑器是 `Application` 的一个实现，不修改引擎主循环：所有 UI 工作发生在
+- 编辑器是 `Application` 的一个实现，所有 UI 工作发生在
   `onStart()`、`onUpdate()` 和 `onStop()` 中。
 - UI 绘制只经过 RHI。`ImGuiRenderer` 取代官方 `imgui_impl_vulkan` 后端，因此
   `tools/editor/` 里没有任何直接的 Vulkan 调用；只有 Win32 平台后端
@@ -45,12 +45,14 @@ tools/editor/
 ├── ProjectPanel.*          assets:// 资产树浏览，双击场景打开
 ├── HierarchyPanel.*        场景树：选择、多选、拖放、右键菜单、就地重命名
 ├── InspectorPanel.*        选中节点的组件编辑：Transform/Mesh/Material/Camera/Light，支持批量编辑
-├── SceneViewPanel.*        视图状态与场景统计（引擎窗口本身即场景视图）
+├── SceneViewPanel.*        离屏场景图像、面板尺寸与渲染视口请求
+├── StatisticsPanel.*       场景与帧统计、主相机参数
+├── EditorLayout.*          默认 Dock 布局与旧布局迁移
 ├── SelectionSet.h          多选容器：Ctrl 切换、Shift 范围、主选择锚点
 ```
 
 面板之间没有相互依赖：`HierarchyPanel` 持有选择状态，`EditorApplication` 把它
-作为参数传给 `InspectorPanel::draw(selection)`；三个场景面板共享同一个
+作为参数传给 `InspectorPanel::draw(selection)`；四个场景面板共享同一个
 `SceneDocument` 引用。
 
 ## 启动流程
@@ -86,7 +88,7 @@ main()
   -> 无项目则提示文本 + endFrame 返回
   -> 无文档则 document_.createEmpty()
   -> handleShortcuts / drawMenuBar / drawDockSpace / 冲突与另存为弹窗
-  -> Project / Hierarchy / Inspector / Scene View 面板
+  -> Project / Hierarchy / Inspector / Scene View / Statistics 面板
   -> imguiLayer_.endFrame()
 ```
 
@@ -132,6 +134,9 @@ VS Code 中对应 `Debug MiniEditor (CodeLLDB)` 与 `Run MiniEditor Release` 两
   链接 `MiniEngineEditor`。两者验证项目配置与项目 API 可用、编辑器配置 API 正确隔离。
 - `ImGuiRendererTest` 直接编译 `tools/editor/ImGuiRenderer.cpp`（UI shader 已内联其中），
   依赖 `MiniImGui`，链接 `MiniEngine`（UI 后端不需要编辑器变体）。
+- 视口相关新增测试统一使用 GoogleTest：`SceneOutputTest` 验证渲染目标、清屏、
+  状态转换与双帧缩放；`EditorLayoutTest` 验证默认布局和旧 ini 迁移；
+  `SceneViewIntegrationTest` 使用实际 Vulkan 验证场景渲染、隐藏恢复和项目重新绑定。
 - 面板交互逻辑（选择、拖放、右键菜单、批量编辑）由 `HierarchyPanelTest`、
   `InspectorPanelTest`、`SelectionSetTest` 通过模拟 ImGui 输入事件驱动真实面板类验证。
 - `EditorApplication` 的整体编排（菜单、快捷键、弹窗时序）没有单元测试，
@@ -152,7 +157,7 @@ VS Code 中对应 `Debug MiniEditor (CodeLLDB)` 与 `Run MiniEditor Release` 两
    width/height/vsync，`Window` 构造也不接受位置与最大化状态；运行时同样不会把用户
    调整后的窗口尺寸写回偏好。
 4. `ProjectPanel` 是只读浏览器：不能新建、重命名或删除资产，非场景资产也不能打开。
-5. `SceneViewPanel` 不是离屏视图：没有独立相机视口、没有 gizmo，只报告统计信息。
+5. `SceneViewPanel` 显示离屏场景输出，沿用场景主相机；尚无独立编辑器相机、拾取和 gizmo。
 6. 编辑器没有 Undo/Redo，`dirty` 标记是唯一的状态跟踪；`HierarchyPanel` 的移动、
    删除等结构调整同样不可撤销。
 7. 回收站删除与文件夹选择都是 Win32 专有实现，编辑器目前只在 Windows 上可用；

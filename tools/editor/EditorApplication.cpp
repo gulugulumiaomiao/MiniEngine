@@ -1,4 +1,4 @@
-﻿#include "tools/editor/EditorApplication.h"
+#include "tools/editor/EditorApplication.h"
 
 #include "asset/manager/AssetManager.h"
 #include "core/filesystem/FileSystem.h"
@@ -8,62 +8,20 @@
 #include "runtime/window/Window.h"
 
 #include "imgui.h"
-#include "imgui_internal.h" // DockBuilder* for the default Unity layout
+#include "tools/editor/EditorLayout.h"
 
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
 
 namespace engine::editor {
-namespace {
-
-// Unity-style default layout: scene graph on the left, inspector on the right, project
-// browser strip along the bottom, and the engine-rendered scene in between as the empty
-// passthru central node (the swapchain output shows through the dock host).
-void applyUnityLayout(ImGuiID dockId) {
-    ImGui::DockBuilderRemoveNode(dockId);
-    ImGui::DockBuilderAddNode(dockId, ImGuiDockNodeFlags_DockSpace);
-    ImGui::DockBuilderSetNodeSize(dockId, ImGui::GetMainViewport()->WorkSize);
-
-    ImGuiID center = dockId;
-    ImGuiID bottom;
-    ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.24F, &bottom, &center);
-    ImGuiID right;
-    ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.20F, &right, &center);
-    ImGuiID left;
-    ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.20F, &left, &center);
-
-    ImGui::DockBuilderDockWindow("Hierarchy", left);
-    ImGui::DockBuilderDockWindow("Inspector", right);
-    ImGui::DockBuilderDockWindow("Project", bottom);
-    ImGui::DockBuilderDockWindow("Scene View", bottom);
-    ImGui::DockBuilderFinish(dockId);
-}
-
-// True when the current ImGui context restored at least one of the editor panels from
-// a persisted layout (imgui.ini). Fresh contexts have no such settings: the first run
-// of the editor, and the otherwise-empty ini written while migrating the context during
-// project open/create. In both cases the layout should fall back to the Unity default.
-// A file-existence test alone would not work: migrating the context during project
-// create writes an (empty) ini that would wrongly suppress the default layout.
-bool hasDockedPanelLayout() {
-    for (const char* name : {"Hierarchy", "Inspector", "Project", "Scene View"}) {
-        const ImGuiWindowSettings* settings =
-            ImGui::FindWindowSettingsByID(ImHashStr(name, 0, 0));
-        if (settings != nullptr && settings->DockId != 0)
-            return true;
-    }
-    return false;
-}
-
-} // namespace
-
 EditorApplication::EditorApplication()
     : projectPicker_(ENGINE.editorConfig().registry),
       projectPanel_([this](const VirtualPath& path) { openScene(path); }),
       hierarchyPanel_(document_),
       inspectorPanel_(document_),
-      sceneViewPanel_(document_) {
+      sceneViewPanel_(document_),
+      statisticsPanel_(document_) {
     // editor.json 固定在当前工作目录下的 editor/config/ 解析（不再由 main 传入）。
     const std::filesystem::path editorConfigPath =
         std::filesystem::current_path() / "editor" / "config" / "editor.json";
@@ -145,6 +103,8 @@ void EditorApplication::onUpdate(float deltaTime) {
         inspectorPanel_.draw(hierarchyPanel_.selectionSet());
     if (showScene_)
         sceneViewPanel_.draw();
+    if (showStatistics_)
+        statisticsPanel_.draw();
 
     imguiLayer_.endFrame();
 }
@@ -292,6 +252,7 @@ void EditorApplication::drawMenuBar() {
         ImGui::MenuItem("Inspector", nullptr, &showInspector_);
         ImGui::MenuItem("Project", nullptr, &showProject_);
         ImGui::MenuItem("Scene View", nullptr, &showScene_);
+        ImGui::MenuItem("Statistics", nullptr, &showStatistics_);
         ImGui::Separator();
         if (ImGui::MenuItem("Reset Layout"))
             resetDockLayout();
@@ -322,13 +283,13 @@ void EditorApplication::drawDockSpace() {
         // or when the user explicitly asks to reset it.
         if (forceApplyDefaultLayout_ || !hasDockedPanelLayout()) {
             forceApplyDefaultLayout_ = false;
-            applyUnityLayout(dockId);
+            applyDefaultEditorLayout(dockId);
+        } else {
+            migrateLegacyEditorLayout(dockId);
         }
     }
 
-    // A full-viewport, non-dockable host window that owns the dockspace. The central
-    // node is left as a passthru hole so the engine-rendered frame shows through as the
-    // scene view; everything else is covered by the docked panels.
+    // The dockspace owns the editor workspace, including the central Scene View.
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -342,7 +303,7 @@ void EditorApplication::drawDockSpace() {
                          ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
                          ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus |
                          ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBackground)) {
-        ImGui::DockSpace(dockId, ImVec2(0.0F, 0.0F), ImGuiDockNodeFlags_PassthruCentralNode);
+        ImGui::DockSpace(dockId, ImVec2(0.0F, 0.0F), ImGuiDockNodeFlags_None);
     }
     ImGui::End();
     ImGui::PopStyleColor();
@@ -352,7 +313,7 @@ void EditorApplication::drawDockSpace() {
 void EditorApplication::resetDockLayout() {
     dockLayoutApplied_ = false;
     forceApplyDefaultLayout_ = true;
-    showProject_ = showHierarchy_ = showInspector_ = showScene_ = true;
+    showProject_ = showHierarchy_ = showInspector_ = showScene_ = showStatistics_ = true;
 }
 
 void EditorApplication::drawConflictModal() {

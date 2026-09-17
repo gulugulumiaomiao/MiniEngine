@@ -44,6 +44,11 @@ public:
     // Requires an idle device, which Renderer guarantees around swapchain resizes.
     void onColorFormatChanged(rhi::TextureFormat colorFormat);
 
+    // generation zero cannot collide with encoded live RHI handles.
+    static constexpr ImTextureID kSceneTextureId = 1;
+    // Called after the selected slot's fence, never while that slot is in flight.
+    [[nodiscard]] bool setSceneTexture(std::uint32_t frameIndex, rhi::TextureViewHandle view);
+
     // Records the draw calls for drawData. frameIndex selects the geometry buffers;
     // the swapchain fence already proved that frame's buffers are free to overwrite.
     void render(rhi::IGraphicsCommandEncoder& encoder,
@@ -78,6 +83,11 @@ private:
     rhi::TextureViewHandle fontView_;
     rhi::SamplerHandle sampler_;
     rhi::BindGroupHandle fontBindGroup_;
+    struct SceneTexture {
+        rhi::TextureViewHandle view;
+        rhi::BindGroupHandle group;
+    };
+    std::array<SceneTexture, FrameGpuManager::kFramesInFlight> sceneTextures_{};
     std::array<Geometry, FrameGpuManager::kFramesInFlight> geometry_;
     // Reused scratch buffers: the vertex copy applies ImGui's display transform and
     // the index copy concatenates the draw lists into one range.

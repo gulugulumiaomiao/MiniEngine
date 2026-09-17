@@ -1,4 +1,4 @@
-﻿#include "runtime/engine/Engine.h"
+#include "runtime/engine/Engine.h"
 
 #include "asset/importer/AssetImportPipeline.h"
 #include "asset/manager/AssetManager.h"
@@ -316,9 +316,7 @@ void Engine::loop(Application& application) {
         if (shouldQuit_)
             break;
         scene_->update(deltaTime_);
-        const auto [width, height] = window_->framebufferSize();
-        const float aspectRatio =
-            height != 0 ? static_cast<float>(width) / static_cast<float>(height) : 1.0F;
+        const float aspectRatio = renderer_->sceneAspectRatio();
         scene_->buildRenderScene(renderScene_, aspectRatio);
         renderer_->renderFrame(renderScene_);
     }

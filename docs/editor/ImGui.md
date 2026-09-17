@@ -63,8 +63,9 @@ overlay 是 present 之前的最后写入者，必须把获取到的 backbuffer 
 - **字体图集**：上传为 `Rgba8Unorm` 纹理 + `ClampToEdge` 采样器（nearest wrap 会让
   图集边缘字形互相渗色），随后 `ClearTexData()` 释放 CPU 侧副本。
 - **ImTextureID**：是 64 位整数，直接编码 RHI 的 `BindGroupHandle`
-  （`generation << 32 | index`）。活句柄的 generation 恒非零，所以被清零的
-  `ImDrawCmd::TextureId` 不会与真实句柄冲突，`ImGui::Image` 无需旁路映射表即可用。
+  （`generation << 32 | index`）。Scene View 使用 generation 为零的保留 ID `1`，
+  在录制时解析到实际获取帧的场景 BindGroup。活句柄的 generation 恒非零，所以被清零的
+  `ImDrawCmd::TextureId` 不会与真实句柄冲突，普通纹理无需旁路映射表即可用。
 - **UI 管线**：无深度测试与写入、`CullMode::None`（ImGui 两种绕序都会发）、Alpha
   混合、`colorFormats = {swapchain 格式}`。
 - **sRGB**：sRGB 附件会选 `-DSRGB_TARGET` 编出的片元变体，在片元阶段把 ImGui 的
@@ -96,3 +97,27 @@ UI shader 绕过 ShaderLab 资产管线：两段 GLSL（`tools/editor/shaders/im
 `ImGuiRendererTest` 直接编译 `tools/editor/ImGuiRenderer.cpp`（UI shader 已内联其中），
 依赖 `MiniImGui`、链接普通 `MiniEngine`（UI 后端不需要编辑器变体），覆盖几何上传、
 管线记录与 sRGB 变体选择。
+
+## 场景离屏输出与帧序
+
+编辑器 attach 后启用离屏场景模式，beginFrame 把请求尺寸归零，由可见的
+SceneViewPanel 提交本帧尺寸。detach 在 GPU idle 后释放 UI BindGroup，并恢复默认
+swapchain 输出；项目切换继续遵循先 detach、再 open/close、再 attach 的顺序。
+
+```text
+Application::onUpdate：生成 UI，提交 Scene View 的像素尺寸
+  -> Scene::buildRenderScene：使用 Renderer::sceneAspectRatio
+  -> swapchain.beginFrame：获取实际帧并等待该 slot 的 fence
+  -> 准备该 slot 的颜色与深度目标（尺寸变化时重建）
+  -> 场景管线：离屏颜色附件 -> ShaderRead
+  -> recordOverlay：绑定实际 slot 的场景纹理，清理主窗口并绘制 UI
+  -> backbuffer -> Present
+```
+
+颜色目标使用 swapchain 的颜色格式与 Sampled usage。sRGB 目标写入时编码，ImGui
+采样时由硬件解码，随后主窗口附件编码，保持原来的场景色彩。场景目标不会设置
+backBufferWritten；该标记仍只描述真正的主窗口写入。
+
+ImGuiRenderer 按双帧缓存场景纹理 BindGroup，比较包含 generation 的完整 view 句柄，
+重建仅发生于相应 fence 完成后，shutdown 释放全部绑定。零尺寸时跳过场景管线，
+overlay 继续保证合法的主窗口清屏与 Present。ImGuiRendererTest 已迁移为 GoogleTest。

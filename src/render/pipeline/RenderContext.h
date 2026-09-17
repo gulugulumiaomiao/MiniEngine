@@ -1,6 +1,7 @@
 #pragma once
 
 #include "render/scene/RenderScene.h"
+#include "rhi/api/PipelineDesc.h"
 
 #include <cstdint>
 
@@ -28,6 +29,10 @@ public:
     [[nodiscard]] std::uint32_t frameIndex() const;
     [[nodiscard]] std::uint64_t frameSerial() const;
     [[nodiscard]] const RenderScene& scene() const { return scene_; }
+    [[nodiscard]] bool offscreenScene() const;
+    [[nodiscard]] std::uint32_t sceneWidth() const;
+    [[nodiscard]] std::uint32_t sceneHeight() const;
+    [[nodiscard]] rhi::TextureFormat sceneColorFormat() const;
 
     // True once a pass actually rendered into the swapchain backbuffer this frame.
     // The overlay uses this instead of guessing from scene contents: a scene can have

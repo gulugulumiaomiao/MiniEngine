@@ -2,6 +2,7 @@
 
 #include "core/logging/Log.h"
 #include "render/pipeline/RenderContext.h"
+#include "render/render_target/RenderTarget.h"
 #include "rhi/api/CommandEncoder.h"
 #include "rhi/api/Swapchain.h"
 
@@ -51,6 +52,7 @@ void ImGuiLayer::attach(Renderer& renderer, Window& window) {
             handleNativeMessage(handle, message, wParam, lParam);
         });
     renderer.setOverlay(this);
+    renderer.setSceneViewport(0, 0);
     engineRenderer_ = &renderer;
     window_ = &window;
     initialized_ = true;
@@ -75,6 +77,7 @@ void ImGuiLayer::detach() {
     if (engineRenderer_) {
         engineRenderer_->waitIdle();
         engineRenderer_->setOverlay(nullptr);
+        engineRenderer_->resetSceneViewport();
         engineRenderer_ = nullptr;
     }
     imguiRenderer_.shutdown();
@@ -101,6 +104,8 @@ void ImGuiLayer::beginFrame() {
     if (!initialized_)
         return;
     ImGui_ImplWin32_NewFrame();
+    // Hidden panels and picker early returns must not reuse last frame's request.
+    engineRenderer_->setSceneViewport(0, 0);
     ImGui::NewFrame();
 }
 
@@ -133,6 +138,10 @@ void ImGuiLayer::recordOverlay(RenderContext& context) {
         return;
 
     rhi::IGraphicsCommandEncoder& encoder = context.encoder();
+    if (context.offscreenScene() && context.sceneWidth() != 0 && context.sceneHeight() != 0) {
+        if (!imguiRenderer_.setSceneTexture(context.frameIndex(), context.currentForwardTarget().colorView(0)))
+            Log::error("ImGuiLayer", "Cannot bind the Scene View texture");
+    }
     const bool needsClear = !backBufferWritten;
     const rhi::TextureBarrier toAttachment{
         .texture = swapchain.currentTexture(),

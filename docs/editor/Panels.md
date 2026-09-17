@@ -6,11 +6,11 @@ ImGui 集成本身见 [ImGui.md](ImGui.md)，项目流程见 [ProjectManagement.
 ## 共享基础设施
 
 面板之间没有相互依赖：`HierarchyPanel` 持有选择状态，`EditorApplication` 把它作为
-参数传给 `InspectorPanel::draw(selection)`；三个场景面板共享同一个 `SceneDocument`
+参数传给 `InspectorPanel::draw(selection)`；四个场景面板共享同一个 `SceneDocument`
 引用。`EditorApplication` 每帧的绘制顺序：
 
 ```text
-ProjectPanel -> HierarchyPanel -> InspectorPanel -> SceneViewPanel
+ProjectPanel -> HierarchyPanel -> InspectorPanel -> SceneViewPanel -> StatisticsPanel
 （选择在 HierarchyPanel 内产生，InspectorPanel 只读消费）
 ```
 
@@ -52,12 +52,15 @@ ProjectPanel -> HierarchyPanel -> InspectorPanel -> SceneViewPanel
 
 ## Dock 布局
 
-Dock 宿主是一个铺满工作区、不可停靠、无标题栏、无背景的窗口，内部
-`DockSpace(..., ImGuiDockNodeFlags_PassthruCentralNode)` 把中央节点留成空洞，于是
-引擎渲染出的帧直接透出来充当场景视图，其余区域被面板覆盖。
+Dock 宿主铺满工作区，中央节点停靠真正的 `Scene View`，不再使用
+`PassthruCentralNode`。场景先渲染到离屏纹理，再由 `ImGui::Image` 显示，因此画面
+随面板停靠、移动和缩放，不会透出到其他面板后面。
 
-默认 Unity 布局：左 `Hierarchy`（20%）、右 `Inspector`（20%）、底部 `Project` 与
-`Scene View`（24%）。应用时机由两个标记控制：
+默认 Unity 布局：左 `Hierarchy`（20%）、右 `Inspector`（20%）、中央 `Scene View`，
+底部 `Project` 与 `Statistics` 标签页（24%）。布局构建与迁移由 `EditorLayout` 管理。
+旧布局中尚无 `Statistics` 设置时，将原 `Scene View` 的 dock 槽位交给统计窗口，
+并把新的场景视图放到中央；已有统计窗口的新布局保留用户自定义停靠位置。
+应用时机由两个标记控制：
 
 - `dockLayoutApplied_`：每个 ImGui 上下文只在首帧推导一次（项目打开/创建会重建
   上下文，因此每次切换都会重新推导）。
@@ -65,7 +68,7 @@ Dock 宿主是一个铺满工作区、不可停靠、无标题栏、无背景的
   docked 状态。只判断 ini 文件是否存在是不行的——项目切换迁移上下文时会写出一个空
   ini，那样会错误地抑制默认布局。
 
-`Window > Reset Layout` 置 `forceApplyDefaultLayout_` 并恢复四个面板的可见性。面板
+`Window > Reset Layout` 置 `forceApplyDefaultLayout_` 并恢复五个面板的可见性。面板
 可见性是会话级偏好：窗口在持久化布局里保留自己的 dock 槽位，所以反复开关是安全的。
 
 ## HierarchyPanel（场景树）
@@ -172,11 +175,22 @@ Camera、Light，最后是 `Add Component` 弹窗（已存在的组件类型不�
 其他资产置灰只显示路径 tooltip。`FileSystem::listFiles` 只返回文件，子目录是从子
 路径重建的，因此空目录也能作为折叠节点出现。当前是只读浏览器。
 
-## SceneViewPanel（场景视图统计）
+## SceneViewPanel（场景视图）
 
-统计节点/相机/网格/灯光数量，显示视口尺寸、帧时间与主相机参数。它不承载离屏
-渲染目标——引擎窗口本身即场景视图，面板叠加在透出的帧上（见 Dock 布局）。
+以无内容边距的图像区域显示当前场景，沿用场景主相机，参数通过 Inspector 编辑。
+内容尺寸乘以 `DisplayFramebufferScale` 后取整，提交给 `Renderer::setSceneViewport`。
+Engine 构建 RenderScene 时使用场景视口宽高比，Forward 与 DepthOnly 使用相同的尺寸。
+隐藏、非当前 dock 标签页或零尺寸时不请求场景渲染；UI 和 present 仍继续运行。
 
+UI 构建早于 swapchain 获取帧，因此图像使用保留的逻辑纹理 ID，录制 overlay 时才
+解析成实际获取帧的 BindGroup。离屏颜色/深度目标按双帧分别管理，尺寸变化后在该帧
+fence 完成时重建。空场景或没有相机仍清理颜色纹理，不显示上一帧的残留。
+
+## StatisticsPanel（统计）
+
+迁移原 Scene View 的节点/相机/网格/灯光数量、场景名称与 dirty 标记、帧时间/FPS
+和主相机参数。窗口尺寸与实际场景视口尺寸分别显示；统计不负责请求渲染尺寸。
+主相机查找支持嵌套层级。通过 `Window > Statistics` 独立切换可见性。
 ## ProjectPickerPanel（项目选择器）
 
 编辑器启动或关闭项目后显示的模态框：
@@ -206,3 +220,9 @@ Camera、Light，最后是 `Add Component` 弹窗（已存在的组件类型不�
 | `InspectorPanelTest` | 批量 Active 三态切换、Transform 一致值批量写与混合值占位 |
 | `SelectionSetTest` | 容器纯逻辑：修饰键、范围选择、removeIf、payload 序列化 |
 | `SceneHierarchyEditorTest` | `Scene` 层的父子重排与世界变换保持（面板的后端依赖） |
+
+新增视口相关测试统一使用 GoogleTest：
+
+- `SceneOutputTest`：默认输出、离屏清屏与 ShaderRead、双帧缩放、隐藏恢复、失效 acquire、无相机。
+- `EditorLayoutTest`：默认布局、旧布局迁移、自定义布局与重置。
+- `SceneViewIntegrationTest`：实际 Vulkan 渲染、缩放/隐藏/空场景，以及项目打开、关闭和重新绑定。

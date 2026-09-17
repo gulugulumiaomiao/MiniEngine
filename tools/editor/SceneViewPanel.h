@@ -6,9 +6,8 @@ namespace editor {
 
 class SceneDocument;
 
-// Scene-view companion. The engine's swapchain output is the scene view itself and the
-// editor panels overlay it, so this panel reports view state and scene statistics
-// instead of hosting an off-screen render target.
+// Displays the scene output and requests its extent from the renderer. The logical
+// image ID is resolved to the acquired frame's texture when the overlay is recorded.
 class SceneViewPanel {
 public:
     explicit SceneViewPanel(SceneDocument& document) : document_(document) {}

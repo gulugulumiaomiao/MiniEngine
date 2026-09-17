@@ -1,96 +1,36 @@
 #include "tools/editor/SceneViewPanel.h"
 
 #include "imgui.h"
+#include "render/renderer/Renderer.h"
 #include "runtime/engine/Engine.h"
-#include "runtime/window/Window.h"
-#include "scene/components/CameraComponent.h"
-#include "scene/components/LightComponent.h"
-#include "scene/components/MeshComponent.h"
-#include "scene/node/Node.h"
-#include "scene/scene/Scene.h"
+#include "tools/editor/ImGuiRenderer.h"
 #include "tools/editor/SceneDocument.h"
 
+#include <algorithm>
 #include <cmath>
-#include <string>
+#include <cstdint>
 
 namespace engine::editor {
-namespace {
-
-struct SceneStats {
-    std::uint32_t cameras{};
-    std::uint32_t meshes{};
-    std::uint32_t lights{};
-};
-
-void collectStats(Node& node, SceneStats& stats) {
-    if (node.getComponent<CameraComponent>() != nullptr)
-        ++stats.cameras;
-    if (node.getComponent<MeshComponent>() != nullptr)
-        ++stats.meshes;
-    if (node.getComponent<LightComponent>() != nullptr)
-        ++stats.lights;
-    for (const NodeHandle child : node.children()) {
-        if (Node* childNode = node.scene().findNode(child))
-            collectStats(*childNode, stats);
-    }
-}
-
-const CameraComponent* findPrimaryCamera(Node& node) {
-    if (const CameraComponent* camera = node.getComponent<CameraComponent>(); camera && camera->primary)
-        return camera;
-    for (const NodeHandle child : node.children()) {
-        if (const Node* childNode = node.scene().findNode(child)) {
-            if (const CameraComponent* camera = childNode->getComponent<CameraComponent>();
-                camera && camera->primary)
-                return camera;
-        }
-    }
-    return nullptr;
-}
-
-} // namespace
 
 void SceneViewPanel::draw() {
-    if (!ImGui::Begin("Scene View", nullptr, ImGuiWindowFlags_NoCollapse)) {
-        ImGui::End();
-        return;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0F, 0.0F});
+    const bool visible = ImGui::Begin("Scene View", nullptr,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleVar();
+    if (visible) {
+        if (!document_.valid()) {
+            ImGui::TextUnformatted("No Scene document is open");
+        } else {
+            const ImVec2 size = ImGui::GetContentRegionAvail();
+            const ImVec2 scale = ImGui::GetIO().DisplayFramebufferScale;
+            if (size.x > 0.0F && size.y > 0.0F) {
+                const auto width = static_cast<std::uint32_t>(std::max(1.0F, std::floor(size.x * scale.x)));
+                const auto height = static_cast<std::uint32_t>(std::max(1.0F, std::floor(size.y * scale.y)));
+                ENGINE.renderer().setSceneViewport(width, height);
+                ImGui::Image(ImGuiRenderer::kSceneTextureId, size);
+            }
+        }
     }
-    if (!document_.valid()) {
-        ImGui::TextUnformatted("No Scene document is open");
-        ImGui::End();
-        return;
-    }
-
-    Scene& scene = document_.scene();
-    SceneStats stats;
-    collectStats(scene.root(), stats);
-    ImGui::Text("Scene: %s%s", std::string{scene.name()}.c_str(),
-                document_.dirty() ? " *" : "");
-    ImGui::Text("Nodes: %zu   Cameras: %u   Meshes: %u   Lights: %u",
-                scene.nodeCount(), stats.cameras, stats.meshes, stats.lights);
-
-    const auto [width, height] = ENGINE.window().framebufferSize();
-    ImGui::Text("Viewport: %u x %u", width, height);
-    const float deltaTime = ENGINE.deltaTime();
-    ImGui::Text("Frame: %.2f ms (%.0f FPS)", deltaTime * 1000.0F,
-                deltaTime > 0.0F ? 1.0F / deltaTime : 0.0F);
-
-    if (const CameraComponent* camera = findPrimaryCamera(scene.root())) {
-        ImGui::Separator();
-        ImGui::Text("Primary Camera");
-        ImGui::Text("  %s, FOV %.1f, Near %.2f, Far %.1f",
-                    camera->projection == CameraProjection::Perspective ? "Perspective"
-                                                                        : "Orthographic",
-                    camera->fieldOfView, camera->nearPlane, camera->farPlane);
-    } else {
-        ImGui::TextUnformatted("No primary camera (scene renders the clear color)");
-    }
-
-    ImGui::Separator();
-    ImGui::TextWrapped(
-        "The engine window is the scene view; editor panels overlay it. Adjust the "
-        "camera through the Inspector.");
-
     ImGui::End();
 }
 

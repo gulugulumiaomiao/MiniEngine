@@ -10,6 +10,7 @@
 #include "tools/editor/ProjectPickerPanel.h"
 #include "tools/editor/SceneDocument.h"
 #include "tools/editor/SceneViewPanel.h"
+#include "tools/editor/StatisticsPanel.h"
 
 #include <filesystem>
 #include <optional>
@@ -18,8 +19,8 @@
 namespace engine::editor {
 
 // Editor entry point: owns the ImGui layer, the scene document and the panels, and
-// drives them from the engine's application callbacks. The panels overlay the swapchain
-// output, which acts as the scene view.
+// drives them from the engine's application callbacks. Scene View displays offscreen
+// scene output; the swapchain presents the editor UI.
 class EditorApplication final : public Application {
 public:
     // editor.json 与 imgui.ini 固定在进程当前工作目录下的 editor/config/ 解析，构造
@@ -59,6 +60,7 @@ private:
     HierarchyPanel hierarchyPanel_;
     InspectorPanel inspectorPanel_;
     SceneViewPanel sceneViewPanel_;
+    StatisticsPanel statisticsPanel_;
     bool saveAsOpen_{};
     char saveAsPath_[256]{};
     std::string statusMessage_;
@@ -74,6 +76,7 @@ private:
     bool showHierarchy_{true};
     bool showInspector_{true};
     bool showScene_{true};
+    bool showStatistics_{true};
     // A project to open, deferred out of the ImGui frame: picker clicks happen inside
     // an active ImGui window, and the migration tears the ImGui context down and
     // rebuilds it. Running it there would leave every later ImGui call with a freed

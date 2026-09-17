@@ -34,11 +34,12 @@ void ForwardPass::execute(RenderContext& context,
             items.push_back(item);
         }
     }
-    if (items.empty()) {
+    if (items.empty() && !context.offscreenScene()) {
         return;
     }
 
-    context.markBackBufferWritten();
+    if (!context.offscreenScene())
+        context.markBackBufferWritten();
 
     // Sort opaque front-to-back by queue/state, then transparent back-to-front by camera distance.
     std::vector<DrawItem> opaque;
@@ -65,18 +66,20 @@ void ForwardPass::execute(RenderContext& context,
     items.insert(items.end(),
                  std::make_move_iterator(transparent.begin()),
                  std::make_move_iterator(transparent.end()));
-    const RgTextureHandle backBuffer = graph.importTexture({
-        .texture = context.swapchain().currentTexture(),
-        .view = context.swapchain().currentTextureView(),
-        .initialState = context.swapchain().currentTextureState(),
-        .finalState = rhi::ResourceState::Present,
-        .aspect = rhi::TextureAspect::Color,
-    });
     RenderTarget& forwardTarget = context.currentForwardTarget();
+    const RgTextureHandle backBuffer = context.offscreenScene()
+        ? forwardTarget.importColor(graph, 0, rhi::ResourceState::ShaderRead)
+        : graph.importTexture({
+            .texture = context.swapchain().currentTexture(),
+            .view = context.swapchain().currentTextureView(),
+            .initialState = context.swapchain().currentTextureState(),
+            .finalState = rhi::ResourceState::Present,
+            .aspect = rhi::TextureAspect::Color,
+        });
     const RgTextureHandle depthHandle = forwardTarget.importDepth(graph);
 
     RgRenderingInfo rendering;
-    rendering.renderArea = {0, 0, context.swapchain().width(), context.swapchain().height()};
+    rendering.renderArea = {0, 0, context.sceneWidth(), context.sceneHeight()};
     rendering.colorAttachments.push_back(
         {backBuffer, rhi::LoadOp::Clear, rhi::StoreOp::Store, drawList.clearColor});
     rendering.depthAttachments.push_back(
@@ -99,12 +102,12 @@ void ForwardPass::execute(RenderContext& context,
                               rhi::IGraphicsCommandEncoder& encoder) mutable {
                               encoder.setViewport({0.0F,
                                                    0.0F,
-                                                   static_cast<float>(context.swapchain().width()),
-                                                   static_cast<float>(context.swapchain().height()),
+                                                   static_cast<float>(context.sceneWidth()),
+                                                   static_cast<float>(context.sceneHeight()),
                                                    0.0F,
                                                    1.0F});
                               encoder.setScissor(
-                                  {0, 0, context.swapchain().width(), context.swapchain().height()});
+                                  {0, 0, context.sceneWidth(), context.sceneHeight()});
                               drawFilteredItems(context.frameIndex(),
                                                 items,
                                                 FRAME_GPU_MANAGER.sceneBindGroup(context.frameIndex()),

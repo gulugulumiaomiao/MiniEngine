@@ -61,9 +61,9 @@ set_target_properties(MiniShaderCompiler MiniAssetCooker MiniShaderPackagedShade
 # ---------------------------------------------------------------------------
 # MiniEditor: minimal Unity-style scene editor built on Dear ImGui. Only the
 # Win32 platform backend is vendored; drawing goes through ImGuiRenderer, which
-# records into the engine RHI. The engine renders into the swapchain; the ImGui
-# panels are recorded as an IFrameOverlay after the render pipeline in the same
-# command buffer.
+# records into the engine RHI. Scene output is an offscreen texture displayed by
+# Scene View; IFrameOverlay composites the editor UI into the swapchain after the
+# render pipeline in the same command buffer.
 # ---------------------------------------------------------------------------
 add_library(MiniImGui STATIC
     ${PROJECT_SOURCE_DIR}/third_party/imgui/imgui.cpp
@@ -110,6 +110,8 @@ add_executable(MiniEditor
     editor/HierarchyPanel.cpp
     editor/InspectorPanel.cpp
     editor/SceneViewPanel.cpp
+    editor/StatisticsPanel.cpp
+    editor/EditorLayout.cpp
 )
 # ImGuiRenderer.cpp bakes the UI shaders in as SPIR-V words, so the editor no longer
 # needs a shader compile step or the generated-shader include directory.

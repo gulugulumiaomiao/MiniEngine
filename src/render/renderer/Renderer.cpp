@@ -54,14 +54,17 @@ void Renderer::renderFrame(const RenderScene& scene) {
     }
     GRAPHICS_PIPELINE_MANAGER.refreshShaders(frameSerial_,
                                              frameSerial_ + FrameGpuManager::kFramesInFlight);
-    rgTexturePool_->beginFrame(swapchain_->frameIndex());
     if (swapchain_->beginFrame() == rhi::FrameStatus::OutOfDate) {
         recreateSwapchain();
         return;
     }
+    rgTexturePool_->beginFrame(swapchain_->frameIndex());
     GRAPHICS_PIPELINE_MANAGER.collect(frameSerial_);
     RenderContext context(*this, scene);
-    pipeline_->render(context);
+    if (sceneWidth() != 0 && sceneHeight() != 0) {
+        prepareForwardTarget();
+        pipeline_->render(context);
+    }
     if (overlay_) {
         overlay_->recordOverlay(context);
     } else if (!context.backBufferWritten()) {
@@ -108,6 +111,8 @@ void Renderer::recreateSwapchain() {
     GRAPHICS_PIPELINE_MANAGER.clear();
     swapchain_->resize(width, height);
     for (const std::unique_ptr<RenderTarget>& target : forwardTargets_) {
+        if (offscreenScene_)
+            continue;
         if (!target->resize(swapchain_->width(), swapchain_->height())) {
             Log::fatal("Renderer", "Cannot resize the Forward render target");
         }
@@ -121,6 +126,31 @@ void Renderer::recreateSwapchain() {
 
 void Renderer::waitIdle() {
     device_->waitIdle();
+}
+
+void Renderer::prepareForwardTarget() {
+    // beginFrame waited for this slot's fence. Other slots retain their images until
+    // their own fence completes, including during interactive viewport resizing.
+    RenderTarget& target = currentForwardTarget();
+    const std::size_t colorCount = offscreenScene_ ? 1U : 0U;
+    if (target.width() == sceneWidth() && target.height() == sceneHeight() &&
+        target.colorAttachmentCount() == colorCount &&
+        (!offscreenScene_ || target.colorFormat(0) == swapchain_->format()))
+        return;
+    RenderTargetDesc desc;
+    desc.width = sceneWidth();
+    desc.height = sceneHeight();
+    desc.depthAttachment.emplace();
+    desc.depthAttachment->storeOp = rhi::StoreOp::DontCare;
+    desc.debugName = "ForwardTarget" + std::to_string(swapchain_->frameIndex());
+    if (offscreenScene_) {
+        desc.colorAttachments.push_back({
+            .format = swapchain_->format(),
+            .additionalUsage = rhi::TextureUsage::Sampled,
+        });
+    }
+    if (!target.create(std::move(desc)))
+        Log::fatal("Renderer", "Cannot prepare the scene render target");
 }
 
 } // namespace engine

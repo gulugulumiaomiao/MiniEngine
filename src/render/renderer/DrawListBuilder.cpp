@@ -57,7 +57,7 @@ DrawListBuilder::ResolvedMaterialPass DrawListBuilder::resolveMaterialPass(
     // resolved against an empty color attachment list and the shadow map depth format.
     const bool shadowCaster = phase == RenderPhase::ShadowCaster;
     const rhi::TextureFormat colorFormat =
-        shadowCaster ? rhi::TextureFormat::Undefined : context.swapchain().format();
+        shadowCaster ? rhi::TextureFormat::Undefined : context.sceneColorFormat();
     const rhi::TextureFormat depthFormat = shadowCaster
                                                ? rhi::TextureFormat::Depth32Float
                                                : context.currentForwardTarget().depthFormat();
@@ -74,6 +74,8 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
         RenderPhase::ShadowCaster, RenderPhase::DepthOnly, RenderPhase::Forward};
 
     DrawList drawList;
+    if (context.offscreenScene() && !scene.camera())
+        return drawList;
     std::optional<math::Frustum> frustum;
     if (scene.camera()) {
         const RenderCamera& camera = *scene.camera();

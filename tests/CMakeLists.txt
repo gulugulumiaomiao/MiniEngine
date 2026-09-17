@@ -165,14 +165,38 @@ add_executable(ImGuiRendererTest
     ${PROJECT_SOURCE_DIR}/tools/editor/ImGuiRenderer.cpp
 )
 target_include_directories(ImGuiRendererTest PRIVATE ${PROJECT_SOURCE_DIR})
-target_link_libraries(ImGuiRendererTest PRIVATE MiniEngine MiniImGui)
+target_link_libraries(ImGuiRendererTest PRIVATE MiniEngine MiniImGui MiniGTest)
 mini_enable_warnings(ImGuiRendererTest)
 if(NOT MSVC)
     target_compile_options(ImGuiRendererTest PRIVATE -Wno-missing-field-initializers)
 endif()
 mini_link_mingw_runtime(ImGuiRendererTest)
 set_target_properties(ImGuiRendererTest PROPERTIES FOLDER Tests)
-add_test(NAME ImGuiRendererTest COMMAND ImGuiRendererTest)
+gtest_discover_tests(ImGuiRendererTest)
+
+mini_add_gtest(SceneOutputTest)
+target_compile_options(SceneOutputTest PRIVATE -Wno-missing-field-initializers)
+
+add_executable(EditorLayoutTest EditorLayoutTest.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/EditorLayout.cpp)
+target_include_directories(EditorLayoutTest PRIVATE ${PROJECT_SOURCE_DIR})
+target_link_libraries(EditorLayoutTest PRIVATE MiniImGui MiniGTest)
+mini_enable_warnings(EditorLayoutTest)
+mini_link_mingw_runtime(EditorLayoutTest)
+gtest_discover_tests(EditorLayoutTest)
+
+add_executable(SceneViewIntegrationTest SceneViewIntegrationTest.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/ImGuiLayer.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/ImGuiRenderer.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/SceneDocument.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/SceneViewPanel.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/StatisticsPanel.cpp)
+target_include_directories(SceneViewIntegrationTest PRIVATE ${PROJECT_SOURCE_DIR})
+target_link_libraries(SceneViewIntegrationTest PRIVATE MiniEngineEditor MiniImGui MiniGTest)
+mini_enable_warnings(SceneViewIntegrationTest)
+target_compile_options(SceneViewIntegrationTest PRIVATE -Wno-missing-field-initializers)
+mini_link_mingw_runtime(SceneViewIntegrationTest)
+gtest_discover_tests(SceneViewIntegrationTest PROPERTIES TIMEOUT 120)
 
 mini_add_test(VulkanPipelineCacheTest)
 target_link_libraries(VulkanPipelineCacheTest PRIVATE user32)

@@ -7,6 +7,13 @@
 
 namespace engine {
 
+bool RenderContext::offscreenScene() const { return renderer_.offscreenScene(); }
+std::uint32_t RenderContext::sceneWidth() const { return renderer_.sceneWidth(); }
+std::uint32_t RenderContext::sceneHeight() const { return renderer_.sceneHeight(); }
+rhi::TextureFormat RenderContext::sceneColorFormat() const {
+    return offscreenScene() ? currentForwardTarget().colorFormat(0) : swapchain().format();
+}
+
 RenderContext::RenderContext(Renderer& renderer, const RenderScene& scene)
     : renderer_(renderer), scene_(scene) {}
 

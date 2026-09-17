@@ -40,7 +40,7 @@ void DepthOnlyPass::execute(RenderContext& context,
     const RgTextureHandle depthHandle = forwardTarget.importDepth(graph);
 
     RgRenderingInfo rendering;
-    rendering.renderArea = {0, 0, context.swapchain().width(), context.swapchain().height()};
+    rendering.renderArea = {0, 0, context.sceneWidth(), context.sceneHeight()};
     rendering.depthAttachments.push_back(
         {depthHandle, rhi::LoadOp::Clear, rhi::StoreOp::Store, 1.0F});
 
@@ -55,12 +55,12 @@ void DepthOnlyPass::execute(RenderContext& context,
                               rhi::IGraphicsCommandEncoder& encoder) mutable {
                               encoder.setViewport({0.0F,
                                                    0.0F,
-                                                   static_cast<float>(context.swapchain().width()),
-                                                   static_cast<float>(context.swapchain().height()),
+                                                   static_cast<float>(context.sceneWidth()),
+                                                   static_cast<float>(context.sceneHeight()),
                                                    0.0F,
                                                    1.0F});
                               encoder.setScissor(
-                                  {0, 0, context.swapchain().width(), context.swapchain().height()});
+                                  {0, 0, context.sceneWidth(), context.sceneHeight()});
                               drawFilteredItems(context.frameIndex(),
                                                 items,
                                                 FRAME_GPU_MANAGER.sceneBindGroup(context.frameIndex()),

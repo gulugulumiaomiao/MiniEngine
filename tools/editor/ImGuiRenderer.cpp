@@ -297,6 +297,11 @@ void ImGuiRenderer::shutdown() {
         return;
     for (Geometry& geometry : geometry_)
         releaseGeometry(geometry);
+    for (SceneTexture& texture : sceneTextures_) {
+        if (texture.group)
+            device_->destroyBindGroup(texture.group);
+        texture = {};
+    }
     destroyPipeline();
     if (fontBindGroup_)
         device_->destroyBindGroup(fontBindGroup_);
@@ -512,6 +517,34 @@ void ImGuiRenderer::releaseGeometry(Geometry& geometry) {
     geometry = {};
 }
 
+bool ImGuiRenderer::setSceneTexture(std::uint32_t frameIndex, rhi::TextureViewHandle view) {
+    if (!device_ || frameIndex >= sceneTextures_.size())
+        return false;
+    SceneTexture& texture = sceneTextures_[frameIndex];
+    if (texture.view == view && texture.group)
+        return true;
+    if (texture.group)
+        device_->destroyBindGroup(texture.group);
+    texture = {};
+    if (!view)
+        return false;
+    const rhi::BindGroupEntry entry{
+        .binding = 0,
+        .type = rhi::BindingType::SampledTexture,
+        .textureView = view,
+        .sampler = sampler_,
+    };
+    texture.group = device_->createBindGroup({
+        .layout = textureLayout_,
+        .entries = std::span{&entry, 1},
+        .debugName = "ImGuiSceneTexture",
+    });
+    if (!texture.group)
+        return false;
+    texture.view = view;
+    return true;
+}
+
 void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
                            const ImDrawData& drawData,
                            std::uint32_t frameIndex) {
@@ -600,7 +633,11 @@ void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
                 .width = static_cast<std::uint32_t>(maxX - minX),
                 .height = static_cast<std::uint32_t>(maxY - minY),
             });
-            encoder.bindGroup(0, toBindGroup(command.GetTexID()));
+            const rhi::BindGroupHandle group = command.GetTexID() == kSceneTextureId
+                ? sceneTextures_[frameIndex].group : toBindGroup(command.GetTexID());
+            if (!group)
+                continue;
+            encoder.bindGroup(0, group);
             encoder.drawIndexed({
                 .indexCount = command.ElemCount,
                 .firstIndex = command.IdxOffset + indexBase,
