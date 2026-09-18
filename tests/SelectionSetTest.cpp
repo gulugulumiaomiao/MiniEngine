@@ -1,4 +1,4 @@
-#include "tools/editor/SelectionSet.h"
+#include "tools/editor/model/SelectionSet.h"
 
 #include <cstdio>
 #include <vector>

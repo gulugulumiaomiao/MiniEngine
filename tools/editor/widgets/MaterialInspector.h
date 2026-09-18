@@ -1,11 +1,9 @@
 #pragma once
 
-#include "asset/base/Asset.h"
 #include "core/filesystem/VirtualPath.h"
 #include "render/base/RenderHandle.h"
 
 #include <string>
-#include <vector>
 
 namespace engine {
 
@@ -41,9 +39,6 @@ private:
     void drawKeywords(Material& data);
     void queueSave(const Material& data);
     void saveNow(const VirtualPath& path);
-    // AssetDatabase records of one type, sorted by relative path for stable
-    // combo order.
-    [[nodiscard]] static std::vector<VirtualPath> collectAssets(AssetType type);
 
     // The path whose edit is waiting for the debounce window to expire.
     VirtualPath pendingSavePath_{};

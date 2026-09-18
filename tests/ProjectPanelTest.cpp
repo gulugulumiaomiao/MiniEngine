@@ -1,4 +1,4 @@
-#include "tools/editor/ProjectPanel.h"
+#include "tools/editor/panels/ProjectPanel.h"
 #include "asset/base/AssetMeta.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/importer/AssetImportPipeline.h"

@@ -2,7 +2,7 @@
 
 #include "render/renderer/Renderer.h"
 #include "runtime/window/Window.h"
-#include "tools/editor/ImGuiRenderer.h"
+#include "tools/editor/backend/ImGuiRenderer.h"
 
 namespace engine::editor {
 

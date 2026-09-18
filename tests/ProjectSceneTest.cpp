@@ -6,7 +6,7 @@
 #include "core/filesystem/FileSystem.h"
 #include "core/filesystem/VirtualPath.h"
 #include "runtime/config/ProjectConfig.h"
-#include "tools/editor/ProjectTemplate.h"
+#include "tools/editor/model/ProjectTemplate.h"
 #include "scene/scene/SceneAsset.h"
 #include "asset/format/SceneAssetFormat.h"
 

@@ -93,14 +93,17 @@ mini_add_test(RenderCacheTest)
 mini_add_test(SceneTest)
 mini_add_editor_test(SceneHierarchyEditorTest)
 mini_add_editor_test(HierarchyPanelTest
-    ${PROJECT_SOURCE_DIR}/tools/editor/HierarchyPanel.cpp
-    ${PROJECT_SOURCE_DIR}/tools/editor/SceneDocument.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/panels/HierarchyPanel.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/widgets/EditorWidgets.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/model/SceneDocument.cpp
 )
 target_link_libraries(HierarchyPanelTest PRIVATE MiniImGui)
 mini_add_editor_test(InspectorPanelTest
-    ${PROJECT_SOURCE_DIR}/tools/editor/InspectorPanel.cpp
-    ${PROJECT_SOURCE_DIR}/tools/editor/MaterialInspector.cpp
-    ${PROJECT_SOURCE_DIR}/tools/editor/SceneDocument.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/panels/InspectorPanel.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/panels/InspectorPanelComponents.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/widgets/EditorWidgets.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/widgets/MaterialInspector.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/model/SceneDocument.cpp
 )
 target_link_libraries(InspectorPanelTest PRIVATE MiniImGui)
 
@@ -108,7 +111,8 @@ target_link_libraries(InspectorPanelTest PRIVATE MiniImGui)
 # 事件注入驱动编辑，验证实例同步、防抖写回与重导入幂等；fixture 为测试自建
 # 资产环境，不依赖 builtin 拷贝。
 mini_add_editor_test(MaterialInspectorTest
-    ${PROJECT_SOURCE_DIR}/tools/editor/MaterialInspector.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/widgets/MaterialInspector.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/widgets/EditorWidgets.cpp
 )
 target_link_libraries(MaterialInspectorTest PRIVATE MiniImGui)
 
@@ -127,7 +131,8 @@ set_target_properties(ProjectBrowserModelTest PROPERTIES FOLDER Tests)
 gtest_discover_tests(ProjectBrowserModelTest)
 
 mini_add_editor_test(ProjectPanelTest
-    ${PROJECT_SOURCE_DIR}/tools/editor/ProjectPanel.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/panels/ProjectPanel.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/widgets/EditorWidgets.cpp
 )
 target_link_libraries(ProjectPanelTest PRIVATE MiniImGui)
 # SelectionSet 是纯模板逻辑，测试只需要头文件，不链接引擎库。
@@ -171,7 +176,7 @@ mini_add_test(RenderTargetTest)
 # step or generated-shader include directory is needed.
 add_executable(ImGuiRendererTest
     ImGuiRendererTest.cpp
-    ${PROJECT_SOURCE_DIR}/tools/editor/ImGuiRenderer.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/backend/ImGuiRenderer.cpp
 )
 target_include_directories(ImGuiRendererTest PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(ImGuiRendererTest PRIVATE MiniEngine MiniImGui MiniGTest)
@@ -187,7 +192,7 @@ mini_add_gtest(SceneOutputTest)
 target_compile_options(SceneOutputTest PRIVATE -Wno-missing-field-initializers)
 
 add_executable(EditorLayoutTest EditorLayoutTest.cpp
-    ${PROJECT_SOURCE_DIR}/tools/editor/EditorLayout.cpp)
+    ${PROJECT_SOURCE_DIR}/tools/editor/app/EditorLayout.cpp)
 target_include_directories(EditorLayoutTest PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(EditorLayoutTest PRIVATE MiniImGui MiniGTest)
 mini_enable_warnings(EditorLayoutTest)
@@ -195,11 +200,11 @@ mini_link_mingw_runtime(EditorLayoutTest)
 gtest_discover_tests(EditorLayoutTest)
 
 add_executable(SceneViewIntegrationTest SceneViewIntegrationTest.cpp
-    ${PROJECT_SOURCE_DIR}/tools/editor/ImGuiLayer.cpp
-    ${PROJECT_SOURCE_DIR}/tools/editor/ImGuiRenderer.cpp
-    ${PROJECT_SOURCE_DIR}/tools/editor/SceneDocument.cpp
-    ${PROJECT_SOURCE_DIR}/tools/editor/SceneViewPanel.cpp
-    ${PROJECT_SOURCE_DIR}/tools/editor/StatisticsPanel.cpp)
+    ${PROJECT_SOURCE_DIR}/tools/editor/backend/ImGuiLayer.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/backend/ImGuiRenderer.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/model/SceneDocument.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/panels/SceneViewPanel.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/panels/StatisticsPanel.cpp)
 target_include_directories(SceneViewIntegrationTest PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(SceneViewIntegrationTest PRIVATE MiniEngineEditor MiniImGui MiniGTest)
 mini_enable_warnings(SceneViewIntegrationTest)

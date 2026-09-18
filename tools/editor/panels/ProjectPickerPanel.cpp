@@ -1,10 +1,10 @@
-#include "tools/editor/ProjectPickerPanel.h"
+#include "tools/editor/panels/ProjectPickerPanel.h"
 
 #if defined(MINI_EDITOR)
 
 #include "core/logging/Log.h"
 #include "runtime/config/ProjectConfig.h"
-#include "tools/editor/ProjectTemplate.h"
+#include "tools/editor/model/ProjectTemplate.h"
 
 #include "imgui.h"
 

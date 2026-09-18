@@ -1,4 +1,4 @@
-﻿#include "tools/editor/SceneDocument.h"
+﻿#include "tools/editor/model/SceneDocument.h"
 
 #include "asset/exporter/AssetExportPipeline.h"
 #include "asset/importer/AssetImportPipeline.h"

@@ -1,5 +1,5 @@
-#include "tools/editor/InspectorPanel.h"
-#include "tools/editor/SceneDocument.h"
+#include "tools/editor/panels/InspectorPanel.h"
+#include "tools/editor/model/SceneDocument.h"
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "scene/components/MaterialComponent.h"

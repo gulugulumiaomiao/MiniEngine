@@ -13,7 +13,7 @@
 #include <string>
 
 #if defined(MINI_EDITOR)
-#include "tools/editor/EditorConfig.h"
+#include "tools/editor/model/EditorConfig.h"
 #endif
 
 namespace engine {

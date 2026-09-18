@@ -85,34 +85,36 @@ set_target_properties(MiniImGui PROPERTIES FOLDER ThirdParty)
 # ProjectBrowserModel 是 Project 面板的纯逻辑层（无 ImGui），编进变体库让
 # MiniEditor 与模型/面板两个测试共享同一实现。
 target_sources(MiniEngineEditor PRIVATE
-    editor/EditorConfig.cpp
-    editor/ProjectRegistry.cpp
-    editor/ProjectTemplate.cpp
-    editor/ProjectBrowserModel.cpp
+    editor/model/EditorConfig.cpp
+    editor/model/ProjectRegistry.cpp
+    editor/model/ProjectTemplate.cpp
+    editor/model/ProjectBrowserModel.cpp
 )
 target_include_directories(MiniEngineEditor PUBLIC ${PROJECT_SOURCE_DIR})
 target_link_libraries(MiniEngineEditor PRIVATE shell32)
 source_group(TREE "${PROJECT_SOURCE_DIR}" FILES
-    "${CMAKE_CURRENT_SOURCE_DIR}/editor/EditorConfig.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/editor/ProjectRegistry.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/editor/ProjectTemplate.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/editor/ProjectBrowserModel.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/editor/model/EditorConfig.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/editor/model/ProjectRegistry.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/editor/model/ProjectTemplate.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/editor/model/ProjectBrowserModel.cpp"
 )
 
 add_executable(MiniEditor
-    editor/main.cpp
-    editor/EditorApplication.cpp
-    editor/ImGuiLayer.cpp
-    editor/ImGuiRenderer.cpp
-    editor/SceneDocument.cpp
-    editor/ProjectPanel.cpp
-    editor/ProjectPickerPanel.cpp
-    editor/HierarchyPanel.cpp
-    editor/InspectorPanel.cpp
-    editor/MaterialInspector.cpp
-    editor/SceneViewPanel.cpp
-    editor/StatisticsPanel.cpp
-    editor/EditorLayout.cpp
+    editor/app/main.cpp
+    editor/app/EditorApplication.cpp
+    editor/backend/ImGuiLayer.cpp
+    editor/backend/ImGuiRenderer.cpp
+    editor/model/SceneDocument.cpp
+    editor/panels/ProjectPanel.cpp
+    editor/panels/ProjectPickerPanel.cpp
+    editor/panels/HierarchyPanel.cpp
+    editor/panels/InspectorPanel.cpp
+    editor/panels/InspectorPanelComponents.cpp
+    editor/widgets/EditorWidgets.cpp
+    editor/widgets/MaterialInspector.cpp
+    editor/panels/SceneViewPanel.cpp
+    editor/panels/StatisticsPanel.cpp
+    editor/app/EditorLayout.cpp
 )
 # ImGuiRenderer.cpp bakes the UI shaders in as SPIR-V words, so the editor no longer
 # needs a shader compile step or the generated-shader include directory.

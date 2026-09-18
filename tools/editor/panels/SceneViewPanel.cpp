@@ -1,10 +1,10 @@
-#include "tools/editor/SceneViewPanel.h"
+#include "tools/editor/panels/SceneViewPanel.h"
 
 #include "imgui.h"
 #include "render/renderer/Renderer.h"
 #include "runtime/engine/Engine.h"
-#include "tools/editor/ImGuiRenderer.h"
-#include "tools/editor/SceneDocument.h"
+#include "tools/editor/backend/ImGuiRenderer.h"
+#include "tools/editor/model/SceneDocument.h"
 
 #include <algorithm>
 #include <cmath>

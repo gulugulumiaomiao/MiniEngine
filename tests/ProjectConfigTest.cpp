@@ -2,7 +2,7 @@
 #include "runtime/config/ProjectConfig.h"
 #include "runtime/engine/Engine.h"
 #if defined(MINI_EDITOR)
-#include "tools/editor/EditorConfig.h"
+#include "tools/editor/model/EditorConfig.h"
 #endif
 #include "core/serialization/JsonTransfer.h"
 #include "core/filesystem/FileSystem.h"

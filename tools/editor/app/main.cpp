@@ -1,4 +1,4 @@
-#include "tools/editor/EditorApplication.h"
+#include "tools/editor/app/EditorApplication.h"
 #include "runtime/engine/Engine.h"
 #include "rhi/vulkan/VulkanFactory.h"
 

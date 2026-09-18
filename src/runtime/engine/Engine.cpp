@@ -25,7 +25,7 @@
 #include "scene/scene/SceneAsset.h"
 
 #if defined(MINI_EDITOR)
-#include "tools/editor/ProjectTemplate.h"
+#include "tools/editor/model/ProjectTemplate.h"
 #endif
 
 #include <algorithm>

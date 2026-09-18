@@ -1,5 +1,5 @@
-#include "tools/editor/HierarchyPanel.h"
-#include "tools/editor/SceneDocument.h"
+#include "tools/editor/panels/HierarchyPanel.h"
+#include "tools/editor/model/SceneDocument.h"
 #include "scene/scene/Scene.h"
 #include "imgui.h"
 #include "imgui_internal.h"

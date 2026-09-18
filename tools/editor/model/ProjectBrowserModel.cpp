@@ -1,4 +1,4 @@
-#include "tools/editor/ProjectBrowserModel.h"
+#include "tools/editor/model/ProjectBrowserModel.h"
 
 #include "asset/base/AssetMeta.h"
 #include "asset/database/AssetDatabase.h"

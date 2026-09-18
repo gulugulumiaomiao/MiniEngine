@@ -1,9 +1,10 @@
-#include "tools/editor/HierarchyPanel.h"
+#include "tools/editor/panels/HierarchyPanel.h"
 
 #include "imgui.h"
 #include "scene/scene/Scene.h"
 #include "scene/node/Node.h"
-#include "tools/editor/SceneDocument.h"
+#include "tools/editor/model/SceneDocument.h"
+#include "tools/editor/widgets/EditorWidgets.h"
 
 #include <algorithm>
 #include <cstring>
@@ -22,13 +23,6 @@ struct NodePayload {
     std::uint32_t count;
     NodeHandle nodes[kMaxDragNodes];
 };
-
-int resizeRenameBuffer(ImGuiInputTextCallbackData* data) {
-    auto& buffer = *static_cast<std::vector<char>*>(data->UserData);
-    buffer.resize(static_cast<std::size_t>(data->BufSize));
-    data->Buf = buffer.data();
-    return 0;
-}
 
 } // namespace
 

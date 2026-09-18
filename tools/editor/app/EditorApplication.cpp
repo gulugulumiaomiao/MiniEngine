@@ -1,4 +1,4 @@
-#include "tools/editor/EditorApplication.h"
+#include "tools/editor/app/EditorApplication.h"
 
 #include "asset/manager/AssetManager.h"
 #include "core/filesystem/FileSystem.h"
@@ -8,7 +8,7 @@
 #include "runtime/window/Window.h"
 
 #include "imgui.h"
-#include "tools/editor/EditorLayout.h"
+#include "tools/editor/app/EditorLayout.h"
 
 #include <algorithm>
 #include <cstring>
@@ -49,9 +49,7 @@ EditorApplication::~EditorApplication() {
 }
 
 void EditorApplication::onStart() {
-    imguiLayer_.attach(ENGINE.renderer(), ENGINE.window());
-
-    installSceneChangeListener();
+    reattachUi();
 
     if (!ENGINE.isProjectOpen()) {
         projectPicker_.show();
@@ -132,6 +130,11 @@ void EditorApplication::installSceneChangeListener() {
         });
 }
 
+void EditorApplication::reattachUi() {
+    imguiLayer_.attach(ENGINE.renderer(), ENGINE.window());
+    installSceneChangeListener();
+}
+
 void EditorApplication::openProject(const std::filesystem::path& root) {
     // The old project's mount is about to be torn down inside ENGINE.openProject:
     // flush its pending material edit first, and leave no stale asset inspection
@@ -148,8 +151,7 @@ void EditorApplication::openProject(const std::filesystem::path& root) {
     if (!ENGINE.openProject(root)) {
         document_.createEmpty();
         hierarchyPanel_.select({});
-        imguiLayer_.attach(ENGINE.renderer(), ENGINE.window());
-        installSceneChangeListener();
+        reattachUi();
         statusMessage_ = "Failed to open project: " + root.string();
         Log::error("EditorApplication", "Failed to open project: %s", root.string().c_str());
         projectPicker_.show();
@@ -158,13 +160,12 @@ void EditorApplication::openProject(const std::filesystem::path& root) {
 
     // openProject() tore the project subsystems down (ASSET_MANAGER.shutdown() clears
     // the listener) and then brought them back up, which installs the Engine's own
-    // auto-reload listener. Take the slot back now, otherwise every external scene
-    // change bypasses SceneDocument: the Engine would reload behind our back, rebuild
-    // the Scene and invalidate the NodeHandle held by HierarchyPanel, and
-    // suppressNextChange_ would never get to swallow the editor's own atomic write.
-    installSceneChangeListener();
-
-    imguiLayer_.attach(ENGINE.renderer(), ENGINE.window());
+    // auto-reload listener. reattachUi takes the slot back now, otherwise every
+    // external scene change bypasses SceneDocument: the Engine would reload behind
+    // our back, rebuild the Scene and invalidate the NodeHandle held by
+    // HierarchyPanel, and suppressNextChange_ would never get to swallow the
+    // editor's own atomic write.
+    reattachUi();
 
     // The ImGui context was rebuilt above, so the docking state must be re-derived from
     // what the new context actually restored: apply the default Unity layout unless the
@@ -212,8 +213,7 @@ void EditorApplication::closeProject() {
     ENGINE.closeProject();
     document_.createEmpty();
     hierarchyPanel_.select({});
-    imguiLayer_.attach(ENGINE.renderer(), ENGINE.window());
-    installSceneChangeListener();
+    reattachUi();
     dockLayoutApplied_ = false;
     forceApplyDefaultLayout_ = false;
     statusMessage_.clear();

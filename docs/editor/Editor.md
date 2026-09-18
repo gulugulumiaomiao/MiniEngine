@@ -22,7 +22,7 @@
   `imgui_impl_win32` 被 vendored 使用。
 - `src/render` 完全不感知 ImGui。唯一接触点是 `Renderer` 定义的 `IFrameOverlay`
   接口，`ImGuiLayer` 是它在编辑器侧的唯一实现（详见 [ImGui.md](ImGui.md)）。
-- `EditorConfig`、`ProjectRegistry` 和 `ProjectTemplate` 位于 `tools/editor/`，
+- `EditorConfig`、`ProjectRegistry` 和 `ProjectTemplate` 位于 `tools/editor/model/`，
   仅编入 `MiniEngineEditor`。引擎中所有编辑器配置相关代码由 `MINI_EDITOR` 保护。
 - `ProjectConfig` 位于 `src/runtime/config/`，与 `Engine::openProject/closeProject`
   及项目状态一起供普通引擎和编辑器共用，不受编辑器宏保护。
@@ -33,25 +33,33 @@
 
 ```text
 tools/editor/
-├── main.cpp                入口：构造 EditorApplication 并交给 Engine::run（editor.json/engine.json 各自从当前工作目录解析）
-├── EditorApplication.*     Application 实现：菜单栏、Dock 布局、快捷键、项目与场景的打开/保存编排
-├── EditorConfig.*          编辑器窗口偏好及内嵌的最近项目注册表
-├── ImGuiLayer.*            IFrameOverlay 实现：ImGui 上下文、Win32 后端、帧序与帧末叠加录制
-├── ImGuiRenderer.*         用 RHI 绘制 ImDrawData：字体图集、UI 管线、双帧几何缓冲
-├── SceneDocument.*         当前场景文档状态：来源路径、dirty、外部变更冲突
-├── ProjectRegistry.*       最近项目列表、上次场景持久化与项目移除/删除
-├── ProjectTemplate.*       项目创建、内建基础资源同步与示例内容初始化
-├── ProjectPickerPanel.*    项目选择/新建/浏览/移除/删除模态框，含原生文件夹对话框
-├── ProjectPanel.*          assets:// 资产树浏览，双击场景打开
-├── HierarchyPanel.*        场景树：选择、多选、拖放、右键菜单、就地重命名
-├── InspectorPanel.*        选中节点的组件编辑：Transform/Mesh/Material/Camera/Light，支持批量编辑
-├── SceneViewPanel.*        离屏场景图像、面板尺寸与渲染视口请求
-├── StatisticsPanel.*       场景与帧统计、主相机参数
-├── EditorLayout.*          默认 Dock 布局与旧布局迁移
-├── SelectionSet.h          多选容器：Ctrl 切换、Shift 范围、主选择锚点
+├── app/                    入口与应用编排
+│   ├── main.cpp                构造 EditorApplication 并交给 Engine::run（editor.json/engine.json 各自从当前工作目录解析）
+│   ├── EditorApplication.*     Application 实现：菜单栏、Dock 布局、快捷键、项目与场景的打开/保存编排
+│   └── EditorLayout.*          默认 Dock 布局与旧布局迁移
+├── backend/                ImGui 到 RHI 的桥接
+│   ├── ImGuiLayer.*            IFrameOverlay 实现：ImGui 上下文、Win32 后端、帧序与帧末叠加录制
+│   └── ImGuiRenderer.*         用 RHI 绘制 ImDrawData：字体图集、UI 管线、双帧几何缓冲
+├── model/                  纯逻辑层（无 ImGui，编入 MiniEngineEditor 供测试共享）
+│   ├── SceneDocument.*         当前场景文档状态：来源路径、dirty、外部变更冲突
+│   ├── EditorConfig.*          编辑器窗口偏好及内嵌的最近项目注册表
+│   ├── ProjectRegistry.*       最近项目列表、上次场景持久化与项目移除/删除
+│   ├── ProjectTemplate.*       项目创建、内建基础资源同步与示例内容初始化
+│   ├── ProjectBrowserModel.*   Project 面板纯逻辑层：导航、搜索过滤、文件操作
+│   └── SelectionSet.h          多选容器：Ctrl 切换、Shift 范围、主选择锚点
+├── widgets/                可复用控件
+│   └── MaterialInspector.*     材质编辑控件：属性控件、keyword、防抖写回（Project 资产视图与组件槽位共用）
+└── panels/                 各窗口面板
+    ├── ProjectPickerPanel.*    项目选择/新建/浏览/移除/删除模态框，含原生文件夹对话框
+    ├── ProjectPanel.*          assets:// 资产树浏览（双栏、网格/列表、上下文菜单）
+    ├── HierarchyPanel.*        场景树：选择、多选、拖放、右键菜单、就地重命名
+    ├── InspectorPanel.*        选中节点的组件编辑：Transform/Mesh/Material/Camera/Light，支持批量编辑
+    ├── SceneViewPanel.*        离屏场景图像、面板尺寸与渲染视口请求
+    └── StatisticsPanel.*       场景与帧统计、主相机参数
 ```
 
-面板之间没有相互依赖：`HierarchyPanel` 持有选择状态，`EditorApplication` 把它
+依赖方向单向：`app → panels → widgets → model`；`backend` 独立，只依赖 ImGui 与
+引擎 RHI。面板之间没有相互依赖：`HierarchyPanel` 持有选择状态，`EditorApplication` 把它
 作为参数传给 `InspectorPanel::draw(selection)`；四个场景面板共享同一个
 `SceneDocument` 引用。
 
@@ -132,7 +140,7 @@ VS Code 中对应 `Debug MiniEditor (CodeLLDB)` 与 `Run MiniEditor Release` 两
   `ProjectLifecycleTest`、`BuildConfigEditorTest`。
 - `ProjectConfigTest` 链接普通 `MiniEngine`；`ProjectConfigEditorTest` 复用相同源码，
   链接 `MiniEngineEditor`。两者验证项目配置与项目 API 可用、编辑器配置 API 正确隔离。
-- `ImGuiRendererTest` 直接编译 `tools/editor/ImGuiRenderer.cpp`（UI shader 已内联其中），
+- `ImGuiRendererTest` 直接编译 `tools/editor/backend/ImGuiRenderer.cpp`（UI shader 已内联其中），
   依赖 `MiniImGui`，链接 `MiniEngine`（UI 后端不需要编辑器变体）。
 - 视口相关新增测试统一使用 GoogleTest：`SceneOutputTest` 验证渲染目标、清屏、
   状态转换与双帧缩放；`EditorLayoutTest` 验证默认布局和旧 ini 迁移；

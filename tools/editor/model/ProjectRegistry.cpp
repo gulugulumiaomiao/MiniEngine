@@ -1,4 +1,4 @@
-#include "tools/editor/ProjectRegistry.h"
+#include "tools/editor/model/ProjectRegistry.h"
 
 #if defined(MINI_EDITOR)
 

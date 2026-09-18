@@ -11,8 +11,8 @@
 // real temporary directory and fails on any error.
 #include "core/filesystem/FileSystem.h"
 #include "runtime/config/ProjectConfig.h"
-#include "tools/editor/ProjectRegistry.h"
-#include "tools/editor/ProjectTemplate.h"
+#include "tools/editor/model/ProjectRegistry.h"
+#include "tools/editor/model/ProjectTemplate.h"
 
 #include <array>
 #include <filesystem>

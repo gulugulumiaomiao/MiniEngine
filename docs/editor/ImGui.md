@@ -6,9 +6,9 @@
 ## 分层边界
 
 ```text
-tools/editor/ImGuiLayer      IFrameOverlay 的唯一实现：ImGui 上下文、Win32 后端、帧序
-tools/editor/ImGuiRenderer   ImDrawData -> RHI：字体图集、UI 管线、几何上传
-src/render/Renderer          只认识 IFrameOverlay 接口，完全不感知 ImGui
+tools/editor/backend/ImGuiLayer      IFrameOverlay 的唯一实现：ImGui 上下文、Win32 后端、帧序
+tools/editor/backend/ImGuiRenderer   ImDrawData -> RHI：字体图集、UI 管线、几何上传
+src/render/Renderer                  只认识 IFrameOverlay 接口，完全不感知 ImGui
 ```
 
 - `IFrameOverlay` 是 `Renderer` 模块定义的纯虚接口，只有 `recordOverlay` 与
@@ -94,7 +94,7 @@ UI shader 绕过 ShaderLab 资产管线：两段 GLSL（`tools/editor/shaders/im
 
 ## 相关测试
 
-`ImGuiRendererTest` 直接编译 `tools/editor/ImGuiRenderer.cpp`（UI shader 已内联其中），
+`ImGuiRendererTest` 直接编译 `tools/editor/backend/ImGuiRenderer.cpp`（UI shader 已内联其中），
 依赖 `MiniImGui`、链接普通 `MiniEngine`（UI 后端不需要编辑器变体），覆盖几何上传、
 管线记录与 sRGB 变体选择。
 

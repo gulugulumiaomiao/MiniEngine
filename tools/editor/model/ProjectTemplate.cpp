@@ -1,4 +1,4 @@
-#include "tools/editor/ProjectTemplate.h"
+#include "tools/editor/model/ProjectTemplate.h"
 
 #if defined(MINI_EDITOR)
 

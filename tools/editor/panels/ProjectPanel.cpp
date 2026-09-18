@@ -1,9 +1,10 @@
-﻿#include "tools/editor/ProjectPanel.h"
+﻿#include "tools/editor/panels/ProjectPanel.h"
 
 #include "asset/base/Asset.h"
 #include "asset/base/AssetMeta.h"
 #include "asset/database/AssetDatabase.h"
 #include "core/filesystem/FileSystem.h"
+#include "tools/editor/widgets/EditorWidgets.h"
 
 #include "imgui.h"
 
@@ -121,13 +122,6 @@ void drawGridLabel(ImDrawList* drawList,
                    maxWidth,
                    color,
                    name.substr(std::min(cut + 1, name.size())));
-}
-
-int resizeRenameBuffer(ImGuiInputTextCallbackData* data) {
-    auto& buffer = *static_cast<std::vector<char>*>(data->UserData);
-    buffer.resize(static_cast<std::size_t>(data->BufSize));
-    data->Buf = buffer.data();
-    return 0;
 }
 
 // Directories without sub-folders render as leaves (no expander arrow) — the

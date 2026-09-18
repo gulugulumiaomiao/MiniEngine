@@ -2,8 +2,8 @@
 
 #include "core/filesystem/VirtualPath.h"
 #include "scene/node/SceneHandles.h"
-#include "tools/editor/MaterialInspector.h"
-#include "tools/editor/SelectionSet.h"
+#include "tools/editor/widgets/MaterialInspector.h"
+#include "tools/editor/model/SelectionSet.h"
 
 #include <optional>
 #include <string>
@@ -73,8 +73,14 @@ private:
     void drawPrimitive(MeshComponent& mesh);
     void drawAssetInspector();
 
-    // Lists assets:// files of one extension (without .meta) for combo boxes.
-    [[nodiscard]] std::vector<VirtualPath> listAssetFiles(const char* extension) const;
+    // Component-editor shell, first half: null check -> CollapsingHeader
+    // (DefaultOpen) -> PushID(title) -> Enabled checkbox. Returns false when
+    // the whole editor must be skipped (no component or a collapsed header).
+    // Defined and instantiated for the optional components in
+    // InspectorPanelComponents.cpp, so this header needs no component includes.
+    template <typename T> bool beginComponent(const char* title, T* component);
+    // Shell second half: Separator -> Remove Component (removeComponent<T>) -> PopID.
+    template <typename T> void endComponent(Node& node);
 
     SceneDocument& document_;
     std::string statusMessage_;

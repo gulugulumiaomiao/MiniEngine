@@ -1,8 +1,5 @@
-﻿#include "tools/editor/InspectorPanel.h"
+#include "tools/editor/panels/InspectorPanel.h"
 
-#include "asset/base/AssetMeta.h"
-#include "asset/database/AssetDatabase.h"
-#include "core/filesystem/FileSystem.h"
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
@@ -14,11 +11,12 @@
 #include "scene/components/MeshComponent.h"
 #include "scene/components/TransformComponent.h"
 #include "scene/node/Node.h"
-#include "scene/scene/Scene.h"
-#include "tools/editor/SceneDocument.h"
+#include "tools/editor/model/SceneDocument.h"
+#include "tools/editor/widgets/EditorWidgets.h"
 
 #include "imgui.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <variant>
@@ -27,117 +25,69 @@
 namespace engine::editor {
 namespace {
 
-constexpr float kDragSpeed = 0.05F;
-
-bool dragVec3(const char* label, math::Vec3& value) {
-    return ImGui::DragFloat3(label, &value.x, kDragSpeed, 0.0F, 0.0F, "%.3f");
-}
-
-bool dragEuler(const char* label, math::Quat& rotation) {
-    // math::degrees/radians are scalar helpers; glm provides the vector overloads.
-    math::Vec3 euler = glm::degrees(math::toEuler(rotation));
-    if (!ImGui::DragFloat3(label, &euler.x, 0.5F, -360.0F, 360.0F, "%.1f deg"))
+// One multi-selection field of drawMultiTransform: take the first component's
+// value, check the whole group for equality, then either show the shared value
+// (an edit writes back to every component) or a grey placeholder for mixed
+// values. Returns whether an edit happened, so the caller can markDirty once.
+template <typename Value>
+bool multiField(const char* label,
+                const std::vector<TransformComponent*>& transforms,
+                const Value& (TransformComponent::*get)() const,
+                bool (*drag)(const char*, Value&),
+                void (TransformComponent::*set)(const Value&)) {
+    Value value = (transforms.front()->*get)();
+    const bool uniform = std::ranges::all_of(transforms, [&](const TransformComponent* transform) {
+        return (transform->*get)() == value;
+    });
+    if (!uniform) {
+        ImGui::TextDisabled("%s  -", label);
         return false;
-    rotation = math::normalize(math::fromEuler(glm::radians(euler)));
-    return true;
-}
-
-bool inputUint(const char* label, std::uint32_t& value) {
-    int temporary = static_cast<int>(value);
-    if (!ImGui::InputInt(label, &temporary, 0, 0))
-        return false;
-    value = temporary > 0 ? static_cast<std::uint32_t>(temporary) : 0U;
-    return true;
-}
-
-// Combo over asset paths. Returns the index of the chosen path, or -1 when nothing was
-// picked this frame.
-int assetCombo(const char* label, const std::vector<VirtualPath>& paths,
-               const VirtualPath& current) {
-    const std::string currentLabel =
-        current.valid() ? current.relativePath() : std::string{"(none)"};
-    if (!ImGui::BeginCombo(label, currentLabel.c_str()))
-        return -1;
-    int chosen = -1;
-    for (std::size_t index = 0; index < paths.size(); ++index) {
-        const bool isSelected = paths[index] == current;
-        if (ImGui::Selectable(paths[index].relativePath().c_str(), isSelected))
-            chosen = static_cast<int>(index);
-        if (isSelected)
-            ImGui::SetItemDefaultFocus();
     }
-    ImGui::EndCombo();
-    return chosen;
+    if (!drag(label, value))
+        return false;
+    for (TransformComponent* transform : transforms)
+        (transform->*set)(value);
+    return true;
 }
 
 } // namespace
 
-void InspectorPanel::draw(const SelectionSet<NodeHandle>& selection) {
-    if (!ImGui::Begin("Inspector", nullptr, ImGuiWindowFlags_NoCollapse)) {
-        ImGui::End();
-        return;
+template <typename T>
+bool InspectorPanel::beginComponent(const char* title, T* component) {
+    if (component == nullptr)
+        return false;
+    if (!ImGui::CollapsingHeader(title, ImGuiTreeNodeFlags_DefaultOpen))
+        return false;
+    ImGui::PushID(title);
+
+    bool enabled = component->enabled();
+    if (ImGui::Checkbox("Enabled", &enabled)) {
+        component->setEnabled(enabled);
+        document_.markDirty();
     }
-
-    statusMessage_.clear();
-    if (!document_.valid()) {
-        ImGui::TextUnformatted("No Scene document is open");
-        ImGui::End();
-        return;
-    }
-
-    // Last-interaction-wins: the panel serves the window the user clicked
-    // last (EditorApplication switches the mode on selection stamps), so a
-    // Project asset pick shows the asset editor even with nodes selected,
-    // and any Hierarchy interaction switches back to the node view.
-    if (mode_ == InspectionMode::Asset) {
-        if (assetSelection_.has_value())
-            drawAssetInspector();
-        else
-            ImGui::TextUnformatted("Nothing selected");
-        ImGui::End();
-        return;
-    }
-
-    if (selection.empty()) {
-        ImGui::TextUnformatted("Nothing selected");
-        ImGui::End();
-        return;
-    }
-
-    if (selection.size() == 1) {
-        Node* node = document_.scene().findNode(selection.primary());
-        if (node == nullptr) {
-            ImGui::TextUnformatted("Nothing selected");
-            ImGui::End();
-            return;
-        }
-
-        drawNodeHeader(*node);
-        drawTransform(*node);
-        drawMesh(*node);
-        drawMaterial(*node);
-        drawCamera(*node);
-        drawLight(*node);
-        drawAddComponent(*node);
-    } else {
-        // 多选视图只展示共有字段；编辑同步写入所有选中节点。
-        drawMultiHeader(selection);
-        drawMultiActive(selection);
-        drawMultiTransform(selection);
-    }
-
-    if (!statusMessage_.empty())
-        ImGui::TextUnformatted(statusMessage_.c_str());
-    ImGui::End();
+    return true;
 }
 
-std::vector<Node*> InspectorPanel::collectNodes(const SelectionSet<NodeHandle>& selection) const {
-    std::vector<Node*> nodes;
-    for (const NodeHandle handle : selection.items())
-        if (Node* node = document_.scene().findNode(handle))
-            nodes.push_back(node);
-    return nodes;
+template <typename T>
+void InspectorPanel::endComponent(Node& node) {
+    ImGui::Separator();
+    if (ImGui::Button("Remove Component")) {
+        node.removeComponent<T>();
+        document_.markDirty();
+    }
+    ImGui::PopID();
 }
+
+// The shell templates live with their only users and are instantiated here for
+// the four optional components; InspectorPanel.h stays free of component includes.
+template bool InspectorPanel::beginComponent<MeshComponent>(const char*, MeshComponent*);
+template bool InspectorPanel::beginComponent<MaterialComponent>(const char*, MaterialComponent*);
+template bool InspectorPanel::beginComponent<CameraComponent>(const char*, CameraComponent*);
+template bool InspectorPanel::beginComponent<LightComponent>(const char*, LightComponent*);
+template void InspectorPanel::endComponent<MeshComponent>(Node&);
+template void InspectorPanel::endComponent<MaterialComponent>(Node&);
+template void InspectorPanel::endComponent<CameraComponent>(Node&);
+template void InspectorPanel::endComponent<LightComponent>(Node&);
 
 void InspectorPanel::drawMultiHeader(const SelectionSet<NodeHandle>& selection) {
     ImGui::Text("%u nodes selected", static_cast<unsigned>(selection.size()));
@@ -151,25 +101,11 @@ void InspectorPanel::drawMultiActive(const SelectionSet<NodeHandle>& selection) 
     bool anyActive = false, anyInactive = false;
     for (const Node* node : nodes)
         node->activeSelf() ? anyActive = true : anyInactive = true;
-    if (anyActive && anyInactive) {
-        // 混合状态：MixedValue 标志让复选框渲染三态方块（数值取自 imgui_internal.h，
-        // 编辑器代码不包含内部头）。本地值取 false，首次点击把整组统一为激活，
-        // 再次点击统一取消。
-        ImGui::PushItemFlag(1 << 12 /* ImGuiItemFlags_MixedValue */, true);
-        bool active = false;
-        if (ImGui::Checkbox("Active", &active)) {
-            for (Node* node : nodes)
-                node->setActive(active);
-            document_.markDirty();
-        }
-        ImGui::PopItemFlag();
-    } else {
-        bool active = anyActive;
-        if (ImGui::Checkbox("Active", &active)) {
-            for (Node* node : nodes)
-                node->setActive(active);
-            document_.markDirty();
-        }
+    bool active = false;
+    if (mixedCheckbox("Active", anyActive, anyInactive, active)) {
+        for (Node* node : nodes)
+            node->setActive(active);
+        document_.markDirty();
     }
     ImGui::Separator();
 }
@@ -189,62 +125,16 @@ void InspectorPanel::drawMultiTransform(const SelectionSet<NodeHandle>& selectio
         transforms.push_back(&node->transform());
 
     // 各组值一致时显示公共值并把编辑写入所有节点；混合值显示灰色占位。
-    math::Vec3 position = transforms.front()->localPosition();
-    if (std::ranges::all_of(transforms, [&](const TransformComponent* transform) {
-            return transform->localPosition() == position;
-        })) {
-        if (dragVec3("Position", position)) {
-            for (TransformComponent* transform : transforms)
-                transform->setLocalPosition(position);
-            document_.markDirty();
-        }
-    } else {
-        ImGui::TextDisabled("Position  -");
-    }
-
-    math::Quat rotation = transforms.front()->localRotation();
-    if (std::ranges::all_of(transforms, [&](const TransformComponent* transform) {
-            return transform->localRotation() == rotation;
-        })) {
-        if (dragEuler("Rotation", rotation)) {
-            for (TransformComponent* transform : transforms)
-                transform->setLocalRotation(rotation);
-            document_.markDirty();
-        }
-    } else {
-        ImGui::TextDisabled("Rotation  -");
-    }
-
-    math::Vec3 scale = transforms.front()->localScale();
-    if (std::ranges::all_of(transforms, [&](const TransformComponent* transform) {
-            return transform->localScale() == scale;
-        })) {
-        if (dragVec3("Scale", scale)) {
-            for (TransformComponent* transform : transforms)
-                transform->setLocalScale(scale);
-            document_.markDirty();
-        }
-    } else {
-        ImGui::TextDisabled("Scale  -");
-    }
+    if (multiField("Position", transforms, &TransformComponent::localPosition, dragVec3,
+                   &TransformComponent::setLocalPosition))
+        document_.markDirty();
+    if (multiField("Rotation", transforms, &TransformComponent::localRotation, dragEuler,
+                   &TransformComponent::setLocalRotation))
+        document_.markDirty();
+    if (multiField("Scale", transforms, &TransformComponent::localScale, dragVec3,
+                   &TransformComponent::setLocalScale))
+        document_.markDirty();
     ImGui::PopID();
-}
-
-void InspectorPanel::drawNodeHeader(Node& node) {
-    // InputText needs a writable buffer; a locally sized string doubles as one.
-    std::string name{node.name()};
-    name.resize(128, char(0));
-    if (ImGui::InputText("Name", name.data(), name.size())) {
-        node.setName(std::string{name.c_str()});
-        document_.markDirty();
-    }
-
-    bool active = node.activeSelf();
-    if (ImGui::Checkbox("Active", &active)) {
-        node.setActive(active);
-        document_.markDirty();
-    }
-    ImGui::Separator();
 }
 
 void InspectorPanel::drawTransform(Node& node) {
@@ -274,17 +164,9 @@ void InspectorPanel::drawTransform(Node& node) {
 
 void InspectorPanel::drawMesh(Node& node) {
     MeshComponent* mesh = node.getComponent<MeshComponent>();
-    if (mesh == nullptr)
+    if (!beginComponent("Mesh", mesh))
         return;
-    if (!ImGui::CollapsingHeader("Mesh", ImGuiTreeNodeFlags_DefaultOpen))
-        return;
-    ImGui::PushID("Mesh");
 
-    bool enabled = mesh->enabled();
-    if (ImGui::Checkbox("Enabled", &enabled)) {
-        mesh->setEnabled(enabled);
-        document_.markDirty();
-    }
     if (ImGui::Checkbox("Visible", &mesh->visible))
         document_.markDirty();
     if (ImGui::Checkbox("Cast Shadow", &mesh->castShadow))
@@ -295,31 +177,24 @@ void InspectorPanel::drawMesh(Node& node) {
         document_.markDirty();
 
     if (mesh->sourceType() == MeshComponentSourceType::Asset) {
-        const std::vector<VirtualPath> meshes = listAssetFiles(".mesh.json");
+        const std::vector<VirtualPath> meshes = collectAssets(AssetType::Mesh);
         const Mesh* current = MESH_MANAGER.find(mesh->mesh());
         const VirtualPath currentPath = current != nullptr ? current->assetPath() : VirtualPath{};
-        const int chosen = assetCombo("Mesh Asset", meshes, currentPath);
-        if (chosen >= 0) {
-            const VirtualPath& target = meshes[static_cast<std::size_t>(chosen)];
-            const MeshHandle loaded = MESH_MANAGER.load(target);
+        VirtualPath chosen;
+        if (assetCombo("Mesh Asset", meshes, currentPath, chosen)) {
+            const MeshHandle loaded = MESH_MANAGER.load(chosen);
             if (loaded) {
                 mesh->setAssetMesh(loaded);
                 document_.markDirty();
             } else {
-                statusMessage_ = "Failed to load mesh: " + target.string();
+                statusMessage_ = "Failed to load mesh: " + chosen.string();
             }
         }
     } else {
         drawPrimitive(*mesh);
     }
 
-    ImGui::Separator();
-    if (ImGui::Button("Remove Component")) {
-        node.removeComponent<MeshComponent>();
-        document_.markDirty();
-    }
-
-    ImGui::PopID();
+    endComponent<MeshComponent>(node);
 }
 
 void InspectorPanel::drawPrimitive(MeshComponent& mesh) {
@@ -443,34 +318,24 @@ void InspectorPanel::drawPrimitive(MeshComponent& mesh) {
 
 void InspectorPanel::drawMaterial(Node& node) {
     MaterialComponent* material = node.getComponent<MaterialComponent>();
-    if (material == nullptr)
+    if (!beginComponent("Material", material))
         return;
-    if (!ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen))
-        return;
-    ImGui::PushID("Material");
 
-    bool enabled = material->enabled();
-    if (ImGui::Checkbox("Enabled", &enabled)) {
-        material->setEnabled(enabled);
-        document_.markDirty();
-    }
-
-    const std::vector<VirtualPath> materials = listAssetFiles(".material.json");
+    const std::vector<VirtualPath> materials = collectAssets(AssetType::Material);
     const std::vector<MaterialHandle> slots = material->materials();
     for (std::size_t slot = 0; slot < slots.size(); ++slot) {
         ImGui::PushID(static_cast<int>(slot));
         const Material* current = MATERIAL_MANAGER.find(slots[slot]);
         const VirtualPath currentPath = current != nullptr ? current->assetPath() : VirtualPath{};
         const std::string label = "Slot " + std::to_string(slot);
-        const int chosen = assetCombo(label.c_str(), materials, currentPath);
-        if (chosen >= 0) {
-            const VirtualPath& target = materials[static_cast<std::size_t>(chosen)];
-            const MaterialHandle loaded = MATERIAL_MANAGER.load(target);
+        VirtualPath chosen;
+        if (assetCombo(label.c_str(), materials, currentPath, chosen)) {
+            const MaterialHandle loaded = MATERIAL_MANAGER.load(chosen);
             if (loaded) {
                 material->setMaterial(static_cast<std::uint32_t>(slot), loaded);
                 document_.markDirty();
             } else {
-                statusMessage_ = "Failed to load material: " + target.string();
+                statusMessage_ = "Failed to load material: " + chosen.string();
             }
         }
         // Embedding the shared widget here is the reuse path: slot materials
@@ -489,65 +354,13 @@ void InspectorPanel::drawMaterial(Node& node) {
         document_.markDirty();
     }
 
-    ImGui::Separator();
-    if (ImGui::Button("Remove Component")) {
-        node.removeComponent<MaterialComponent>();
-        document_.markDirty();
-    }
-
-    ImGui::PopID();
-}
-
-void InspectorPanel::drawAssetInspector() {
-    const VirtualPath& path = *assetSelection_;
-    if (!FILE_SYSTEM.isFile(path)) {
-        // Deleted or renamed since it was picked (Project window operations or
-        // external changes); the next selection change re-points the view.
-        ImGui::TextUnformatted("Asset not found");
-        return;
-    }
-    ImGui::TextDisabled("%s", path.relativePath().c_str());
-    ImGui::Separator();
-
-    switch (inferAssetType(path)) {
-    case AssetType::Material: {
-        const MaterialHandle handle = MATERIAL_MANAGER.load(path);
-        const Material* material = MATERIAL_MANAGER.find(handle);
-        if (material == nullptr || !(material->assetPath() == path)) {
-            // load() falls back to the Error Material, which must never be
-            // offered for editing under another asset's name.
-            ImGui::TextUnformatted("Failed to load material");
-            return;
-        }
-        materialInspector_.draw(handle);
-        return;
-    }
-    case AssetType::Shader: ImGui::TextUnformatted("Type: Shader"); break;
-    case AssetType::Mesh: ImGui::TextUnformatted("Type: Mesh"); break;
-    case AssetType::Scene: ImGui::TextUnformatted("Type: Scene"); break;
-    case AssetType::Texture: ImGui::TextUnformatted("Type: Texture"); break;
-    case AssetType::Generic: ImGui::TextUnformatted("Type: Generic"); break;
-    case AssetType::Unknown:
-    default: ImGui::TextUnformatted("Type: Unknown"); break;
-    }
-    const auto guid = ASSET_DATABASE.findGuid(path);
-    ImGui::Text("GUID: %s", guid ? guid->toString().c_str() : "-");
-    ImGui::TextDisabled("No editor for this asset type yet");
+    endComponent<MaterialComponent>(node);
 }
 
 void InspectorPanel::drawCamera(Node& node) {
     CameraComponent* camera = node.getComponent<CameraComponent>();
-    if (camera == nullptr)
+    if (!beginComponent("Camera", camera))
         return;
-    if (!ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))
-        return;
-    ImGui::PushID("Camera");
-
-    bool enabled = camera->enabled();
-    if (ImGui::Checkbox("Enabled", &enabled)) {
-        camera->setEnabled(enabled);
-        document_.markDirty();
-    }
 
     const char* projections[] = {"Perspective", "Orthographic"};
     int projectionIndex = camera->projection == CameraProjection::Perspective ? 0 : 1;
@@ -580,28 +393,13 @@ void InspectorPanel::drawCamera(Node& node) {
     if (ImGui::Checkbox("Primary", &camera->primary))
         document_.markDirty();
 
-    ImGui::Separator();
-    if (ImGui::Button("Remove Component")) {
-        node.removeComponent<CameraComponent>();
-        document_.markDirty();
-    }
-
-    ImGui::PopID();
+    endComponent<CameraComponent>(node);
 }
 
 void InspectorPanel::drawLight(Node& node) {
     LightComponent* light = node.getComponent<LightComponent>();
-    if (light == nullptr)
+    if (!beginComponent("Light", light))
         return;
-    if (!ImGui::CollapsingHeader("Light", ImGuiTreeNodeFlags_DefaultOpen))
-        return;
-    ImGui::PushID("Light");
-
-    bool enabled = light->enabled();
-    if (ImGui::Checkbox("Enabled", &enabled)) {
-        light->setEnabled(enabled);
-        document_.markDirty();
-    }
 
     const char* lightTypes[] = {"Directional", "Point", "Spot"};
     int lightTypeIndex = static_cast<int>(light->type);
@@ -633,13 +431,7 @@ void InspectorPanel::drawLight(Node& node) {
     if (inputUint("Culling Mask", light->cullingMask))
         document_.markDirty();
 
-    ImGui::Separator();
-    if (ImGui::Button("Remove Component")) {
-        node.removeComponent<LightComponent>();
-        document_.markDirty();
-    }
-
-    ImGui::PopID();
+    endComponent<LightComponent>(node);
 }
 
 void InspectorPanel::drawAddComponent(Node& node) {
@@ -665,17 +457,6 @@ void InspectorPanel::drawAddComponent(Node& node) {
         document_.markDirty();
     }
     ImGui::EndPopup();
-}
-
-std::vector<VirtualPath> InspectorPanel::listAssetFiles(const char* suffix) const {
-    std::vector<VirtualPath> result;
-    // std::filesystem::path::extension() only yields the final suffix (.json), so asset
-    // files are matched through the relative path tail instead.
-    for (const VirtualPath& file : FILE_SYSTEM.listFiles(VirtualPath{"assets://"}, true)) {
-        if (file.relativePath().ends_with(suffix))
-            result.push_back(file);
-    }
-    return result;
 }
 
 } // namespace engine::editor

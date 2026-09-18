@@ -2,7 +2,7 @@
 
 #if defined(MINI_EDITOR)
 
-#include "tools/editor/ProjectRegistry.h"
+#include "tools/editor/model/ProjectRegistry.h"
 
 #include <cstdint>
 #include <filesystem>

@@ -1,4 +1,4 @@
-#include "tools/editor/MaterialInspector.h"
+#include "tools/editor/widgets/MaterialInspector.h"
 
 #include "asset/database/AssetDatabase.h"
 #include "asset/exporter/MaterialAssetExporter.h"
@@ -9,17 +9,16 @@
 #include "render/material/MaterialManager.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderManager.h"
+#include "tools/editor/widgets/EditorWidgets.h"
 
 #include "imgui.h"
 
-#include <algorithm>
 #include <cstdio>
 #include <optional>
 
 namespace engine::editor {
 namespace {
 
-constexpr float kDragSpeed = 0.05F;
 constexpr float kSaveDebounceSeconds = 0.5F;
 
 [[nodiscard]] std::string propertyLabel(const ShaderPropertyDesc& property) {
@@ -98,23 +97,15 @@ void MaterialInspector::drawIdentity(Material& data) {
 
 void MaterialInspector::drawShaderCombo(MaterialHandle handle, Material& data) {
     const VirtualPath current = data.shader().assetPath();
-    const std::string currentLabel =
-        current.valid() ? current.relativePath() : std::string{"(none)"};
-    if (!ImGui::BeginCombo("Shader", currentLabel.c_str()))
-        return;
-    // Collected inside the opened combo: closed frames pay nothing.
-    for (const VirtualPath& path : collectAssets(AssetType::Shader)) {
-        const bool isSelected = path == current;
-        if (ImGui::Selectable(path.relativePath().c_str(), isSelected) && !isSelected) {
-            // setShader rebuilds the uniform block and keeps values of
-            // compatible properties (rebuildForShader with preserveValues).
-            MATERIAL_MANAGER.setShader(handle, path);
-            queueSave(data);
-        }
-        if (isSelected)
-            ImGui::SetItemDefaultFocus();
+    VirtualPath chosen;
+    if (assetCombo("Shader", collectAssets(AssetType::Shader), current, chosen) &&
+        !(chosen == current)) {
+        // setShader rebuilds the uniform block and keeps values of
+        // compatible properties (rebuildForShader with preserveValues). The
+        // chosen != current guard keeps re-picking the current shader a no-op.
+        MATERIAL_MANAGER.setShader(handle, chosen);
+        queueSave(data);
     }
-    ImGui::EndCombo();
 }
 
 void MaterialInspector::drawRenderQueue(Material& data) {
@@ -190,23 +181,13 @@ void MaterialInspector::drawProperties(Material& data) {
         }
         case ShaderPropertyType::Texture2D: {
             const std::string& current = data.getTexture(property.name);
-            const std::string currentLabel =
-                current.empty() ? std::string{"(none)"} : VirtualPath{current}.relativePath();
-            if (ImGui::BeginCombo(label.c_str(), currentLabel.c_str())) {
-                if (ImGui::Selectable("(none)", current.empty())) {
-                    data.setTexture(property.name, std::string{});
-                    queueSave(data);
-                }
-                for (const VirtualPath& path : collectAssets(AssetType::Texture)) {
-                    const bool isSelected = path.string() == current;
-                    if (ImGui::Selectable(path.relativePath().c_str(), isSelected)) {
-                        data.setTexture(property.name, path.string());
-                        queueSave(data);
-                    }
-                    if (isSelected)
-                        ImGui::SetItemDefaultFocus();
-                }
-                ImGui::EndCombo();
+            const VirtualPath currentPath =
+                current.empty() ? VirtualPath{} : VirtualPath{current};
+            VirtualPath chosen;
+            if (assetCombo(label.c_str(), collectAssets(AssetType::Texture), currentPath, chosen,
+                           "(none)")) {
+                data.setTexture(property.name, chosen.valid() ? chosen.string() : std::string{});
+                queueSave(data);
             }
             break;
         }
@@ -282,18 +263,6 @@ void MaterialInspector::saveNow(const VirtualPath& path) {
     // (hash comparison) instead of overwriting fresher edits.
     if (ASSET_IMPORT_PIPELINE.initialized())
         (void)ASSET_IMPORT_PIPELINE.reimportAsset(path);
-}
-
-std::vector<VirtualPath> MaterialInspector::collectAssets(AssetType type) {
-    std::vector<VirtualPath> result;
-    for (const AssetRecord& record : ASSET_DATABASE.records()) {
-        if (record.type == type)
-            result.push_back(record.sourcePath);
-    }
-    std::ranges::sort(result, {}, [](const VirtualPath& path) {
-        return path.relativePath();
-    });
-    return result;
 }
 
 } // namespace engine::editor

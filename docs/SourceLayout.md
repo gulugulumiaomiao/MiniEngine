@@ -99,9 +99,9 @@ tests/CMakeLists.txt       测试目标和测试专用配置
 受该宏保护；`ProjectConfig`、项目接口与项目状态不受编辑器宏保护，两种变体均可使用。
 因此只在 `MiniEditor` 可执行文件上定义宏仍会导致 `Engine` 的布局不一致。
 游戏运行时、打包工具和普通引擎测试链接 `MiniEngine`。
-`tools/CMakeLists.txt` 将 `tools/editor/` 中的 `EditorConfig.cpp`、
-`ProjectRegistry.cpp`、`ProjectTemplate.cpp` 显式加入 `MiniEngineEditor`，不加入
-`MiniEngine`；编辑器变体公开项目根目录作为头文件搜索路径。
+`tools/CMakeLists.txt` 将 `tools/editor/model/` 中的 `EditorConfig.cpp`、
+`ProjectRegistry.cpp`、`ProjectTemplate.cpp`、`ProjectBrowserModel.cpp` 显式加入
+`MiniEngineEditor`，不加入 `MiniEngine`；编辑器变体公开项目根目录作为头文件搜索路径。
 `src/runtime/config/` 仅保留共用的 `EngineConfig` 和 `ProjectConfig`。
 
 ## 逻辑依赖方向

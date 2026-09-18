@@ -1,4 +1,4 @@
-#include "tools/editor/EditorConfig.h"
+#include "tools/editor/model/EditorConfig.h"
 
 #if defined(MINI_EDITOR)
 

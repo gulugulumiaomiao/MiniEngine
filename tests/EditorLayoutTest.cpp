@@ -1,4 +1,4 @@
-#include "tools/editor/EditorLayout.h"
+#include "tools/editor/app/EditorLayout.h"
 #include "imgui_internal.h"
 #include <gtest/gtest.h>
 #include <string>

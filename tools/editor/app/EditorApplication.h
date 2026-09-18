@@ -2,15 +2,15 @@
 
 #include "runtime/application/Application.h"
 #include "core/filesystem/VirtualPath.h"
-#include "tools/editor/EditorConfig.h"
-#include "tools/editor/HierarchyPanel.h"
-#include "tools/editor/ImGuiLayer.h"
-#include "tools/editor/InspectorPanel.h"
-#include "tools/editor/ProjectPanel.h"
-#include "tools/editor/ProjectPickerPanel.h"
-#include "tools/editor/SceneDocument.h"
-#include "tools/editor/SceneViewPanel.h"
-#include "tools/editor/StatisticsPanel.h"
+#include "tools/editor/model/EditorConfig.h"
+#include "tools/editor/panels/HierarchyPanel.h"
+#include "tools/editor/backend/ImGuiLayer.h"
+#include "tools/editor/panels/InspectorPanel.h"
+#include "tools/editor/panels/ProjectPanel.h"
+#include "tools/editor/panels/ProjectPickerPanel.h"
+#include "tools/editor/model/SceneDocument.h"
+#include "tools/editor/panels/SceneViewPanel.h"
+#include "tools/editor/panels/StatisticsPanel.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -50,6 +50,10 @@ private:
     // re-run after every successful openProject: bringing the project subsystems up
     // tears them down first, and both steps touch that slot.
     void installSceneChangeListener();
+    // Re-binds the ImGui layer to the current renderer/window and re-claims the
+    // AssetManager listener slot — the pair that every renderer rebuild (project
+    // open, create, close) invalidates. Callers run it outside an ImGui frame.
+    void reattachUi();
     [[nodiscard]] bool saveDocument();
     void openSaveAsPopup();
     void handleShortcuts();

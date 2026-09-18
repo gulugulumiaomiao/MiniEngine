@@ -1,4 +1,4 @@
-#include "tools/editor/MaterialInspector.h"
+#include "tools/editor/widgets/MaterialInspector.h"
 
 #include "asset/database/AssetDatabase.h"
 #include "asset/format/MaterialAssetFormat.h"

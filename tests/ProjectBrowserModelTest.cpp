@@ -5,7 +5,7 @@
 #include "asset/importer/AssetImportPipeline.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/filesystem/FileWatcher.h"
-#include "tools/editor/ProjectBrowserModel.h"
+#include "tools/editor/model/ProjectBrowserModel.h"
 #include "TestAssetEnvironment.h"
 
 #include <algorithm>

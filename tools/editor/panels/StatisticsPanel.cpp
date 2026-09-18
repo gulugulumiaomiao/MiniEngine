@@ -1,4 +1,4 @@
-#include "tools/editor/StatisticsPanel.h"
+#include "tools/editor/panels/StatisticsPanel.h"
 
 #include "imgui.h"
 #include "runtime/engine/Engine.h"
@@ -9,7 +9,7 @@
 #include "scene/components/MeshComponent.h"
 #include "scene/node/Node.h"
 #include "scene/scene/Scene.h"
-#include "tools/editor/SceneDocument.h"
+#include "tools/editor/model/SceneDocument.h"
 
 #include <cmath>
 #include <string>

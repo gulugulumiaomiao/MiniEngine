@@ -3,11 +3,11 @@
 #include "render/renderer/Renderer.h"
 #include "render/render_target/RenderTarget.h"
 #include "rhi/vulkan/VulkanFactory.h"
-#include "tools/editor/ImGuiLayer.h"
-#include "tools/editor/SceneDocument.h"
-#include "tools/editor/SceneViewPanel.h"
-#include "tools/editor/StatisticsPanel.h"
-#include "tools/editor/ProjectTemplate.h"
+#include "tools/editor/backend/ImGuiLayer.h"
+#include "tools/editor/model/SceneDocument.h"
+#include "tools/editor/panels/SceneViewPanel.h"
+#include "tools/editor/panels/StatisticsPanel.h"
+#include "tools/editor/model/ProjectTemplate.h"
 #include <gtest/gtest.h>
 #include <cmath>
 #include <filesystem>

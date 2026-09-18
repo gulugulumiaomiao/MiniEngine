@@ -1,7 +1,7 @@
 #pragma once
 
 #include "scene/node/SceneHandles.h"
-#include "tools/editor/SelectionSet.h"
+#include "tools/editor/model/SelectionSet.h"
 
 #include <cstddef>
 #include <cstdint>

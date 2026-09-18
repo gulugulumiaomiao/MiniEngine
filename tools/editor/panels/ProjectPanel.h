@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "core/filesystem/VirtualPath.h"
-#include "tools/editor/ProjectBrowserModel.h"
+#include "tools/editor/model/ProjectBrowserModel.h"
 
 #include <functional>
 #include <optional>
