@@ -361,11 +361,42 @@ bool multiDrag() {
     return true;
 }
 
+// 选择交互戳：左键、右键、点空白取消都推进（重复点同一节点也是交互），代码驱动
+// 的 select 不计。EditorApplication 靠它做 Inspector 的"最后交互优先"仲裁。
+bool selectionStamps() {
+    Harness ui;
+    auto& scene = ui.document.scene();
+    const auto a = scene.createNode("A");
+    ui.settle();
+    CHECK(ui.panel.selectionClickStamp() == 0);
+
+    ui.click(ui.row(1));
+    CHECK(ui.panel.selectionClickStamp() == 1);
+
+    ui.advance();
+    ui.click(ui.row(1)); // 重复点同一节点也要推进（值未变也是交互）
+    CHECK(ui.panel.selectionClickStamp() == 2);
+
+    ui.advance();
+    ui.click({100, 400}); // 点空白取消选择
+    CHECK(ui.panel.selectionClickStamp() == 3);
+    CHECK(!static_cast<bool>(ui.panel.selection()));
+
+    ui.advance();
+    ui.click(ui.row(1), 1); // 右键选中同样推进
+    CHECK(ui.panel.selectionClickStamp() == 4);
+    CHECK(ui.panel.selection() == a);
+
+    ui.panel.select(a); // 代码驱动的聚焦不算用户交互
+    CHECK(ui.panel.selectionClickStamp() == 4);
+    return true;
+}
+
 } // namespace
 
 int main() {
     return dragging() && menusAndRename() && hoverAndScroll() && staleDocument() && multiSelection() &&
-                   multiDrag()
+                   multiDrag() && selectionStamps()
                ? 0
                : 1;
 }

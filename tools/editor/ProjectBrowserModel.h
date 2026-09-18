@@ -3,6 +3,7 @@
 #include "asset/base/Asset.h"
 #include "core/filesystem/VirtualPath.h"
 
+#include <cstdint>
 #include <optional>
 #include <set>
 #include <string>
@@ -56,6 +57,10 @@ public:
     void selectEntry(const VirtualPath& path);
     void clearSelection();
     [[nodiscard]] const VirtualPath* selectedEntry() const; // nullptr when empty
+    // Bumped by every selection change (picks, clears and the stale-drop above),
+    // including re-picking the same entry: the editor treats the stamp, not the
+    // value, as the "user interacted with the Project window" signal.
+    [[nodiscard]] std::uint64_t selectionStamp() const;
 
     // --- Snapshots (cached; .meta hidden; directories first, then name) ---
     // All directories under assets://, flattened; the view builds the tree.
@@ -92,6 +97,8 @@ private:
     // mutable: dropping a stale selection is part of snapshot rebuilding, which
     // happens lazily inside the const accessors.
     mutable std::optional<VirtualPath> selected_;
+    // mutable: the stale-drop bump happens inside the const snapshot rebuild.
+    mutable std::uint64_t selectionStamp_{};
 
     mutable std::vector<ProjectEntry> directoryTree_;
     mutable std::vector<ProjectEntry> content_;

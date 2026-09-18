@@ -109,6 +109,7 @@ add_executable(MiniEditor
     editor/ProjectPickerPanel.cpp
     editor/HierarchyPanel.cpp
     editor/InspectorPanel.cpp
+    editor/MaterialInspector.cpp
     editor/SceneViewPanel.cpp
     editor/StatisticsPanel.cpp
     editor/EditorLayout.cpp

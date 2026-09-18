@@ -56,6 +56,17 @@ public:
     }
     void setShader(ShaderHandle shader);
 
+    // Editor write path: an override re-derives the effective renderQueue, and
+    // clearing it (nullopt) falls back to the current Shader's sub-shader
+    // default, keeping the derived field and the dirty/version bookkeeping in
+    // step with the other setters. Idempotent: an unchanged value does not bump
+    // the version.
+    void setRenderQueue(std::optional<int> queueOverride);
+    // Toggles one shader keyword (affects variant selection). Only keywords the
+    // current Shader declares are accepted; rebuildForShader drops undeclared
+    // ones anyway. Idempotent: re-applying the current state is a no-op.
+    void setKeywordEnabled(const std::string& keyword, bool enabled);
+
     // Creates a detached runtime copy. The clone is not asset-backed: changes to
     // the source asset will not affect it, and it will not be returned by
     // MaterialManager::findHandle(assetId).

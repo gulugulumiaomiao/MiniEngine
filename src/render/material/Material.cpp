@@ -222,6 +222,33 @@ void Material::setShader(ShaderHandle shader) {
     rebuildForShader(shader, true);
 }
 
+void Material::setRenderQueue(std::optional<int> queueOverride) {
+    if (renderQueueOverride_ == queueOverride)
+        return;
+    if (!SHADER_MANAGER.find(shaderHandle_)) {
+        Log::error("Material", "setRenderQueue requires a valid ShaderHandle");
+        return;
+    }
+    renderQueueOverride_ = queueOverride;
+    renderQueue = renderQueueOverride_.value_or(shader().defaultSubShader().renderQueue());
+    markChanged();
+}
+
+void Material::setKeywordEnabled(const std::string& keyword, bool enabled) {
+    const auto found = std::ranges::find(keywords, keyword);
+    if (enabled == (found != keywords.end()))
+        return; // Idempotent: the state is unchanged, so no version bump.
+    if (!SHADER_MANAGER.find(shaderHandle_) || !shader().declaresKeyword(keyword)) {
+        Log::warn("Material", "Shader does not declare keyword: %s", keyword.c_str());
+        return;
+    }
+    if (enabled)
+        keywords.push_back(keyword);
+    else
+        keywords.erase(found);
+    markChanged();
+}
+
 void Material::rebuildForShader(ShaderHandle newShaderHandle, bool preserveValues) {
     const Shader* newShaderValue = SHADER_MANAGER.find(newShaderHandle);
     if (!newShaderValue) {

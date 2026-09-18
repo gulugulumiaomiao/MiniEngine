@@ -73,8 +73,11 @@ void HierarchyPanel::draw() {
     ImGui::InvisibleButton("##root-drop",
                            ImVec2{std::max(available.x, 1.0F), std::max(available.y, 32.0F)});
     const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
-    if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
         selection_.clear();
+        // 点空白取消选择也是一次用户交互。
+        ++selectionClickStamp_;
+    }
     if (drawDropTarget(root, min, max, true) != Drop::None)
         ImGui::GetWindowDrawList()->AddLine(
             min, ImVec2{max.x, min.y}, ImGui::GetColorU32(ImGuiCol_DragDropTarget), 2.0F);
@@ -156,6 +159,7 @@ void HierarchyPanel::drawNode(NodeHandle handle) {
             dragStartSelection_ = selection_;
             selection_.click(handle, false, false, visibleNodes_);
         }
+        ++selectionClickStamp_;
         if (!root && !ctrl && !shift && !ImGui::IsItemToggledOpen() &&
             ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             beginRename(handle);
@@ -164,6 +168,7 @@ void HierarchyPanel::drawNode(NodeHandle handle) {
         // 右键未选中的节点先单选；已处于多选中则保留整组选择弹批量菜单。
         if (!selection_.contains(handle) || root)
             selection_.select(handle);
+        ++selectionClickStamp_;
     }
     if (!root && renameTarget_ != handle &&
         ImGui::BeginDragDropSource(ImGuiDragDropFlags_PayloadAutoExpire)) {
@@ -414,6 +419,7 @@ void HierarchyPanel::applyRequest() {
             return;
         }
         selection_.select(created);
+        ++selectionClickStamp_;
         expandAncestors(request.parent);
         beginRename(created);
         document_.markDirty();
@@ -473,8 +479,10 @@ void HierarchyPanel::applyRequest() {
             document_.markDirty();
         if (!rejected) {
             // 单节点拖动把选择聚焦到被移动节点；批量拖动整组保持选中（句柄不变）。
-            if (request.nodes.size() == 1)
+            if (request.nodes.size() == 1) {
                 selection_.select(request.nodes.front());
+                ++selectionClickStamp_;
+            }
             expandAncestors(request.parent);
         }
     }

@@ -12,6 +12,7 @@
 #include "tools/editor/SceneViewPanel.h"
 #include "tools/editor/StatisticsPanel.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -40,6 +41,11 @@ private:
     void openProject(const std::filesystem::path& root);
     void closeProject();
     void openScene(const VirtualPath& path);
+    // Two-way last-interaction-wins arbitration for the Inspector, driven by
+    // the selection stamps of the Project and Hierarchy windows: a stamp bump
+    // (any interaction, including re-clicking the same entry or clearing) hands
+    // the panel to that side. Called every frame after both panels drew.
+    void syncInspectorSelection();
     // Claims AssetManager's single change-listener slot for SceneDocument. Must be
     // re-run after every successful openProject: bringing the project subsystems up
     // tears them down first, and both steps touch that slot.
@@ -84,6 +90,11 @@ private:
     // beginFrame, i.e. with no ImGui frame open.
     std::optional<std::filesystem::path> pendingProjectRoot_;
     bool pendingProjectClose_{};
+    // Last-seen selection stamps of the two windows competing for the
+    // Inspector; deduplicates the per-frame bridge calls and decides which
+    // side the user interacted with last.
+    std::uint64_t lastProjectSelectionStamp_{};
+    std::uint64_t lastHierarchyClickStamp_{};
 };
 
 } // namespace engine::editor

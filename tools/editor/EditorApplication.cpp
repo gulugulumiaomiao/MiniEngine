@@ -99,6 +99,9 @@ void EditorApplication::onUpdate(float deltaTime) {
     hierarchyPanel_.syncDocument();
     if (showHierarchy_)
         hierarchyPanel_.draw();
+    // Both competing panels have drawn and bumped their stamps: arbitrate the
+    // Inspector target now so a click on either side applies this frame.
+    syncInspectorSelection();
     if (showInspector_)
         inspectorPanel_.draw(hierarchyPanel_.selectionSet());
     if (showScene_)
@@ -110,6 +113,8 @@ void EditorApplication::onUpdate(float deltaTime) {
 }
 
 void EditorApplication::onStop() {
+    // 停机时项目仍挂载：把防抖窗口内的最后一次材质编辑写盘。
+    inspectorPanel_.flushMaterialSaves();
     // 先释放依赖 Renderer 的界面资源；Engine::shutdown 统一保存配置。
     imguiLayer_.detach();
 }
@@ -128,6 +133,11 @@ void EditorApplication::installSceneChangeListener() {
 }
 
 void EditorApplication::openProject(const std::filesystem::path& root) {
+    // The old project's mount is about to be torn down inside ENGINE.openProject:
+    // flush its pending material edit first, and leave no stale asset inspection
+    // pointing into the previous project.
+    inspectorPanel_.flushMaterialSaves();
+    inspectorPanel_.clearAssetInspection();
     // OpenProject destroys the current renderer (and window on size change) and builds
     // a new one. The ImGui layer is bound to the old renderer/device, so move it off
     // before the renderer goes away and back on once the new one exists. Otherwise the
@@ -172,7 +182,31 @@ void EditorApplication::openProject(const std::filesystem::path& root) {
     statusMessage_.clear();
 }
 
+void EditorApplication::syncInspectorSelection() {
+    // Two-way last-interaction-wins: each window bumps its own stamp on every
+    // selection interaction (value changes and no-op repeats alike), so the
+    // fresher stamp below decides which view the Inspector serves.
+    const ProjectBrowserModel& model = projectPanel_.model();
+    if (model.selectionStamp() != lastProjectSelectionStamp_) {
+        lastProjectSelectionStamp_ = model.selectionStamp();
+        const VirtualPath* selected = model.selectedEntry();
+        // Directories have no Inspector meaning; an empty selection clears the view.
+        if (selected != nullptr && !FILE_SYSTEM.isDirectory(*selected))
+            inspectorPanel_.inspectAsset(*selected);
+        else
+            inspectorPanel_.clearAssetInspection();
+    }
+    if (hierarchyPanel_.selectionClickStamp() != lastHierarchyClickStamp_) {
+        lastHierarchyClickStamp_ = hierarchyPanel_.selectionClickStamp();
+        inspectorPanel_.focusNodeSelection();
+    }
+}
+
 void EditorApplication::closeProject() {
+    // Flush a pending material edit while the project mount still exists;
+    // afterwards the write target would be gone and the edit lost.
+    inspectorPanel_.flushMaterialSaves();
+    inspectorPanel_.clearAssetInspection();
     // 在帧外切换 Renderer，返回选择界面后仍能继续绘制和打开项目。
     imguiLayer_.detach();
     ENGINE.closeProject();

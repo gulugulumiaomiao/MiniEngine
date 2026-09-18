@@ -99,9 +99,18 @@ mini_add_editor_test(HierarchyPanelTest
 target_link_libraries(HierarchyPanelTest PRIVATE MiniImGui)
 mini_add_editor_test(InspectorPanelTest
     ${PROJECT_SOURCE_DIR}/tools/editor/InspectorPanel.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/MaterialInspector.cpp
     ${PROJECT_SOURCE_DIR}/tools/editor/SceneDocument.cpp
 )
 target_link_libraries(InspectorPanelTest PRIVATE MiniImGui)
+
+# MaterialInspector 是可复用控件（Project 资产视图与 MaterialComponent 槽位共用）：
+# 事件注入驱动编辑，验证实例同步、防抖写回与重导入幂等；fixture 为测试自建
+# 资产环境，不依赖 builtin 拷贝。
+mini_add_editor_test(MaterialInspectorTest
+    ${PROJECT_SOURCE_DIR}/tools/editor/MaterialInspector.cpp
+)
+target_link_libraries(MaterialInspectorTest PRIVATE MiniImGui)
 
 # Project 浏览器模型是纯逻辑（导航/过滤/快照/操作），已编入 MiniEngineEditor；
 # gtest 逐用例注册，失败可定位到单个导航或操作语义。ProjectPanelTest 直接触发

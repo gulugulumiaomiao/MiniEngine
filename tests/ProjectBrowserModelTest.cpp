@@ -376,6 +376,36 @@ TEST_F(ProjectBrowserModelTest, SelectionIsSingleEntry) {
     EXPECT_EQ(model.selectedEntry(), nullptr);
 }
 
+TEST_F(ProjectBrowserModelTest, SelectionStampBumpsOnEveryInteraction) {
+    // The editor arbitrates the Inspector on interaction stamps, not on value
+    // changes: a no-op repeat pick must also count.
+    ProjectBrowserModel model;
+    EXPECT_EQ(model.selectionStamp(), 0U);
+
+    model.selectEntry(shaderPath);
+    const auto first = model.selectionStamp();
+    EXPECT_GT(first, 0U);
+
+    model.selectEntry(shaderPath); // Re-picking the same entry bumps again.
+    const auto second = model.selectionStamp();
+    EXPECT_GT(second, first);
+
+    model.clearSelection();
+    EXPECT_GT(model.selectionStamp(), second);
+
+    // A selection whose file disappeared is dropped during the snapshot
+    // rebuild; that drop counts as an interaction as well.
+    model.selectEntry(shaderPath);
+    const auto beforeDrop = model.selectionStamp();
+    std::error_code ignored;
+    std::filesystem::remove(root / "assets" / "shaders" / "fixture.shader.json", ignored);
+    ASSERT_FALSE(ignored);
+    model.invalidate();
+    (void)model.contentEntries();
+    EXPECT_GT(model.selectionStamp(), beforeDrop);
+    EXPECT_EQ(model.selectedEntry(), nullptr);
+}
+
 TEST_F(ProjectBrowserModelTest, ViewModeToggle) {
     ProjectBrowserModel model;
     EXPECT_EQ(model.viewMode(), ProjectBrowserModel::ViewMode::Grid);

@@ -1,5 +1,7 @@
 ﻿#include "tools/editor/InspectorPanel.h"
 
+#include "asset/base/AssetMeta.h"
+#include "asset/database/AssetDatabase.h"
 #include "core/filesystem/FileSystem.h"
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
@@ -79,6 +81,19 @@ void InspectorPanel::draw(const SelectionSet<NodeHandle>& selection) {
     statusMessage_.clear();
     if (!document_.valid()) {
         ImGui::TextUnformatted("No Scene document is open");
+        ImGui::End();
+        return;
+    }
+
+    // Last-interaction-wins: the panel serves the window the user clicked
+    // last (EditorApplication switches the mode on selection stamps), so a
+    // Project asset pick shows the asset editor even with nodes selected,
+    // and any Hierarchy interaction switches back to the node view.
+    if (mode_ == InspectionMode::Asset) {
+        if (assetSelection_.has_value())
+            drawAssetInspector();
+        else
+            ImGui::TextUnformatted("Nothing selected");
         ImGui::End();
         return;
     }
@@ -458,6 +473,12 @@ void InspectorPanel::drawMaterial(Node& node) {
                 statusMessage_ = "Failed to load material: " + target.string();
             }
         }
+        // Embedding the shared widget here is the reuse path: slot materials
+        // are load(path) instances, i.e. the asset itself, so component edits
+        // apply to every user of the material and write back to the asset —
+        // the same semantics as the Project asset view.
+        if (slots[slot])
+            materialInspector_.draw(slots[slot]);
         ImGui::PopID();
     }
 
@@ -475,6 +496,43 @@ void InspectorPanel::drawMaterial(Node& node) {
     }
 
     ImGui::PopID();
+}
+
+void InspectorPanel::drawAssetInspector() {
+    const VirtualPath& path = *assetSelection_;
+    if (!FILE_SYSTEM.isFile(path)) {
+        // Deleted or renamed since it was picked (Project window operations or
+        // external changes); the next selection change re-points the view.
+        ImGui::TextUnformatted("Asset not found");
+        return;
+    }
+    ImGui::TextDisabled("%s", path.relativePath().c_str());
+    ImGui::Separator();
+
+    switch (inferAssetType(path)) {
+    case AssetType::Material: {
+        const MaterialHandle handle = MATERIAL_MANAGER.load(path);
+        const Material* material = MATERIAL_MANAGER.find(handle);
+        if (material == nullptr || !(material->assetPath() == path)) {
+            // load() falls back to the Error Material, which must never be
+            // offered for editing under another asset's name.
+            ImGui::TextUnformatted("Failed to load material");
+            return;
+        }
+        materialInspector_.draw(handle);
+        return;
+    }
+    case AssetType::Shader: ImGui::TextUnformatted("Type: Shader"); break;
+    case AssetType::Mesh: ImGui::TextUnformatted("Type: Mesh"); break;
+    case AssetType::Scene: ImGui::TextUnformatted("Type: Scene"); break;
+    case AssetType::Texture: ImGui::TextUnformatted("Type: Texture"); break;
+    case AssetType::Generic: ImGui::TextUnformatted("Type: Generic"); break;
+    case AssetType::Unknown:
+    default: ImGui::TextUnformatted("Type: Unknown"); break;
+    }
+    const auto guid = ASSET_DATABASE.findGuid(path);
+    ImGui::Text("GUID: %s", guid ? guid->toString().c_str() : "-");
+    ImGui::TextDisabled("No editor for this asset type yet");
 }
 
 void InspectorPanel::drawCamera(Node& node) {

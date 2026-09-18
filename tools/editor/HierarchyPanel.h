@@ -30,6 +30,10 @@ public:
         return selection_.empty() ? NodeHandle{} : selection_.primary();
     }
     [[nodiscard]] const SelectionSet<NodeHandle>& selectionSet() const { return selection_; }
+    // 用户指向性选择操作(左/右键点击、点空白取消、创建与拖动后的聚焦)的计数,
+    // 选择值是否变化、是否重复点击同一节点都推进。EditorApplication 靠它仲裁
+    // Inspector 的"最后交互优先";代码驱动的清空与失效清理不计入。
+    [[nodiscard]] std::uint64_t selectionClickStamp() const { return selectionClickStamp_; }
     void select(NodeHandle handle) {
         if (handle)
             selection_.select(handle);
@@ -63,6 +67,7 @@ private:
     SceneDocument& document_;
     std::uint64_t revision_{};
     SelectionSet<NodeHandle> selection_;
+    std::uint64_t selectionClickStamp_{};
     // 按下节点行时暂存的潜在拖动组；拖动源激活时整组随行。
     SelectionSet<NodeHandle> dragStartSelection_;
     // 本帧可见行顺序，供 Shift 范围选择使用。

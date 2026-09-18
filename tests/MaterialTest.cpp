@@ -80,6 +80,52 @@ int main() {
     if (!warmData.dirty() || warmData.version() != 2 || warmData.getVec4("BaseColor").z != 0.3F) {
         return 3;
     }
+    // setRenderQueue: the override takes effect, re-applying it is idempotent,
+    // and clearing it falls back to the Shader's sub-shader default queue.
+    const int vertexColorDefaultQueue = warmData.shader().defaultSubShader().renderQueue();
+    warmData.setRenderQueue(3100);
+    if (warmData.renderQueue != 3100 || !warmData.renderQueueOverride() ||
+        warmData.version() != 3) {
+        return 27;
+    }
+    warmData.setRenderQueue(3100); // Unchanged value must not bump the version.
+    if (warmData.version() != 3) {
+        return 28;
+    }
+    warmData.setRenderQueue(std::nullopt);
+    if (warmData.renderQueue != vertexColorDefaultQueue || warmData.renderQueueOverride() ||
+        warmData.version() != 4) {
+        return 29;
+    }
+    // setKeywordEnabled: a keyword the Shader does not declare is rejected
+    // (vertex_color declares no features).
+    warmData.setKeywordEnabled("RECEIVE_SHADOWS", true);
+    if (!warmData.keywords.empty() || warmData.version() != 4) {
+        return 30;
+    }
+    // After switching to blinn_phong (declares RECEIVE_SHADOWS on Forward):
+    // enabling the keyword changes the variant key, re-enabling is idempotent,
+    // and disabling restores the original key.
+    materials.setShader(warm, VirtualPath{"assets://shaders/blinn_phong.shader.json"});
+    const ShaderVariantKey keywordOffKey =
+        warmData.shader().defaultSubShader().requirePass(ShaderPassType::Forward)
+            .variantKey(warmData.keywords);
+    const std::uint64_t versionBeforeKeywords = warmData.version();
+    warmData.setKeywordEnabled("RECEIVE_SHADOWS", true);
+    warmData.setKeywordEnabled("RECEIVE_SHADOWS", true); // Idempotent.
+    const ShaderVariantKey keywordOnKey =
+        warmData.shader().defaultSubShader().requirePass(ShaderPassType::Forward)
+            .variantKey(warmData.keywords);
+    if (warmData.keywords != std::vector<std::string>{"RECEIVE_SHADOWS"} ||
+        warmData.version() != versionBeforeKeywords + 1 || keywordOnKey == keywordOffKey) {
+        return 31;
+    }
+    warmData.setKeywordEnabled("RECEIVE_SHADOWS", false);
+    if (!warmData.keywords.empty() || warmData.version() != versionBeforeKeywords + 2 ||
+        warmData.shader().defaultSubShader().requirePass(ShaderPassType::Forward)
+                .variantKey(warmData.keywords) != keywordOffKey) {
+        return 32;
+    }
     materials.destroy(warm);
     if (materials.find(warm) != nullptr) {
         return 19;

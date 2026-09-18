@@ -272,14 +272,20 @@ ProjectBrowserModel::ViewMode ProjectBrowserModel::viewMode() const {
 
 void ProjectBrowserModel::selectEntry(const VirtualPath& path) {
     selected_ = path;
+    ++selectionStamp_;
 }
 
 void ProjectBrowserModel::clearSelection() {
     selected_.reset();
+    ++selectionStamp_;
 }
 
 const VirtualPath* ProjectBrowserModel::selectedEntry() const {
     return selected_ ? &*selected_ : nullptr;
+}
+
+std::uint64_t ProjectBrowserModel::selectionStamp() const {
+    return selectionStamp_;
 }
 
 void ProjectBrowserModel::rebuildSnapshots() const {
@@ -335,8 +341,10 @@ void ProjectBrowserModel::rebuildSnapshots() const {
     }
     std::ranges::sort(content_, entryOrder);
 
-    if (selected_ && !FILE_SYSTEM.exists(*selected_))
+    if (selected_ && !FILE_SYSTEM.exists(*selected_)) {
         selected_.reset();
+        ++selectionStamp_;
+    }
     // Clear only on the built path: an unmounted assets:// stays dirty so the
     // next frame retries once a project (mount) appears.
     snapshotsDirty_ = false;
