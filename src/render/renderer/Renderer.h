@@ -2,6 +2,7 @@
 
 #include "render/pipeline/RenderPipeline.h"
 #include "render/render_graph/RgTexturePool.h"
+#include "render/render_target/RenderTargetPool.h"
 #include "rhi/RhiFactory.h"
 
 #include <cstdint>
@@ -66,9 +67,11 @@ public:
 
     [[nodiscard]] rhi::IDevice& device() { return *device_; }
     [[nodiscard]] rhi::ISwapchain& swapchain() { return *swapchain_; }
-    [[nodiscard]] RenderTarget& currentForwardTarget() {
-        return *forwardTargets_[swapchain_->frameIndex()];
+    [[nodiscard]] RenderTarget& currentForwardTarget();
+    [[nodiscard]] RenderTarget* renderTarget(RenderTargetHandle handle) {
+        return renderTargetPool_->find(handle);
     }
+    [[nodiscard]] RenderTargetPool& renderTargetPool() { return *renderTargetPool_; }
     [[nodiscard]] RgTexturePool& rgTexturePool() { return *rgTexturePool_; }
     [[nodiscard]] Window& window() { return window_; }
     [[nodiscard]] std::uint64_t frameSerial() const { return frameSerial_; }
@@ -80,7 +83,8 @@ private:
     Window& window_;
     std::unique_ptr<rhi::IDevice> device_;
     std::unique_ptr<rhi::ISwapchain> swapchain_;
-    std::vector<std::unique_ptr<RenderTarget>> forwardTargets_;
+    std::vector<RenderTargetHandle> forwardTargets_;
+    std::optional<RenderTargetPool> renderTargetPool_;
     std::optional<RgTexturePool> rgTexturePool_;
     std::unique_ptr<IRenderPipeline> pipeline_;
     IFrameOverlay* overlay_{};

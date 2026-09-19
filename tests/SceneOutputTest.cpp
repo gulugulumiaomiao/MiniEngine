@@ -105,7 +105,7 @@ TEST_F(SceneOutputTest, EmptySceneClearsSampledImageAndFinishesInShaderRead) {
     EXPECT_TRUE(shaderRead);
 }
 
-TEST_F(SceneOutputTest, ResizeAndReuseOnlyTouchTheAcquiredFrameSlot) {
+TEST_F(SceneOutputTest, ResizeRetiresOnlyTheAcquiredFrameSlotAfterFenceReuse) {
     renderer->setSceneViewport(320, 180);
     renderer->renderFrame(scene);
     renderer->renderFrame(scene);
@@ -113,7 +113,7 @@ TEST_F(SceneOutputTest, ResizeAndReuseOnlyTouchTheAcquiredFrameSlot) {
     const int destroyedBefore = device->destroyedTextures;
     renderer->renderFrame(scene);
     EXPECT_EQ(device->textures.size(), 6U);
-    EXPECT_EQ(device->destroyedTextures, destroyedBefore);
+    EXPECT_EQ(device->destroyedTextures, destroyedBefore + 1); // slot 0 initial depth
     renderer->setSceneViewport(640, 360);
     renderer->renderFrame(scene); // slot 1, slot 0 remains untouched
     EXPECT_EQ(device->textures.size(), 8U);
@@ -121,7 +121,11 @@ TEST_F(SceneOutputTest, ResizeAndReuseOnlyTouchTheAcquiredFrameSlot) {
     EXPECT_EQ(renderer->currentForwardTarget().width(), 320U); // next slot 0
     renderer->renderFrame(scene);
     EXPECT_EQ(device->textures.size(), 10U);
+    EXPECT_EQ(device->destroyedTextures, destroyedBefore + 2);
+    renderer->renderFrame(scene); // slot 1's old target is now fence-safe
     EXPECT_EQ(device->destroyedTextures, destroyedBefore + 4);
+    renderer->renderFrame(scene); // slot 0's old target is now fence-safe
+    EXPECT_EQ(device->destroyedTextures, destroyedBefore + 6);
 }
 
 TEST_F(SceneOutputTest, HiddenViewportSkipsSceneWhileFramesStillPresentAndCanResume) {
@@ -157,4 +161,30 @@ TEST_F(SceneOutputTest, MissingCameraProducesNoDrawItemsInOffscreenMode) {
     const DrawList list = DrawListBuilder{}.build(scene, context);
     EXPECT_TRUE(list.items.empty());
     EXPECT_TRUE(list.objects.empty());
+}
+
+TEST_F(SceneOutputTest, CameraTargetOverridesViewportWithoutTouchingFrameTargets) {
+    RenderTargetDesc desc;
+    desc.width = 256;
+    desc.height = 144;
+    desc.colorAttachments.push_back({
+        .format = rhi::TextureFormat::Rgba8Unorm,
+        .additionalUsage = rhi::TextureUsage::Sampled,
+    });
+    desc.depthAttachment.emplace();
+    desc.debugName = "CameraTarget";
+    const RenderTargetHandle target = renderer->renderTargetPool().acquire(std::move(desc));
+    ASSERT_TRUE(target);
+
+    RenderCamera camera;
+    camera.target = target;
+    scene.setCamera(camera);
+    renderer->renderFrame(scene);
+
+    ASSERT_FALSE(swapchain->commands.renderings.empty());
+    EXPECT_EQ(swapchain->commands.renderings.front().renderArea.width, 256U);
+    EXPECT_EQ(swapchain->commands.renderings.front().renderArea.height, 144U);
+    ASSERT_NE(renderer->renderTarget(target), nullptr);
+    EXPECT_EQ(renderer->renderTarget(target)->colorFormat(0), rhi::TextureFormat::Rgba8Unorm);
+    EXPECT_EQ(renderer->currentForwardTarget().width(), 800U);
 }

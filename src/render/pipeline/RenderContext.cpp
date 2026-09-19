@@ -1,5 +1,6 @@
 #include "render/pipeline/RenderContext.h"
 
+#include "core/logging/Log.h"
 #include "render/renderer/Renderer.h"
 #include "render/render_target/RenderTarget.h"
 #include "rhi/api/Device.h"
@@ -7,9 +8,17 @@
 
 namespace engine {
 
-bool RenderContext::offscreenScene() const { return renderer_.offscreenScene(); }
-std::uint32_t RenderContext::sceneWidth() const { return renderer_.sceneWidth(); }
-std::uint32_t RenderContext::sceneHeight() const { return renderer_.sceneHeight(); }
+bool RenderContext::offscreenScene() const {
+    return (scene_.camera() && scene_.camera()->target) || renderer_.offscreenScene();
+}
+std::uint32_t RenderContext::sceneWidth() const {
+    return scene_.camera() && scene_.camera()->target ? currentForwardTarget().width()
+                                                     : renderer_.sceneWidth();
+}
+std::uint32_t RenderContext::sceneHeight() const {
+    return scene_.camera() && scene_.camera()->target ? currentForwardTarget().height()
+                                                     : renderer_.sceneHeight();
+}
 rhi::TextureFormat RenderContext::sceneColorFormat() const {
     return offscreenScene() ? currentForwardTarget().colorFormat(0) : swapchain().format();
 }
@@ -30,6 +39,13 @@ rhi::IGraphicsCommandEncoder& RenderContext::encoder() const {
 }
 
 RenderTarget& RenderContext::currentForwardTarget() const {
+    if (scene_.camera() && scene_.camera()->target) {
+        RenderTarget* target = renderer_.renderTarget(*scene_.camera()->target);
+        if (!target) {
+            Log::fatal("RenderContext", "Camera render target is invalid or retired");
+        }
+        return *target;
+    }
     return renderer_.currentForwardTarget();
 }
 

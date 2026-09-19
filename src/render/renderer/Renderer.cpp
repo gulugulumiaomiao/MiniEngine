@@ -4,6 +4,7 @@
 #include "render/pipeline/MiniForwardPipeline.h"
 #include "render/pipeline/RenderContext.h"
 #include "render/render_target/RenderTarget.h"
+#include "render/render_target/RenderTargetPool.h"
 #include "render/gpu/frame/FrameGpuManager.h"
 #include "render/gpu/pipeline/GraphicsPipelineManager.h"
 #include "rhi/api/CommandEncoder.h"
@@ -19,20 +20,21 @@ Renderer::Renderer(Window& window, rhi::Context context)
     if (!device_ || !swapchain_) {
         Log::fatal("Renderer", "RHI context is incomplete");
     }
+    renderTargetPool_.emplace(*device_, FrameGpuManager::kFramesInFlight);
     rgTexturePool_.emplace(*device_);
     forwardTargets_.reserve(FrameGpuManager::kFramesInFlight);
     for (std::uint32_t frame = 0; frame < FrameGpuManager::kFramesInFlight; ++frame) {
-        auto target = std::make_unique<RenderTarget>(*device_);
         RenderTargetDesc targetDesc;
         targetDesc.width = swapchain_->width();
         targetDesc.height = swapchain_->height();
         targetDesc.depthAttachment.emplace();
         targetDesc.depthAttachment->storeOp = rhi::StoreOp::DontCare;
         targetDesc.debugName = "ForwardTarget" + std::to_string(frame);
-        if (!target->create(std::move(targetDesc))) {
+        const RenderTargetHandle target = renderTargetPool_->acquire(std::move(targetDesc));
+        if (!target) {
             Log::fatal("Renderer", "Cannot create the Forward render target");
         }
-        forwardTargets_.push_back(std::move(target));
+        forwardTargets_.push_back(target);
     }
 }
 
@@ -44,6 +46,7 @@ Renderer::~Renderer() {
     // destruction order would run after device_.reset() below and hit a dangling device.
     rgTexturePool_.reset();
     forwardTargets_.clear();
+    renderTargetPool_.reset();
     swapchain_.reset();
     device_.reset();
 }
@@ -59,10 +62,13 @@ void Renderer::renderFrame(const RenderScene& scene) {
         return;
     }
     rgTexturePool_->beginFrame(swapchain_->frameIndex());
+    renderTargetPool_->beginFrame(swapchain_->frameIndex());
     GRAPHICS_PIPELINE_MANAGER.collect(frameSerial_);
     RenderContext context(*this, scene);
-    if (sceneWidth() != 0 && sceneHeight() != 0) {
-        prepareForwardTarget();
+    if (context.sceneWidth() != 0 && context.sceneHeight() != 0) {
+        if (!scene.camera() || !scene.camera()->target) {
+            prepareForwardTarget();
+        }
         pipeline_->render(context);
     }
     if (overlay_) {
@@ -110,12 +116,19 @@ void Renderer::recreateSwapchain() {
     device_->waitIdle();
     GRAPHICS_PIPELINE_MANAGER.clear();
     swapchain_->resize(width, height);
-    for (const std::unique_ptr<RenderTarget>& target : forwardTargets_) {
+    for (RenderTargetHandle& handle : forwardTargets_) {
         if (offscreenScene_)
             continue;
-        if (!target->resize(swapchain_->width(), swapchain_->height())) {
+        RenderTarget* target = renderTargetPool_->find(handle);
+        RenderTargetDesc desc = target->desc();
+        desc.width = swapchain_->width();
+        desc.height = swapchain_->height();
+        const RenderTargetHandle replacement = renderTargetPool_->acquire(std::move(desc));
+        if (!replacement) {
             Log::fatal("Renderer", "Cannot resize the Forward render target");
         }
+        renderTargetPool_->release(handle);
+        handle = replacement;
     }
     if (pipeline_) {
         pipeline_->onSwapchainChanged();
@@ -126,6 +139,14 @@ void Renderer::recreateSwapchain() {
 
 void Renderer::waitIdle() {
     device_->waitIdle();
+}
+
+RenderTarget& Renderer::currentForwardTarget() {
+    RenderTarget* target = renderTargetPool_->find(forwardTargets_[swapchain_->frameIndex()]);
+    if (!target) {
+        Log::fatal("Renderer", "Current Forward render target is unavailable");
+    }
+    return *target;
 }
 
 void Renderer::prepareForwardTarget() {
@@ -149,8 +170,12 @@ void Renderer::prepareForwardTarget() {
             .additionalUsage = rhi::TextureUsage::Sampled,
         });
     }
-    if (!target.create(std::move(desc)))
+    const RenderTargetHandle replacement = renderTargetPool_->acquire(std::move(desc));
+    if (!replacement)
         Log::fatal("Renderer", "Cannot prepare the scene render target");
+    RenderTargetHandle& current = forwardTargets_[swapchain_->frameIndex()];
+    renderTargetPool_->release(current);
+    current = replacement;
 }
 
 } // namespace engine
