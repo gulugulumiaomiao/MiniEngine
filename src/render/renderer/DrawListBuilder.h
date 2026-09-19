@@ -22,6 +22,10 @@ public:
     explicit DrawListBuilder(std::string_view renderPipeline = "MiniForward");
 
     [[nodiscard]] DrawList build(const RenderScene& scene, const RenderContext& context);
+    [[nodiscard]] SourceDrawData extract(const RenderScene& scene,
+                                         const RenderContext& context) const;
+    [[nodiscard]] DrawList prepare(const SourceDrawData& source,
+                                   const RenderContext& context) const;
 
 private:
     struct ResolvedMaterialPass {

@@ -29,20 +29,8 @@ void ShadowCasterPass::execute(RenderContext& context,
         output_->castShadows = true;
     }
 
-    std::vector<DrawItem> items;
-    items.reserve(drawList.items.size());
-    for (const DrawItem& item : drawList.items) {
-        if (item.renderPhase != RenderPhase::ShadowCaster) {
-            continue;
-        }
-        const std::uint32_t objectIndex = item.arguments.firstInstance;
-        const std::uint32_t layerMask = objectIndex < context.scene().objects().size()
-                                            ? context.scene().objects()[objectIndex].layerMask
-                                            : 0xFFFFFFFFU;
-        if (filter_.accepts(item, layerMask)) {
-            items.push_back(item);
-        }
-    }
+    std::vector<DrawItem> items =
+        collectPassItems(drawList, RenderPhase::ShadowCaster, filter_);
     const RgTextureHandle shadowMap = graph.createTexture({
         .dimension = rhi::TextureDimension::Texture2D,
         .format = rhi::TextureFormat::Depth32Float,

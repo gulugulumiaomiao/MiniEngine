@@ -18,20 +18,8 @@ DepthOnlyPass::DepthOnlyPass(DrawFilter filter) : filter_(std::move(filter)) {}
 void DepthOnlyPass::execute(RenderContext& context,
                             RenderGraph& graph,
                             const DrawList& drawList) {
-    std::vector<DrawItem> items;
-    items.reserve(drawList.items.size());
-    for (const DrawItem& item : drawList.items) {
-        if (item.renderPhase != RenderPhase::DepthOnly) {
-            continue;
-        }
-        const std::uint32_t objectIndex = item.arguments.firstInstance;
-        const std::uint32_t layerMask = objectIndex < context.scene().objects().size()
-                                            ? context.scene().objects()[objectIndex].layerMask
-                                            : 0xFFFFFFFFU;
-        if (filter_.accepts(item, layerMask)) {
-            items.push_back(item);
-        }
-    }
+    std::vector<DrawItem> items =
+        collectPassItems(drawList, RenderPhase::DepthOnly, filter_);
     if (items.empty()) {
         return;
     }

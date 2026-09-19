@@ -3,6 +3,7 @@
 #include "render/pipeline/RenderPass.h"
 #include "render/pipeline/RenderPipeline.h"
 #include "render/pipeline/passes/ShadowCasterPass.h"
+#include "render/renderer/RenderItems.h"
 
 #include <memory>
 #include <vector>
@@ -24,6 +25,7 @@ public:
     void addPass(std::unique_ptr<IRenderPass> pass);
     void setPasses(std::vector<std::unique_ptr<IRenderPass>> passes);
     [[nodiscard]] const std::vector<std::unique_ptr<IRenderPass>>& passes() const { return passes_; }
+    [[nodiscard]] const SourceDrawGroups& sourceDrawGroups() const { return sourceDrawGroups_; }
 
 private:
     void resolveMaterialBindGroups(DrawList& drawList, std::uint32_t frameIndex);
@@ -32,6 +34,7 @@ private:
     // when binding the resolved shadow map view into the scene bind group.
     ShadowCasterOutput shadowOutput_;
     std::vector<std::unique_ptr<IRenderPass>> passes_;
+    SourceDrawGroups sourceDrawGroups_;
 };
 
 } // namespace engine

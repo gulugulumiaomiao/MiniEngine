@@ -3,8 +3,10 @@
 #include "rhi/api/RhiTypes.h"
 #include "rhi/api/PipelineDesc.h"
 #include "render/base/RenderHandle.h"
+#include "render/renderer/RenderItems.h"
 
 #include <cstddef>
+#include <map>
 #include <vector>
 
 namespace engine {
@@ -59,10 +61,20 @@ struct DrawItem {
     rhi::IndexFormat indexFormat{rhi::IndexFormat::UInt32};
     rhi::DrawIndexedArguments arguments;
     int renderQueue{2000};
+    std::uint32_t layerMask{1};
 };
 
 struct DrawList {
     std::vector<DrawItem> items;
+    std::map<int, std::vector<DrawItem>> groups;
+    SourceDrawGroups sourceGroups;
+    std::vector<ObjectDrawData> objects;
+    SceneDrawData scene;
+    math::Vec4 clearColor{0.025F, 0.055F, 0.10F, 1.0F};
+};
+
+struct SourceDrawData {
+    SourceDrawItemList items;
     std::vector<ObjectDrawData> objects;
     SceneDrawData scene;
     math::Vec4 clearColor{0.025F, 0.055F, 0.10F, 1.0F};

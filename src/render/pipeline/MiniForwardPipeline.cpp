@@ -23,11 +23,17 @@ MiniForwardPipeline::MiniForwardPipeline() {
 
 bool MiniForwardPipeline::render(RenderContext& context) {
     DrawListBuilder builder;
-    DrawList drawList = builder.build(context.scene(), context);
+    const SourceDrawData source = builder.extract(context.scene(), context);
+    DrawList drawList = builder.prepare(source, context);
+    sourceDrawGroups_ = drawList.sourceGroups;
 
     resolveMaterialBindGroups(drawList, context.frameIndex());
     std::erase_if(drawList.items,
                   [](const DrawItem& item) { return !item.pipeline || !item.materialBindGroup; });
+    drawList.groups.clear();
+    for (const DrawItem& item : drawList.items) {
+        drawList.groups[item.renderQueue].push_back(item);
+    }
 
     FRAME_GPU_MANAGER.beginFrame(context.frameIndex());
     FRAME_GPU_MANAGER.upload(context.frameIndex(), drawList);
