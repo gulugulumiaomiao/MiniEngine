@@ -37,9 +37,7 @@ using SourceDrawGroups = std::map<int, SourceDrawItemList>;
 
 struct RenderItem {
     rhi::GraphicsPipelineHandle pipeline;
-    rhi::RasterStateDesc raster;
-    rhi::DepthStencilStateDesc depthStencil;
-    rhi::BlendStateDesc blend;
+    rhi::DrawStateDesc drawState;
     struct VertexBuffer {
         std::uint32_t binding{};
         rhi::BufferHandle buffer;

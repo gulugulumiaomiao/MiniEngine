@@ -63,6 +63,57 @@ VkAttachmentStoreOp mapStoreOp(StoreOp operation) {
                                        : VK_ATTACHMENT_STORE_OP_DONT_CARE;
 }
 
+VkCullModeFlags mapCullMode(CullMode mode) {
+    switch (mode) {
+    case CullMode::None: return VK_CULL_MODE_NONE;
+    case CullMode::Front: return VK_CULL_MODE_FRONT_BIT;
+    case CullMode::Back: return VK_CULL_MODE_BACK_BIT;
+    }
+    return VK_CULL_MODE_NONE;
+}
+
+VkCompareOp mapCompareOp(CompareOp compare) {
+    switch (compare) {
+    case CompareOp::Never: return VK_COMPARE_OP_NEVER;
+    case CompareOp::Less: return VK_COMPARE_OP_LESS;
+    case CompareOp::LessEqual: return VK_COMPARE_OP_LESS_OR_EQUAL;
+    case CompareOp::Equal: return VK_COMPARE_OP_EQUAL;
+    case CompareOp::Greater: return VK_COMPARE_OP_GREATER;
+    case CompareOp::GreaterEqual: return VK_COMPARE_OP_GREATER_OR_EQUAL;
+    case CompareOp::Always: return VK_COMPARE_OP_ALWAYS;
+    }
+    return VK_COMPARE_OP_ALWAYS;
+}
+
+VkColorComponentFlags mapColorMask(ColorWriteMask mask) {
+    VkColorComponentFlags result{};
+    if (hasFlag(mask, ColorWriteMask::Red))
+        result |= VK_COLOR_COMPONENT_R_BIT;
+    if (hasFlag(mask, ColorWriteMask::Green))
+        result |= VK_COLOR_COMPONENT_G_BIT;
+    if (hasFlag(mask, ColorWriteMask::Blue))
+        result |= VK_COLOR_COMPONENT_B_BIT;
+    if (hasFlag(mask, ColorWriteMask::Alpha))
+        result |= VK_COLOR_COMPONENT_A_BIT;
+    return result;
+}
+
+VkColorBlendEquationEXT mapBlendEquation(BlendMode mode) {
+    VkColorBlendEquationEXT result{};
+    result.colorBlendOp = VK_BLEND_OP_ADD;
+    result.alphaBlendOp = VK_BLEND_OP_ADD;
+    result.srcColorBlendFactor =
+        mode == BlendMode::Alpha ? VK_BLEND_FACTOR_SRC_ALPHA : VK_BLEND_FACTOR_ONE;
+    result.dstColorBlendFactor =
+        mode == BlendMode::Additive ? VK_BLEND_FACTOR_ONE
+                                    : VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    result.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    result.dstAlphaBlendFactor =
+        mode == BlendMode::Additive ? VK_BLEND_FACTOR_ONE
+                                    : VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    return result;
+}
+
 } // namespace
 
 VulkanGraphicsCommandEncoder::VulkanGraphicsCommandEncoder(VkCommandBuffer commandBuffer,
@@ -165,6 +216,38 @@ void VulkanGraphicsCommandEncoder::setViewport(const Viewport& viewport) {
 void VulkanGraphicsCommandEncoder::setScissor(const Rect& scissor) {
     const VkRect2D native{{scissor.x, scissor.y}, {scissor.width, scissor.height}};
     vkCmdSetScissor(commandBuffer_, 0, 1, &native);
+}
+
+void VulkanGraphicsCommandEncoder::setDrawState(const DrawStateDesc& state) {
+    vkCmdSetCullMode(commandBuffer_, mapCullMode(state.raster.cull));
+    vkCmdSetFrontFace(commandBuffer_, state.raster.frontFace == FrontFace::Clockwise
+                                         ? VK_FRONT_FACE_CLOCKWISE
+                                         : VK_FRONT_FACE_COUNTER_CLOCKWISE);
+    vkCmdSetDepthTestEnable(commandBuffer_, state.depthStencil.depthTestEnable);
+    vkCmdSetDepthWriteEnable(commandBuffer_, state.depthStencil.depthWriteEnable);
+    vkCmdSetDepthCompareOp(commandBuffer_, mapCompareOp(state.depthStencil.depthCompare));
+
+    if (state.colorAttachmentCount > 0) {
+        const VkBool32 blendEnable = state.blend.mode == BlendMode::Off ? VK_FALSE : VK_TRUE;
+        const VkColorBlendEquationEXT blendEquation = mapBlendEquation(state.blend.mode);
+        const VkColorComponentFlags colorMask = mapColorMask(state.blend.colorWriteMask);
+        const std::vector<VkBool32> blendEnables(state.colorAttachmentCount, blendEnable);
+        const std::vector<VkColorBlendEquationEXT> blendEquations(state.colorAttachmentCount,
+                                                                    blendEquation);
+        const std::vector<VkColorComponentFlags> colorMasks(state.colorAttachmentCount, colorMask);
+        const auto setBlendEnable = reinterpret_cast<PFN_vkCmdSetColorBlendEnableEXT>(
+            vkGetDeviceProcAddr(device_.device(), "vkCmdSetColorBlendEnableEXT"));
+        const auto setBlendEquation = reinterpret_cast<PFN_vkCmdSetColorBlendEquationEXT>(
+            vkGetDeviceProcAddr(device_.device(), "vkCmdSetColorBlendEquationEXT"));
+        const auto setColorWriteMask = reinterpret_cast<PFN_vkCmdSetColorWriteMaskEXT>(
+            vkGetDeviceProcAddr(device_.device(), "vkCmdSetColorWriteMaskEXT"));
+        if (!setBlendEnable || !setBlendEquation || !setColorWriteMask) {
+            throw std::runtime_error("VK_EXT_extended_dynamic_state3 commands are unavailable");
+        }
+        setBlendEnable(commandBuffer_, 0, state.colorAttachmentCount, blendEnables.data());
+        setBlendEquation(commandBuffer_, 0, state.colorAttachmentCount, blendEquations.data());
+        setColorWriteMask(commandBuffer_, 0, state.colorAttachmentCount, colorMasks.data());
+    }
 }
 
 void VulkanGraphicsCommandEncoder::bindPipeline(GraphicsPipelineHandle pipeline) {

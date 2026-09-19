@@ -3,6 +3,8 @@
 #include "render/gpu/frame/FrameGpuManager.h"
 #include "render/renderer/DrawBatcher.h"
 
+#include <optional>
+
 namespace engine {
 
 void drawFilteredItems(std::uint32_t frameIndex,
@@ -26,6 +28,7 @@ void drawFilteredItems(std::uint32_t frameIndex,
 
     rhi::GraphicsPipelineHandle boundPipeline;
     rhi::BindGroupHandle boundMaterial;
+    std::optional<rhi::DrawStateDesc> boundDrawState;
     for (const DrawBatch& batch : batched.batches) {
         if (batch.pipeline != boundPipeline) {
             encoder.bindPipeline(batch.pipeline);
@@ -35,6 +38,10 @@ void drawFilteredItems(std::uint32_t frameIndex,
         if (batch.materialBindGroup != boundMaterial) {
             encoder.bindGroup(1, batch.materialBindGroup);
             boundMaterial = batch.materialBindGroup;
+        }
+        if (!boundDrawState || *boundDrawState != batch.drawState) {
+            encoder.setDrawState(batch.drawState);
+            boundDrawState = batch.drawState;
         }
         for (const DrawItem::VertexBuffer& vertex : batch.vertexBuffers) {
             encoder.bindVertexBuffer(vertex.binding, vertex.buffer);

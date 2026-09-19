@@ -113,17 +113,28 @@ struct RasterStateDesc {
     CullMode cull{CullMode::Back};
     FrontFace frontFace{FrontFace::Clockwise};
     FillMode fill{FillMode::Solid};
+    bool operator==(const RasterStateDesc&) const = default;
 };
 
 struct DepthStencilStateDesc {
     bool depthTestEnable{true};
     bool depthWriteEnable{true};
     CompareOp depthCompare{CompareOp::LessEqual};
+    bool operator==(const DepthStencilStateDesc&) const = default;
 };
 
 struct BlendStateDesc {
     BlendMode mode{BlendMode::Off};
     ColorWriteMask colorWriteMask{ColorWriteMask::All};
+    bool operator==(const BlendStateDesc&) const = default;
+};
+
+struct DrawStateDesc {
+    RasterStateDesc raster;
+    DepthStencilStateDesc depthStencil;
+    BlendStateDesc blend;
+    std::uint32_t colorAttachmentCount{1};
+    bool operator==(const DrawStateDesc&) const = default;
 };
 
 struct GraphicsPipelineDesc {

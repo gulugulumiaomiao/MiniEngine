@@ -176,6 +176,13 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
                     .renderPhase = renderPhase,
                     .mesh = object.mesh,
                     .pipeline = resolved.pipeline,
+                    .drawState = [&] {
+                        rhi::DrawStateDesc state =
+                            GraphicsPipelineManager::makeDrawState(*resolved.pass);
+                        state.colorAttachmentCount =
+                            renderPhase == RenderPhase::Forward ? 1u : 0u;
+                        return state;
+                    }(),
                     .material = resolved.material,
                     .fallbackPipeline = fallback.pipeline,
                     .fallbackMaterial = fallback.material,

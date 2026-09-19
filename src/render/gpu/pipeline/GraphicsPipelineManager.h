@@ -38,6 +38,7 @@ public:
     void clear();
     void shutdown();
     [[nodiscard]] bool initialized() const { return factory_ != nullptr; }
+    [[nodiscard]] static rhi::DrawStateDesc makeDrawState(const ShaderPass& pass);
 
 private:
     struct RetiredPipeline {

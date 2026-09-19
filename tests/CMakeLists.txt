@@ -157,6 +157,7 @@ mini_add_editor_test(ProjectLifecycleTest)
 mini_add_test(RenderGraphTest)
 mini_add_test(RenderTargetTest)
 mini_add_gtest(RenderDataModelTest)
+mini_add_gtest(DynamicDrawStateTest)
 
 # The editor UI backend lives with the editor, so its test compiles that translation
 # unit directly; the UI shaders are baked into it as SPIR-V words, so no shader build

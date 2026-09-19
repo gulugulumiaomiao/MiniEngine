@@ -88,18 +88,37 @@ GraphicsPipelineCacheKey GraphicsPipelineManager::makeCacheKey(const ShaderProgr
     hashAppend(key, program.layout.id);
     hashAppend(key, colorFormat);
     hashAppend(key, depthFormat);
-    hashAppend(key, state.cull);
-    hashAppend(key, state.frontFace);
     hashAppend(key, state.fill);
     hashAppend(key, state.topology);
-    hashAppend(key, state.depthWrite);
-    hashAppend(key, state.depthTest);
-    hashAppend(key, state.blend);
-    key = hashString(state.colorMask, key);
     // The Mesh caches its layout hash, so the vertex layout costs one mix instead of a
     // full walk over every binding and attribute on each resolve.
     hashAppend(key, vertexLayoutHash);
     return key;
+}
+
+rhi::DrawStateDesc GraphicsPipelineManager::makeDrawState(const ShaderPass& pass) {
+    const RenderStateDesc& state = pass.renderState();
+    rhi::DrawStateDesc result;
+    result.raster.cull = toRhi(state.cull);
+    result.raster.frontFace = state.frontFace == FrontFace::Clockwise
+                                  ? rhi::FrontFace::Clockwise
+                                  : rhi::FrontFace::CounterClockwise;
+    result.raster.fill =
+        state.fill == FillMode::Solid ? rhi::FillMode::Solid : rhi::FillMode::Wireframe;
+    result.depthStencil.depthTestEnable =
+        state.depthTest != DepthCompare::Always || state.depthWrite;
+    result.depthStencil.depthWriteEnable = state.depthWrite;
+    result.depthStencil.depthCompare = toRhi(state.depthTest);
+    switch (state.blend) {
+    case BlendMode::Off: result.blend.mode = rhi::BlendMode::Off; break;
+    case BlendMode::Alpha: result.blend.mode = rhi::BlendMode::Alpha; break;
+    case BlendMode::Additive: result.blend.mode = rhi::BlendMode::Additive; break;
+    case BlendMode::PremultipliedAlpha:
+        result.blend.mode = rhi::BlendMode::PremultipliedAlpha;
+        break;
+    }
+    result.blend.colorWriteMask = toRhiColorMask(state.colorMask);
+    return result;
 }
 
 rhi::GraphicsPipelineDesc
@@ -138,22 +157,12 @@ GraphicsPipelineManager::makeDescription(const ShaderPass& pass,
     desc.topology = state.topology == PrimitiveTopology::TriangleList
                         ? rhi::PrimitiveTopology::TriangleList
                         : rhi::PrimitiveTopology::LineList;
-    desc.raster.cull = toRhi(state.cull);
-    desc.raster.frontFace = state.frontFace == FrontFace::Clockwise
-                                ? rhi::FrontFace::Clockwise
-                                : rhi::FrontFace::CounterClockwise;
+    const rhi::DrawStateDesc drawState = makeDrawState(pass);
+    desc.raster = drawState.raster;
     desc.raster.fill =
         state.fill == FillMode::Solid ? rhi::FillMode::Solid : rhi::FillMode::Wireframe;
-    desc.depthStencil.depthTestEnable = state.depthTest != DepthCompare::Always || state.depthWrite;
-    desc.depthStencil.depthWriteEnable = state.depthWrite;
-    desc.depthStencil.depthCompare = toRhi(state.depthTest);
-    switch (state.blend) {
-    case BlendMode::Off: desc.blend.mode = rhi::BlendMode::Off; break;
-    case BlendMode::Alpha: desc.blend.mode = rhi::BlendMode::Alpha; break;
-    case BlendMode::Additive: desc.blend.mode = rhi::BlendMode::Additive; break;
-    case BlendMode::PremultipliedAlpha: desc.blend.mode = rhi::BlendMode::PremultipliedAlpha; break;
-    }
-    desc.blend.colorWriteMask = toRhiColorMask(state.colorMask);
+    desc.depthStencil = drawState.depthStencil;
+    desc.blend = drawState.blend;
     return desc;
 }
 

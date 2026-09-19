@@ -13,6 +13,7 @@ namespace engine {
 // single drawIndexed invocation.
 struct DrawBatch {
     rhi::GraphicsPipelineHandle pipeline;
+    rhi::DrawStateDesc drawState;
     rhi::BindGroupHandle materialBindGroup;
     std::vector<DrawItem::VertexBuffer> vertexBuffers;
     rhi::BufferHandle indexBuffer;

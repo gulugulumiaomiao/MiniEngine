@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rhi/api/RhiTypes.h"
+#include "rhi/api/PipelineDesc.h"
 
 #include <span>
 #include <string_view>
@@ -20,6 +21,7 @@ public:
     [[nodiscard]] virtual VkCommandBuffer nativeCommandBuffer() const = 0;
     virtual void setViewport(const Viewport& viewport) = 0;
     virtual void setScissor(const Rect& scissor) = 0;
+    virtual void setDrawState(const DrawStateDesc&) {}
     virtual void bindPipeline(GraphicsPipelineHandle pipeline) = 0;
     virtual void
     bindVertexBuffer(std::uint32_t slot, BufferHandle buffer, std::uint64_t offset = 0) = 0;

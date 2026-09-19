@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rhi/api/RhiTypes.h"
+#include "rhi/api/PipelineDesc.h"
 #include "render/base/RenderHandle.h"
 
 #include <cstddef>
@@ -42,6 +43,7 @@ struct DrawItem {
     RenderPhase renderPhase{RenderPhase::Forward};
     MeshHandle mesh;
     rhi::GraphicsPipelineHandle pipeline;
+    rhi::DrawStateDesc drawState;
     MaterialHandle material;
     rhi::BindGroupHandle materialBindGroup;
     rhi::GraphicsPipelineHandle fallbackPipeline;

@@ -28,7 +28,8 @@ namespace {
 #if defined(MINI_DEBUG)
 constexpr std::array kValidationLayers{"VK_LAYER_KHRONOS_validation"};
 #endif
-constexpr std::array kDeviceExtensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+constexpr std::array kDeviceExtensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+                                       VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME};
 const VirtualPath kPipelineCachePath{"shader-cache://pipeline_cache.bin"};
 
 void check(VkResult result, const char* operation) {
@@ -299,10 +300,20 @@ bool VulkanDevice::isDeviceSuitable(VkPhysicalDevice device) const {
     vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface_, &presentModeCount, nullptr);
     VkPhysicalDeviceVulkan13Features features13{
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT dynamicState{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
+    VkPhysicalDeviceExtendedDynamicState3FeaturesEXT dynamicState3{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
     VkPhysicalDeviceFeatures2 features2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
     features2.pNext = &features13;
+    features13.pNext = &dynamicState;
+    dynamicState.pNext = &dynamicState3;
     vkGetPhysicalDeviceFeatures2(device, &features2);
-    return formatCount > 0 && presentModeCount > 0 && features13.dynamicRendering;
+    return formatCount > 0 && presentModeCount > 0 && features13.dynamicRendering &&
+           dynamicState.extendedDynamicState &&
+           dynamicState3.extendedDynamicState3ColorBlendEnable &&
+           dynamicState3.extendedDynamicState3ColorBlendEquation &&
+           dynamicState3.extendedDynamicState3ColorWriteMask;
 }
 
 void VulkanDevice::selectPhysicalDevice() {
@@ -318,7 +329,8 @@ void VulkanDevice::selectPhysicalDevice() {
     }
     if (physicalDevice_ == VK_NULL_HANDLE) {
         Log::fatal("VulkanDevice",
-                   "No Vulkan 1.3 GPU with swapchain and dynamic rendering support found");
+                   "No Vulkan 1.3 GPU with swapchain, dynamic rendering, and required dynamic "
+                   "draw-state support found");
     }
     VkPhysicalDeviceProperties properties{};
     vkGetPhysicalDeviceProperties(physicalDevice_, &properties);
@@ -342,6 +354,16 @@ void VulkanDevice::createLogicalDevice() {
     VkPhysicalDeviceVulkan13Features features13{
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
     features13.dynamicRendering = VK_TRUE;
+    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT dynamicState{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
+    dynamicState.extendedDynamicState = VK_TRUE;
+    VkPhysicalDeviceExtendedDynamicState3FeaturesEXT dynamicState3{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
+    dynamicState3.extendedDynamicState3ColorBlendEnable = VK_TRUE;
+    dynamicState3.extendedDynamicState3ColorBlendEquation = VK_TRUE;
+    dynamicState3.extendedDynamicState3ColorWriteMask = VK_TRUE;
+    features13.pNext = &dynamicState;
+    dynamicState.pNext = &dynamicState3;
     VkDeviceCreateInfo createInfo{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
     createInfo.pNext = &features13;
     createInfo.queueCreateInfoCount = static_cast<std::uint32_t>(queueInfos.size());

@@ -587,7 +587,14 @@ void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
     device_->uploadBuffer(geometry.indexBuffer, asBytes(indexStaging_));
 
     encoder.beginDebugLabel("ImGui", {0.4F, 0.7F, 1.0F, 1.0F});
+    rhi::DrawStateDesc uiDrawState;
+    uiDrawState.raster.cull = rhi::CullMode::None;
+    uiDrawState.depthStencil.depthTestEnable = false;
+    uiDrawState.depthStencil.depthWriteEnable = false;
+    uiDrawState.blend.mode = rhi::BlendMode::Alpha;
+
     encoder.bindPipeline(pipeline_);
+    encoder.setDrawState(uiDrawState);
     encoder.bindVertexBuffer(0, geometry.vertexBuffer);
     encoder.bindIndexBuffer(geometry.indexBuffer, 0, rhi::IndexFormat::UInt32);
     encoder.setViewport({.width = framebufferWidth, .height = framebufferHeight});
@@ -601,6 +608,7 @@ void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
                 // panels use none, so anything else is reported instead of guessed at.
                 if (command.UserCallback == ImDrawCallback_ResetRenderState) {
                     encoder.bindPipeline(pipeline_);
+                    encoder.setDrawState(uiDrawState);
                     encoder.bindVertexBuffer(0, geometry.vertexBuffer);
                     encoder.bindIndexBuffer(geometry.indexBuffer, 0, rhi::IndexFormat::UInt32);
                     encoder.setViewport({.width = framebufferWidth, .height = framebufferHeight});

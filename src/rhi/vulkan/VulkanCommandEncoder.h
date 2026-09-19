@@ -19,6 +19,7 @@ public:
     }
     void setViewport(const Viewport& viewport) override;
     void setScissor(const Rect& scissor) override;
+    void setDrawState(const DrawStateDesc& state) override;
     void bindPipeline(GraphicsPipelineHandle pipeline) override;
     void bindVertexBuffer(std::uint32_t slot, BufferHandle buffer, std::uint64_t offset) override;
     void bindIndexBuffer(BufferHandle buffer, std::uint64_t offset, IndexFormat format) override;
