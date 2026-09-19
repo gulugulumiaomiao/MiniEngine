@@ -1,4 +1,5 @@
 #include "render/renderer/DrawBatcher.h"
+#include "render/material/Material.h"
 
 #include <cassert>
 #include <cstdint>
@@ -19,6 +20,7 @@ engine::DrawItem makeItem(std::uint32_t pipelineIndex,
     item.materialBindGroup = engine::rhi::BindGroupHandle{materialBindGroupIndex, 1};
     item.indexBuffer = engine::rhi::BufferHandle{indexBufferIndex, 1};
     item.indexFormat = indexFormat;
+    item.batchingMode = engine::MaterialBatchingMode::GpuInstancing;
     item.arguments = {.indexCount = indexCount,
                       .instanceCount = 1,
                       .firstIndex = firstIndex,

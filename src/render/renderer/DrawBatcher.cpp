@@ -1,9 +1,13 @@
 #include "render/renderer/DrawBatcher.h"
 
+#include "render/material/Material.h"
+
 namespace engine {
 
 bool DrawBatcher::sameBatchState(const DrawItem& lhs, const DrawItem& rhs) {
-    if (lhs.pipeline != rhs.pipeline || lhs.drawState != rhs.drawState ||
+    if (lhs.batchingMode != MaterialBatchingMode::GpuInstancing ||
+        rhs.batchingMode != MaterialBatchingMode::GpuInstancing ||
+        lhs.pipeline != rhs.pipeline || lhs.drawState != rhs.drawState ||
         lhs.materialBindGroup != rhs.materialBindGroup ||
         lhs.indexBuffer != rhs.indexBuffer || lhs.indexFormat != rhs.indexFormat ||
         lhs.vertexBuffers.size() != rhs.vertexBuffers.size()) {
@@ -19,9 +23,10 @@ bool DrawBatcher::sameBatchState(const DrawItem& lhs, const DrawItem& rhs) {
            a.vertexOffset == b.vertexOffset;
 }
 
-BatchedDrawList DrawBatcher::build(std::span<const DrawItem> items) {
+BatchedDrawList DrawBatcher::build(std::span<const DrawItem> items, std::string_view passName) {
     BatchedDrawList result;
     result.itemCount = items.size();
+    result.passName = passName;
 
     const DrawItem* previous = nullptr;
     for (const DrawItem& item : items) {
@@ -30,7 +35,7 @@ BatchedDrawList DrawBatcher::build(std::span<const DrawItem> items) {
 
         const bool extendsBatch = previous != nullptr &&
                                   result.batches.back().instanceCount <
-                                      std::numeric_limits<std::uint32_t>::max() &&
+                                      limits_.maxGpuInstancesPerDraw &&
                                   sameBatchState(*previous, item);
         if (extendsBatch) {
             ++result.batches.back().instanceCount;
@@ -50,6 +55,11 @@ BatchedDrawList DrawBatcher::build(std::span<const DrawItem> items) {
             });
         }
         previous = &item;
+    }
+    for (const DrawBatch& batch : result.batches) {
+        if (batch.instanceCount > 1) {
+            ++result.gpuInstancedBatchCount;
+        }
     }
     return result;
 }

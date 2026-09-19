@@ -99,7 +99,8 @@ void ForwardPass::execute(RenderContext& context,
                               drawFilteredItems(context.frameIndex(),
                                                 items,
                                                 FRAME_GPU_MANAGER.sceneBindGroup(context.frameIndex()),
-                                                encoder);
+                                                encoder,
+                                                "Forward");
                           });
 }
 

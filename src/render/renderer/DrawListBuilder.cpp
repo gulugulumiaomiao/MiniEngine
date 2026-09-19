@@ -226,6 +226,7 @@ DrawList DrawListBuilder::prepare(const SourceDrawData& source,
                               .firstInstance = sourceItem.objectIndex};
             item.renderQueue = material->renderQueue;
             item.layerMask = sourceItem.layerMask;
+            item.batchingMode = material->batchingMode;
             result.items.push_back(item);
             result.groups[item.renderQueue].push_back(std::move(item));
         }

@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <span>
+#include <string_view>
 #include <vector>
 
 namespace engine {
@@ -32,6 +33,12 @@ struct BatchedDrawList {
     // firstInstance..firstInstance+instanceCount-1 into this table.
     std::vector<std::uint32_t> instanceRows;
     std::size_t itemCount{}; // number of source draw items covered by the batches
+    std::size_t gpuInstancedBatchCount{};
+    std::string_view passName;
+};
+
+struct DrawBatcherLimits {
+    std::uint32_t maxGpuInstancesPerDraw{1024};
 };
 
 // Merges consecutive draw items with identical GPU state into instanced
@@ -39,10 +46,13 @@ struct BatchedDrawList {
 // merged so the caller-controlled ordering (queue, transparency) is preserved.
 class DrawBatcher final {
 public:
-    [[nodiscard]] BatchedDrawList build(std::span<const DrawItem> items);
+    explicit DrawBatcher(DrawBatcherLimits limits = {}) : limits_(limits) {}
+    [[nodiscard]] BatchedDrawList build(std::span<const DrawItem> items,
+                                        std::string_view passName = {});
 
 private:
     [[nodiscard]] static bool sameBatchState(const DrawItem& lhs, const DrawItem& rhs);
+    DrawBatcherLimits limits_;
 };
 
 } // namespace engine

@@ -12,6 +12,7 @@
 namespace engine {
 
 class ShaderPass;
+enum class MaterialBatchingMode : std::uint8_t;
 
 enum class RenderPhase { Forward, DepthOnly, ShadowCaster };
 
@@ -62,6 +63,7 @@ struct DrawItem {
     rhi::DrawIndexedArguments arguments;
     int renderQueue{2000};
     std::uint32_t layerMask{1};
+    MaterialBatchingMode batchingMode{};
 };
 
 struct DrawList {

@@ -32,9 +32,10 @@ std::vector<DrawItem> collectPassItems(const DrawList& drawList,
 void drawFilteredItems(std::uint32_t frameIndex,
                        std::span<const DrawItem> items,
                        rhi::BindGroupHandle sceneBindGroup,
-                       rhi::IGraphicsCommandEncoder& encoder) {
+                       rhi::IGraphicsCommandEncoder& encoder,
+                       std::string_view passName) {
     DrawBatcher batcher;
-    BatchedDrawList batched = batcher.build(items);
+    BatchedDrawList batched = batcher.build(items, passName);
     if (batched.batches.empty()) {
         return;
     }

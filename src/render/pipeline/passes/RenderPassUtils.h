@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <span>
+#include <string_view>
 #include <vector>
 
 namespace engine {
@@ -22,6 +23,7 @@ struct DrawFilter;
 void drawFilteredItems(std::uint32_t frameIndex,
                        std::span<const DrawItem> items,
                        rhi::BindGroupHandle sceneBindGroup,
-                       rhi::IGraphicsCommandEncoder& encoder);
+                       rhi::IGraphicsCommandEncoder& encoder,
+                       std::string_view passName = {});
 
 } // namespace engine

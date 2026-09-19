@@ -71,7 +71,8 @@ void ShadowCasterPass::execute(RenderContext& context,
                               drawFilteredItems(frameIndex,
                                                 items,
                                                 FRAME_GPU_MANAGER.sceneBindGroup(frameIndex),
-                                                encoder);
+                                                encoder,
+                                                "ShadowCaster");
                           });
 }
 
