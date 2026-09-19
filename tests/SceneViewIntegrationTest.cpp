@@ -1,6 +1,7 @@
 #include "runtime/engine/Engine.h"
 #include "runtime/window/Window.h"
 #include "render/renderer/Renderer.h"
+#include "render/pipeline/MiniDeferredPipeline.h"
 #include "render/render_target/RenderTarget.h"
 #include "rhi/vulkan/VulkanFactory.h"
 #include "tools/editor/ImGuiLayer.h"
@@ -19,7 +20,8 @@ using namespace engine;
 
 class SceneViewSession final : public Application {
 public:
-    explicit SceneViewSession(std::filesystem::path project) : project_(std::move(project)) {}
+    explicit SceneViewSession(std::filesystem::path project, bool deferred = false)
+        : project_(std::move(project)), deferred_(deferred) {}
     int frames{};
     bool drewGeometry{};
     bool resumed{};
@@ -30,6 +32,8 @@ private:
             ENGINE.requestQuit();
             return;
         }
+        if (deferred_)
+            ENGINE.renderer().setPipeline(std::make_unique<MiniDeferredPipeline>());
         attach();
     }
     void attach() {
@@ -89,6 +93,7 @@ private:
     }
     void onStop() override { layer_.detach(); }
     std::filesystem::path project_;
+    bool deferred_{};
     editor::ImGuiLayer layer_;
     editor::SceneDocument document_;
     editor::SceneViewPanel view_{document_};
@@ -133,6 +138,19 @@ TEST_F(SceneViewIntegrationTest, VulkanSceneResizeHideEmptyAndProjectReattachHav
     const rhi::vulkan::VulkanFactory factory;
     EXPECT_EQ(ENGINE.run(application, factory), 0);
     EXPECT_EQ(application.frames, 19);
+    EXPECT_TRUE(application.drewGeometry);
+    EXPECT_TRUE(application.resumed);
+    EXPECT_EQ(validation.str().find("Validation Error"), std::string::npos) << validation.str();
+    EXPECT_EQ(validation.str().find("VUID-"), std::string::npos) << validation.str();
+}
+
+TEST_F(SceneViewIntegrationTest, VulkanDeferredPipelineResolvesIntoSceneViewWithoutValidationErrors) {
+    std::string error;
+    const auto project = editor::createNewProject(scratch, "DeferredViewportProject", error);
+    ASSERT_TRUE(project.has_value()) << error;
+    SceneViewSession application{*project, true};
+    const rhi::vulkan::VulkanFactory factory;
+    EXPECT_EQ(ENGINE.run(application, factory), 0);
     EXPECT_TRUE(application.drewGeometry);
     EXPECT_TRUE(application.resumed);
     EXPECT_EQ(validation.str().find("Validation Error"), std::string::npos) << validation.str();

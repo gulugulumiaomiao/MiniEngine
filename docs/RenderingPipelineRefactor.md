@@ -58,3 +58,16 @@ render item 与 draw call 数量、静态合批命中、GPU instance draw、Rend
 新增测试一律使用 GoogleTest。批处理边界、缓存失效、动态状态、RenderGraph 编排和帧统计
 分别由 `GpuInstancingBatcherTest`、`StaticBatcherTest`、`DynamicDrawStateTest`、
 `RenderGraphSchedulingTest` 与 `RenderDiagnosticsTest` 覆盖。
+
+## MiniDeferred 验证管线
+
+`MiniDeferredPipeline` 可通过配置 `render.pipeline = "MiniDeferred"` 选择。它先在
+`DeferredGeometry` pass 把场景写入 RenderGraph 分配的临时 GBuffer Color 和相机 Depth，
+再由 `DeferredResolve` 全屏 pass 采样 GBuffer Color，输出到 Camera RT 或 swapchain。
+这条最小管线用于验证延迟架构需要的 pass 依赖、临时 RT 生命周期、ColorAttachment 到
+ShaderRead 的布局转换、descriptor binding 和最终输出路径；当前 GBuffer Color 保存已有
+Forward shader 的着色结果，后续可扩展为 Albedo/Normal/Material 多目标和真正的延迟光照。
+
+每个 in-flight frame 持有独立的 resolve bind group，只有对应 frame fence 完成后才更新，
+避免 descriptor 仍被 GPU 使用时销毁。`SceneViewIntegrationTest` 会在 Vulkan validation layer
+开启的情况下运行这条管线并覆盖 resize、隐藏视口、空场景和项目重新挂载。

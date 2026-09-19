@@ -6,6 +6,7 @@
 #include "core/logging/Log.h"
 #include "render/gpu/frame/FrameGpuManager.h"
 #include "render/pipeline/MiniForwardPipeline.h"
+#include "render/pipeline/MiniDeferredPipeline.h"
 #include "render/pipeline/RenderPipeline.h"
 #include "render/gpu/material/MaterialGpuManager.h"
 #include "render/gpu/mesh/MeshGpuManager.h"
@@ -242,6 +243,8 @@ bool Engine::initializeGpuManagers(const rhi::IContextFactory& contextFactory,
     RenderPipelineRegistry pipelineRegistry;
     pipelineRegistry.registerPipeline("MiniForward",
                                       []() { return std::make_unique<MiniForwardPipeline>(); });
+    pipelineRegistry.registerPipeline("MiniDeferred",
+                                      []() { return std::make_unique<MiniDeferredPipeline>(); });
     renderer_->setPipeline(pipelineRegistry.create(config_.render.pipeline));
 
     if (!FRAME_GPU_MANAGER.initialize(renderer_->device()) ||
