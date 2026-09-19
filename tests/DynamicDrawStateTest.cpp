@@ -42,10 +42,10 @@ TEST(DynamicDrawStateTest, DifferentDynamicStateSplitsBatches) {
     second.drawState.blend.mode = rhi::BlendMode::Alpha;
 
     const std::array items{first, second};
-    const BatchedDrawList result = DrawBatcher{}.build(items);
-    ASSERT_EQ(result.batches.size(), 2U);
-    EXPECT_EQ(result.batches[0].drawState.blend.mode, rhi::BlendMode::Off);
-    EXPECT_EQ(result.batches[1].drawState.blend.mode, rhi::BlendMode::Alpha);
+    const BatchedRenderItems result = DrawBatcher{}.build(items);
+    ASSERT_EQ(result.items.size(), 2U);
+    EXPECT_EQ(result.items[0].drawState.blend.mode, rhi::BlendMode::Off);
+    EXPECT_EQ(result.items[1].drawState.blend.mode, rhi::BlendMode::Alpha);
 }
 
 } // namespace

@@ -9,7 +9,6 @@
 #include "render/scene/RenderScene.h"
 #include "rhi/api/Swapchain.h"
 
-#include <algorithm>
 #include <vector>
 
 namespace engine {
@@ -29,31 +28,7 @@ void ForwardPass::execute(RenderContext& context,
     if (!context.offscreenScene())
         context.markBackBufferWritten();
 
-    // Sort opaque front-to-back by queue/state, then transparent back-to-front by camera distance.
-    std::vector<DrawItem> opaque;
-    std::vector<DrawItem> transparent;
-    opaque.reserve(items.size());
-    transparent.reserve(items.size());
-    for (DrawItem& item : items) {
-        if (RenderQueueRange::opaque().contains(item.renderQueue)) {
-            opaque.push_back(std::move(item));
-        } else {
-            transparent.push_back(std::move(item));
-        }
-    }
-
-    DrawSorter sorter;
-    sorter.sort(opaque,
-                SortingCriteria::RenderQueue | SortingCriteria::Pipeline | SortingCriteria::Material |
-                    SortingCriteria::Mesh,
-                context.scene());
-    sorter.sort(transparent, SortingCriteria::BackToFront, context.scene());
-
-    items.clear();
-    items.insert(items.end(), std::make_move_iterator(opaque.begin()), std::make_move_iterator(opaque.end()));
-    items.insert(items.end(),
-                 std::make_move_iterator(transparent.begin()),
-                 std::make_move_iterator(transparent.end()));
+    sortForwardItems(items, context.scene());
     RenderTarget& forwardTarget = context.currentForwardTarget();
     const RgTextureHandle backBuffer = context.offscreenScene()
         ? forwardTarget.importColor(graph, 0, rhi::ResourceState::ShaderRead)
@@ -100,8 +75,7 @@ void ForwardPass::execute(RenderContext& context,
                                   context.frameIndex(),
                                   items,
                                   FRAME_GPU_MANAGER.sceneBindGroup(context.frameIndex()),
-                                  encoder,
-                                  "Forward"));
+                                  encoder));
                           });
 }
 

@@ -19,7 +19,7 @@ bind group 和 instance 数量。
 
 ## RenderQueue 与 GPU 调试
 
-Pass 先按 RenderQueue 读取 `SourceDrawGroups`。同一 queue 内再按 pipeline、动态状态、
+Pass 先按 RenderQueue 读取 `DrawList::groups`。同一 queue 内再按 pipeline、动态状态、
 顶点布局、材质和距离排序。GPU instancing 不跨 RenderQueue 合并。提交命令时，每段
 RenderQueue 使用 `RenderQueue <值>` 的 GPU debug label，因此 RenderDoc、Nsight 或
 验证层标记可以直接对应到材质的 queue。

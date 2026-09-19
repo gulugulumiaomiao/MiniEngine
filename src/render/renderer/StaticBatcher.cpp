@@ -290,11 +290,6 @@ void StaticBatcher::process(DrawList& drawList, rhi::IDevice& device) {
         rebuilt.emplace(queue, std::move(passthrough));
     }
     drawList.groups = std::move(rebuilt);
-    drawList.items.clear();
-    for (const auto& [queue, items] : drawList.groups) {
-        (void)queue;
-        drawList.items.insert(drawList.items.end(), items.begin(), items.end());
-    }
 }
 
 void StaticBatcher::clear() {

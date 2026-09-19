@@ -4,7 +4,9 @@
 #include "render/queue/RenderQueue.h"
 #include "render/renderer/DrawBatcher.h"
 #include "render/renderer/RenderItems.h"
+#include "render/scene/RenderScene.h"
 
+#include <iterator>
 #include <optional>
 #include <string>
 
@@ -30,14 +32,39 @@ std::vector<DrawItem> collectPassItems(const DrawList& drawList,
     return result;
 }
 
+void sortForwardItems(std::vector<DrawItem>& items, const RenderScene& scene) {
+    std::vector<DrawItem> opaque;
+    std::vector<DrawItem> transparent;
+    opaque.reserve(items.size());
+    transparent.reserve(items.size());
+    for (DrawItem& item : items) {
+        (RenderQueueRange::opaque().contains(item.renderQueue) ? opaque : transparent)
+            .push_back(std::move(item));
+    }
+
+    DrawSorter sorter;
+    sorter.sort(opaque,
+                SortingCriteria::RenderQueue | SortingCriteria::Pipeline |
+                    SortingCriteria::Material | SortingCriteria::Mesh,
+                scene);
+    sorter.sort(transparent, SortingCriteria::BackToFront, scene);
+
+    items.clear();
+    items.insert(items.end(),
+                 std::make_move_iterator(opaque.begin()),
+                 std::make_move_iterator(opaque.end()));
+    items.insert(items.end(),
+                 std::make_move_iterator(transparent.begin()),
+                 std::make_move_iterator(transparent.end()));
+}
+
 DrawSubmissionStats drawFilteredItems(std::uint32_t frameIndex,
                        std::span<const DrawItem> items,
                        rhi::BindGroupHandle sceneBindGroup,
-                       rhi::IGraphicsCommandEncoder& encoder,
-                       std::string_view passName) {
+                       rhi::IGraphicsCommandEncoder& encoder) {
     DrawBatcher batcher;
-    BatchedDrawList batched = batcher.build(items, passName);
-    if (batched.batches.empty()) {
+    BatchedRenderItems batched = batcher.build(items);
+    if (batched.items.empty()) {
         return {};
     }
 
@@ -50,33 +77,12 @@ DrawSubmissionStats drawFilteredItems(std::uint32_t frameIndex,
                                                     batched.instanceRows.size()));
     FRAME_GPU_MANAGER.uploadInstanceRegion(frameIndex, baseSlot, batched.instanceRows);
 
-    RenderItemList renderItems;
-    renderItems.reserve(batched.batches.size());
-    for (const DrawBatch& batch : batched.batches) {
-        RenderItem item;
-        item.renderQueue = batch.renderQueue;
-        item.pipeline = batch.pipeline;
-        item.drawState = batch.drawState;
-        item.materialBindGroup = batch.materialBindGroup;
-        item.vertexBuffers.reserve(batch.vertexBuffers.size());
-        for (const DrawItem::VertexBuffer& vertex : batch.vertexBuffers) {
-            item.vertexBuffers.push_back({vertex.binding, vertex.buffer, 0});
-        }
-        item.indexBuffer = batch.indexBuffer;
-        item.indexFormat = batch.indexFormat;
-        item.arguments = {.indexCount = batch.indexCount,
-                          .instanceCount = batch.instanceCount,
-                          .firstIndex = batch.firstIndex,
-                          .vertexOffset = batch.vertexOffset,
-                          .firstInstance = baseSlot + batch.firstInstance};
-        renderItems.push_back(std::move(item));
-    }
-
     rhi::GraphicsPipelineHandle boundPipeline;
     rhi::BindGroupHandle boundMaterial;
     std::optional<rhi::DrawStateDesc> boundDrawState;
     std::optional<int> labeledQueue;
-    for (const RenderItem& item : renderItems) {
+    for (RenderItem& item : batched.items) {
+        item.arguments.firstInstance += baseSlot;
         if (!labeledQueue || *labeledQueue != item.renderQueue) {
             if (labeledQueue) {
                 encoder.endDebugLabel();
@@ -99,9 +105,9 @@ DrawSubmissionStats drawFilteredItems(std::uint32_t frameIndex,
             boundDrawState = item.drawState;
         }
         for (const RenderItem::VertexBuffer& vertex : item.vertexBuffers) {
-            encoder.bindVertexBuffer(vertex.binding, vertex.buffer, vertex.offset);
+            encoder.bindVertexBuffer(vertex.binding, vertex.buffer);
         }
-        encoder.bindIndexBuffer(item.indexBuffer, item.indexBufferOffset, item.indexFormat);
+        encoder.bindIndexBuffer(item.indexBuffer, 0, item.indexFormat);
         encoder.drawIndexed(item.arguments);
     }
     if (labeledQueue) {
@@ -109,7 +115,7 @@ DrawSubmissionStats drawFilteredItems(std::uint32_t frameIndex,
     }
     return {
         .sourceItems = batched.itemCount,
-        .renderItems = renderItems.size(),
+        .renderItems = batched.items.size(),
         .gpuInstancedDraws = batched.gpuInstancedBatchCount,
     };
 }

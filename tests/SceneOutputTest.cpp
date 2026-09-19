@@ -162,7 +162,7 @@ TEST_F(SceneOutputTest, MissingCameraProducesNoDrawItemsInOffscreenMode) {
     scene.submit(RenderObject{});
     RenderContext context(*renderer, scene);
     const DrawList list = DrawListBuilder{}.build(scene, context);
-    EXPECT_TRUE(list.items.empty());
+    EXPECT_TRUE(list.groups.empty());
     EXPECT_TRUE(list.objects.empty());
 }
 

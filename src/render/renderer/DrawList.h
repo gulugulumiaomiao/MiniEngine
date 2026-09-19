@@ -11,7 +11,6 @@
 
 namespace engine {
 
-class ShaderPass;
 enum class MaterialBatchingMode : std::uint8_t;
 
 enum class RenderPhase { Forward, DepthOnly, ShadowCaster };
@@ -42,7 +41,6 @@ struct ObjectDrawData {
 static_assert(sizeof(ObjectDrawData) == 64, "ObjectDrawData must match the std430 shader layout");
 
 struct DrawItem {
-    const ShaderPass* shaderPass{};
     RenderPhase renderPhase{RenderPhase::Forward};
     MeshHandle mesh;
     rhi::GraphicsPipelineHandle pipeline;
@@ -68,9 +66,7 @@ struct DrawItem {
 };
 
 struct DrawList {
-    std::vector<DrawItem> items;
     std::map<int, std::vector<DrawItem>> groups;
-    SourceDrawGroups sourceGroups;
     std::vector<ObjectDrawData> objects;
     SceneDrawData scene;
     math::Vec4 clearColor{0.025F, 0.055F, 0.10F, 1.0F};

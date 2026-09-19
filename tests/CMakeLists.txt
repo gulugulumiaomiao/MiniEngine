@@ -217,7 +217,7 @@ endif()
 mini_add_test(RgTexturePoolTest)
 mini_add_test(RenderPipelineTest)
 mini_add_test(RenderQueueTest)
-mini_add_test(DrawBatcherTest)
+mini_add_gtest(DrawBatcherTest)
 mini_add_test(RenderPassTest)
 
 mini_add_test(MaterialTest)

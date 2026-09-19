@@ -121,9 +121,7 @@ SourceDrawData DrawListBuilder::extract(const RenderScene& scene,
     extractLighting(scene, result);
 
     result.objects.reserve(scene.objects().size());
-    for (std::size_t sceneObjectIndex = 0; sceneObjectIndex < scene.objects().size();
-         ++sceneObjectIndex) {
-        const RenderObject& object = scene.objects()[sceneObjectIndex];
+    for (const RenderObject& object : scene.objects()) {
         if (scene.camera() && (object.layerMask & scene.camera()->cullingMask) == 0) {
             continue;
         }
@@ -131,8 +129,7 @@ SourceDrawData DrawListBuilder::extract(const RenderScene& scene,
         if (frustum && !math::intersects(*frustum, center, object.boundsRadius)) {
             continue;
         }
-        Mesh* mesh = MESH_MANAGER.find(object.mesh);
-        if (!mesh) {
+        if (!MESH_MANAGER.find(object.mesh)) {
             Log::warn("DrawListBuilder", "Skipping object with an invalid MeshHandle");
             continue;
         }
@@ -147,19 +144,15 @@ SourceDrawData DrawListBuilder::extract(const RenderScene& scene,
             const MeshDrawInfo::Range& range = gpu.subMeshes[subMeshIndex];
             SourceDrawItem item;
             item.mesh = object.mesh;
-            item.subMeshIndex = static_cast<std::uint32_t>(subMeshIndex);
-            item.vertexLayout = mesh->desc().vertexLayout;
             item.vertexBuffers.reserve(gpu.vertexBuffers.size());
             for (const DrawItem::VertexBuffer& vertex : gpu.vertexBuffers) {
-                item.vertexBuffers.push_back({vertex.binding, vertex.buffer, 0});
+                item.vertexBuffers.push_back({vertex.binding, vertex.buffer});
             }
             item.indexBuffer = gpu.indexBuffer;
             item.indexRange = {range.firstIndex, range.indexCount, range.vertexOffset};
             item.material = object.material(range.materialSlot);
             item.worldMatrix = object.transform;
-            item.worldBounds = mesh->desc().bounds;
             item.layerMask = object.layerMask;
-            item.objectId = sceneObjectIndex;
             item.objectIndex = objectIndex;
             item.castShadow = object.castShadow;
             result.items.push_back(std::move(item));
@@ -181,7 +174,6 @@ DrawList DrawListBuilder::prepare(const SourceDrawData& source,
         if (!mesh) {
             continue;
         }
-        bool acceptedByPipeline = false;
         for (const RenderPhase phase : phases) {
             if (phase == RenderPhase::ShadowCaster && !sourceItem.castShadow) {
                 continue;
@@ -201,10 +193,8 @@ DrawList DrawListBuilder::prepare(const SourceDrawData& source,
             if (!resolved) {
                 continue;
             }
-            acceptedByPipeline = true;
             const Material* material = MATERIAL_MANAGER.find(resolved.material);
             DrawItem item;
-            item.shaderPass = resolved.pass;
             item.renderPhase = phase;
             item.mesh = sourceItem.mesh;
             item.pipeline = resolved.pipeline;
@@ -228,13 +218,7 @@ DrawList DrawListBuilder::prepare(const SourceDrawData& source,
             item.layerMask = sourceItem.layerMask;
             item.batchingMode = material->batchingMode;
             item.worldMatrix = sourceItem.worldMatrix;
-            result.items.push_back(item);
             result.groups[item.renderQueue].push_back(std::move(item));
-        }
-        if (acceptedByPipeline) {
-            const Material* material = MATERIAL_MANAGER.find(sourceItem.material);
-            const int queue = material ? material->renderQueue : 2000;
-            result.sourceGroups[queue].push_back(sourceItem);
         }
     }
     return result;

@@ -53,8 +53,7 @@ void DepthOnlyPass::execute(RenderContext& context,
                                   context.frameIndex(),
                                   items,
                                   FRAME_GPU_MANAGER.sceneBindGroup(context.frameIndex()),
-                                  encoder,
-                                  "DepthOnly"));
+                                  encoder));
                           });
 }
 

@@ -11,6 +11,7 @@ namespace engine {
 class Mesh;
 class RenderContext;
 class RenderScene;
+class ShaderPass;
 
 // Builds a DrawList from a RenderScene for the MiniForward pipeline.
 //

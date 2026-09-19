@@ -27,19 +27,18 @@ DrawItem compatibleItem(std::uint32_t objectRow, MaterialBatchingMode mode) {
 TEST(GpuInstancingBatcherTest, RequiresMaterialOptIn) {
     const std::vector items{compatibleItem(0, MaterialBatchingMode::None),
                             compatibleItem(1, MaterialBatchingMode::None)};
-    const BatchedDrawList result = DrawBatcher{}.build(items, "Forward");
-    EXPECT_EQ(result.batches.size(), 2U);
+    const BatchedRenderItems result = DrawBatcher{}.build(items);
+    EXPECT_EQ(result.items.size(), 2U);
     EXPECT_EQ(result.gpuInstancedBatchCount, 0U);
-    EXPECT_EQ(result.passName, "Forward");
 }
 
 TEST(GpuInstancingBatcherTest, PacksInstanceRowsForOneDraw) {
     const std::vector items{compatibleItem(7, MaterialBatchingMode::GpuInstancing),
                             compatibleItem(3, MaterialBatchingMode::GpuInstancing),
                             compatibleItem(9, MaterialBatchingMode::GpuInstancing)};
-    const BatchedDrawList result = DrawBatcher{}.build(items, "DepthOnly");
-    ASSERT_EQ(result.batches.size(), 1U);
-    EXPECT_EQ(result.batches.front().instanceCount, 3U);
+    const BatchedRenderItems result = DrawBatcher{}.build(items);
+    ASSERT_EQ(result.items.size(), 1U);
+    EXPECT_EQ(result.items.front().arguments.instanceCount, 3U);
     EXPECT_EQ(result.gpuInstancedBatchCount, 1U);
     EXPECT_EQ(result.instanceRows, (std::vector<std::uint32_t>{7, 3, 9}));
 }
@@ -49,12 +48,12 @@ TEST(GpuInstancingBatcherTest, SplitsAtConfiguredInstanceLimit) {
     for (std::uint32_t row = 0; row < 5; ++row) {
         items.push_back(compatibleItem(row, MaterialBatchingMode::GpuInstancing));
     }
-    const BatchedDrawList result =
+    const BatchedRenderItems result =
         DrawBatcher{DrawBatcherLimits{.maxGpuInstancesPerDraw = 2}}.build(items);
-    ASSERT_EQ(result.batches.size(), 3U);
-    EXPECT_EQ(result.batches[0].instanceCount, 2U);
-    EXPECT_EQ(result.batches[1].instanceCount, 2U);
-    EXPECT_EQ(result.batches[2].instanceCount, 1U);
+    ASSERT_EQ(result.items.size(), 3U);
+    EXPECT_EQ(result.items[0].arguments.instanceCount, 2U);
+    EXPECT_EQ(result.items[1].arguments.instanceCount, 2U);
+    EXPECT_EQ(result.items[2].arguments.instanceCount, 1U);
 }
 
 } // namespace

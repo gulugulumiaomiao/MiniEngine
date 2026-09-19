@@ -48,12 +48,12 @@ TEST(RenderDataModelTest, CameraTargetAndDrawStagesHaveExplicitContracts) {
     ASSERT_TRUE(screenCamera.target.has_value());
     EXPECT_EQ(screenCamera.target->index, 7U);
 
-    SourceDrawGroups groups;
+    SourceDrawItemList items;
     SourceDrawItem source;
     source.indexRange = {.firstIndex = 3, .indexCount = 12, .vertexOffset = -1};
-    groups[2000].push_back(source);
-    ASSERT_EQ(groups.at(2000).size(), 1U);
-    EXPECT_EQ(groups.at(2000).front().indexRange.indexCount, 12U);
+    items.push_back(source);
+    ASSERT_EQ(items.size(), 1U);
+    EXPECT_EQ(items.front().indexRange.indexCount, 12U);
 
     RenderItem item;
     item.arguments.indexCount = 12;

@@ -6,16 +6,18 @@
 
 #include <cstdint>
 #include <span>
-#include <string_view>
 #include <vector>
 
 namespace engine {
 
 struct DrawFilter;
+class RenderScene;
 
 [[nodiscard]] std::vector<DrawItem> collectPassItems(const DrawList& drawList,
                                                      RenderPhase phase,
                                                      const DrawFilter& filter);
+
+void sortForwardItems(std::vector<DrawItem>& items, const RenderScene& scene);
 
 // Draws a filtered subset of draw items using the provided scene bind group.
 // Consecutive items with identical GPU state are merged into instanced batches
@@ -24,7 +26,6 @@ struct DrawFilter;
 [[nodiscard]] DrawSubmissionStats drawFilteredItems(std::uint32_t frameIndex,
                        std::span<const DrawItem> items,
                        rhi::BindGroupHandle sceneBindGroup,
-                       rhi::IGraphicsCommandEncoder& encoder,
-                       std::string_view passName = {});
+                       rhi::IGraphicsCommandEncoder& encoder);
 
 } // namespace engine

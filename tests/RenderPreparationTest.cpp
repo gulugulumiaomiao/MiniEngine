@@ -51,11 +51,11 @@ TEST(RenderPreparationTest, PassCollectionAppliesQueueAndLayerFiltering) {
 }
 
 TEST(RenderPreparationTest, SourceAndRenderStagesKeepExplicitGeometryContracts) {
-    SourceDrawGroups groups;
+    SourceDrawItemList items;
     SourceDrawItem source;
     source.indexBuffer = {7, 1};
     source.indexRange = {.firstIndex = 12, .indexCount = 36, .vertexOffset = 4};
-    groups[kRenderQueueGeometry].push_back(source);
+    items.push_back(source);
 
     RenderItem render;
     render.indexBuffer = source.indexBuffer;
@@ -65,7 +65,7 @@ TEST(RenderPreparationTest, SourceAndRenderStagesKeepExplicitGeometryContracts) 
                         .firstIndex = source.indexRange.firstIndex,
                         .vertexOffset = source.indexRange.vertexOffset};
 
-    ASSERT_EQ(groups.size(), 1U);
+    ASSERT_EQ(items.size(), 1U);
     EXPECT_EQ(render.indexFormat, rhi::IndexFormat::UInt32);
     EXPECT_EQ(render.arguments.indexCount, 36U);
     EXPECT_EQ(render.arguments.firstIndex, 12U);

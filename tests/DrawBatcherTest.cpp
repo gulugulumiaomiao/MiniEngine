@@ -1,26 +1,28 @@
-#include "render/renderer/DrawBatcher.h"
 #include "render/material/Material.h"
+#include "render/renderer/DrawBatcher.h"
 
-#include <cassert>
+#include <gtest/gtest.h>
+
 #include <cstdint>
 #include <vector>
 
+namespace engine {
 namespace {
 
-engine::DrawItem makeItem(std::uint32_t pipelineIndex,
-                          std::uint32_t materialBindGroupIndex,
-                          std::uint32_t indexCount,
-                          std::uint32_t firstIndex,
-                          std::int32_t vertexOffset,
-                          std::uint32_t objectRow,
-                          std::uint32_t indexBufferIndex = 1,
-                          engine::rhi::IndexFormat indexFormat = engine::rhi::IndexFormat::UInt32) {
-    engine::DrawItem item;
-    item.pipeline = engine::rhi::GraphicsPipelineHandle{pipelineIndex, 1};
-    item.materialBindGroup = engine::rhi::BindGroupHandle{materialBindGroupIndex, 1};
-    item.indexBuffer = engine::rhi::BufferHandle{indexBufferIndex, 1};
+DrawItem makeItem(std::uint32_t pipelineIndex,
+                  std::uint32_t materialBindGroupIndex,
+                  std::uint32_t indexCount,
+                  std::uint32_t firstIndex,
+                  std::int32_t vertexOffset,
+                  std::uint32_t objectRow,
+                  std::uint32_t indexBufferIndex = 1,
+                  rhi::IndexFormat indexFormat = rhi::IndexFormat::UInt32) {
+    DrawItem item;
+    item.pipeline = {pipelineIndex, 1};
+    item.materialBindGroup = {materialBindGroupIndex, 1};
+    item.indexBuffer = {indexBufferIndex, 1};
     item.indexFormat = indexFormat;
-    item.batchingMode = engine::MaterialBatchingMode::GpuInstancing;
+    item.batchingMode = MaterialBatchingMode::GpuInstancing;
     item.arguments = {.indexCount = indexCount,
                       .instanceCount = 1,
                       .firstIndex = firstIndex,
@@ -29,99 +31,70 @@ engine::DrawItem makeItem(std::uint32_t pipelineIndex,
     return item;
 }
 
-} // namespace
+TEST(DrawBatcherTest, MergesConsecutiveCompatibleItems) {
+    const std::vector items{makeItem(1, 1, 60, 0, 0, 0),
+                            makeItem(1, 1, 60, 0, 0, 1),
+                            makeItem(1, 1, 60, 0, 0, 2)};
+    const BatchedRenderItems batched = DrawBatcher{}.build(items);
 
-int main() {
-    using namespace engine;
-
-    // Consecutive items with identical state merge into a single batch.
-    {
-        DrawBatcher batcher;
-        const std::vector<DrawItem> items{
-            makeItem(1, 1, 60, 0, 0, 0),
-            makeItem(1, 1, 60, 0, 0, 1),
-            makeItem(1, 1, 60, 0, 0, 2),
-        };
-        const BatchedDrawList batched = batcher.build(items);
-
-        assert(batched.batches.size() == 1);
-        assert(batched.batches[0].instanceCount == 3);
-        assert(batched.batches[0].firstInstance == 0);
-        assert(batched.batches[0].indexCount == 60);
-        assert(batched.itemCount == 3);
-        assert((batched.instanceRows == std::vector<std::uint32_t>{0, 1, 2}));
-    }
-
-    // Different materials / pipelines / index ranges break batches.
-    {
-        DrawBatcher batcher;
-        const std::vector<DrawItem> items{
-            makeItem(1, 1, 60, 0, 0, 0),
-            makeItem(1, 2, 60, 0, 0, 1),  // material change
-            makeItem(2, 2, 60, 0, 0, 2),  // pipeline change
-            makeItem(2, 2, 30, 0, 0, 3),  // index count change
-            makeItem(2, 2, 30, 60, 0, 4), // first index change
-        };
-        const BatchedDrawList batched = batcher.build(items);
-
-        assert(batched.batches.size() == 5);
-        for (const DrawBatch& batch : batched.batches)
-            assert(batch.instanceCount == 1);
-        assert((batched.instanceRows == std::vector<std::uint32_t>{0, 1, 2, 3, 4}));
-    }
-
-    // A A B A A produces three batches; the interleaved state splits the run.
-    {
-        DrawBatcher batcher;
-        const std::vector<DrawItem> items{
-            makeItem(1, 1, 60, 0, 0, 0),
-            makeItem(1, 1, 60, 0, 0, 1),
-            makeItem(1, 2, 60, 0, 0, 2), // B
-            makeItem(1, 1, 60, 0, 0, 3),
-            makeItem(1, 1, 60, 0, 0, 4),
-        };
-        const BatchedDrawList batched = batcher.build(items);
-
-        assert(batched.batches.size() == 3);
-        assert(batched.batches[0].instanceCount == 2);
-        assert(batched.batches[1].instanceCount == 1);
-        assert(batched.batches[2].instanceCount == 2);
-        assert(batched.batches[2].firstInstance == 3);
-        assert((batched.instanceRows == std::vector<std::uint32_t>{0, 1, 2, 3, 4}));
-    }
-
-    // Vertex/index buffer and format changes break batches.
-    {
-        DrawBatcher batcher;
-        std::vector<DrawItem> items{
-            makeItem(1, 1, 60, 0, 0, 0),
-            makeItem(1, 1, 60, 0, 0, 1, /*indexBufferIndex=*/2), // index buffer change
-        };
-        items[1].vertexBuffers.push_back({0, rhi::BufferHandle{5, 1}});
-
-        std::vector<DrawItem> formatChange{
-            makeItem(1, 1, 60, 0, 0, 0),
-            makeItem(1, 1, 60, 0, 0, 1, 1, engine::rhi::IndexFormat::UInt16),
-        };
-        formatChange[0].vertexBuffers.push_back({0, rhi::BufferHandle{5, 1}});
-        formatChange[1].vertexBuffers.push_back({0, rhi::BufferHandle{5, 1}});
-        formatChange[1].vertexBuffers[0].buffer = rhi::BufferHandle{9, 1}; // VB change
-
-        const BatchedDrawList batchedA = batcher.build(items);
-        assert(batchedA.batches.size() == 2); // size mismatch + index buffer mismatch
-
-        const BatchedDrawList batchedB = batcher.build(formatChange);
-        assert(batchedB.batches.size() == 2); // format + vertex buffer mismatch
-    }
-
-    // Empty input yields no batches.
-    {
-        DrawBatcher batcher;
-        const BatchedDrawList batched = batcher.build({});
-        assert(batched.batches.empty());
-        assert(batched.instanceRows.empty());
-        assert(batched.itemCount == 0);
-    }
-
-    return 0;
+    ASSERT_EQ(batched.items.size(), 1U);
+    EXPECT_EQ(batched.items[0].arguments.instanceCount, 3U);
+    EXPECT_EQ(batched.items[0].arguments.firstInstance, 0U);
+    EXPECT_EQ(batched.items[0].arguments.indexCount, 60U);
+    EXPECT_EQ(batched.itemCount, 3U);
+    EXPECT_EQ(batched.instanceRows, (std::vector<std::uint32_t>{0, 1, 2}));
 }
+
+TEST(DrawBatcherTest, StateAndGeometryChangesSplitItems) {
+    const std::vector items{makeItem(1, 1, 60, 0, 0, 0),
+                            makeItem(1, 2, 60, 0, 0, 1),
+                            makeItem(2, 2, 60, 0, 0, 2),
+                            makeItem(2, 2, 30, 0, 0, 3),
+                            makeItem(2, 2, 30, 60, 0, 4)};
+    const BatchedRenderItems batched = DrawBatcher{}.build(items);
+
+    ASSERT_EQ(batched.items.size(), 5U);
+    for (const RenderItem& item : batched.items)
+        EXPECT_EQ(item.arguments.instanceCount, 1U);
+    EXPECT_EQ(batched.instanceRows, (std::vector<std::uint32_t>{0, 1, 2, 3, 4}));
+}
+
+TEST(DrawBatcherTest, DoesNotMergeAcrossAnInterleavedState) {
+    const std::vector items{makeItem(1, 1, 60, 0, 0, 0),
+                            makeItem(1, 1, 60, 0, 0, 1),
+                            makeItem(1, 2, 60, 0, 0, 2),
+                            makeItem(1, 1, 60, 0, 0, 3),
+                            makeItem(1, 1, 60, 0, 0, 4)};
+    const BatchedRenderItems batched = DrawBatcher{}.build(items);
+
+    ASSERT_EQ(batched.items.size(), 3U);
+    EXPECT_EQ(batched.items[0].arguments.instanceCount, 2U);
+    EXPECT_EQ(batched.items[1].arguments.instanceCount, 1U);
+    EXPECT_EQ(batched.items[2].arguments.instanceCount, 2U);
+    EXPECT_EQ(batched.items[2].arguments.firstInstance, 3U);
+}
+
+TEST(DrawBatcherTest, BufferAndIndexFormatChangesSplitItems) {
+    std::vector<DrawItem> indexBufferChange{makeItem(1, 1, 60, 0, 0, 0),
+                                             makeItem(1, 1, 60, 0, 0, 1, 2)};
+    indexBufferChange[1].vertexBuffers.push_back({0, {5, 1}});
+
+    std::vector<DrawItem> formatAndVertexChange{
+        makeItem(1, 1, 60, 0, 0, 0),
+        makeItem(1, 1, 60, 0, 0, 1, 1, rhi::IndexFormat::UInt16)};
+    formatAndVertexChange[0].vertexBuffers.push_back({0, {5, 1}});
+    formatAndVertexChange[1].vertexBuffers.push_back({0, {9, 1}});
+
+    EXPECT_EQ(DrawBatcher{}.build(indexBufferChange).items.size(), 2U);
+    EXPECT_EQ(DrawBatcher{}.build(formatAndVertexChange).items.size(), 2U);
+}
+
+TEST(DrawBatcherTest, EmptyInputProducesNoRenderItems) {
+    const BatchedRenderItems batched = DrawBatcher{}.build({});
+    EXPECT_TRUE(batched.items.empty());
+    EXPECT_TRUE(batched.instanceRows.empty());
+    EXPECT_EQ(batched.itemCount, 0U);
+}
+
+} // namespace
+} // namespace engine

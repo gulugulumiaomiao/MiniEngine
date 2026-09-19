@@ -34,13 +34,13 @@ TEST(RenderDiagnosticsTest, AccumulatesPassSubmissionStats) {
 
 TEST(RenderDiagnosticsTest, KeepsRenderQueuesInSeparateDrawBatches) {
     const std::vector items{queueItem(2000, 0), queueItem(2000, 1), queueItem(2450, 2)};
-    const BatchedDrawList batches = DrawBatcher{}.build(items, "Forward");
+    const BatchedRenderItems batches = DrawBatcher{}.build(items);
 
-    ASSERT_EQ(batches.batches.size(), 2U);
-    EXPECT_EQ(batches.batches[0].renderQueue, 2000);
-    EXPECT_EQ(batches.batches[0].instanceCount, 2U);
-    EXPECT_EQ(batches.batches[1].renderQueue, 2450);
-    EXPECT_EQ(batches.batches[1].instanceCount, 1U);
+    ASSERT_EQ(batches.items.size(), 2U);
+    EXPECT_EQ(batches.items[0].renderQueue, 2000);
+    EXPECT_EQ(batches.items[0].arguments.instanceCount, 2U);
+    EXPECT_EQ(batches.items[1].renderQueue, 2450);
+    EXPECT_EQ(batches.items[1].arguments.instanceCount, 1U);
 }
 
 } // namespace

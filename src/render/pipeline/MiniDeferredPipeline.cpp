@@ -2,21 +2,19 @@
 
 #include "core/logging/Log.h"
 #include "render/gpu/frame/FrameGpuManager.h"
-#include "render/gpu/material/MaterialGpuManager.h"
 #include "render/pipeline/DeferredResolveShaders.h"
 #include "render/pipeline/RenderContext.h"
+#include "render/pipeline/RenderPreparation.h"
 #include "render/pipeline/passes/RenderPassUtils.h"
 #include "render/pipeline/passes/ShadowCasterPass.h"
 #include "render/queue/RenderQueue.h"
 #include "render/render_graph/RenderGraph.h"
 #include "render/render_target/RenderTarget.h"
-#include "render/renderer/DrawListBuilder.h"
 #include "render/renderer/RenderFrameStats.h"
 #include "render/scene/RenderScene.h"
 #include "rhi/api/Device.h"
 #include "rhi/api/Swapchain.h"
 
-#include <algorithm>
 #include <span>
 #include <utility>
 #include <vector>
@@ -31,53 +29,12 @@ MiniDeferredPipeline::~MiniDeferredPipeline() {
 }
 
 bool MiniDeferredPipeline::render(RenderContext& context) {
-    DrawListBuilder builder;
-    const SourceDrawData source = builder.extract(context.scene(), context);
-    DrawList drawList = builder.prepare(source, context);
-    sourceDrawGroups_ = drawList.sourceGroups;
-
+    DrawList drawList = preparePipelineDrawList(context, staticBatcher_);
     RenderFrameStats& frameStats = context.frameStats();
-    frameStats.sourceDrawItems = source.items.size();
-    frameStats.preparedDrawItems = drawList.items.size();
-
-    resolveMaterialBindGroups(drawList, context.frameIndex());
-    std::erase_if(drawList.items,
-                  [](const DrawItem& item) { return !item.pipeline || !item.materialBindGroup; });
-    drawList.groups.clear();
-    for (const DrawItem& item : drawList.items) {
-        drawList.groups[item.renderQueue].push_back(item);
-    }
-    staticBatcher_.process(drawList, context.device());
-    const StaticBatcherStats& staticStats = staticBatcher_.stats();
-    frameStats.staticSourceItems = staticStats.sourceItems;
-    frameStats.staticCombinedDraws = staticStats.combinedDraws;
-    frameStats.staticCacheHits = staticStats.cacheHits;
-    frameStats.staticCacheMisses = staticStats.cacheMisses;
-
-    FRAME_GPU_MANAGER.beginFrame(context.frameIndex());
-    FRAME_GPU_MANAGER.upload(context.frameIndex(), drawList);
 
     std::vector<DrawItem> geometry = collectPassItems(
         drawList, RenderPhase::Forward, DrawFilter{RenderQueueRange::all()});
-    std::vector<DrawItem> opaque;
-    std::vector<DrawItem> transparent;
-    for (DrawItem& item : geometry) {
-        (RenderQueueRange::opaque().contains(item.renderQueue) ? opaque : transparent)
-            .push_back(std::move(item));
-    }
-    DrawSorter sorter;
-    sorter.sort(opaque,
-                SortingCriteria::RenderQueue | SortingCriteria::Pipeline |
-                    SortingCriteria::Material | SortingCriteria::Mesh,
-                context.scene());
-    sorter.sort(transparent, SortingCriteria::BackToFront, context.scene());
-    geometry.clear();
-    geometry.insert(geometry.end(),
-                    std::make_move_iterator(opaque.begin()),
-                    std::make_move_iterator(opaque.end()));
-    geometry.insert(geometry.end(),
-                    std::make_move_iterator(transparent.begin()),
-                    std::make_move_iterator(transparent.end()));
+    sortForwardItems(geometry, context.scene());
 
     if (!ensureResolveResources(context.device(), context.sceneColorFormat())) {
         return false;
@@ -141,8 +98,7 @@ bool MiniDeferredPipeline::render(RenderContext& context) {
                 context.frameIndex(),
                 geometry,
                 FRAME_GPU_MANAGER.sceneBindGroup(context.frameIndex()),
-                encoder,
-                "DeferredGeometry"));
+                encoder));
         });
 
     RgRenderingInfo resolveRendering;
@@ -190,20 +146,6 @@ bool MiniDeferredPipeline::render(RenderContext& context) {
     graph.execute(context.encoder());
     graph.reset();
     return true;
-}
-
-void MiniDeferredPipeline::resolveMaterialBindGroups(DrawList& drawList,
-                                                       std::uint32_t frameIndex) {
-    MATERIAL_GPU_MANAGER.beginFrame(frameIndex);
-    for (DrawItem& item : drawList.items) {
-        item.materialBindGroup = MATERIAL_GPU_MANAGER.resolve(item.material);
-        if (!item.materialBindGroup && item.fallbackPipeline && item.fallbackMaterial) {
-            Log::error("MiniDeferredPipeline", "Using Error Material after GPU preparation failed");
-            item.pipeline = item.fallbackPipeline;
-            item.material = item.fallbackMaterial;
-            item.materialBindGroup = MATERIAL_GPU_MANAGER.resolve(item.fallbackMaterial);
-        }
-    }
 }
 
 bool MiniDeferredPipeline::ensureResolveResources(rhi::IDevice& device,
