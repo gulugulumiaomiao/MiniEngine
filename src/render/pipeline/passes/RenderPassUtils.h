@@ -1,6 +1,7 @@
 #pragma once
 
 #include "render/renderer/DrawList.h"
+#include "render/renderer/RenderFrameStats.h"
 #include "rhi/api/CommandEncoder.h"
 
 #include <cstdint>
@@ -20,7 +21,7 @@ struct DrawFilter;
 // Consecutive items with identical GPU state are merged into instanced batches
 // backed by the per-frame instance table. The items are assumed to have already
 // been sorted and to have valid pipelines/bind groups.
-void drawFilteredItems(std::uint32_t frameIndex,
+[[nodiscard]] DrawSubmissionStats drawFilteredItems(std::uint32_t frameIndex,
                        std::span<const DrawItem> items,
                        rhi::BindGroupHandle sceneBindGroup,
                        rhi::IGraphicsCommandEncoder& encoder,

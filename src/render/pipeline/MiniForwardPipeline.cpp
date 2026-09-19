@@ -9,6 +9,7 @@
 #include "render/pipeline/passes/ShadowCasterPass.h"
 #include "render/render_graph/RenderGraph.h"
 #include "render/renderer/DrawListBuilder.h"
+#include "render/renderer/RenderFrameStats.h"
 #include "render/scene/RenderScene.h"
 
 #include <utility>
@@ -25,6 +26,9 @@ bool MiniForwardPipeline::render(RenderContext& context) {
     DrawListBuilder builder;
     const SourceDrawData source = builder.extract(context.scene(), context);
     DrawList drawList = builder.prepare(source, context);
+    RenderFrameStats& frameStats = context.frameStats();
+    frameStats.sourceDrawItems = source.items.size();
+    frameStats.preparedDrawItems = drawList.items.size();
     sourceDrawGroups_ = drawList.sourceGroups;
 
     resolveMaterialBindGroups(drawList, context.frameIndex());
@@ -35,6 +39,11 @@ bool MiniForwardPipeline::render(RenderContext& context) {
         drawList.groups[item.renderQueue].push_back(item);
     }
     staticBatcher_.process(drawList, context.device());
+    const StaticBatcherStats& staticStats = staticBatcher_.stats();
+    frameStats.staticSourceItems = staticStats.sourceItems;
+    frameStats.staticCombinedDraws = staticStats.combinedDraws;
+    frameStats.staticCacheHits = staticStats.cacheHits;
+    frameStats.staticCacheMisses = staticStats.cacheMisses;
 
     FRAME_GPU_MANAGER.beginFrame(context.frameIndex());
     FRAME_GPU_MANAGER.upload(context.frameIndex(), drawList);
@@ -48,6 +57,9 @@ bool MiniForwardPipeline::render(RenderContext& context) {
         Log::error("MiniForwardPipeline", "RenderGraph setup failed: %s", graph.lastError().c_str());
         return false;
     }
+    frameStats.renderGraphPasses = graph.passCount();
+    frameStats.renderGraphPlanCacheHit = graph.planCacheHit();
+    frameStats.transientRenderTargets = context.rgTexturePool().inUseCount();
     if (shadowOutput_.castShadows && shadowOutput_.shadowMap.valid()) {
         FRAME_GPU_MANAGER.bindShadowMap(context.frameIndex(),
                                         graph.resolvedTextureView(shadowOutput_.shadowMap));

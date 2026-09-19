@@ -58,8 +58,7 @@ void ShadowCasterPass::execute(RenderContext& context,
     graph.addGraphicsPass("ShadowCaster",
                           std::move(rendering),
                           std::move(resources),
-                          [items = std::move(items), size = shadowMapSize_,
-                           frameIndex = context.frameIndex()](
+                          [items = std::move(items), size = shadowMapSize_, &context](
                               rhi::IGraphicsCommandEncoder& encoder) mutable {
                               encoder.setViewport({0.0F,
                                                    0.0F,
@@ -68,11 +67,12 @@ void ShadowCasterPass::execute(RenderContext& context,
                                                    0.0F,
                                                    1.0F});
                               encoder.setScissor({0, 0, size, size});
-                              drawFilteredItems(frameIndex,
-                                                items,
-                                                FRAME_GPU_MANAGER.sceneBindGroup(frameIndex),
-                                                encoder,
-                                                "ShadowCaster");
+                              context.recordSubmission(drawFilteredItems(
+                                  context.frameIndex(),
+                                  items,
+                                  FRAME_GPU_MANAGER.sceneBindGroup(context.frameIndex()),
+                                  encoder,
+                                  "ShadowCaster"));
                           });
 }
 

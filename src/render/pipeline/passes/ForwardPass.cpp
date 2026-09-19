@@ -96,11 +96,12 @@ void ForwardPass::execute(RenderContext& context,
                                                    1.0F});
                               encoder.setScissor(
                                   {0, 0, context.sceneWidth(), context.sceneHeight()});
-                              drawFilteredItems(context.frameIndex(),
-                                                items,
-                                                FRAME_GPU_MANAGER.sceneBindGroup(context.frameIndex()),
-                                                encoder,
-                                                "Forward");
+                              context.recordSubmission(drawFilteredItems(
+                                  context.frameIndex(),
+                                  items,
+                                  FRAME_GPU_MANAGER.sceneBindGroup(context.frameIndex()),
+                                  encoder,
+                                  "Forward"));
                           });
 }
 

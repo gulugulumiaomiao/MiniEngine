@@ -2,6 +2,7 @@
 
 #include "core/logging/Log.h"
 #include "render/renderer/Renderer.h"
+#include "render/renderer/RenderFrameStats.h"
 #include "render/render_target/RenderTarget.h"
 #include "rhi/api/Device.h"
 #include "rhi/api/Swapchain.h"
@@ -59,6 +60,14 @@ std::uint32_t RenderContext::frameIndex() const {
 
 std::uint64_t RenderContext::frameSerial() const {
     return renderer_.frameSerial();
+}
+
+RenderFrameStats& RenderContext::frameStats() const {
+    return renderer_.frameStats();
+}
+
+void RenderContext::recordSubmission(const DrawSubmissionStats& submission) const {
+    renderer_.frameStats().recordSubmission(submission);
 }
 
 } // namespace engine

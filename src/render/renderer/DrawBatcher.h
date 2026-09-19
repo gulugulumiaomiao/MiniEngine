@@ -13,6 +13,7 @@ namespace engine {
 // material bind group, vertex/index buffers and index range collapsed into a
 // single drawIndexed invocation.
 struct DrawBatch {
+    int renderQueue{2000};
     rhi::GraphicsPipelineHandle pipeline;
     rhi::DrawStateDesc drawState;
     rhi::BindGroupHandle materialBindGroup;

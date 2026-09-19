@@ -10,6 +10,8 @@ namespace engine {
 class Renderer;
 class RenderTarget;
 class RgTexturePool;
+struct DrawSubmissionStats;
+struct RenderFrameStats;
 
 namespace rhi {
 class IDevice;
@@ -33,6 +35,8 @@ public:
     [[nodiscard]] std::uint32_t sceneWidth() const;
     [[nodiscard]] std::uint32_t sceneHeight() const;
     [[nodiscard]] rhi::TextureFormat sceneColorFormat() const;
+    [[nodiscard]] RenderFrameStats& frameStats() const;
+    void recordSubmission(const DrawSubmissionStats& submission) const;
 
     // True once a pass actually rendered into the swapchain backbuffer this frame.
     // The overlay uses this instead of guessing from scene contents: a scene can have

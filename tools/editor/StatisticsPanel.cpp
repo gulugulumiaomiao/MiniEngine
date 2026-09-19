@@ -76,6 +76,20 @@ void StatisticsPanel::draw() {
     ImGui::Text("Frame: %.2f ms (%.0f FPS)", deltaTime * 1000.0F,
                 deltaTime > 0.0F ? 1.0F / deltaTime : 0.0F);
 
+    const RenderFrameStats& render = ENGINE.renderer().frameStats();
+    ImGui::Separator();
+    ImGui::TextUnformatted("Rendering");
+    ImGui::Text("  Source: %zu   Prepared: %zu   Submitted: %zu",
+                render.sourceDrawItems, render.preparedDrawItems, render.submittedDrawItems);
+    ImGui::Text("  Render items / draw calls: %zu / %zu", render.renderItems, render.drawCalls);
+    ImGui::Text("  Static: %zu sources -> %zu draws  cache %zu hit / %zu miss",
+                render.staticSourceItems, render.staticCombinedDraws,
+                render.staticCacheHits, render.staticCacheMisses);
+    ImGui::Text("  GPU instanced draws: %zu", render.gpuInstancedDraws);
+    ImGui::Text("  RenderGraph: %zu passes, %zu transient RTs, plan %s",
+                render.renderGraphPasses, render.transientRenderTargets,
+                render.renderGraphPlanCacheHit ? "cached" : "compiled");
+
     if (const CameraComponent* camera = findPrimaryCamera(scene.root())) {
         ImGui::Separator();
         ImGui::Text("Primary Camera");

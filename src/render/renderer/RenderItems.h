@@ -45,6 +45,7 @@ using SourceDrawItemList = std::vector<SourceDrawItem>;
 using SourceDrawGroups = std::map<int, SourceDrawItemList>;
 
 struct RenderItem {
+    int renderQueue{2000};
     rhi::GraphicsPipelineHandle pipeline;
     rhi::DrawStateDesc drawState;
     struct VertexBuffer {

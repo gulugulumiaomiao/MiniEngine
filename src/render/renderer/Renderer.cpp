@@ -53,6 +53,7 @@ Renderer::~Renderer() {
 }
 
 void Renderer::renderFrame(const RenderScene& scene) {
+    frameStats_ = {};
     if (!pipeline_) {
         Log::fatal("Renderer", "No render pipeline is bound");
     }

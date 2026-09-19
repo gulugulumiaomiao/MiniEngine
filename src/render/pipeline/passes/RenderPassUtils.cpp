@@ -6,6 +6,7 @@
 #include "render/renderer/RenderItems.h"
 
 #include <optional>
+#include <string>
 
 namespace engine {
 
@@ -29,7 +30,7 @@ std::vector<DrawItem> collectPassItems(const DrawList& drawList,
     return result;
 }
 
-void drawFilteredItems(std::uint32_t frameIndex,
+DrawSubmissionStats drawFilteredItems(std::uint32_t frameIndex,
                        std::span<const DrawItem> items,
                        rhi::BindGroupHandle sceneBindGroup,
                        rhi::IGraphicsCommandEncoder& encoder,
@@ -37,7 +38,7 @@ void drawFilteredItems(std::uint32_t frameIndex,
     DrawBatcher batcher;
     BatchedDrawList batched = batcher.build(items, passName);
     if (batched.batches.empty()) {
-        return;
+        return {};
     }
 
     // Upload the instance rows this pass needs. Each pass owns a disjoint
@@ -53,6 +54,7 @@ void drawFilteredItems(std::uint32_t frameIndex,
     renderItems.reserve(batched.batches.size());
     for (const DrawBatch& batch : batched.batches) {
         RenderItem item;
+        item.renderQueue = batch.renderQueue;
         item.pipeline = batch.pipeline;
         item.drawState = batch.drawState;
         item.materialBindGroup = batch.materialBindGroup;
@@ -73,7 +75,16 @@ void drawFilteredItems(std::uint32_t frameIndex,
     rhi::GraphicsPipelineHandle boundPipeline;
     rhi::BindGroupHandle boundMaterial;
     std::optional<rhi::DrawStateDesc> boundDrawState;
+    std::optional<int> labeledQueue;
     for (const RenderItem& item : renderItems) {
+        if (!labeledQueue || *labeledQueue != item.renderQueue) {
+            if (labeledQueue) {
+                encoder.endDebugLabel();
+            }
+            encoder.beginDebugLabel("RenderQueue " + std::to_string(item.renderQueue),
+                                    {0.35F, 0.8F, 0.45F, 1.0F});
+            labeledQueue = item.renderQueue;
+        }
         if (item.pipeline != boundPipeline) {
             encoder.bindPipeline(item.pipeline);
             encoder.bindGroup(0, sceneBindGroup);
@@ -93,6 +104,14 @@ void drawFilteredItems(std::uint32_t frameIndex,
         encoder.bindIndexBuffer(item.indexBuffer, item.indexBufferOffset, item.indexFormat);
         encoder.drawIndexed(item.arguments);
     }
+    if (labeledQueue) {
+        encoder.endDebugLabel();
+    }
+    return {
+        .sourceItems = batched.itemCount,
+        .renderItems = renderItems.size(),
+        .gpuInstancedDraws = batched.gpuInstancedBatchCount,
+    };
 }
 
 } // namespace engine

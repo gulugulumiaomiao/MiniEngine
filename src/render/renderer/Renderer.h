@@ -3,6 +3,7 @@
 #include "render/pipeline/RenderPipeline.h"
 #include "render/render_graph/RgTexturePool.h"
 #include "render/render_target/RenderTargetPool.h"
+#include "render/renderer/RenderFrameStats.h"
 #include "rhi/RhiFactory.h"
 
 #include <cstdint>
@@ -75,6 +76,8 @@ public:
     [[nodiscard]] RgTexturePool& rgTexturePool() { return *rgTexturePool_; }
     [[nodiscard]] Window& window() { return window_; }
     [[nodiscard]] std::uint64_t frameSerial() const { return frameSerial_; }
+    [[nodiscard]] RenderFrameStats& frameStats() { return frameStats_; }
+    [[nodiscard]] const RenderFrameStats& frameStats() const { return frameStats_; }
 
 private:
     void recreateSwapchain();
@@ -89,6 +92,7 @@ private:
     std::unique_ptr<IRenderPipeline> pipeline_;
     IFrameOverlay* overlay_{};
     std::uint64_t frameSerial_{};
+    RenderFrameStats frameStats_;
     bool offscreenScene_{};
     std::uint32_t sceneWidth_{};
     std::uint32_t sceneHeight_{};

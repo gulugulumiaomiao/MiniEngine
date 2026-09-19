@@ -7,7 +7,8 @@ namespace engine {
 bool DrawBatcher::sameBatchState(const DrawItem& lhs, const DrawItem& rhs) {
     if (lhs.batchingMode != MaterialBatchingMode::GpuInstancing ||
         rhs.batchingMode != MaterialBatchingMode::GpuInstancing ||
-        lhs.pipeline != rhs.pipeline || lhs.drawState != rhs.drawState ||
+        lhs.renderQueue != rhs.renderQueue || lhs.pipeline != rhs.pipeline ||
+        lhs.drawState != rhs.drawState ||
         lhs.materialBindGroup != rhs.materialBindGroup ||
         lhs.indexBuffer != rhs.indexBuffer || lhs.indexFormat != rhs.indexFormat ||
         lhs.vertexBuffers.size() != rhs.vertexBuffers.size()) {
@@ -41,6 +42,7 @@ BatchedDrawList DrawBatcher::build(std::span<const DrawItem> items, std::string_
             ++result.batches.back().instanceCount;
         } else {
             result.batches.push_back({
+                .renderQueue = item.renderQueue,
                 .pipeline = item.pipeline,
                 .drawState = item.drawState,
                 .materialBindGroup = item.materialBindGroup,
