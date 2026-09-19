@@ -1,6 +1,7 @@
 #pragma once
 #include "rhi/api/CommandEncoder.h"
 #include "rhi/api/Device.h"
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -13,11 +14,20 @@ class MockDevice final : public rhi::IDevice {
 public:
     rhi::BufferHandle createBuffer(const rhi::BufferDesc& desc) override {
         buffers.push_back(desc);
+        bufferContents.emplace_back(static_cast<std::size_t>(desc.size));
         return {static_cast<std::uint32_t>(buffers.size()), 1};
     }
     void destroyBuffer(rhi::BufferHandle) override { ++destroyedBuffers; }
-    void uploadBuffer(rhi::BufferHandle, std::span<const std::byte> data, std::uint64_t) override {
+    void uploadBuffer(rhi::BufferHandle handle,
+                      std::span<const std::byte> data,
+                      std::uint64_t offset) override {
         uploadedBytes.push_back(data.size_bytes());
+        if (handle.index > 0 && handle.index <= bufferContents.size() &&
+            offset + data.size_bytes() <= bufferContents[handle.index - 1].size()) {
+            std::ranges::copy(data,
+                              bufferContents[handle.index - 1].begin() +
+                                  static_cast<std::ptrdiff_t>(offset));
+        }
     }
 
     rhi::TextureHandle createTexture(const rhi::TextureDesc& desc) override {
@@ -72,6 +82,7 @@ public:
     void waitIdle() override {}
 
     std::vector<rhi::BufferDesc> buffers;
+    std::vector<std::vector<std::byte>> bufferContents;
     std::vector<rhi::TextureDesc> textures;
     std::vector<rhi::SamplerDesc> samplers;
     std::vector<rhi::ShaderStage> shaders;

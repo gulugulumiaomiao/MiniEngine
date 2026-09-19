@@ -4,6 +4,7 @@
 #include "render/pipeline/RenderPipeline.h"
 #include "render/pipeline/passes/ShadowCasterPass.h"
 #include "render/renderer/RenderItems.h"
+#include "render/renderer/StaticBatcher.h"
 
 #include <memory>
 #include <vector>
@@ -35,6 +36,7 @@ private:
     ShadowCasterOutput shadowOutput_;
     std::vector<std::unique_ptr<IRenderPass>> passes_;
     SourceDrawGroups sourceDrawGroups_;
+    StaticBatcher staticBatcher_;
 };
 
 } // namespace engine

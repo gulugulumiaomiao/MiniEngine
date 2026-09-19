@@ -64,6 +64,7 @@ struct DrawItem {
     int renderQueue{2000};
     std::uint32_t layerMask{1};
     MaterialBatchingMode batchingMode{};
+    math::Mat44 worldMatrix{1.0F};
 };
 
 struct DrawList {

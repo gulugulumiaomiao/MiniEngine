@@ -34,6 +34,7 @@ bool MiniForwardPipeline::render(RenderContext& context) {
     for (const DrawItem& item : drawList.items) {
         drawList.groups[item.renderQueue].push_back(item);
     }
+    staticBatcher_.process(drawList, context.device());
 
     FRAME_GPU_MANAGER.beginFrame(context.frameIndex());
     FRAME_GPU_MANAGER.upload(context.frameIndex(), drawList);
@@ -79,7 +80,9 @@ void MiniForwardPipeline::setPasses(std::vector<std::unique_ptr<IRenderPass>> pa
 }
 
 void MiniForwardPipeline::onSwapchainChanged() {
-    // Forward targets remain owned by Renderer in stage A.
+    // Renderer waits for the device before this callback, so cached combined buffers are safe
+    // to release here.
+    staticBatcher_.clear();
 }
 
 } // namespace engine

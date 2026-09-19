@@ -162,6 +162,7 @@ mini_add_gtest(RenderTargetPoolTest)
 mini_add_gtest(RenderGraphSchedulingTest)
 mini_add_gtest(RenderPreparationTest)
 mini_add_gtest(GpuInstancingBatcherTest)
+mini_add_gtest(StaticBatcherTest)
 
 # The editor UI backend lives with the editor, so its test compiles that translation
 # unit directly; the UI shaders are baked into it as SPIR-V words, so no shader build
