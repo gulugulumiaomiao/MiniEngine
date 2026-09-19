@@ -35,6 +35,9 @@ struct RenderCamera {
     std::uint32_t cullingMask{0xFFFFFFFFU};
     int priority{};
     bool primary{};
+    // Empty means that this camera renders to the swapchain. A live handle names a
+    // persistent camera target managed by the render-target pool.
+    std::optional<RenderTargetHandle> target;
 };
 
 struct RenderLight {

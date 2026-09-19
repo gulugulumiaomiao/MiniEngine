@@ -310,25 +310,18 @@ std::shared_ptr<MeshAsset> parseRawMesh(const VirtualPath& path, const Json& roo
         asset->meshData.vertexStreams.push_back(std::move(stream));
     }
 
-    if (asset->desc.indexType == IndexType::UInt16) {
-        std::vector<std::uint16_t> values;
-        for (const Json& value : *indices) {
-            if (!value.is_number_unsigned() || value.get<std::uint32_t>() > 65535)
-                return {};
-            values.push_back(static_cast<std::uint16_t>(value.get<std::uint32_t>()));
-        }
-        if (!asset->meshData.setIndexData(std::span{values}))
+    std::vector<std::uint32_t> values;
+    for (const Json& value : *indices) {
+        if (!value.is_number_unsigned())
             return {};
-    } else {
-        std::vector<std::uint32_t> values;
-        for (const Json& value : *indices) {
-            if (!value.is_number_unsigned())
-                return {};
-            values.push_back(value.get<std::uint32_t>());
-        }
-        if (!asset->meshData.setIndexData(std::span{values}))
+        const std::uint32_t index = value.get<std::uint32_t>();
+        if (asset->desc.indexType == IndexType::UInt16 && index > 65535)
             return {};
+        values.push_back(index);
     }
+    asset->desc.indexType = IndexType::UInt32;
+    if (!asset->meshData.setIndexData(std::span{values}))
+        return {};
 
     const auto bounds = calculateMeshBounds(*asset);
     if (!bounds)

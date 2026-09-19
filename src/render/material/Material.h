@@ -16,6 +16,12 @@
 
 namespace engine {
 
+enum class MaterialBatchingMode : std::uint8_t {
+    None,
+    Static,
+    GpuInstancing,
+};
+
 class AssetManager;
 class Material;
 class MaterialManager;
@@ -29,6 +35,7 @@ public:
     std::unordered_map<std::string, ShaderValue> properties;
     std::vector<std::string> keywords;
     std::optional<int> renderQueue;
+    MaterialBatchingMode batchingMode{MaterialBatchingMode::None};
 
     [[nodiscard]] Material instantiate(ShaderHandle shaderHandle) const;
     [[nodiscard]] bool transfer(Transfer& archive) override;
@@ -43,6 +50,14 @@ public:
     std::unordered_map<std::string, std::string> textures;
     std::vector<std::string> keywords;
     int renderQueue{2000};
+    MaterialBatchingMode batchingMode{MaterialBatchingMode::None};
+
+    [[nodiscard]] bool staticBatch() const {
+        return batchingMode == MaterialBatchingMode::Static;
+    }
+    [[nodiscard]] bool gpuInstancing() const {
+        return batchingMode == MaterialBatchingMode::GpuInstancing;
+    }
 
     [[nodiscard]] const VirtualPath& assetPath() const { return assetPath_; }
     [[nodiscard]] AssetId assetId() const { return assetId_; }

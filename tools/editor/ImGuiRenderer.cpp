@@ -225,7 +225,6 @@ constexpr std::uint32_t kFragmentSrgbSpirv[] = {
 };
 
 static_assert(sizeof(ImDrawVert) == 20, "The UI pipeline hardcodes ImGui's vertex layout");
-static_assert(sizeof(ImDrawIdx) == 2, "The UI pipeline binds indices as IndexFormat::UInt16");
 
 // Extra headroom so a slowly growing UI does not reallocate its buffers every frame.
 constexpr std::uint32_t kGeometrySlack = 4096;
@@ -495,7 +494,7 @@ bool ImGuiRenderer::reserveGeometry(Geometry& geometry,
             device_->destroyBuffer(geometry.indexBuffer);
         geometry.indexCapacity = indexCount + kGeometrySlack;
         geometry.indexBuffer = device_->createBuffer({
-            .size = std::uint64_t{geometry.indexCapacity} * sizeof(ImDrawIdx),
+            .size = std::uint64_t{geometry.indexCapacity} * sizeof(std::uint32_t),
             .usage = rhi::BufferUsage::Index,
             .memoryUsage = rhi::MemoryUsage::Upload,
             .debugName = "ImGuiIndexBuffer",
@@ -581,7 +580,8 @@ void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
             vertex.pos.y = (source.pos.y - drawData.DisplayPos.y) * scaleY - 1.0F;
             vertexStaging_.push_back(vertex);
         }
-        indexStaging_.insert(indexStaging_.end(), list->IdxBuffer.begin(), list->IdxBuffer.end());
+        for (ImDrawIdx index : list->IdxBuffer)
+            indexStaging_.push_back(static_cast<std::uint32_t>(index));
     }
     device_->uploadBuffer(geometry.vertexBuffer, asBytes(vertexStaging_));
     device_->uploadBuffer(geometry.indexBuffer, asBytes(indexStaging_));
@@ -589,7 +589,7 @@ void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
     encoder.beginDebugLabel("ImGui", {0.4F, 0.7F, 1.0F, 1.0F});
     encoder.bindPipeline(pipeline_);
     encoder.bindVertexBuffer(0, geometry.vertexBuffer);
-    encoder.bindIndexBuffer(geometry.indexBuffer, 0, rhi::IndexFormat::UInt16);
+    encoder.bindIndexBuffer(geometry.indexBuffer, 0, rhi::IndexFormat::UInt32);
     encoder.setViewport({.width = framebufferWidth, .height = framebufferHeight});
 
     std::uint32_t vertexBase{};
@@ -602,7 +602,7 @@ void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
                 if (command.UserCallback == ImDrawCallback_ResetRenderState) {
                     encoder.bindPipeline(pipeline_);
                     encoder.bindVertexBuffer(0, geometry.vertexBuffer);
-                    encoder.bindIndexBuffer(geometry.indexBuffer, 0, rhi::IndexFormat::UInt16);
+                    encoder.bindIndexBuffer(geometry.indexBuffer, 0, rhi::IndexFormat::UInt32);
                     encoder.setViewport({.width = framebufferWidth, .height = framebufferHeight});
                 } else {
                     Log::warn("ImGuiRenderer", "Ignoring an unsupported ImGui draw callback");

@@ -98,6 +98,17 @@ MaterialAsset parseMaterialAssetValue(const VirtualPath& path,
     if (root.contains("renderQueue")) {
         material.renderQueue = root.at("renderQueue").get<int>();
     }
+    const bool staticBatch = root.value("static_batch", false);
+    const bool gpuInstancing = root.value("gpu_instancing", false);
+    if (staticBatch && gpuInstancing) {
+        fail(kCategory,
+             path,
+             "$",
+             "static_batch and gpu_instancing are mutually exclusive");
+    }
+    material.batchingMode = staticBatch ? MaterialBatchingMode::Static
+                            : gpuInstancing ? MaterialBatchingMode::GpuInstancing
+                                            : MaterialBatchingMode::None;
     material.keywords = root.value("keywords", std::vector<std::string>{});
     std::set<std::string> usedKeywords;
     for (const std::string& keyword : material.keywords) {
@@ -237,6 +248,10 @@ std::string writeMaterialAssetJson(const MaterialAsset& material, const GuidReso
     root["shader"] = referenceString(material.shader, resolver);
     if (material.renderQueue)
         root["renderQueue"] = *material.renderQueue;
+    if (material.batchingMode == MaterialBatchingMode::Static)
+        root["static_batch"] = true;
+    if (material.batchingMode == MaterialBatchingMode::GpuInstancing)
+        root["gpu_instancing"] = true;
     if (!material.keywords.empty()) {
         OrderedJson keywords = OrderedJson::array();
         for (const std::string& keyword : material.keywords)

@@ -17,7 +17,7 @@ namespace engine {
 namespace {
 
 constexpr std::uint32_t kMaterialAssetMagic = 0x4c54414dU;
-constexpr std::uint16_t kMaterialAssetVersion = 2;
+constexpr std::uint16_t kMaterialAssetVersion = 3;
 
 struct MaterialPropertyEntry : public Transferable {
     std::string name;
@@ -61,7 +61,8 @@ bool transferMaterialPayload(Transfer& archive, MaterialAsset& value) {
         }
     }
     return archive.transfer("keywords", value.keywords) &&
-           archive.transfer("render_queue", value.renderQueue);
+           archive.transfer("render_queue", value.renderQueue) &&
+           archive.transfer("batching_mode", value.batchingMode);
 }
 
 } // namespace
@@ -83,6 +84,7 @@ bool MaterialAsset::transfer(Transfer& archive) {
         properties = std::move(decoded.properties);
         keywords = std::move(decoded.keywords);
         renderQueue = decoded.renderQueue;
+        batchingMode = decoded.batchingMode;
     }
     return true;
 }
@@ -244,6 +246,7 @@ void Material::rebuildForShader(ShaderHandle newShaderHandle, bool preserveValue
     replacement.shaderHandle_ = newShaderHandle;
     replacement.shaderRevision_ = newShader.revision();
     replacement.renderQueueOverride_ = renderQueueOverride_;
+    replacement.batchingMode = batchingMode;
     replacement.uniformLayout = newShader.uniformBlockLayout();
     replacement.uniformData.resize(replacement.uniformLayout.byteSize, std::byte{0});
     replacement.renderQueue =
@@ -277,6 +280,7 @@ Material MaterialAsset::instantiate(ShaderHandle shaderHandle) const {
     Material material;
     const AssetId assetId = ASSET_DATABASE.findGuid(assetPath()).value_or(AssetId{});
     material.initialize(assetId, assetPath(), name, shaderHandle, renderQueue);
+    material.batchingMode = batchingMode;
     const Shader* shader = SHADER_MANAGER.find(shaderHandle);
     if (!shader)
         return material;
@@ -471,6 +475,7 @@ Material Material::clone() const {
     copy.textures = textures;
     copy.keywords = keywords;
     copy.renderQueue = renderQueue;
+    copy.batchingMode = batchingMode;
     copy.shaderHandle_ = shaderHandle_;
     copy.shaderRevision_ = shaderRevision_;
     copy.renderQueueOverride_ = renderQueueOverride_;
@@ -493,6 +498,7 @@ void Material::rebuildFromAsset(const MaterialAsset& asset, ShaderHandle newShad
     }
     assetPath_ = asset.assetPath();
     name = asset.name;
+    batchingMode = asset.batchingMode;
     renderQueueOverride_ = asset.renderQueue;
 
     // Rebuild layout if the shader changed, preserving compatible overrides.

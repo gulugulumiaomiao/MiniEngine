@@ -4,6 +4,8 @@
 #include "rhi/api/Device.h"
 
 #include <string>
+#include <cstring>
+#include <vector>
 
 namespace engine {
 
@@ -24,16 +26,30 @@ bool MeshGpuFactory::create(const MeshGpuCreateInfo& request, MeshGpuResource& d
         device_.uploadBuffer(buffer, stream.bytes);
         uploaded.drawInfo.vertexBuffers.push_back({stream.binding, buffer});
     }
+    std::vector<std::byte> normalizedIndices;
+    std::span<const std::byte> indexBytes = mesh.data().indices;
+    if (mesh.desc().indexType == IndexType::UInt16) {
+        normalizedIndices.resize(static_cast<std::size_t>(mesh.data().indexCount) * sizeof(std::uint32_t));
+        for (std::uint32_t index = 0; index < mesh.data().indexCount; ++index) {
+            std::uint16_t source{};
+            std::memcpy(&source,
+                        mesh.data().indices.data() + static_cast<std::size_t>(index) * sizeof(source),
+                        sizeof(source));
+            const std::uint32_t destination = source;
+            std::memcpy(normalizedIndices.data() + static_cast<std::size_t>(index) * sizeof(destination),
+                        &destination,
+                        sizeof(destination));
+        }
+        indexBytes = normalizedIndices;
+    }
     uploaded.drawInfo.indexBuffer = device_.createBuffer({
-        .size = mesh.data().indices.size(),
+        .size = indexBytes.size(),
         .usage = rhi::BufferUsage::Index | rhi::BufferUsage::TransferDestination,
         .memoryUsage = rhi::MemoryUsage::DeviceLocal,
         .debugName = mesh.desc().debugName + ".index",
     });
-    device_.uploadBuffer(uploaded.drawInfo.indexBuffer, mesh.data().indices);
-    uploaded.drawInfo.indexFormat = mesh.desc().indexType == IndexType::UInt16
-                                        ? rhi::IndexFormat::UInt16
-                                        : rhi::IndexFormat::UInt32;
+    device_.uploadBuffer(uploaded.drawInfo.indexBuffer, indexBytes);
+    uploaded.drawInfo.indexFormat = rhi::IndexFormat::UInt32;
     uploaded.drawInfo.subMeshes.reserve(mesh.desc().subMeshes.size());
     for (const SubMesh& subMesh : mesh.desc().subMeshes) {
         uploaded.drawInfo.subMeshes.push_back(

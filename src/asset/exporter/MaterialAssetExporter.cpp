@@ -41,6 +41,7 @@ std::unique_ptr<MaterialAsset> exportMaterialToAsset(const Material& material,
     asset->shader = shader->assetPath();
     asset->keywords = material.keywords;
     asset->renderQueue = material.renderQueueOverride();
+    asset->batchingMode = material.batchingMode;
     for (const ShaderPropertyDesc& property : shader->properties()) {
         switch (property.type) {
         case ShaderPropertyType::Float:

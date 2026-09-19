@@ -92,7 +92,7 @@ private:
     // Reused scratch buffers: the vertex copy applies ImGui's display transform and
     // the index copy concatenates the draw lists into one range.
     std::vector<ImDrawVert> vertexStaging_;
-    std::vector<ImDrawIdx> indexStaging_;
+    std::vector<std::uint32_t> indexStaging_;
 };
 
 } // namespace engine::editor

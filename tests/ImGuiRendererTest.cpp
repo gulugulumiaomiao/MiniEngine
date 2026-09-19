@@ -119,13 +119,13 @@ TEST_F(ImGuiRendererTest, GeometryFontsAndColorFormats) {
             device.uploadedBytes[0] !=
                 static_cast<std::size_t>(drawData.TotalVtxCount) * sizeof(ImDrawVert) ||
             device.uploadedBytes[1] !=
-                static_cast<std::size_t>(drawData.TotalIdxCount) * sizeof(ImDrawIdx)) {
+                static_cast<std::size_t>(drawData.TotalIdxCount) * sizeof(std::uint32_t)) {
             FAIL() << "the whole frame's geometry must be uploaded once";
         }
         if (encoder.boundPipelines.size() != 1 || encoder.viewports.size() != 1 ||
             encoder.viewports[0].width != kDisplaySize.x ||
             encoder.viewports[0].height != kDisplaySize.y || encoder.indexFormats.size() != 1 ||
-            encoder.indexFormats[0] != rhi::IndexFormat::UInt16) {
+            encoder.indexFormats[0] != rhi::IndexFormat::UInt32) {
             FAIL() << "pipeline, viewport or index format binding is wrong";
         }
 

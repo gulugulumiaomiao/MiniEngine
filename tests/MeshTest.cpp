@@ -221,7 +221,7 @@ int main() {
     planeRecipe.parts.push_back({PlaneGeometry{{2.0F, 4.0F}, 1, 1}});
     const auto plane = MeshBuilder::build(planeRecipe);
     if (!plane || plane->data.vertexStreams[0].vertexCount != 4 || plane->data.indexCount != 6 ||
-        plane->desc.indexType != IndexType::UInt16 ||
+        plane->desc.indexType != IndexType::UInt32 ||
         !math::nearlyEqual(plane->desc.bounds.aabb.minimum.x, -1.0F) ||
         !math::nearlyEqual(plane->desc.bounds.aabb.maximum.z, 2.0F)) {
         return 11;
@@ -308,7 +308,8 @@ int main() {
     if (!large || large->desc.indexType != IndexType::UInt32)
         return 16;
     largeRecipe.indexPolicy = MeshIndexPolicy::UInt16;
-    if (MeshBuilder::build(largeRecipe))
+    if (!MeshBuilder::build(largeRecipe) ||
+        MeshBuilder::build(largeRecipe)->desc.indexType != IndexType::UInt32)
         return 16;
 
     MeshBuildRecipe invalidRecipe;

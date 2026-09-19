@@ -396,18 +396,9 @@ std::optional<MeshBuildResult> MeshBuilder::build(const MeshBuildRecipe& recipe)
                              calculateBounds(partPositions)});
     }
 
-    IndexType indexType = IndexType::UInt32;
-    if (recipe.indexPolicy == MeshIndexPolicy::UInt16 ||
-        (recipe.indexPolicy == MeshIndexPolicy::Auto &&
-         vertices.size() <=
-             static_cast<std::size_t>(std::numeric_limits<std::uint16_t>::max()) + 1U)) {
-        if (vertices.size() >
-            static_cast<std::size_t>(std::numeric_limits<std::uint16_t>::max()) + 1U) {
-            Log::error("MeshBuilder", "The recipe exceeds the UInt16 index range");
-            return std::nullopt;
-        }
-        indexType = IndexType::UInt16;
-    }
+    // Runtime index buffers use one format throughout the renderer. Legacy recipes may
+    // still decode UInt16 as an input preference, but builders always normalize to UInt32.
+    const IndexType indexType = IndexType::UInt32;
 
     MeshBuildResult result;
     result.desc.debugName = recipe.name;
@@ -436,14 +427,7 @@ std::optional<MeshBuildResult> MeshBuilder::build(const MeshBuildRecipe& recipe)
     }
     if (!result.data.setVertexData(0, static_cast<std::uint32_t>(vertices.size()), vertexBytes))
         return std::nullopt;
-    if (indexType == IndexType::UInt16) {
-        std::vector<std::uint16_t> packed;
-        packed.reserve(indices.size());
-        for (std::uint32_t index : indices)
-            packed.push_back(static_cast<std::uint16_t>(index));
-        if (!result.data.setIndexData(std::span{packed}))
-            return std::nullopt;
-    } else if (!result.data.setIndexData(std::span{indices})) {
+    if (!result.data.setIndexData(std::span{indices})) {
         return std::nullopt;
     }
     if (!validateMesh(result.desc, result.data))
