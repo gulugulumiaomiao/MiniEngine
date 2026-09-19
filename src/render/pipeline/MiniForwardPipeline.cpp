@@ -21,7 +21,7 @@ MiniForwardPipeline::MiniForwardPipeline() {
     passes_.push_back(std::make_unique<ForwardPass>(&shadowOutput_));
 }
 
-void MiniForwardPipeline::render(RenderContext& context) {
+bool MiniForwardPipeline::render(RenderContext& context) {
     DrawListBuilder builder;
     DrawList drawList = builder.build(context.scene(), context);
 
@@ -37,13 +37,17 @@ void MiniForwardPipeline::render(RenderContext& context) {
     for (const std::unique_ptr<IRenderPass>& pass : passes_) {
         pass->execute(context, graph, drawList);
     }
-    graph.compile(context.rgTexturePool());
+    if (!graph.compile(context.rgTexturePool())) {
+        Log::error("MiniForwardPipeline", "RenderGraph setup failed: %s", graph.lastError().c_str());
+        return false;
+    }
     if (shadowOutput_.castShadows && shadowOutput_.shadowMap.valid()) {
         FRAME_GPU_MANAGER.bindShadowMap(context.frameIndex(),
                                         graph.resolvedTextureView(shadowOutput_.shadowMap));
     }
     graph.execute(context.encoder());
     graph.reset();
+    return true;
 }
 
 void MiniForwardPipeline::resolveMaterialBindGroups(DrawList& drawList, std::uint32_t frameIndex) {

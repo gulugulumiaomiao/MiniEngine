@@ -18,7 +18,7 @@ class MiniForwardPipeline final : public IRenderPipeline {
 public:
     MiniForwardPipeline();
 
-    void render(RenderContext& context) override;
+    [[nodiscard]] bool render(RenderContext& context) override;
     void onSwapchainChanged() override;
 
     void addPass(std::unique_ptr<IRenderPass> pass);

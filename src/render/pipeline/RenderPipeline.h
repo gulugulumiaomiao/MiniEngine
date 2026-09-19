@@ -11,7 +11,7 @@ class IRenderPipeline {
 public:
     virtual ~IRenderPipeline() = default;
 
-    virtual void render(class RenderContext& context) = 0;
+    [[nodiscard]] virtual bool render(class RenderContext& context) = 0;
     virtual void onSwapchainChanged() {}
 };
 

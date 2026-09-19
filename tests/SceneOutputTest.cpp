@@ -31,16 +31,19 @@ public:
 
 class ForwardOnlyPipeline final : public IRenderPipeline {
 public:
-    void render(RenderContext& context) override {
+    bool render(RenderContext& context) override {
         ++calls;
         DrawList list;
         list.clearColor = {0.2F, 0.3F, 0.4F, 1.0F};
         RenderGraph graph;
         ForwardPass pass;
         pass.execute(context, graph, list);
-        graph.compile(context.rgTexturePool());
+        if (!graph.compile(context.rgTexturePool())) {
+            return false;
+        }
         graph.execute(context.encoder());
         backbufferWritten = context.backBufferWritten();
+        return true;
     }
     int calls{};
     bool backbufferWritten{};

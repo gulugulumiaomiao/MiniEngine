@@ -69,7 +69,13 @@ void Renderer::renderFrame(const RenderScene& scene) {
         if (!scene.camera() || !scene.camera()->target) {
             prepareForwardTarget();
         }
-        pipeline_->render(context);
+        if (!pipeline_->render(context)) {
+            Log::error("Renderer", "Active render pipeline failed; using MiniForwardPipeline");
+            MiniForwardPipeline fallback;
+            if (!fallback.render(context)) {
+                Log::fatal("Renderer", "Default render pipeline setup failed");
+            }
+        }
     }
     if (overlay_) {
         overlay_->recordOverlay(context);

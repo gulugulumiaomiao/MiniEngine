@@ -3,7 +3,10 @@
 #include "core/logging/Log.h"
 
 #include <algorithm>
+#include <queue>
 #include <ranges>
+#include <sstream>
+#include <unordered_map>
 #include <utility>
 
 namespace engine {
@@ -51,11 +54,44 @@ void RenderGraph::addGraphicsPass(std::string name,
         {std::move(name), std::move(rendering), std::move(resources), std::move(execute)});
 }
 
-void RenderGraph::compile(RgTexturePool& pool) {
+namespace {
+
+bool isWriteState(rhi::ResourceState state) {
+    return state == rhi::ResourceState::ColorAttachment ||
+           state == rhi::ResourceState::DepthAttachment;
+}
+
+std::unordered_map<std::string, std::vector<std::size_t>>& planCache() {
+    static std::unordered_map<std::string, std::vector<std::size_t>> cache;
+    return cache;
+}
+
+} // namespace
+
+bool RenderGraph::compile(RgTexturePool& pool) {
     if (compiled_) {
         Log::fatal("RenderGraph", "A RenderGraph can only be compiled once");
     }
+    lastError_.clear();
+    executionOrder_.clear();
+    planCacheHit_ = false;
     pool_ = &pool;
+
+    const std::string signature = planSignature();
+    std::vector<std::size_t> order;
+    if (const auto cached = planCache().find(signature); cached != planCache().end()) {
+        order = cached->second;
+        planCacheHit_ = true;
+    } else {
+        if (!buildExecutionPlan(order)) {
+            pool_ = nullptr;
+            return false;
+        }
+        if (planCache().size() >= 256) {
+            planCache().clear();
+        }
+        planCache().emplace(signature, order);
+    }
 
     for (TextureNode& node : textures_) {
         if (node.isTransient) {
@@ -66,7 +102,9 @@ void RenderGraph::compile(RgTexturePool& pool) {
     }
 
     compiledPasses_.reserve(passes_.size());
-    for (const GraphicsPass& pass : passes_) {
+    executionOrder_.reserve(order.size());
+    for (const std::size_t passIndex : order) {
+        const GraphicsPass& pass = passes_[passIndex];
         CompiledPass compiled;
         compiled.name = pass.name;
         compiled.resources = pass.resources;
@@ -87,9 +125,146 @@ void RenderGraph::compile(RgTexturePool& pool) {
         }
 
         compiledPasses_.push_back(std::move(compiled));
+        executionOrder_.push_back(pass.name);
     }
 
     compiled_ = true;
+    return true;
+}
+
+bool RenderGraph::buildExecutionPlan(std::vector<std::size_t>& order) {
+    const std::size_t passCount = passes_.size();
+    std::vector<std::vector<std::size_t>> edges(passCount);
+    std::vector<std::size_t> indegree(passCount);
+    const auto addEdge = [&](std::size_t from, std::size_t to) {
+        if (from == to || std::ranges::find(edges[from], to) != edges[from].end()) {
+            return;
+        }
+        edges[from].push_back(to);
+        ++indegree[to];
+    };
+
+    for (std::size_t passIndex = 0; passIndex < passCount; ++passIndex) {
+        const GraphicsPass& pass = passes_[passIndex];
+        for (const RgResourceUsage& usage : pass.resources) {
+            if (!usage.texture.valid() || usage.texture.index >= textures_.size()) {
+                return failCompile("Pass '" + pass.name + "' references an invalid texture");
+            }
+        }
+        for (const RgColorAttachment& attachment : pass.rendering.colorAttachments) {
+            const bool declared = std::ranges::any_of(pass.resources, [&](const auto& usage) {
+                return usage.texture == attachment.texture &&
+                       usage.state == rhi::ResourceState::ColorAttachment;
+            });
+            if (!declared) {
+                return failCompile("Pass '" + pass.name +
+                                   "' has an undeclared color attachment write");
+            }
+        }
+        for (const RgDepthAttachment& attachment : pass.rendering.depthAttachments) {
+            const bool declared = std::ranges::any_of(pass.resources, [&](const auto& usage) {
+                return usage.texture == attachment.texture &&
+                       usage.state == rhi::ResourceState::DepthAttachment;
+            });
+            if (!declared) {
+                return failCompile("Pass '" + pass.name +
+                                   "' has an undeclared depth attachment write");
+            }
+        }
+    }
+
+    for (std::size_t textureIndex = 0; textureIndex < textures_.size(); ++textureIndex) {
+        std::vector<std::size_t> writers;
+        std::vector<std::size_t> readers;
+        for (std::size_t passIndex = 0; passIndex < passCount; ++passIndex) {
+            for (const RgResourceUsage& usage : passes_[passIndex].resources) {
+                if (usage.texture.index != textureIndex) {
+                    continue;
+                }
+                (isWriteState(usage.state) ? writers : readers).push_back(passIndex);
+            }
+        }
+        std::ranges::sort(writers);
+        writers.erase(std::unique(writers.begin(), writers.end()), writers.end());
+        std::ranges::sort(readers);
+        readers.erase(std::unique(readers.begin(), readers.end()), readers.end());
+
+        if (textures_[textureIndex].isTransient && writers.empty() && !readers.empty()) {
+            return failCompile("Transient texture " + std::to_string(textureIndex) +
+                               " is read without a producer");
+        }
+        for (std::size_t i = 1; i < writers.size(); ++i) {
+            addEdge(writers[i - 1], writers[i]);
+        }
+        for (const std::size_t reader : readers) {
+            const auto nextWriter = std::ranges::upper_bound(writers, reader);
+            if (nextWriter != writers.begin()) {
+                const std::size_t producer = *std::prev(nextWriter);
+                addEdge(producer, reader);
+                if (nextWriter != writers.end()) {
+                    addEdge(reader, *nextWriter);
+                }
+            } else if (writers.size() == 1) {
+                addEdge(writers.front(), reader);
+            } else if (writers.size() > 1) {
+                return failCompile("Texture " + std::to_string(textureIndex) +
+                                   " has an ambiguous producer");
+            }
+        }
+    }
+
+    std::priority_queue<std::size_t, std::vector<std::size_t>, std::greater<>> ready;
+    for (std::size_t i = 0; i < passCount; ++i) {
+        if (indegree[i] == 0) {
+            ready.push(i);
+        }
+    }
+    while (!ready.empty()) {
+        const std::size_t current = ready.top();
+        ready.pop();
+        order.push_back(current);
+        for (const std::size_t dependent : edges[current]) {
+            if (--indegree[dependent] == 0) {
+                ready.push(dependent);
+            }
+        }
+    }
+    if (order.size() != passCount) {
+        return failCompile("Render pass dependencies contain a cycle");
+    }
+    return true;
+}
+
+std::string RenderGraph::planSignature() const {
+    std::ostringstream signature;
+    signature << textures_.size() << ':' << passes_.size();
+    for (const TextureNode& texture : textures_) {
+        signature << '|'
+                  << texture.isTransient << ',' << static_cast<int>(texture.aspect) << ','
+                  << static_cast<int>(texture.desc.format);
+    }
+    for (const GraphicsPass& pass : passes_) {
+        signature << '#' << pass.name;
+        for (const RgResourceUsage& usage : pass.resources) {
+            signature << ';' << usage.texture.index << ',' << static_cast<int>(usage.aspect) << ','
+                      << static_cast<int>(usage.state);
+        }
+        signature << 'c';
+        for (const RgColorAttachment& attachment : pass.rendering.colorAttachments) {
+            signature << attachment.texture.index << ',';
+        }
+        signature << 'd';
+        for (const RgDepthAttachment& attachment : pass.rendering.depthAttachments) {
+            signature << attachment.texture.index << ',';
+        }
+    }
+    return signature.str();
+}
+
+bool RenderGraph::failCompile(std::string message) {
+    lastError_ = std::move(message);
+    Log::error("RenderGraph", "%s", lastError_.c_str());
+    return false;
 }
 
 void RenderGraph::execute(rhi::IGraphicsCommandEncoder& encoder) const {
@@ -165,6 +340,9 @@ void RenderGraph::reset() {
     compiledPasses_.clear();
     pool_ = nullptr;
     compiled_ = false;
+    planCacheHit_ = false;
+    lastError_.clear();
+    executionOrder_.clear();
 }
 
 rhi::TextureViewHandle RenderGraph::resolvedTextureView(RgTextureHandle handle) const {

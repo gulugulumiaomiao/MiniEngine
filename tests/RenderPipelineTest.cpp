@@ -8,7 +8,10 @@ namespace {
 
 class StubPipeline final : public engine::IRenderPipeline {
 public:
-    void render(engine::RenderContext&) override { rendered_ = true; }
+    bool render(engine::RenderContext&) override {
+        rendered_ = true;
+        return true;
+    }
 
     [[nodiscard]] bool rendered() const { return rendered_; }
 

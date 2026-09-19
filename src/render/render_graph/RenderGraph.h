@@ -56,7 +56,7 @@ public:
                          std::vector<RgResourceUsage> resources,
                          ExecuteCallback execute);
 
-    void compile(RgTexturePool& pool);
+    [[nodiscard]] bool compile(RgTexturePool& pool);
     void execute(rhi::IGraphicsCommandEncoder& encoder) const;
     void reset();
 
@@ -66,6 +66,11 @@ public:
     [[nodiscard]] rhi::TextureViewHandle resolvedTextureView(RgTextureHandle handle) const;
 
     [[nodiscard]] bool compiled() const { return compiled_; }
+    [[nodiscard]] bool planCacheHit() const { return planCacheHit_; }
+    [[nodiscard]] const std::string& lastError() const { return lastError_; }
+    [[nodiscard]] const std::vector<std::string>& executionOrder() const {
+        return executionOrder_;
+    }
     [[nodiscard]] std::size_t passCount() const { return passes_.size(); }
     [[nodiscard]] std::size_t textureCount() const { return textures_.size(); }
 
@@ -104,6 +109,9 @@ private:
     };
 
     [[nodiscard]] const TextureNode& resolveNode(RgTextureHandle handle) const;
+    [[nodiscard]] bool buildExecutionPlan(std::vector<std::size_t>& order);
+    [[nodiscard]] std::string planSignature() const;
+    [[nodiscard]] bool failCompile(std::string message);
     void releaseTransientTextures();
 
     std::vector<TextureNode> textures_;
@@ -111,6 +119,9 @@ private:
     std::vector<CompiledPass> compiledPasses_;
     RgTexturePool* pool_{};
     bool compiled_{false};
+    bool planCacheHit_{false};
+    std::string lastError_;
+    std::vector<std::string> executionOrder_;
 };
 
 } // namespace engine
