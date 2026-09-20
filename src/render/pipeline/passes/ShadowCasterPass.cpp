@@ -1,5 +1,6 @@
 ﻿#include "render/pipeline/passes/ShadowCasterPass.h"
 #include "render/gpu/frame/FrameGpuManager.h"
+#include "render/gpu/global_uniform/GlobalUniformGpuManager.h"
 #include "render/pipeline/RenderContext.h"
 #include "render/pipeline/passes/RenderPassUtils.h"
 #include "render/render_graph/RenderGraph.h"
@@ -71,7 +72,9 @@ void ShadowCasterPass::execute(RenderContext& context,
                           std::move(rendering),
                           std::move(resources),
                           [items = std::move(items), size = shadowMapSize_,
-                           frameIndex = context.frameIndex()](
+                           frameIndex = context.frameIndex(),
+                           globalBindGroup = GLOBAL_UNIFORM_GPU_MANAGER.resolve(
+                               context.frameIndex())](
                               rhi::IGraphicsCommandEncoder& encoder) mutable {
                               encoder.setViewport({0.0F,
                                                    0.0F,
@@ -83,6 +86,7 @@ void ShadowCasterPass::execute(RenderContext& context,
                               drawFilteredItems(frameIndex,
                                                 items,
                                                 FRAME_GPU_MANAGER.sceneBindGroup(frameIndex),
+                                                globalBindGroup,
                                                 encoder);
                           });
 }

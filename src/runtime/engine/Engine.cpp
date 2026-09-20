@@ -5,6 +5,7 @@
 #include "core/filesystem/FileSystem.h"
 #include "core/logging/Log.h"
 #include "render/gpu/frame/FrameGpuManager.h"
+#include "render/gpu/global_uniform/GlobalUniformGpuManager.h"
 #include "render/pipeline/MiniForwardPipeline.h"
 #include "render/pipeline/RenderPipeline.h"
 #include "render/gpu/material/MaterialGpuManager.h"
@@ -250,10 +251,13 @@ bool Engine::initializeGpuManagers(const rhi::IContextFactory& contextFactory,
         !MATERIAL_GPU_MANAGER.initialize(renderer_->device(),
                                          FRAME_GPU_MANAGER.materialLayout(),
                                          FrameGpuManager::kFramesInFlight) ||
+        !GLOBAL_UNIFORM_GPU_MANAGER.initialize(renderer_->device(),
+                                               FrameGpuManager::kFramesInFlight) ||
         !SHADER_GPU_MANAGER.initialize(renderer_->device()) ||
         !GRAPHICS_PIPELINE_MANAGER.initialize(renderer_->device(),
                                               FRAME_GPU_MANAGER.sceneLayout(),
-                                              FRAME_GPU_MANAGER.materialLayout())) {
+                                              FRAME_GPU_MANAGER.materialLayout(),
+                                              GLOBAL_UNIFORM_GPU_MANAGER.bindGroupLayout())) {
         Log::error("Engine", "Cannot initialize GPU resource managers");
         return false;
     }
@@ -267,6 +271,7 @@ void Engine::teardownProjectSubsystems() {
         renderer_->waitIdle();
     MATERIAL_GPU_MANAGER.shutdown();
     GRAPHICS_PIPELINE_MANAGER.shutdown();
+    GLOBAL_UNIFORM_GPU_MANAGER.shutdown();
     SHADER_GPU_MANAGER.shutdown();
     TEXTURE_GPU_MANAGER.shutdown();
     MESH_GPU_MANAGER.shutdown();

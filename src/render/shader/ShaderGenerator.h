@@ -54,6 +54,9 @@ private:
     [[nodiscard]] static std::optional<std::string>
     generateMaterialDeclarations(std::span<const ShaderPropertyDesc> properties,
                                  const UniformBlockLayout& layout);
+    [[nodiscard]] static std::optional<std::string>
+    generateGlobalDeclarations(const UniformBlockLayout& layout,
+                               std::span<const ShaderPropertyDesc> textureProperties);
 };
 
 } // namespace engine

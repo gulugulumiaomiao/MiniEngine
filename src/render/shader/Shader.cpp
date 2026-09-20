@@ -2,6 +2,7 @@
 
 #include "core/logging/Log.h"
 #include "core/serialization/Transfer.h"
+#include "render/global_uniform/GlobalUniformManager.h"
 
 #include <algorithm>
 #include <cassert>
@@ -13,7 +14,7 @@ namespace engine {
 namespace {
 
 constexpr std::uint32_t kShaderAssetMagic = 0x52444853U;
-constexpr std::uint16_t kShaderAssetVersion = 2;
+constexpr std::uint16_t kShaderAssetVersion = 3;
 
 template <typename Enum>
 bool transferShaderEnum(Transfer& archive, std::string_view name, Enum& value, Enum maximum) {
@@ -79,6 +80,7 @@ bool ShaderAsset::transfer(Transfer& archive) {
                            version == kShaderAssetVersion &&
                            archive.transfer("name", target.name) &&
                            archive.transfer("properties", target.properties) &&
+                           archive.transfer("global_properties", target.globalProperties) &&
                            archive.transfer("sub_shaders", target.subShaders) &&
                            !target.subShaders.empty() && archive.endObject();
     if (!succeeded) {
@@ -139,6 +141,14 @@ const ShaderPropertyDesc* ShaderAsset::findProperty(const std::string& name) con
     const auto found = std::ranges::find_if(
         properties, [&name](const ShaderPropertyDesc& property) { return property.name == name; });
     return found == properties.end() ? nullptr : &*found;
+}
+
+const ShaderPropertyDesc* ShaderAsset::findGlobalProperty(const std::string& name) const {
+    const auto found = std::ranges::find_if(globalProperties,
+                                            [&name](const ShaderPropertyDesc& property) {
+                                                return property.name == name;
+                                            });
+    return found == globalProperties.end() ? nullptr : &*found;
 }
 
 } // namespace engine
@@ -252,7 +262,10 @@ bool SubShader::supports(std::string_view renderPipeline) const {
 
 Shader::Shader(const ShaderAsset& asset)
     : assetPath_(asset.assetPath()), name_(asset.name), properties_(asset.properties),
-      uniformBlockLayout_(buildUniformBlockLayout(properties_)) {
+      globalProperties_(asset.globalProperties),
+      uniformBlockLayout_(buildUniformBlockLayout(properties_)),
+      globalUniformBlockLayout_(buildUniformBlockLayout(globalProperties_)) {
+    GLOBAL_UNIFORM_MANAGER.registerGlobalProperties(globalProperties_);
     subShaders_.reserve(asset.subShaders.size());
     for (const SubShaderDesc& subShader : asset.subShaders) {
         subShaders_.emplace_back(subShader);
@@ -309,6 +322,30 @@ bool Shader::declaresKeyword(std::string_view keyword) const {
             return std::ranges::find(pass.features(), keyword) != pass.features().end();
         });
     });
+}
+
+void Shader::setGlobalFloat(std::string_view name, float value) {
+    GLOBAL_UNIFORM_MANAGER.setFloat(name, value);
+}
+
+void Shader::setGlobalInt(std::string_view name, int value) {
+    GLOBAL_UNIFORM_MANAGER.setFloat(name, static_cast<float>(value));
+}
+
+void Shader::setGlobalVector(std::string_view name, const math::Vec4& value) {
+    GLOBAL_UNIFORM_MANAGER.setVector(name, value);
+}
+
+void Shader::setGlobalColor(std::string_view name, const math::Vec4& value) {
+    GLOBAL_UNIFORM_MANAGER.setColor(name, value);
+}
+
+void Shader::setGlobalBool(std::string_view name, bool value) {
+    GLOBAL_UNIFORM_MANAGER.setBool(name, value);
+}
+
+void Shader::setGlobalTexture(std::string_view name, std::string_view texturePath) {
+    GLOBAL_UNIFORM_MANAGER.setTexture(name, texturePath);
 }
 
 } // namespace engine

@@ -188,6 +188,23 @@ mini_link_mingw_runtime(ImGuiRendererTest)
 set_target_properties(ImGuiRendererTest PROPERTIES FOLDER Tests)
 gtest_discover_tests(ImGuiRendererTest)
 
+# The ImGui style/font configuration is a backend concern like the renderer, so
+# its test compiles that translation unit directly too. The font case references
+# the vendored TTF by its source-tree path, independent of the build-tree copy.
+add_executable(ImGuiStyleConfigTest
+    ImGuiStyleConfigTest.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/backend/ImGuiStyleConfig.cpp
+)
+target_include_directories(ImGuiStyleConfigTest PRIVATE ${PROJECT_SOURCE_DIR})
+target_link_libraries(ImGuiStyleConfigTest PRIVATE MiniEngine MiniImGui MiniGTest)
+target_compile_definitions(ImGuiStyleConfigTest PRIVATE
+    MINI_TEST_FONT_DIR="${PROJECT_SOURCE_DIR}/third_party/fonts"
+)
+mini_enable_warnings(ImGuiStyleConfigTest)
+mini_link_mingw_runtime(ImGuiStyleConfigTest)
+set_target_properties(ImGuiStyleConfigTest PROPERTIES FOLDER Tests)
+gtest_discover_tests(ImGuiStyleConfigTest)
+
 mini_add_gtest(SceneOutputTest)
 target_compile_options(SceneOutputTest PRIVATE -Wno-missing-field-initializers)
 
@@ -202,6 +219,7 @@ gtest_discover_tests(EditorLayoutTest)
 add_executable(SceneViewIntegrationTest SceneViewIntegrationTest.cpp
     ${PROJECT_SOURCE_DIR}/tools/editor/backend/ImGuiLayer.cpp
     ${PROJECT_SOURCE_DIR}/tools/editor/backend/ImGuiRenderer.cpp
+    ${PROJECT_SOURCE_DIR}/tools/editor/backend/ImGuiStyleConfig.cpp
     ${PROJECT_SOURCE_DIR}/tools/editor/model/SceneDocument.cpp
     ${PROJECT_SOURCE_DIR}/tools/editor/panels/SceneViewPanel.cpp
     ${PROJECT_SOURCE_DIR}/tools/editor/panels/StatisticsPanel.cpp)
@@ -263,6 +281,8 @@ target_compile_definitions(ShaderLayoutTest PRIVATE
     MINI_TEST_ASSET_DIR="${CMAKE_BINARY_DIR}/assets"
 )
 add_dependencies(ShaderLayoutTest MiniCopyBuiltin)
+
+mini_add_gtest(GlobalUniformTest)
 
 mini_add_test(ShaderGeneratorTest)
 target_compile_definitions(ShaderGeneratorTest PRIVATE

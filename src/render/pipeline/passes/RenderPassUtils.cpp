@@ -8,6 +8,7 @@ namespace engine {
 void drawFilteredItems(std::uint32_t frameIndex,
                        std::span<const DrawItem> items,
                        rhi::BindGroupHandle sceneBindGroup,
+                       rhi::BindGroupHandle globalBindGroup,
                        rhi::IGraphicsCommandEncoder& encoder) {
     DrawBatcher batcher;
     BatchedDrawList batched = batcher.build(items);
@@ -26,15 +27,21 @@ void drawFilteredItems(std::uint32_t frameIndex,
 
     rhi::GraphicsPipelineHandle boundPipeline;
     rhi::BindGroupHandle boundMaterial;
+    rhi::BindGroupHandle boundGlobal;
     for (const DrawBatch& batch : batched.batches) {
         if (batch.pipeline != boundPipeline) {
             encoder.bindPipeline(batch.pipeline);
             encoder.bindGroup(0, sceneBindGroup);
             boundPipeline = batch.pipeline;
+            boundGlobal = {}; // Pipeline change may require set 2 rebind.
         }
         if (batch.materialBindGroup != boundMaterial) {
             encoder.bindGroup(1, batch.materialBindGroup);
             boundMaterial = batch.materialBindGroup;
+        }
+        if (globalBindGroup && globalBindGroup != boundGlobal) {
+            encoder.bindGroup(2, globalBindGroup);
+            boundGlobal = globalBindGroup;
         }
         for (const DrawItem::VertexBuffer& vertex : batch.vertexBuffers) {
             encoder.bindVertexBuffer(vertex.binding, vertex.buffer);

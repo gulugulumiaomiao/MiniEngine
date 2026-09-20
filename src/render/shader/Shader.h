@@ -133,9 +133,11 @@ public:
 
     std::string name;
     std::vector<ShaderPropertyDesc> properties;
+    std::vector<ShaderPropertyDesc> globalProperties;
     std::vector<SubShaderDesc> subShaders;
 
     [[nodiscard]] const ShaderPropertyDesc* findProperty(const std::string& name) const;
+    [[nodiscard]] const ShaderPropertyDesc* findGlobalProperty(const std::string& name) const;
     [[nodiscard]] Shader instantiate() const;
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
@@ -254,8 +256,14 @@ public:
     [[nodiscard]] const VirtualPath& assetPath() const { return assetPath_; }
     [[nodiscard]] const std::string& name() const { return name_; }
     [[nodiscard]] const std::vector<ShaderPropertyDesc>& properties() const { return properties_; }
+    [[nodiscard]] const std::vector<ShaderPropertyDesc>& globalProperties() const {
+        return globalProperties_;
+    }
     [[nodiscard]] const UniformBlockLayout& uniformBlockLayout() const {
         return uniformBlockLayout_;
+    }
+    [[nodiscard]] const UniformBlockLayout& globalUniformBlockLayout() const {
+        return globalUniformBlockLayout_;
     }
     [[nodiscard]] const std::vector<SubShader>& subShaders() const { return subShaders_; }
     [[nodiscard]] const SubShader* selectSubShader(std::string_view renderPipeline) const;
@@ -269,13 +277,24 @@ public:
     [[nodiscard]] Shader clone() const;
     void rebuildFromAsset(const ShaderAsset& asset);
 
+    // Unity-style global shader property API. Values set here are shared across
+    // all shaders that declare a matching global property.
+    static void setGlobalFloat(std::string_view name, float value);
+    static void setGlobalInt(std::string_view name, int value);
+    static void setGlobalVector(std::string_view name, const math::Vec4& value);
+    static void setGlobalColor(std::string_view name, const math::Vec4& value);
+    static void setGlobalBool(std::string_view name, bool value);
+    static void setGlobalTexture(std::string_view name, std::string_view texturePath);
+
 private:
     friend class ShaderManager;
     VirtualPath assetPath_;
     AssetId assetId_;
     std::string name_;
     std::vector<ShaderPropertyDesc> properties_;
+    std::vector<ShaderPropertyDesc> globalProperties_;
     UniformBlockLayout uniformBlockLayout_;
+    UniformBlockLayout globalUniformBlockLayout_;
     std::vector<SubShader> subShaders_;
     std::uint64_t revision_{1};
 };

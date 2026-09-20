@@ -66,13 +66,15 @@ GraphicsPipelineManager::~GraphicsPipelineManager() = default;
 
 bool GraphicsPipelineManager::initialize(rhi::IDevice& device,
                                          rhi::BindGroupLayoutHandle sceneLayout,
-                                         rhi::BindGroupLayoutHandle materialLayout) {
+                                         rhi::BindGroupLayoutHandle materialLayout,
+                                         rhi::BindGroupLayoutHandle globalLayout) {
     if (initialized()) {
         Log::error("GraphicsPipelineManager", "Manager is already initialized");
         return false;
     }
     sceneLayout_ = sceneLayout;
     materialLayout_ = materialLayout;
+    globalLayout_ = globalLayout;
     factory_ = std::make_unique<GraphicsPipelineGpuFactory>(device);
     lastShaderPollSerial_ = ~std::uint64_t{};
     return true;
@@ -116,7 +118,7 @@ GraphicsPipelineManager::makeDescription(const ShaderPass& pass,
     desc.vertexEntry = std::move(vertexEntry);
     desc.fragmentShader = fragmentShader;
     desc.fragmentEntry = std::move(fragmentEntry);
-    desc.bindGroupLayouts = {sceneLayout_, materialLayout_};
+    desc.bindGroupLayouts = {sceneLayout_, materialLayout_, globalLayout_};
     // Depth-only passes (ShadowCaster) pass Undefined as the color format and render without
     // any color attachment; toVulkan(Undefined) is not a valid attachment format.
     if (colorFormat != rhi::TextureFormat::Undefined) {
@@ -256,6 +258,7 @@ void GraphicsPipelineManager::shutdown() {
     factory_.reset();
     sceneLayout_ = {};
     materialLayout_ = {};
+    globalLayout_ = {};
     lastShaderPollSerial_ = ~std::uint64_t{};
 }
 

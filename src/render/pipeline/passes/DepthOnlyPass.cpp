@@ -1,6 +1,7 @@
 #include "render/pipeline/passes/DepthOnlyPass.h"
 
 #include "render/gpu/frame/FrameGpuManager.h"
+#include "render/gpu/global_uniform/GlobalUniformGpuManager.h"
 #include "render/pipeline/RenderContext.h"
 #include "render/pipeline/passes/RenderPassUtils.h"
 #include "render/render_graph/RenderGraph.h"
@@ -64,6 +65,7 @@ void DepthOnlyPass::execute(RenderContext& context,
                               drawFilteredItems(context.frameIndex(),
                                                 items,
                                                 FRAME_GPU_MANAGER.sceneBindGroup(context.frameIndex()),
+                                                GLOBAL_UNIFORM_GPU_MANAGER.resolve(context.frameIndex()),
                                                 encoder);
                           });
 }

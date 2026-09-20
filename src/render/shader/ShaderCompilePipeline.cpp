@@ -4,6 +4,7 @@
 #include "core/filesystem/FileSystem.h"
 #include "core/math/hash.h"
 #include "core/logging/Log.h"
+#include "render/global_uniform/GlobalUniformManager.h"
 
 #include <spirv_cross.hpp>
 
@@ -134,6 +135,50 @@ void validateTextureBindings(std::span<const ShaderPropertyDesc> properties,
     }
 }
 
+void validateGlobalBlock(const SpirvReflection& reflection, const VirtualPath& path) {
+    const UniformBlockLayout& layout = GLOBAL_UNIFORM_MANAGER.uniformBlockLayout();
+    if (layout.members.empty())
+        return;
+    const ShaderDescriptorBinding* block = findDescriptor(reflection, 2, 0);
+    if (!block)
+        return;
+    if (block->type != ShaderDescriptorType::UniformBuffer)
+        reflectionFail("%s set 2 binding 0 is not a uniform block", path.string().c_str());
+    for (const UniformMemberLayout& expected : layout.members) {
+        const auto member =
+            std::ranges::find_if(block->members, [&expected](const ShaderUniformMember& actual) {
+                return actual.name == expected.name;
+            });
+        if (member == block->members.end())
+            continue;
+        if (member->offset != expected.offset) {
+            reflectionFail("%s global uniform member %s has an unexpected offset",
+                           path.string().c_str(),
+                           expected.name.c_str());
+        }
+    }
+}
+
+void validateGlobalTextureBindings(const SpirvReflection& vertex,
+                                   const SpirvReflection& fragment) {
+    constexpr std::uint32_t kMaxGlobalTextures = 8;
+    std::uint32_t binding = 1;
+    for (const ShaderPropertyDesc& property : GLOBAL_UNIFORM_MANAGER.textureProperties()) {
+        if (binding > kMaxGlobalTextures)
+            break;
+        const ShaderDescriptorBinding* descriptor = findDescriptor(fragment, 2, binding);
+        if (!descriptor)
+            descriptor = findDescriptor(vertex, 2, binding);
+        if (descriptor && descriptor->type != ShaderDescriptorType::CombinedImageSampler) {
+            reflectionFail("Global texture property %s is bound as the wrong descriptor type at "
+                           "set 2 binding %u",
+                           property.name.c_str(),
+                           binding);
+        }
+        ++binding;
+    }
+}
+
 } // namespace
 
 std::optional<SpirvReflection>
@@ -246,6 +291,9 @@ bool ShaderCompilePipeline::validateSpirvReflection(const Shader& shader,
         validateMaterialBlock(shader.properties(), vertex, vertexPath);
         validateMaterialBlock(shader.properties(), fragment, fragmentPath);
         validateTextureBindings(shader.properties(), vertex, fragment);
+        validateGlobalBlock(vertex, vertexPath);
+        validateGlobalBlock(fragment, fragmentPath);
+        validateGlobalTextureBindings(vertex, fragment);
         for (const ShaderDescriptorBinding& descriptor : vertex.descriptors) {
             if (const ShaderDescriptorBinding* other =
                     findDescriptor(fragment, descriptor.set, descriptor.binding);

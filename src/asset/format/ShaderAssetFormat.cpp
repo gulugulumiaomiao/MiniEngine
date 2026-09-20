@@ -235,6 +235,45 @@ RenderStateDesc parseState(const Json& value, const VirtualPath& file, const std
     return state;
 }
 
+std::vector<ShaderPropertyDesc> parsePropertyList(const Json& list,
+                                                  const char* key,
+                                                  const VirtualPath& path,
+                                                  std::set<std::string>& usedNames) {
+    std::vector<ShaderPropertyDesc> result;
+    if (!list.is_array()) {
+        fail(kCategory, path, std::string{"$."} + key, "must be an array");
+    }
+    result.reserve(list.size());
+    for (std::size_t i = 0; i < list.size(); ++i) {
+        const Json& json = list[i];
+        const std::string at = std::string{"$."} + key + "[" + std::to_string(i) + "]";
+        ShaderPropertyDesc property;
+        property.name = required<std::string>(kCategory, json, "name", path, at);
+        property.displayName = json.value("displayName", property.name);
+        property.type = propertyType(
+            required<std::string>(kCategory, json, "type", path, at), path, at + ".type");
+        if (!usedNames.insert(property.name).second) {
+            fail(kCategory, path, at + ".name", "duplicate property '" + property.name + "'");
+        }
+        if (!json.contains("default")) {
+            fail(kCategory, path, at, "missing required field 'default'");
+        }
+        property.defaultValue =
+            parseValue(json.at("default"), property.type, path, at + ".default");
+        if (property.type == ShaderPropertyType::Range) {
+            if (!json.contains("range") || !json.at("range").is_array() ||
+                json.at("range").size() != 2) {
+                fail(kCategory, path, at + ".range", "Range property requires [min, max]");
+            }
+            property.range =
+                math::Vec2{json.at("range")[0].get<float>(), json.at("range")[1].get<float>()};
+        }
+        property.attributes = json.value("attributes", std::vector<std::string>{});
+        result.push_back(std::move(property));
+    }
+    return result;
+}
+
 int parseQueue(const Json& tags, const VirtualPath& file) {
     if (!tags.contains("queue")) {
         return 2000;
@@ -282,34 +321,14 @@ ShaderAsset parseShaderAssetValue(const VirtualPath& path, std::string_view sour
     const Json rootTags = root.value("tags", Json::object());
 
     std::set<std::string> propertyNames;
-    const Json properties = root.value("properties", Json::array());
-    for (std::size_t i = 0; i < properties.size(); ++i) {
-        const Json& json = properties[i];
-        const std::string at = "$.properties[" + std::to_string(i) + "]";
-        ShaderPropertyDesc property;
-        property.name = required<std::string>(kCategory, json, "name", path, at);
-        property.displayName = json.value("displayName", property.name);
-        property.type = propertyType(
-            required<std::string>(kCategory, json, "type", path, at), path, at + ".type");
-        if (!propertyNames.insert(property.name).second) {
-            fail(kCategory, path, at + ".name", "duplicate property '" + property.name + "'");
-        }
-        if (!json.contains("default")) {
-            fail(kCategory, path, at, "missing required field 'default'");
-        }
-        property.defaultValue =
-            parseValue(json.at("default"), property.type, path, at + ".default");
-        if (property.type == ShaderPropertyType::Range) {
-            if (!json.contains("range") || !json.at("range").is_array() ||
-                json.at("range").size() != 2) {
-                fail(kCategory, path, at + ".range", "Range property requires [min, max]");
-            }
-            property.range =
-                math::Vec2{json.at("range")[0].get<float>(), json.at("range")[1].get<float>()};
-        }
-        property.attributes = json.value("attributes", std::vector<std::string>{});
-        asset.properties.push_back(std::move(property));
-    }
+    asset.properties = parsePropertyList(root.value("properties", Json::array()),
+                                         "properties",
+                                         path,
+                                         propertyNames);
+    asset.globalProperties = parsePropertyList(root.value("globalProperties", Json::array()),
+                                               "globalProperties",
+                                               path,
+                                               propertyNames);
 
     Json subShaders;
     if (root.contains("subShaders") && root.at("subShaders").is_array()) {

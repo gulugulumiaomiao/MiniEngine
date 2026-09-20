@@ -26,7 +26,8 @@ public:
 
     [[nodiscard]] bool initialize(rhi::IDevice& device,
                                   rhi::BindGroupLayoutHandle sceneLayout,
-                                  rhi::BindGroupLayoutHandle materialLayout);
+                                  rhi::BindGroupLayoutHandle materialLayout,
+                                  rhi::BindGroupLayoutHandle globalLayout);
     [[nodiscard]] rhi::GraphicsPipelineHandle resolve(const Shader& shader,
                                                       const ShaderPass& pass,
                                                       const ShaderVariantKey& variant,
@@ -65,6 +66,7 @@ private:
 
     rhi::BindGroupLayoutHandle sceneLayout_;
     rhi::BindGroupLayoutHandle materialLayout_;
+    rhi::BindGroupLayoutHandle globalLayout_;
     GraphicsPipelineCache cache_;
     std::unique_ptr<GraphicsPipelineGpuFactory> factory_;
     std::vector<RetiredPipeline> retired_;

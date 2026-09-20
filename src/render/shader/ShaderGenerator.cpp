@@ -1,5 +1,6 @@
 #include "render/shader/ShaderGenerator.h"
 
+#include "render/global_uniform/GlobalUniformManager.h"
 #include "render/material/MaterialLimits.h"
 
 #include "core/logging/Log.h"
@@ -277,6 +278,44 @@ ShaderGenerator::generateMaterialDeclarations(std::span<const ShaderPropertyDesc
     return output.str();
 }
 
+std::optional<std::string>
+ShaderGenerator::generateGlobalDeclarations(const UniformBlockLayout& layout,
+                                            std::span<const ShaderPropertyDesc> textureProperties) {
+    if (layout.members.empty() && textureProperties.empty())
+        return std::string{};
+
+    std::ostringstream output;
+    output << "// Generated from global shader properties. Do not edit.\n";
+    if (!layout.members.empty()) {
+        output << "layout(std140, set = 2, binding = 0) uniform GlobalProperties\n{\n";
+        for (const UniformMemberLayout& member : layout.members) {
+            const char* type = glslType(member.type);
+            if (!type)
+                return {};
+            output << "    layout(offset = " << member.offset << ") " << type << ' ' << member.name
+                   << ";\n";
+        }
+        output << "} Global;\n";
+    }
+
+    constexpr std::uint32_t kMaxGlobalTextures = 8;
+    std::uint32_t textureBinding = 1;
+    for (const ShaderPropertyDesc& property : textureProperties) {
+        if (textureBinding > kMaxGlobalTextures) {
+            Log::error("ShaderGenerator",
+                       "Global textures exceed the maximum of %u",
+                       kMaxGlobalTextures);
+            return {};
+        }
+        if (textureBinding != 1 || !layout.members.empty())
+            output << '\n';
+        output << "layout(set = 2, binding = " << textureBinding << ") uniform sampler2D "
+               << property.name << ";\n";
+        ++textureBinding;
+    }
+    return output.str();
+}
+
 std::optional<std::string> ShaderGenerator::generateStage(const Shader& shader,
                                                           const ShaderPass& pass,
                                                           ShaderStage stage,
@@ -289,16 +328,23 @@ std::optional<std::string> ShaderGenerator::generateStage(const Shader& shader,
     desc.varyings = pass.varyings();
     desc.fragmentOutputs = pass.fragmentOutputs();
     desc.features = pass.features();
-    const auto declarations =
+    const auto materialDeclarations =
         generateMaterialDeclarations(shader.properties(), shader.uniformBlockLayout());
-    if (!declarations || !desc.program.hasSourceProgram() || source.empty() ||
-        !validateInterface(desc.vertexInput, "vertexInput") ||
+    const auto globalDeclarations = generateGlobalDeclarations(
+        GLOBAL_UNIFORM_MANAGER.uniformBlockLayout(), GLOBAL_UNIFORM_MANAGER.textureProperties());
+    if (!materialDeclarations || !globalDeclarations || !desc.program.hasSourceProgram() ||
+        source.empty() || !validateInterface(desc.vertexInput, "vertexInput") ||
         !validateInterface(desc.varyings, "varyings") ||
         !validateInterface(desc.fragmentOutputs, "fragmentOutputs")) {
         return {};
     }
-    return stage == ShaderStage::Vertex ? generateVertexStage(desc, *declarations, source)
-                                        : generateFragmentStage(desc, *declarations, source);
+    std::ostringstream declarations;
+    declarations << *materialDeclarations;
+    if (!globalDeclarations->empty())
+        declarations << '\n' << *globalDeclarations;
+    return stage == ShaderStage::Vertex
+               ? generateVertexStage(desc, declarations.str(), source)
+               : generateFragmentStage(desc, declarations.str(), source);
 }
 
 } // namespace engine

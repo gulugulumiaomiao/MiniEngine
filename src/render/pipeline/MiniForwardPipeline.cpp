@@ -2,6 +2,7 @@
 
 #include "core/logging/Log.h"
 #include "render/gpu/frame/FrameGpuManager.h"
+#include "render/gpu/global_uniform/GlobalUniformGpuManager.h"
 #include "render/gpu/material/MaterialGpuManager.h"
 #include "render/pipeline/RenderContext.h"
 #include "render/pipeline/passes/DepthOnlyPass.h"
@@ -29,6 +30,7 @@ void MiniForwardPipeline::render(RenderContext& context) {
     std::erase_if(drawList.items,
                   [](const DrawItem& item) { return !item.pipeline || !item.materialBindGroup; });
 
+    GLOBAL_UNIFORM_GPU_MANAGER.beginFrame(context.frameIndex());
     FRAME_GPU_MANAGER.beginFrame(context.frameIndex());
     FRAME_GPU_MANAGER.upload(context.frameIndex(), drawList);
 
