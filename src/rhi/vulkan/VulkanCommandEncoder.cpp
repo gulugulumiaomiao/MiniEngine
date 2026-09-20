@@ -3,6 +3,7 @@
 #include "core/logging/Log.h"
 
 #include "core/base/BuildConfig.h"
+#include "rhi/vulkan/VulkanDevice.h"
 
 #include <array>
 #include <stdexcept>
@@ -120,10 +121,43 @@ void toVulkanBlend(BlendMode mode, VkColorBlendEquationEXT& equation, VkBool32& 
         mode == BlendMode::Additive ? VK_BLEND_FACTOR_ONE : VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 }
 
+std::uint32_t bytesPerPixel(TextureFormat format) {
+    switch (format) {
+    case TextureFormat::Rgba8Unorm:
+    case TextureFormat::Rgba8Srgb:
+    case TextureFormat::Bgra8Unorm:
+    case TextureFormat::Bgra8Srgb:
+    case TextureFormat::Depth32Float:
+        return 4U;
+    case TextureFormat::Undefined:
+        break;
+    }
+    Log::fatal("VulkanCommandEncoder", "Unsupported RHI texture format");
+}
+
+VkImageSubresourceLayers imageSubresource(std::uint32_t mipLevel, std::uint32_t arrayLayer) {
+    VkImageSubresourceLayers subresource{};
+    subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    subresource.mipLevel = mipLevel;
+    subresource.baseArrayLayer = arrayLayer;
+    subresource.layerCount = 1;
+    return subresource;
+}
+
+VkOffset3D toVulkan(const Offset3D& offset) {
+    return {static_cast<std::int32_t>(offset.x),
+            static_cast<std::int32_t>(offset.y),
+            static_cast<std::int32_t>(offset.z)};
+}
+
+VkExtent3D toVulkan(const Extent3D& extent) {
+    return {extent.width, extent.height, extent.depth};
+}
+
 } // namespace
 
 VulkanGraphicsCommandEncoder::VulkanGraphicsCommandEncoder(VkCommandBuffer commandBuffer,
-                                                           const IDevice& device)
+                                                           VulkanDevice& device)
     : commandBuffer_(commandBuffer), device_(device) {
     pfnSetColorBlendEnable_ = reinterpret_cast<PFN_vkCmdSetColorBlendEnableEXT>(
         vkGetDeviceProcAddr(device.device(), "vkCmdSetColorBlendEnableEXT"));
@@ -157,8 +191,10 @@ void VulkanGraphicsCommandEncoder::resourceBarriers(std::span<const TextureBarri
         native.subresourceRange.aspectMask = barrier.aspect == TextureAspect::Color
                                                  ? VK_IMAGE_ASPECT_COLOR_BIT
                                                  : VK_IMAGE_ASPECT_DEPTH_BIT;
-        native.subresourceRange.levelCount = 1;
-        native.subresourceRange.layerCount = 1;
+        native.subresourceRange.baseMipLevel = barrier.baseMipLevel;
+        native.subresourceRange.levelCount = barrier.mipCount;
+        native.subresourceRange.baseArrayLayer = barrier.baseArrayLayer;
+        native.subresourceRange.layerCount = barrier.layerCount;
         imageBarriers.push_back(native);
         sourceStages |= before.stage;
         destinationStages |= after.stage;
@@ -370,17 +406,100 @@ void VulkanGraphicsCommandEncoder::endDebugLabel() {
 #endif
 }
 
-VulkanTransferCommandEncoder::VulkanTransferCommandEncoder(VkCommandBuffer commandBuffer,
-                                                           const IDevice& device)
-    : commandBuffer_(commandBuffer), device_(device) {}
-
-void VulkanTransferCommandEncoder::copyBuffer(const BufferCopy& copy) {
+void VulkanGraphicsCommandEncoder::copyBuffer(const BufferCopy& copy) {
     const VkBufferCopy native{copy.sourceOffset, copy.destinationOffset, copy.size};
     vkCmdCopyBuffer(commandBuffer_,
                     device_.resolveBuffer(copy.source),
                     device_.resolveBuffer(copy.destination),
                     1,
                     &native);
+}
+
+void VulkanGraphicsCommandEncoder::copyImage(const ImageCopy& copy) {
+    // Callers are responsible for transitioning the images to CopySource/CopyDestination
+    // states (via resourceBarriers) before recording the copy.
+    VkImageCopy native{};
+    native.srcSubresource = imageSubresource(copy.sourceMipLevel, copy.sourceArrayLayer);
+    native.srcOffset = toVulkan(copy.sourceOffset);
+    native.dstSubresource = imageSubresource(copy.destinationMipLevel, copy.destinationArrayLayer);
+    native.dstOffset = toVulkan(copy.destinationOffset);
+    native.extent = toVulkan(copy.extent);
+    vkCmdCopyImage(commandBuffer_,
+                   device_.resolveTexture(copy.source),
+                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                   device_.resolveTexture(copy.destination),
+                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                   1,
+                   &native);
+}
+
+void VulkanGraphicsCommandEncoder::copyBufferToImage(const BufferImageCopy& copy) {
+    VkBufferImageCopy native{};
+    native.bufferOffset = copy.bufferOffset;
+    native.bufferRowLength = copy.bufferRowLength;
+    native.bufferImageHeight = copy.bufferImageHeight;
+    native.imageSubresource = imageSubresource(copy.mipLevel, copy.arrayLayer);
+    native.imageOffset = toVulkan(copy.textureOffset);
+    native.imageExtent = toVulkan(copy.extent);
+    vkCmdCopyBufferToImage(commandBuffer_,
+                           device_.resolveBuffer(copy.buffer),
+                           device_.resolveTexture(copy.texture),
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                           1,
+                           &native);
+}
+
+void VulkanGraphicsCommandEncoder::copyImageToBuffer(const BufferImageCopy& copy) {
+    VkBufferImageCopy native{};
+    native.bufferOffset = copy.bufferOffset;
+    native.bufferRowLength = copy.bufferRowLength;
+    native.bufferImageHeight = copy.bufferImageHeight;
+    native.imageSubresource = imageSubresource(copy.mipLevel, copy.arrayLayer);
+    native.imageOffset = toVulkan(copy.textureOffset);
+    native.imageExtent = toVulkan(copy.extent);
+    vkCmdCopyImageToBuffer(commandBuffer_,
+                           device_.resolveTexture(copy.texture),
+                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           device_.resolveBuffer(copy.buffer),
+                           1,
+                           &native);
+}
+
+void VulkanGraphicsCommandEncoder::updateBuffer(const BufferUpdate& update) {
+    if (update.data.empty()) {
+        return;
+    }
+    // Vulkan has no arbitrary-size in-command update, so stage the payload in a
+    // host-visible scratch buffer owned by the device and copy from there.
+    const BufferHandle staging = device_.acquireStagingBuffer(update.data.size_bytes());
+    device_.uploadBuffer(staging, update.data);
+    const BufferCopy copy{staging, update.destination, 0, update.offset, update.data.size_bytes()};
+    copyBuffer(copy);
+}
+
+void VulkanGraphicsCommandEncoder::updateImage(const ImageUpdate& update) {
+    if (update.extent.width == 0 || update.extent.height == 0 || update.extent.depth == 0) {
+        Log::fatal("VulkanCommandEncoder", "Image update extent must not be empty");
+    }
+    const std::uint64_t pixelCount = static_cast<std::uint64_t>(update.extent.width) *
+                                     update.extent.height * update.extent.depth;
+    const std::uint64_t expectedSize =
+        pixelCount * bytesPerPixel(device_.textureFormat(update.destination));
+    if (update.data.size_bytes() != expectedSize) {
+        Log::fatal("VulkanCommandEncoder", "Image update data does not match the extent");
+    }
+    const BufferHandle staging = device_.acquireStagingBuffer(update.data.size_bytes());
+    device_.uploadBuffer(staging, update.data);
+    const BufferImageCopy copy{staging,
+                               update.destination,
+                               0,
+                               0,
+                               0,
+                               update.mipLevel,
+                               update.arrayLayer,
+                               update.offset,
+                               update.extent};
+    copyBufferToImage(copy);
 }
 
 } // namespace engine::rhi::vulkan

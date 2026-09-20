@@ -40,10 +40,12 @@ VkCommandBuffer / Vulkan 资源
 
 ### 2. 定义命令编码接口
 
-`src/rhi/api/CommandEncoder.h` 将接口拆为两类：
+`src/rhi/api/CommandEncoder.h` 只保留 `IGraphicsCommandEncoder` 一个编码接口，覆盖：
 
-- `IGraphicsCommandEncoder`：屏障、动态渲染、viewport、scissor、pipeline、VB/IB、bind group、draw 和 debug label；
-- `ITransferCommandEncoder`：第一版只提供 `copyBuffer`。
+- 屏障、动态渲染、viewport、scissor、pipeline、VB/IB、bind group、draw 和 debug label；
+- 传输命令：`copyBuffer`、`copyImage`、`copyBufferToImage`、`copyImageToBuffer`、`updateBuffer`、`updateImage`（早期版本单独拆出的 `ITransferCommandEncoder` 已合并进来并删除）。
+
+`copy*` 系列直接映射 Vulkan 的对应命令，且与 `vkCmdCopy*` 一样**自身不做布局转换**：执行 copy 时纹理必须已处于 `CopySource`/`CopyDestination` 状态。布局转换由调用方通过 `resourceBarriers` 显式完成，`TextureBarrier` 携带 `baseMipLevel/mipCount/baseArrayLayer/layerCount` 子资源范围（`kRemainingMipLevels`/`kRemainingArrayLayers` 哨兵对应 Vulkan 的 REMAINING 语义），因此可以精确转换被 copy 的那个 mip/layer。`updateBuffer`/`updateImage` 在 Vulkan 中没有任意尺寸的原生等价命令，由后端先把数据写入 host-visible 的 scratch buffer，再录制一次 copy。因此 scratch buffer 必须活到命令缓冲执行完毕，其生命周期由 `VulkanDevice` 管理：`endFrame` 提交前把待回收的 scratch buffer 打上本帧 fence，下一次 `beginFrame` 等待 fence 后销毁；设备析构时 `waitIdle` 兜底。
 
 接口描述渲染意图，不复制 Vulkan 的创建流程。`ISwapchain` 负责帧 acquire/present，
 其 Vulkan 实现内部管理命令缓冲、队列提交、fence 和 semaphore。
@@ -90,7 +92,7 @@ vkCmdPipelineBarrier
 
 ### 6. 迁移 GPU buffer copy
 
-Mesh 上传的 staging buffer 和 device-local buffer 都进入带 generation 的 buffer 资源表。`uploadBuffer` 通过 `VulkanTransferCommandEncoder::copyBuffer` 录制，不再直接调用 `vkCmdCopyBuffer`。
+Mesh 上传的 staging buffer 和 device-local buffer 都进入带 generation 的 buffer 资源表。`uploadBuffer` 内部通过一次性 command buffer 录制 `IGraphicsCommandEncoder::copyBuffer`（Vulkan 后端实现），不再直接调用 `vkCmdCopyBuffer`。
 
 第一版仍会 `vkQueueWaitIdle`，实现简单且资源生命周期明确。资源批量加载后应改为 upload context：持久 command pool、批量 copy、timeline semaphore 和延迟释放 staging buffer。
 

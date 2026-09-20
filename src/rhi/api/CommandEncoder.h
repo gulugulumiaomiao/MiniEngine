@@ -3,6 +3,7 @@
 #include "rhi/api/PipelineDesc.h"
 #include "rhi/api/RhiTypes.h"
 
+#include <cstddef>
 #include <span>
 #include <string_view>
 #include <vulkan/vulkan.h>
@@ -41,12 +42,19 @@ public:
     virtual void drawIndexed(const DrawIndexedArguments& arguments) = 0;
     virtual void beginDebugLabel(std::string_view name, const math::Vec4& color) = 0;
     virtual void endDebugLabel() = 0;
-};
 
-class ITransferCommandEncoder {
-public:
-    virtual ~ITransferCommandEncoder() = default;
+    // Transfer commands. The copy* family never transitions image layouts by itself:
+    // exactly like vkCmdCopy*/vkCmdUpdate*, the textures must already be in the
+    // CopySource/CopyDestination state (record resourceBarriers first, scoped to the
+    // mip level / array layer being copied). Vulkan has no native updateImage, so
+    // backends stage the data in a scratch buffer and record a buffer-to-image copy
+    // instead.
     virtual void copyBuffer(const BufferCopy& copy) = 0;
+    virtual void copyImage(const ImageCopy& copy) = 0;
+    virtual void copyBufferToImage(const BufferImageCopy& copy) = 0;
+    virtual void copyImageToBuffer(const BufferImageCopy& copy) = 0;
+    virtual void updateBuffer(const BufferUpdate& update) = 0;
+    virtual void updateImage(const ImageUpdate& update) = 0;
 };
 
 } // namespace engine::rhi

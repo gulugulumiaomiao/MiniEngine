@@ -3,7 +3,9 @@
 #include "core/base/Handle.h"
 #include "core/math/Math.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <span>
 #include <vector>
 
 namespace engine::rhi {
@@ -99,11 +101,73 @@ struct BufferCopy {
     std::uint64_t size{};
 };
 
+struct Offset3D {
+    std::uint32_t x{};
+    std::uint32_t y{};
+    std::uint32_t z{};
+};
+
+struct Extent3D {
+    std::uint32_t width{};
+    std::uint32_t height{};
+    std::uint32_t depth{1};
+};
+
+struct ImageCopy {
+    TextureHandle source;
+    TextureHandle destination;
+    std::uint32_t sourceMipLevel{};
+    std::uint32_t destinationMipLevel{};
+    std::uint32_t sourceArrayLayer{};
+    std::uint32_t destinationArrayLayer{};
+    Offset3D sourceOffset;
+    Offset3D destinationOffset;
+    Extent3D extent;
+};
+
+struct BufferImageCopy {
+    BufferHandle buffer;
+    TextureHandle texture;
+    std::uint64_t bufferOffset{};
+    std::uint32_t bufferRowLength{};
+    std::uint32_t bufferImageHeight{};
+    std::uint32_t mipLevel{};
+    std::uint32_t arrayLayer{};
+    Offset3D textureOffset;
+    Extent3D extent;
+};
+
+struct BufferUpdate {
+    BufferHandle destination;
+    std::uint64_t offset{};
+    std::span<const std::byte> data;
+};
+
+struct ImageUpdate {
+    TextureHandle destination;
+    std::uint32_t mipLevel{};
+    std::uint32_t arrayLayer{};
+    Offset3D offset;
+    Extent3D extent;
+    std::span<const std::byte> data;
+};
+
 struct TextureBarrier {
     TextureHandle texture;
     TextureAspect aspect{TextureAspect::Color};
     ResourceState before{ResourceState::Undefined};
     ResourceState after{ResourceState::Undefined};
+    // Subresource range affected by the transition. Transfer commands such as
+    // copyBufferToImage operate on a specific mip level / array layer, so callers
+    // must be able to barrier exactly the subresource they copy.
+    std::uint32_t baseMipLevel{};
+    std::uint32_t mipCount{1};
+    std::uint32_t baseArrayLayer{};
+    std::uint32_t layerCount{1};
 };
+
+// Range sentinels matching VK_REMAINING_MIP_LEVELS / VK_REMAINING_ARRAY_LAYERS.
+inline constexpr std::uint32_t kRemainingMipLevels = 0xFFFFFFFFU;
+inline constexpr std::uint32_t kRemainingArrayLayers = 0xFFFFFFFFU;
 
 } // namespace engine::rhi

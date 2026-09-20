@@ -746,6 +746,45 @@ void VulkanDevice::waitIdle() {
     }
 }
 
+BufferHandle VulkanDevice::acquireStagingBuffer(std::uint64_t size) {
+    if (size == 0) {
+        Log::fatal("VulkanDevice", "Staging buffer size must be positive");
+    }
+    const BufferDesc desc{size,
+                          BufferUsage::TransferSource,
+                          MemoryUsage::Upload,
+                          "encoder staging"};
+    const BufferHandle handle = createBuffer(desc);
+    pendingStagingBuffers_.push_back(StagingBuffer{handle, VK_NULL_HANDLE});
+    return handle;
+}
+
+void VulkanDevice::tagPendingStagingBuffers(VkFence fence) {
+    for (StagingBuffer& staging : pendingStagingBuffers_) {
+        if (staging.fence == VK_NULL_HANDLE) {
+            staging.fence = fence;
+        }
+    }
+}
+
+void VulkanDevice::collectStagingBuffers() {
+    retireStagingBuffers(pendingStagingBuffers_);
+}
+
+void VulkanDevice::retireStagingBuffers(std::vector<StagingBuffer>& pending) {
+    for (auto entry = pending.begin(); entry != pending.end();) {
+        // Untagged entries belong to a command buffer that has not been submitted yet;
+        // leave them to the device teardown (which waits idle first).
+        if (entry->fence != VK_NULL_HANDLE &&
+            vkGetFenceStatus(device_, entry->fence) == VK_SUCCESS) {
+            destroyBuffer(entry->handle);
+            entry = pending.erase(entry);
+            continue;
+        }
+        ++entry;
+    }
+}
+
 VulkanBuffer& VulkanDevice::requireBuffer(BufferHandle handle) {
     return const_cast<VulkanBuffer&>(std::as_const(*this).requireBuffer(handle));
 }
@@ -776,6 +815,14 @@ VkImage VulkanDevice::resolveTexture(TextureHandle handle) const {
         Log::fatal("VulkanDevice", "Invalid or stale RHI texture handle");
     }
     return resource->handle();
+}
+
+TextureFormat VulkanDevice::textureFormat(TextureHandle handle) const {
+    const TextureResource* resource = textures_.find(handle);
+    if (!resource || !resource->owned) {
+        Log::fatal("VulkanDevice", "RHI texture handle has no tracked format");
+    }
+    return resource->owned->format();
 }
 
 VkImageView VulkanDevice::resolveTextureView(TextureViewHandle handle) const {

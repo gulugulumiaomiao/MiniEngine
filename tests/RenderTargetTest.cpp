@@ -117,6 +117,12 @@ public:
     [[nodiscard]] VkCommandBuffer nativeCommandBuffer() const override {
         return VK_NULL_HANDLE;
     }
+    void copyBuffer(const engine::rhi::BufferCopy&) override {}
+    void copyImage(const engine::rhi::ImageCopy&) override {}
+    void copyBufferToImage(const engine::rhi::BufferImageCopy&) override {}
+    void copyImageToBuffer(const engine::rhi::BufferImageCopy&) override {}
+    void updateBuffer(const engine::rhi::BufferUpdate&) override {}
+    void updateImage(const engine::rhi::ImageUpdate&) override {}
 
     std::vector<engine::rhi::TextureBarrier> barriers;
 };

@@ -197,6 +197,9 @@ FrameStatus VulkanSwapchain::beginFrame() {
         Log::fatal("VulkanSwapchain", "A frame is already open");
     Frame& frame = frames_[currentFrame_];
     check(vkWaitForFences(device(), 1, &frame.inFlight, VK_TRUE, UINT64_MAX), "vkWaitForFences");
+    // The fence we just waited on proves that this slot's previous submission finished,
+    // so its encoder staging buffers can be destroyed safely.
+    device_.collectStagingBuffers();
     const VkResult acquire = vkAcquireNextImageKHR(
         device(), swapchain_, UINT64_MAX, frame.imageAvailable, VK_NULL_HANDLE, &imageIndex_);
     if (acquire == VK_ERROR_OUT_OF_DATE_KHR)
@@ -249,6 +252,9 @@ FrameStatus VulkanSwapchain::endFrame() {
     check(vkEndCommandBuffer(frame.commandBuffer), "vkEndCommandBuffer");
     const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     const VkSemaphore finished = renderFinished_[imageIndex_];
+    // Encoder staging buffers recorded this frame retire once this submission's fence
+    // is signaled; tag them before submitting so collection sees the fence.
+    device_.tagPendingStagingBuffers(frame.inFlight);
     VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores = &frame.imageAvailable;

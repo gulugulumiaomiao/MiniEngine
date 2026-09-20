@@ -7,9 +7,11 @@
 
 namespace engine::rhi::vulkan {
 
+class VulkanDevice;
+
 class VulkanGraphicsCommandEncoder final : public IGraphicsCommandEncoder {
 public:
-    VulkanGraphicsCommandEncoder(VkCommandBuffer commandBuffer, const IDevice& device);
+    VulkanGraphicsCommandEncoder(VkCommandBuffer commandBuffer, VulkanDevice& device);
 
     void resourceBarriers(std::span<const TextureBarrier> barriers) override;
     void beginRendering(const RenderingInfo& info) override;
@@ -39,24 +41,21 @@ public:
     void beginDebugLabel(std::string_view name, const math::Vec4& color) override;
     void endDebugLabel() override;
 
+    void copyBuffer(const BufferCopy& copy) override;
+    void copyImage(const ImageCopy& copy) override;
+    void copyBufferToImage(const BufferImageCopy& copy) override;
+    void copyImageToBuffer(const BufferImageCopy& copy) override;
+    void updateBuffer(const BufferUpdate& update) override;
+    void updateImage(const ImageUpdate& update) override;
+
 private:
     VkCommandBuffer commandBuffer_{VK_NULL_HANDLE};
-    const IDevice& device_;
+    VulkanDevice& device_;
     VkPipelineLayout boundPipelineLayout_{VK_NULL_HANDLE};
     PFN_vkCmdSetColorBlendEnableEXT pfnSetColorBlendEnable_{nullptr};
     PFN_vkCmdSetColorBlendEquationEXT pfnSetColorBlendEquation_{nullptr};
     PFN_vkCmdSetColorWriteMaskEXT pfnSetColorWriteMask_{nullptr};
     PFN_vkCmdSetPolygonModeEXT pfnSetPolygonMode_{nullptr};
-};
-
-class VulkanTransferCommandEncoder final : public ITransferCommandEncoder {
-public:
-    VulkanTransferCommandEncoder(VkCommandBuffer commandBuffer, const IDevice& device);
-    void copyBuffer(const BufferCopy& copy) override;
-
-private:
-    VkCommandBuffer commandBuffer_{VK_NULL_HANDLE};
-    const IDevice& device_;
 };
 
 } // namespace engine::rhi::vulkan

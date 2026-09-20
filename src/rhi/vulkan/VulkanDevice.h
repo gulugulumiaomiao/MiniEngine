@@ -93,6 +93,9 @@ public:
 
     [[nodiscard]] VkBuffer resolveBuffer(BufferHandle handle) const override;
     [[nodiscard]] VkImage resolveTexture(TextureHandle handle) const override;
+    // RHI formats are only tracked for device-owned textures; external images
+    // (e.g. swapchain) have no format in the handle table.
+    [[nodiscard]] TextureFormat textureFormat(TextureHandle handle) const;
     [[nodiscard]] VkImageView resolveTextureView(TextureViewHandle handle) const override;
     [[nodiscard]] VkSampler resolveSampler(SamplerHandle handle) const;
     [[nodiscard]] VkShaderModule resolveShader(ShaderHandle handle) const;
@@ -104,6 +107,15 @@ public:
     void unregisterExternalTexture(TextureHandle handle);
     [[nodiscard]] TextureViewHandle registerExternalTextureView(VkImageView view);
     void unregisterExternalTextureView(TextureViewHandle handle);
+
+    // Encoder staging support. Encoders run while the frame command buffer is still
+    // being recorded, so scratch buffers must outlive the encoder itself. The device
+    // owns them: endFrame tags them with the submitting frame's fence and they are
+    // destroyed once that fence has been signaled.
+    [[nodiscard]] BufferHandle acquireStagingBuffer(std::uint64_t size);
+    void tagPendingStagingBuffers(VkFence fence);
+    // Destroys staging buffers whose fence has been signaled. Called at frame boundaries.
+    void collectStagingBuffers();
 
 private:
     struct QueueFamilies {
@@ -171,6 +183,14 @@ private:
     void destroyPipelineLayoutsReferencing(BindGroupLayoutHandle handle);
     void clear();
 
+    // Scratch buffer created for an encoder staging upload; retired once the frame
+    // that recorded the copy has completed.
+    struct StagingBuffer {
+        BufferHandle handle;
+        VkFence fence{VK_NULL_HANDLE};
+    };
+    void retireStagingBuffers(std::vector<StagingBuffer>& pending);
+
     VkInstance instance_{VK_NULL_HANDLE};
     VkDebugUtilsMessengerEXT debugMessenger_{VK_NULL_HANDLE};
     VkSurfaceKHR surface_{VK_NULL_HANDLE};
@@ -184,6 +204,7 @@ private:
     std::uint32_t presentQueueFamily_{};
     float maxSamplerAnisotropy_{1.0F};
     HandlePool<BufferResource, BufferHandle> buffers_;
+    std::vector<StagingBuffer> pendingStagingBuffers_;
     HandlePool<ShaderResource, ShaderHandle> shaders_;
     HandlePool<PipelineResource, GraphicsPipelineHandle> pipelines_;
     HandlePool<BindGroupLayoutResource, BindGroupLayoutHandle> bindGroupLayouts_;

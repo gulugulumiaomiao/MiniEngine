@@ -137,6 +137,16 @@ public:
     }
     void beginDebugLabel(std::string_view, const math::Vec4&) override {}
     void endDebugLabel() override {}
+    void copyBuffer(const rhi::BufferCopy& copy) override { bufferCopies.push_back(copy); }
+    void copyImage(const rhi::ImageCopy& copy) override { imageCopies.push_back(copy); }
+    void copyBufferToImage(const rhi::BufferImageCopy& copy) override {
+        bufferImageCopies.push_back(copy);
+    }
+    void copyImageToBuffer(const rhi::BufferImageCopy& copy) override {
+        imageBufferCopies.push_back(copy);
+    }
+    void updateBuffer(const rhi::BufferUpdate& update) override { bufferUpdates.push_back(update); }
+    void updateImage(const rhi::ImageUpdate& update) override { imageUpdates.push_back(update); }
 
     std::vector<rhi::Viewport> viewports;
     std::vector<rhi::Rect> scissors;
@@ -158,6 +168,12 @@ public:
     std::vector<rhi::DrawIndexedArguments> draws;
     std::vector<rhi::TextureBarrier> barriers;
     std::vector<rhi::RenderingInfo> renderings;
+    std::vector<rhi::BufferCopy> bufferCopies;
+    std::vector<rhi::ImageCopy> imageCopies;
+    std::vector<rhi::BufferImageCopy> bufferImageCopies;
+    std::vector<rhi::BufferImageCopy> imageBufferCopies;
+    std::vector<rhi::BufferUpdate> bufferUpdates;
+    std::vector<rhi::ImageUpdate> imageUpdates;
 };
 
 
