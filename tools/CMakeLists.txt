@@ -104,6 +104,7 @@ add_executable(MiniEditor
     editor/app/EditorApplication.cpp
     editor/backend/ImGuiLayer.cpp
     editor/backend/ImGuiRenderer.cpp
+    editor/backend/ImGuiStyleConfig.cpp
     editor/model/SceneDocument.cpp
     editor/panels/ProjectPanel.cpp
     editor/panels/ProjectPickerPanel.cpp
@@ -154,3 +155,19 @@ set_target_properties(MiniCopyBuiltin PROPERTIES FOLDER Tools)
 # names are global, so the dependency can be declared from here after add_subdirectory.
 add_dependencies(MiniEditor MiniCopyBuiltin)
 add_dependencies(MiniVulkanEngine MiniCopyBuiltin)
+
+# The editor's default UI font: Noto Sans SC (SIL OFL; variable font whose default
+# instance is Regular). imgui_style.json (in build/<config>/editor/config/) resolves
+# a relative font.file against its own directory, so the default document points at
+# ../../fonts/ — two levels up, next to the editor executable. copy_if_different
+# keeps the 17 MB copy incremental.
+add_custom_target(MiniCopyEditorFonts
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/fonts"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${PROJECT_SOURCE_DIR}/third_party/fonts/NotoSansSC-Regular.ttf"
+            "${CMAKE_BINARY_DIR}/fonts/NotoSansSC-Regular.ttf"
+    COMMENT "Copying the editor font next to the executables"
+    VERBATIM
+)
+set_target_properties(MiniCopyEditorFonts PROPERTIES FOLDER Tools)
+add_dependencies(MiniEditor MiniCopyEditorFonts)

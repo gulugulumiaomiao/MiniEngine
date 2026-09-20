@@ -8,6 +8,7 @@
 ```text
 tools/editor/backend/ImGuiLayer      IFrameOverlay 的唯一实现：ImGui 上下文、Win32 后端、帧序
 tools/editor/backend/ImGuiRenderer   ImDrawData -> RHI：字体图集、UI 管线、几何上传
+tools/editor/backend/ImGuiStyleConfig  imgui_style.json 的解析与应用：字体 + 全部 ImGuiStyle 显示字段
 src/render/Renderer                  只认识 IFrameOverlay 接口，完全不感知 ImGui
 ```
 
@@ -17,13 +18,15 @@ src/render/Renderer                  只认识 IFrameOverlay 接口，完全不�
 - `ImGuiRenderer` 取代官方 `imgui_impl_vulkan` 后端，绘制只经过 RHI，因此
   `tools/editor/` 里没有任何直接的 Vulkan 调用；只有 Win32 平台后端
   `imgui_impl_win32` 被 vendored 使用（`MiniImGui` 静态库）。
+- `ImGuiStyleConfig` 编入 `MiniEditor`（依赖 imgui 与引擎 JSON 序列化，不进
+  `MiniEngineEditor` 库），负责 `imgui_style.json` 的读、默认文档生成与应用。
 - 这一抽象维持了 render/rhi 的分层边界：`src/render` 不引入任何 ImGui 头文件。
 
 ## ImGuiLayer 的生命周期
 
 | 方法 | 职责 |
 |---|---|
-| `attach(renderer, window)` | 创建 ImGui 上下文；配置 IO（键盘导航、Docking、ini 路径）；初始化 Win32 后端与 `ImGuiRenderer`；注册窗口消息处理器；把自己设为 renderer 的 overlay |
+| `attach(renderer, window)` | 创建 ImGui 上下文；配置 IO（键盘导航、Docking、ini 路径）；加载 `imgui_style.json` 并应用字体与样式（见下节）；初始化 Win32 后端与 `ImGuiRenderer`；注册窗口消息处理器；把自己设为 renderer 的 overlay |
 | `beginFrame()` | `ImGui_ImplWin32_NewFrame()` + `ImGui::NewFrame()` |
 | `endFrame()` | `ImGui::Render()`，**每帧都必须调用**，即使渲染器随后跳过这一帧，否则下一次 `NewFrame` 会触发 ImGui 的 forgot-to-render 检查 |
 | `recordOverlay(context)` | 帧末把 ImDrawData 经 `ImGuiRenderer` 记录到命令缓冲区 |
@@ -36,6 +39,60 @@ src/render/Renderer                  只认识 IFrameOverlay 接口，完全不�
 `attach/detach` 与项目切换强耦合：`ENGINE.openProject` 会销毁旧 renderer 重建新的，
 编辑器必须先 `detach()` 再打开、打开成功后 `attach(新 renderer, window)`，详见
 [ProjectManagement.md](ProjectManagement.md) 的顺序约束。
+
+## 样式与字体配置（imgui_style.json）
+
+ImGui 的字体与全部 `ImGuiStyle` 显示参数收在独立的手调文件
+`<CWD>/editor/config/imgui_style.json`（`EditorApplication` 构造时把路径设给
+`ImGuiLayer::setStylePath`）。文件缺失时 `ImGuiStyleConfig::load` 会生成一份
+全字段默认文档供手改参考；它是纯手工配置，引擎退出时的配置写回不会触碰它。
+
+```json
+{
+  "schema_version": 1,
+  "font": {
+    "file": "../../fonts/NotoSansSC-Regular.ttf",
+    "size": 16.0,
+    "glyph_ranges": "chinese-common",
+    "oversample_h": 2, "oversample_v": 1, "pixel_snap_h": true
+  },
+  "style": { "window_padding": [9, 9], "scrollbar_size": 17.0, "...": "ImGuiStyle 全部字段，蛇形命名" },
+  "colors": { "Text": [1, 1, 1, 1], "WindowBg": [0.06, 0.06, 0.06, 0.94] }
+}
+```
+
+合成语义在 `load` 内一次做完，`apply` 只是拷贝样式 + 装字体：
+
+1. 起点 = ImGui 工厂 `ImGuiStyle` + `StyleColorsDark` 调色板；
+2. `ScaleAllSizes(size / 13.0f)`——13 是内置 ProggyClean 位图字体的字号，默认
+   样式的间距与控件尺寸都按它调配，比例缩放让 16px 中文下的布局自动协调。
+   `ScaleAllSizes` 用 ImTrunc 截断，且不缩放 Alpha/DisabledAlpha/抗锯齿开关等
+   非尺寸字段；
+3. `style` / `colors` 段中**显式出现**的字段最后覆盖。
+
+读取是宽容的：字段或段落缺失、类型不符、颜色名未知都只是保留该字段的当前值，
+手写半份 JSON 合法；JSON 语法损坏或 `schema_version` 不认识则整份按默认
+（16px + 比例缩放）启动并保留原文件。字段读写共用同一张静态表（`ImGuiStyleConfig.cpp`
+的 float/Vec2/bool/Dir 四张成员指针表），新字段不会读写漂移。
+
+字体规则：
+
+- `font.file` 绝对路径直接用；相对路径按 **imgui_style.json 自身所在目录**解析
+  （不能按进程 CWD：引擎 initialize 会把 CWD 改写到 engine.json 的
+  `working_directory`，attach 晚于它执行）。默认的 `../../fonts/NotoSansSC-Regular.ttf`
+  从 `editor/config/` 上两级指向可执行文件旁的 `fonts/`，由构建目标
+  `MiniCopyEditorFonts` 从 `third_party/fonts/` 拷贝（Noto Sans SC，SIL OFL 许可，
+  许可文件与字体同目录）；文档里保留相对形式，`load` 解析成绝对路径供 `apply` 使用。
+- imgui 未集成 FreeType，stb_truetype 只认 TrueType 轮廓的 `.ttf`；CFF 轮廓的
+  `.otf`（如思源黑体 OTF 版）会被加载前的魔数预检拒绝。任何加载失败（缺失、
+  非 TrueType、解析失败）都回退 `AddFontDefault` + 未缩放的工厂样式，保证字体
+  与比例一致，编辑器照常启动。
+- `glyph_ranges`：`"default"`（基本拉丁）或 `"chinese-common"`（常用简体约 2500 字
+  + ASCII + 假名，ImGui 内置范围表）。
+
+生效时机：`attach()` 在 `CreateContext()` 之后、字体图集构建（renderer 初始化里的
+`GetTexDataAsRGBA32`）之前执行 load + apply；项目切换会 detach→attach 重建 ImGui
+上下文并**重读文件**——手改 JSON 后切换项目即可生效，无需重启进程。
 
 ## recordOverlay 契约
 
@@ -97,6 +154,12 @@ UI shader 绕过 ShaderLab 资产管线：两段 GLSL（`tools/editor/shaders/im
 `ImGuiRendererTest` 直接编译 `tools/editor/backend/ImGuiRenderer.cpp`（UI shader 已内联其中），
 依赖 `MiniImGui`、链接普通 `MiniEngine`（UI 后端不需要编辑器变体），覆盖几何上传、
 管线记录与 sRGB 变体选择。
+
+`ImGuiStyleConfigTest` 同样直接编译 `tools/editor/backend/ImGuiStyleConfig.cpp`，
+覆盖默认文档生成与 round-trip、半份 JSON 的宽容读取、字号比例缩放（尺寸动、
+Alpha 不动）、相对字体路径按文件目录解析、单项颜色覆盖、损坏 JSON 回退，以及
+真实 TTF 装载（源码树里的 Noto Sans SC，含 CJK 字形光栅化验证）与不可用字体
+（含默认相对路径落空）的工厂回退。
 
 ## 场景离屏输出与帧序
 

@@ -5,6 +5,7 @@
 #include "render/render_target/RenderTarget.h"
 #include "rhi/api/CommandEncoder.h"
 #include "rhi/api/Swapchain.h"
+#include "tools/editor/backend/ImGuiStyleConfig.h"
 
 #include "imgui.h"
 #include "backends/imgui_impl_win32.h"
@@ -33,6 +34,12 @@ void ImGuiLayer::attach(Renderer& renderer, Window& window) {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_DockingEnable;
     // ImGui stores the pointer, not the string; iniFilename_ owns the storage.
     io.IniFilename = iniFilename_.empty() ? nullptr : iniFilename_.c_str();
+
+    // Font and style must be applied before the renderer builds the font atlas
+    // (below), and the file is re-read on every attach so config edits survive
+    // project switches. The config object only needs to live through apply().
+    if (!styleFilename_.empty())
+        ImGuiStyleConfig::load(std::filesystem::path{styleFilename_}).apply();
 
     if (!ImGui_ImplWin32_Init(window.nativeHandle())) {
         Log::error("ImGuiLayer", "Cannot initialize the ImGui Win32 backend");
@@ -94,6 +101,10 @@ void ImGuiLayer::handleNativeMessage(HWND handle, UINT message, WPARAM wParam, L
 
 void ImGuiLayer::setIniPath(std::string path) {
     iniFilename_ = std::move(path);
+}
+
+void ImGuiLayer::setStylePath(std::string path) {
+    styleFilename_ = std::move(path);
 }
 
 const std::string& ImGuiLayer::iniPath() const {

@@ -39,7 +39,8 @@ tools/editor/
 │   └── EditorLayout.*          默认 Dock 布局与旧布局迁移
 ├── backend/                ImGui 到 RHI 的桥接
 │   ├── ImGuiLayer.*            IFrameOverlay 实现：ImGui 上下文、Win32 后端、帧序与帧末叠加录制
-│   └── ImGuiRenderer.*         用 RHI 绘制 ImDrawData：字体图集、UI 管线、双帧几何缓冲
+│   ├── ImGuiRenderer.*         用 RHI 绘制 ImDrawData：字体图集、UI 管线、双帧几何缓冲
+│   └── ImGuiStyleConfig.*      imgui_style.json 的解析与应用：字体装载、表驱动样式序列化、字号比例缩放
 ├── model/                  纯逻辑层（无 ImGui，编入 MiniEngineEditor 供测试共享）
 │   ├── SceneDocument.*         当前场景文档状态：来源路径、dirty、外部变更冲突
 │   ├── EditorConfig.*          编辑器窗口偏好及内嵌的最近项目注册表
@@ -71,6 +72,7 @@ main()
        -> editorConfigPath = <CWD>/editor/config/editor.json   // 内部解析，不再由 main 传入
        -> ENGINE.loadEditorConfig(editorConfigPath)   // 缺失时按默认值创建
        -> imguiLayer_.setIniPath(<CWD>/editor/config/imgui.ini)
+       -> imguiLayer_.setStylePath(<CWD>/editor/config/imgui_style.json)   // 字体与样式，见 ImGui.md
        -> 绑定 picker 的 open/create/changed 回调
   -> ENGINE.run(application, VulkanFactory)   // engine.json 由 run 从 <CWD> 解析
        -> Engine::initialize
@@ -111,6 +113,7 @@ main()
 MiniImGui            imgui 四个核心 cpp + imgui_impl_win32；链 gdi32/dwmapi/imm32
 MiniEditor           编辑器可执行文件；链 MiniEngineEditor + MiniImGui + ole32/shell32
 MiniCopyBuiltin      把 builtin/ 两层扁平合并到可执行文件旁的 assets/（不含 .meta），供游戏运行时使用
+MiniCopyEditorFonts  把 third_party/fonts/NotoSansSC-Regular.ttf（SIL OFL）拷到可执行文件旁的 fonts/，imgui_style.json 的默认字体
 ```
 
 `MiniEngineEditor` 是同一份引擎源码的第二个静态库变体，`PUBLIC MINI_EDITOR=1`、
@@ -142,6 +145,9 @@ VS Code 中对应 `Debug MiniEditor (CodeLLDB)` 与 `Run MiniEditor Release` 两
   链接 `MiniEngineEditor`。两者验证项目配置与项目 API 可用、编辑器配置 API 正确隔离。
 - `ImGuiRendererTest` 直接编译 `tools/editor/backend/ImGuiRenderer.cpp`（UI shader 已内联其中），
   依赖 `MiniImGui`，链接 `MiniEngine`（UI 后端不需要编辑器变体）。
+- `ImGuiStyleConfigTest` 直接编译 `tools/editor/backend/ImGuiStyleConfig.cpp`，
+  验证 imgui_style.json 的默认文档生成、宽容读取、字号比例缩放、颜色覆盖、
+  真实 TTF 装载与字体回退（详见 [ImGui.md](ImGui.md)）。
 - 视口相关新增测试统一使用 GoogleTest：`SceneOutputTest` 验证渲染目标、清屏、
   状态转换与双帧缩放；`EditorLayoutTest` 验证默认布局和旧 ini 迁移；
   `SceneViewIntegrationTest` 使用实际 Vulkan 验证场景渲染、隐藏恢复和项目重新绑定。

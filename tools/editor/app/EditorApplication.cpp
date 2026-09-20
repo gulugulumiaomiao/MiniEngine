@@ -33,6 +33,9 @@ EditorApplication::EditorApplication()
     // The ImGui layout (imgui.ini) lives next to the editor config and holds the
     // docking layout between sessions.
     imguiLayer_.setIniPath((editorConfigPath.parent_path() / "imgui.ini").string());
+    // The ImGui appearance (font + style) is a separate hand-editable document;
+    // sharing the directory keeps all editor-local config in one place.
+    imguiLayer_.setStylePath((editorConfigPath.parent_path() / "imgui_style.json").string());
 
     projectPicker_.setOpenHandler([this](const std::filesystem::path& root) {
         pendingProjectRoot_ = root;

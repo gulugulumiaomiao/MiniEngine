@@ -28,6 +28,12 @@ public:
     void setIniPath(std::string path);
     [[nodiscard]] const std::string& iniPath() const;
 
+    // Sets the physical path of imgui_style.json (font + every ImGuiStyle display
+    // field). Empty keeps ImGui's built-in 13px font and factory style. The file is
+    // re-read on every attach — project switches rebuild the ImGui context, so
+    // hand-edits apply on the next switch without restarting the process.
+    void setStylePath(std::string path);
+
     // Win32 message hook installed via Window::setMessageHandler.
     void handleNativeMessage(HWND handle, UINT message, WPARAM wParam, LPARAM lParam);
 
@@ -46,6 +52,7 @@ private:
     Renderer* engineRenderer_{};
     Window* window_{};
     std::string iniFilename_;
+    std::string styleFilename_;
     bool initialized_{};
 };
 
