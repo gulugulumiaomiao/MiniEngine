@@ -34,6 +34,7 @@ const char* ShaderGenerator::glslType(ShaderPropertyType type) {
     case ShaderPropertyType::Vec3: return "vec3";
     case ShaderPropertyType::Vec4:
     case ShaderPropertyType::Color: return "vec4";
+    case ShaderPropertyType::Matrix: return "mat4";
     case ShaderPropertyType::Texture2D: return "sampler2D";
     }
     Log::error("ShaderGenerator", "Unsupported Shader property type");

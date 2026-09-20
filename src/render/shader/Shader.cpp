@@ -47,7 +47,7 @@ bool RenderStateDesc::transfer(Transfer& archive) {
 bool ShaderPropertyDesc::transfer(Transfer& archive) {
     return archive.beginObject({}) && archive.transfer("name", name) &&
            archive.transfer("display_name", displayName) &&
-           transferShaderEnum(archive, "property_type", type, ShaderPropertyType::Boolean) &&
+           transferShaderEnum(archive, "property_type", type, ShaderPropertyType::Matrix) &&
            archive.transfer("default_value", defaultValue) && archive.transfer("range", range) &&
            archive.transfer("attributes", attributes) && archive.endObject();
 }
@@ -170,6 +170,7 @@ Std140TypeLayout std140TypeLayout(ShaderPropertyType type) {
     case ShaderPropertyType::Vec3: return {16, 16};
     case ShaderPropertyType::Vec4:
     case ShaderPropertyType::Color: return {16, 16};
+    case ShaderPropertyType::Matrix: return {64, 16};
     case ShaderPropertyType::Texture2D:
         assert(false && "Texture2D is a descriptor, not a uniform member");
     }
@@ -342,6 +343,10 @@ void Shader::setGlobalColor(std::string_view name, const math::Vec4& value) {
 
 void Shader::setGlobalBool(std::string_view name, bool value) {
     GLOBAL_UNIFORM_MANAGER.setBool(name, value);
+}
+
+void Shader::setGlobalMatrix(std::string_view name, const math::Mat44& value) {
+    GLOBAL_UNIFORM_MANAGER.setMatrix(name, value);
 }
 
 void Shader::setGlobalTexture(std::string_view name, std::string_view texturePath) {

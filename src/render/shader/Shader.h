@@ -22,7 +22,7 @@ class ShaderAsset;
 class Shader;
 class ShaderManager;
 
-enum class ShaderPropertyType { Float, Range, Vec2, Vec3, Vec4, Color, Texture2D, Boolean };
+enum class ShaderPropertyType { Float, Range, Vec2, Vec3, Vec4, Color, Texture2D, Boolean, Matrix };
 enum class ShaderPassType { Forward, DepthOnly, ShadowCaster };
 enum class CullMode { Off, Front, Back };
 enum class FrontFace { Clockwise, CounterClockwise };
@@ -56,7 +56,7 @@ private:
     std::vector<std::string> keywords_;
 };
 
-using ShaderValue = std::variant<float, bool, math::Vec2, math::Vec3, math::Vec4, std::string>;
+using ShaderValue = std::variant<float, bool, math::Vec2, math::Vec3, math::Vec4, std::string, math::Mat44>;
 
 struct ShaderPropertyDesc : public Transferable {
     std::string name;
@@ -284,6 +284,7 @@ public:
     static void setGlobalVector(std::string_view name, const math::Vec4& value);
     static void setGlobalColor(std::string_view name, const math::Vec4& value);
     static void setGlobalBool(std::string_view name, bool value);
+    static void setGlobalMatrix(std::string_view name, const math::Mat44& value);
     static void setGlobalTexture(std::string_view name, std::string_view texturePath);
 
 private:

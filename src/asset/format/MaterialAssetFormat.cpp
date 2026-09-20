@@ -50,6 +50,7 @@ bool valueMatchesProperty(const ShaderValue& value, ShaderPropertyType type) {
     case ShaderPropertyType::Vec3: return std::holds_alternative<math::Vec3>(value);
     case ShaderPropertyType::Vec4:
     case ShaderPropertyType::Color: return std::holds_alternative<math::Vec4>(value);
+    case ShaderPropertyType::Matrix: return std::holds_alternative<math::Mat44>(value);
     case ShaderPropertyType::Texture2D: return std::holds_alternative<std::string>(value);
     }
     return false;

@@ -27,6 +27,7 @@ propertyType(const std::string& value, const VirtualPath& file, const std::strin
                                           {"Vec4", ShaderPropertyType::Vec4},
                                           {"Vector", ShaderPropertyType::Vec4},
                                           {"Color", ShaderPropertyType::Color},
+                                          {"Matrix", ShaderPropertyType::Matrix},
                                           {"Texture2D", ShaderPropertyType::Texture2D},
                                           {"Bool", ShaderPropertyType::Boolean}},
                                          file,
@@ -160,6 +161,22 @@ ShaderValue parseValue(const Json& value,
         case ShaderPropertyType::Vec3: return vectorValue<3, math::Vec3>(kCategory, value, file, path);
         case ShaderPropertyType::Vec4:
         case ShaderPropertyType::Color: return vectorValue<4, math::Vec4>(kCategory, value, file, path);
+        case ShaderPropertyType::Matrix: {
+            if (!value.is_array() || value.size() != 16) {
+                fail(kCategory, file, path, "expected an array of 16 numbers");
+            }
+            try {
+                math::Mat44 result{1.0F};
+                for (glm::length_t i = 0; i < 4; ++i) {
+                    for (glm::length_t j = 0; j < 4; ++j) {
+                        result[i][j] = value[i * 4 + j].get<float>();
+                    }
+                }
+                return result;
+            } catch (const Json::exception&) {
+                fail(kCategory, file, path, "matrix elements must be numbers");
+            }
+        }
         case ShaderPropertyType::Texture2D: return value.get<std::string>();
         }
     } catch (const Json::exception&) {

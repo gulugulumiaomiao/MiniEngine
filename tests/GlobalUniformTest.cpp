@@ -74,6 +74,39 @@ TEST_F(GlobalUniformTest, SetValueUpdatesBuffer) {
     EXPECT_FLOAT_EQ(value.w, 1.0F);
 }
 
+TEST_F(GlobalUniformTest, MatrixLayoutAndBuffer) {
+    std::vector<ShaderPropertyDesc> properties;
+    {
+        ShaderPropertyDesc p;
+        p.name = "_GlobalMatrix";
+        p.type = ShaderPropertyType::Matrix;
+        p.defaultValue = math::Mat44{1.0F};
+        properties.push_back(p);
+    }
+    GLOBAL_UNIFORM_MANAGER.registerGlobalProperties(properties);
+
+    const UniformBlockLayout& layout = GLOBAL_UNIFORM_MANAGER.uniformBlockLayout();
+    ASSERT_EQ(layout.members.size(), 1u);
+    EXPECT_EQ(layout.members[0].name, "_GlobalMatrix");
+    EXPECT_EQ(layout.members[0].type, ShaderPropertyType::Matrix);
+    EXPECT_EQ(layout.members[0].size, 64u);
+    EXPECT_EQ(layout.members[0].alignment, 16u);
+    EXPECT_EQ(layout.byteSize, 64u);
+
+    const std::uint64_t versionBefore = GLOBAL_UNIFORM_MANAGER.version();
+    math::Mat44 value{2.0F};
+    value[0][3] = 3.0F;
+    Shader::setGlobalMatrix("_GlobalMatrix", value);
+    EXPECT_GT(GLOBAL_UNIFORM_MANAGER.version(), versionBefore);
+
+    std::span<const std::byte> bytes = GLOBAL_UNIFORM_MANAGER.uniformBytes();
+    ASSERT_EQ(bytes.size(), layout.byteSize);
+    math::Mat44 readValue;
+    std::memcpy(&readValue, bytes.data() + layout.members[0].offset, sizeof(math::Mat44));
+    EXPECT_FLOAT_EQ(readValue[0][0], 2.0F);
+    EXPECT_FLOAT_EQ(readValue[0][3], 3.0F);
+}
+
 TEST_F(GlobalUniformTest, TexturePropertiesAreTrackedSeparately) {
     std::vector<ShaderPropertyDesc> properties;
     {

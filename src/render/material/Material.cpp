@@ -190,6 +190,7 @@ ShaderValue Material::propertyValue(const ShaderPropertyDesc& property) const {
     case ShaderPropertyType::Vec4:
     case ShaderPropertyType::Color: return getVec4(property.name);
     case ShaderPropertyType::Texture2D: return getTexture(property.name);
+    case ShaderPropertyType::Matrix: return math::Mat44{1.0F};
     }
     assert(false && "Unsupported shader property type");
 }
@@ -469,6 +470,7 @@ void Material::setPropertyValue(std::string_view name, const ShaderValue& value)
             return;
         }
         case ShaderPropertyType::Texture2D: break;
+        case ShaderPropertyType::Matrix: break;
         }
     }
     if (const std::string* typed = requireValue<std::string>(value, name)) {

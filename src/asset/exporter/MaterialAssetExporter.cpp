@@ -68,6 +68,7 @@ std::unique_ptr<MaterialAsset> exportMaterialToAsset(const Material& material,
                 asset->properties.emplace(property.name, texture->second);
             break;
         }
+        case ShaderPropertyType::Matrix: break;
         }
     }
     return asset;

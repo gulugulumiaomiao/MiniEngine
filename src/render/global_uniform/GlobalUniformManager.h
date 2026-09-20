@@ -36,6 +36,7 @@ public:
     void setVector(std::string_view name, const math::Vec4& value);
     void setColor(std::string_view name, const math::Vec4& value);
     void setBool(std::string_view name, bool value);
+    void setMatrix(std::string_view name, const math::Mat44& value);
     void setTexture(std::string_view name, std::string_view texturePath);
 
     [[nodiscard]] const UniformBlockLayout& uniformBlockLayout() const { return layout_; }

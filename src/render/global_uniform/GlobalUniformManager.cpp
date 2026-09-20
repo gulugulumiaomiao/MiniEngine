@@ -19,6 +19,7 @@ const char* glslTypeName(ShaderPropertyType type) {
     case ShaderPropertyType::Vec3: return "vec3";
     case ShaderPropertyType::Vec4:
     case ShaderPropertyType::Color: return "vec4";
+    case ShaderPropertyType::Matrix: return "mat4";
     case ShaderPropertyType::Texture2D: return "sampler2D";
     }
     return "unknown";
@@ -32,6 +33,8 @@ bool compatibleGlobalTypes(ShaderPropertyType left, ShaderPropertyType right) {
         return true;
     if ((left == ShaderPropertyType::Vec4 || left == ShaderPropertyType::Color) &&
         (right == ShaderPropertyType::Vec4 || right == ShaderPropertyType::Color))
+        return true;
+    if (left == ShaderPropertyType::Matrix && right == ShaderPropertyType::Matrix)
         return true;
     return false;
 }
@@ -155,6 +158,25 @@ void GlobalUniformManager::setBool(std::string_view name, bool value) {
     rebuildBuffer();
 }
 
+void GlobalUniformManager::setMatrix(std::string_view name, const math::Mat44& value) {
+    const auto found = globals_.find(std::string{name});
+    if (found == globals_.end()) {
+        globals_.emplace(std::string{name}, KnownGlobal{ShaderPropertyType::Matrix, value});
+        rebuild();
+        return;
+    }
+    if (!compatibleGlobalTypes(found->second.type, ShaderPropertyType::Matrix)) {
+        Log::error("GlobalUniform",
+                   "Cannot set matrix on global property '%.*s' of type %s",
+                   static_cast<int>(name.size()),
+                   name.data(),
+                   glslTypeName(found->second.type));
+        return;
+    }
+    found->second.value = value;
+    rebuildBuffer();
+}
+
 void GlobalUniformManager::setTexture(std::string_view name, std::string_view texturePath) {
     const auto found = globals_.find(std::string{name});
     if (found == globals_.end()) {
@@ -246,6 +268,11 @@ void GlobalUniformManager::rebuildBuffer() {
         case ShaderPropertyType::Vec4:
         case ShaderPropertyType::Color: {
             if (const math::Vec4* value = std::get_if<math::Vec4>(&global.value))
+                writeValueBytes(uniformData_, member, *value);
+            break;
+        }
+        case ShaderPropertyType::Matrix: {
+            if (const math::Mat44* value = std::get_if<math::Mat44>(&global.value))
                 writeValueBytes(uniformData_, member, *value);
             break;
         }
