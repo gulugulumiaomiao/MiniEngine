@@ -14,6 +14,7 @@ namespace engine {
 struct DrawBatch {
     rhi::GraphicsPipelineHandle pipeline;
     rhi::BindGroupHandle materialBindGroup;
+    const ShaderPass* shaderPass{};
     std::vector<DrawItem::VertexBuffer> vertexBuffers;
     rhi::BufferHandle indexBuffer;
     rhi::IndexFormat indexFormat{rhi::IndexFormat::UInt32};

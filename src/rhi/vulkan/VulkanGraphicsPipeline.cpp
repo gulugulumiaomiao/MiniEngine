@@ -8,28 +8,6 @@
 namespace engine::rhi::vulkan {
 namespace {
 
-VkCullModeFlags toVulkan(CullMode mode) {
-    switch (mode) {
-    case CullMode::None: return VK_CULL_MODE_NONE;
-    case CullMode::Front: return VK_CULL_MODE_FRONT_BIT;
-    case CullMode::Back: return VK_CULL_MODE_BACK_BIT;
-    }
-    return VK_CULL_MODE_NONE;
-}
-
-VkCompareOp toVulkan(CompareOp compare) {
-    switch (compare) {
-    case CompareOp::Never: return VK_COMPARE_OP_NEVER;
-    case CompareOp::Less: return VK_COMPARE_OP_LESS;
-    case CompareOp::LessEqual: return VK_COMPARE_OP_LESS_OR_EQUAL;
-    case CompareOp::Equal: return VK_COMPARE_OP_EQUAL;
-    case CompareOp::Greater: return VK_COMPARE_OP_GREATER;
-    case CompareOp::GreaterEqual: return VK_COMPARE_OP_GREATER_OR_EQUAL;
-    case CompareOp::Always: return VK_COMPARE_OP_ALWAYS;
-    }
-    return VK_COMPARE_OP_ALWAYS;
-}
-
 VkFormat toVulkan(VertexFormat format) {
     switch (format) {
     case VertexFormat::Float32: return VK_FORMAT_R32_SFLOAT;
@@ -52,36 +30,6 @@ VkFormat toVulkan(TextureFormat format) {
     case TextureFormat::Undefined: break;
     }
     Log::fatal("VulkanGraphicsPipeline", "Unsupported attachment format");
-}
-
-VkColorComponentFlags toVulkan(ColorWriteMask mask) {
-    VkColorComponentFlags result = 0;
-    if (hasFlag(mask, ColorWriteMask::Red))
-        result |= VK_COLOR_COMPONENT_R_BIT;
-    if (hasFlag(mask, ColorWriteMask::Green))
-        result |= VK_COLOR_COMPONENT_G_BIT;
-    if (hasFlag(mask, ColorWriteMask::Blue))
-        result |= VK_COLOR_COMPONENT_B_BIT;
-    if (hasFlag(mask, ColorWriteMask::Alpha))
-        result |= VK_COLOR_COMPONENT_A_BIT;
-    return result;
-}
-
-void applyBlend(BlendMode mode, VkPipelineColorBlendAttachmentState& blend) {
-    if (mode == BlendMode::Off) {
-        blend.blendEnable = VK_FALSE;
-        return;
-    }
-    blend.blendEnable = VK_TRUE;
-    blend.colorBlendOp = VK_BLEND_OP_ADD;
-    blend.alphaBlendOp = VK_BLEND_OP_ADD;
-    blend.dstColorBlendFactor =
-        mode == BlendMode::Additive ? VK_BLEND_FACTOR_ONE : VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-    blend.srcColorBlendFactor =
-        mode == BlendMode::Alpha ? VK_BLEND_FACTOR_SRC_ALPHA : VK_BLEND_FACTOR_ONE;
-    blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    blend.dstAlphaBlendFactor =
-        mode == BlendMode::Additive ? VK_BLEND_FACTOR_ONE : VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 }
 
 } // namespace
@@ -129,9 +77,7 @@ VulkanGraphicsPipeline::VulkanGraphicsPipeline(
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{
         VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
-    inputAssembly.topology = desc.topology == PrimitiveTopology::TriangleList
-                                 ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
-                                 : VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
     VkPipelineViewportStateCreateInfo viewportState{
         VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
@@ -140,23 +86,18 @@ VulkanGraphicsPipeline::VulkanGraphicsPipeline(
 
     VkPipelineRasterizationStateCreateInfo rasterizer{
         VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
-    rasterizer.polygonMode =
-        desc.raster.fill == FillMode::Solid ? VK_POLYGON_MODE_FILL : VK_POLYGON_MODE_LINE;
-    rasterizer.cullMode = toVulkan(desc.raster.cull);
-    rasterizer.frontFace = desc.raster.frontFace == FrontFace::Clockwise
-                               ? VK_FRONT_FACE_CLOCKWISE
-                               : VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.cullMode = VK_CULL_MODE_NONE;
+    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
     rasterizer.lineWidth = 1.0F;
 
     VkPipelineMultisampleStateCreateInfo multisampling{
         VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
     multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
+    // Color blend and depth/stencil states are fully dynamic; use benign defaults
+    // for pipeline creation and let the encoder configure them per batch.
     std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(desc.colorFormats.size());
-    for (VkPipelineColorBlendAttachmentState& attachment : blendAttachments) {
-        attachment.colorWriteMask = toVulkan(desc.blend.colorWriteMask);
-        applyBlend(desc.blend.mode, attachment);
-    }
     VkPipelineColorBlendStateCreateInfo colorBlending{
         VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
     colorBlending.attachmentCount = static_cast<std::uint32_t>(blendAttachments.size());
@@ -164,11 +105,19 @@ VulkanGraphicsPipeline::VulkanGraphicsPipeline(
 
     VkPipelineDepthStencilStateCreateInfo depthStencil{
         VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
-    depthStencil.depthTestEnable = desc.depthStencil.depthTestEnable;
-    depthStencil.depthWriteEnable = desc.depthStencil.depthWriteEnable;
-    depthStencil.depthCompareOp = toVulkan(desc.depthStencil.depthCompare);
 
-    constexpr std::array dynamicStates{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    constexpr std::array dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
+                                       VK_DYNAMIC_STATE_SCISSOR,
+                                       VK_DYNAMIC_STATE_CULL_MODE,
+                                       VK_DYNAMIC_STATE_FRONT_FACE,
+                                       VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
+                                       VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
+                                       VK_DYNAMIC_STATE_DEPTH_COMPARE_OP,
+                                       VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT,
+                                       VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT,
+                                       VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT,
+                                       VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
+                                       VK_DYNAMIC_STATE_POLYGON_MODE_EXT};
     VkPipelineDynamicStateCreateInfo dynamicState{
         VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
     dynamicState.dynamicStateCount = static_cast<std::uint32_t>(dynamicStates.size());

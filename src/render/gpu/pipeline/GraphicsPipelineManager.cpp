@@ -24,41 +24,6 @@ rhi::VertexFormat toRhi(VertexFormat format) {
     Log::fatal("GraphicsPipelineManager", "Unsupported Mesh vertex format");
 }
 
-rhi::CullMode toRhi(CullMode mode) {
-    switch (mode) {
-    case CullMode::Off: return rhi::CullMode::None;
-    case CullMode::Front: return rhi::CullMode::Front;
-    case CullMode::Back: return rhi::CullMode::Back;
-    }
-    return rhi::CullMode::None;
-}
-
-rhi::CompareOp toRhi(DepthCompare compare) {
-    switch (compare) {
-    case DepthCompare::Never: return rhi::CompareOp::Never;
-    case DepthCompare::Less: return rhi::CompareOp::Less;
-    case DepthCompare::LessEqual: return rhi::CompareOp::LessEqual;
-    case DepthCompare::Equal: return rhi::CompareOp::Equal;
-    case DepthCompare::Greater: return rhi::CompareOp::Greater;
-    case DepthCompare::GreaterEqual: return rhi::CompareOp::GreaterEqual;
-    case DepthCompare::Always: return rhi::CompareOp::Always;
-    }
-    return rhi::CompareOp::Always;
-}
-
-rhi::ColorWriteMask toRhiColorMask(std::string_view mask) {
-    rhi::ColorWriteMask result = rhi::ColorWriteMask::None;
-    if (mask.find('R') != std::string_view::npos)
-        result = result | rhi::ColorWriteMask::Red;
-    if (mask.find('G') != std::string_view::npos)
-        result = result | rhi::ColorWriteMask::Green;
-    if (mask.find('B') != std::string_view::npos)
-        result = result | rhi::ColorWriteMask::Blue;
-    if (mask.find('A') != std::string_view::npos)
-        result = result | rhi::ColorWriteMask::Alpha;
-    return result;
-}
-
 } // namespace
 
 GraphicsPipelineManager::GraphicsPipelineManager() = default;
@@ -90,14 +55,8 @@ GraphicsPipelineCacheKey GraphicsPipelineManager::makeCacheKey(const ShaderProgr
     hashAppend(key, program.layout.id);
     hashAppend(key, colorFormat);
     hashAppend(key, depthFormat);
-    hashAppend(key, state.cull);
-    hashAppend(key, state.frontFace);
-    hashAppend(key, state.fill);
-    hashAppend(key, state.topology);
-    hashAppend(key, state.depthWrite);
-    hashAppend(key, state.depthTest);
-    hashAppend(key, state.blend);
-    key = hashString(state.colorMask, key);
+    // Cull/frontFace/depthTest/depthWrite/blend/colorMask/topology/fill are dynamic states
+    // and do not contribute to the pipeline key.
     // The Mesh caches its layout hash, so the vertex layout costs one mix instead of a
     // full walk over every binding and attribute on each resolve.
     hashAppend(key, vertexLayoutHash);
@@ -136,26 +95,8 @@ GraphicsPipelineManager::makeDescription(const ShaderPass& pass,
         desc.vertexAttributes.push_back(
             {attribute.location, attribute.binding, toRhi(attribute.format), attribute.offset});
     }
-    const RenderStateDesc& state = pass.renderState();
-    desc.topology = state.topology == PrimitiveTopology::TriangleList
-                        ? rhi::PrimitiveTopology::TriangleList
-                        : rhi::PrimitiveTopology::LineList;
-    desc.raster.cull = toRhi(state.cull);
-    desc.raster.frontFace = state.frontFace == FrontFace::Clockwise
-                                ? rhi::FrontFace::Clockwise
-                                : rhi::FrontFace::CounterClockwise;
-    desc.raster.fill =
-        state.fill == FillMode::Solid ? rhi::FillMode::Solid : rhi::FillMode::Wireframe;
-    desc.depthStencil.depthTestEnable = state.depthTest != DepthCompare::Always || state.depthWrite;
-    desc.depthStencil.depthWriteEnable = state.depthWrite;
-    desc.depthStencil.depthCompare = toRhi(state.depthTest);
-    switch (state.blend) {
-    case BlendMode::Off: desc.blend.mode = rhi::BlendMode::Off; break;
-    case BlendMode::Alpha: desc.blend.mode = rhi::BlendMode::Alpha; break;
-    case BlendMode::Additive: desc.blend.mode = rhi::BlendMode::Additive; break;
-    case BlendMode::PremultipliedAlpha: desc.blend.mode = rhi::BlendMode::PremultipliedAlpha; break;
-    }
-    desc.blend.colorWriteMask = toRhiColorMask(state.colorMask);
+    // cull/frontFace/depth/blend/colorMask/topology/fill are dynamic and are set by the
+    // encoder before each batch. Use benign defaults for pipeline creation.
     return desc;
 }
 

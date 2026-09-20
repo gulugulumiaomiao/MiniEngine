@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rhi/api/PipelineDesc.h"
 #include "rhi/api/RhiTypes.h"
 
 #include <span>
@@ -20,6 +21,15 @@ public:
     [[nodiscard]] virtual VkCommandBuffer nativeCommandBuffer() const = 0;
     virtual void setViewport(const Viewport& viewport) = 0;
     virtual void setScissor(const Rect& scissor) = 0;
+    virtual void setCullMode(CullMode mode) = 0;
+    virtual void setFrontFace(FrontFace face) = 0;
+    virtual void setDepthTestEnable(bool enable) = 0;
+    virtual void setDepthWriteEnable(bool enable) = 0;
+    virtual void setDepthCompareOp(CompareOp compare) = 0;
+    virtual void setBlendState(BlendMode mode) = 0;
+    virtual void setColorWriteMask(ColorWriteMask mask) = 0;
+    virtual void setPrimitiveTopology(PrimitiveTopology topology) = 0;
+    virtual void setFillMode(FillMode mode) = 0;
     virtual void bindPipeline(GraphicsPipelineHandle pipeline) = 0;
     virtual void
     bindVertexBuffer(std::uint32_t slot, BufferHandle buffer, std::uint64_t offset = 0) = 0;

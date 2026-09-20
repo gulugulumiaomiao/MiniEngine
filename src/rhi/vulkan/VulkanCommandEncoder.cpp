@@ -63,11 +63,77 @@ VkAttachmentStoreOp mapStoreOp(StoreOp operation) {
                                        : VK_ATTACHMENT_STORE_OP_DONT_CARE;
 }
 
+VkCullModeFlags toVulkan(CullMode mode) {
+    switch (mode) {
+    case CullMode::None: return VK_CULL_MODE_NONE;
+    case CullMode::Front: return VK_CULL_MODE_FRONT_BIT;
+    case CullMode::Back: return VK_CULL_MODE_BACK_BIT;
+    }
+    return VK_CULL_MODE_NONE;
+}
+
+VkFrontFace toVulkan(FrontFace face) {
+    return face == FrontFace::Clockwise ? VK_FRONT_FACE_CLOCKWISE
+                                        : VK_FRONT_FACE_COUNTER_CLOCKWISE;
+}
+
+VkCompareOp toVulkan(CompareOp compare) {
+    switch (compare) {
+    case CompareOp::Never: return VK_COMPARE_OP_NEVER;
+    case CompareOp::Less: return VK_COMPARE_OP_LESS;
+    case CompareOp::LessEqual: return VK_COMPARE_OP_LESS_OR_EQUAL;
+    case CompareOp::Equal: return VK_COMPARE_OP_EQUAL;
+    case CompareOp::Greater: return VK_COMPARE_OP_GREATER;
+    case CompareOp::GreaterEqual: return VK_COMPARE_OP_GREATER_OR_EQUAL;
+    case CompareOp::Always: return VK_COMPARE_OP_ALWAYS;
+    }
+    return VK_COMPARE_OP_ALWAYS;
+}
+
+VkColorComponentFlags toVulkan(ColorWriteMask mask) {
+    VkColorComponentFlags result = 0;
+    if (hasFlag(mask, ColorWriteMask::Red))
+        result |= VK_COLOR_COMPONENT_R_BIT;
+    if (hasFlag(mask, ColorWriteMask::Green))
+        result |= VK_COLOR_COMPONENT_G_BIT;
+    if (hasFlag(mask, ColorWriteMask::Blue))
+        result |= VK_COLOR_COMPONENT_B_BIT;
+    if (hasFlag(mask, ColorWriteMask::Alpha))
+        result |= VK_COLOR_COMPONENT_A_BIT;
+    return result;
+}
+
+void toVulkanBlend(BlendMode mode, VkColorBlendEquationEXT& equation, VkBool32& enable) {
+    if (mode == BlendMode::Off) {
+        enable = VK_FALSE;
+        return;
+    }
+    enable = VK_TRUE;
+    equation.colorBlendOp = VK_BLEND_OP_ADD;
+    equation.alphaBlendOp = VK_BLEND_OP_ADD;
+    equation.dstColorBlendFactor =
+        mode == BlendMode::Additive ? VK_BLEND_FACTOR_ONE : VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    equation.srcColorBlendFactor =
+        mode == BlendMode::Alpha ? VK_BLEND_FACTOR_SRC_ALPHA : VK_BLEND_FACTOR_ONE;
+    equation.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    equation.dstAlphaBlendFactor =
+        mode == BlendMode::Additive ? VK_BLEND_FACTOR_ONE : VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+}
+
 } // namespace
 
 VulkanGraphicsCommandEncoder::VulkanGraphicsCommandEncoder(VkCommandBuffer commandBuffer,
                                                            const IDevice& device)
-    : commandBuffer_(commandBuffer), device_(device) {}
+    : commandBuffer_(commandBuffer), device_(device) {
+    pfnSetColorBlendEnable_ = reinterpret_cast<PFN_vkCmdSetColorBlendEnableEXT>(
+        vkGetDeviceProcAddr(device.device(), "vkCmdSetColorBlendEnableEXT"));
+    pfnSetColorBlendEquation_ = reinterpret_cast<PFN_vkCmdSetColorBlendEquationEXT>(
+        vkGetDeviceProcAddr(device.device(), "vkCmdSetColorBlendEquationEXT"));
+    pfnSetColorWriteMask_ = reinterpret_cast<PFN_vkCmdSetColorWriteMaskEXT>(
+        vkGetDeviceProcAddr(device.device(), "vkCmdSetColorWriteMaskEXT"));
+    pfnSetPolygonMode_ = reinterpret_cast<PFN_vkCmdSetPolygonModeEXT>(
+        vkGetDeviceProcAddr(device.device(), "vkCmdSetPolygonModeEXT"));
+}
 
 void VulkanGraphicsCommandEncoder::resourceBarriers(std::span<const TextureBarrier> barriers) {
     if (barriers.empty()) {
@@ -165,6 +231,55 @@ void VulkanGraphicsCommandEncoder::setViewport(const Viewport& viewport) {
 void VulkanGraphicsCommandEncoder::setScissor(const Rect& scissor) {
     const VkRect2D native{{scissor.x, scissor.y}, {scissor.width, scissor.height}};
     vkCmdSetScissor(commandBuffer_, 0, 1, &native);
+}
+
+void VulkanGraphicsCommandEncoder::setCullMode(CullMode mode) {
+    vkCmdSetCullMode(commandBuffer_, toVulkan(mode));
+}
+
+void VulkanGraphicsCommandEncoder::setFrontFace(FrontFace face) {
+    vkCmdSetFrontFace(commandBuffer_, toVulkan(face));
+}
+
+void VulkanGraphicsCommandEncoder::setDepthTestEnable(bool enable) {
+    vkCmdSetDepthTestEnable(commandBuffer_, enable ? VK_TRUE : VK_FALSE);
+}
+
+void VulkanGraphicsCommandEncoder::setDepthWriteEnable(bool enable) {
+    vkCmdSetDepthWriteEnable(commandBuffer_, enable ? VK_TRUE : VK_FALSE);
+}
+
+void VulkanGraphicsCommandEncoder::setDepthCompareOp(CompareOp compare) {
+    vkCmdSetDepthCompareOp(commandBuffer_, toVulkan(compare));
+}
+
+void VulkanGraphicsCommandEncoder::setBlendState(BlendMode mode) {
+    VkColorBlendEquationEXT equation{};
+    VkBool32 enable = VK_FALSE;
+    toVulkanBlend(mode, equation, enable);
+    const VkBool32 enables[1] = {enable};
+    pfnSetColorBlendEnable_(commandBuffer_, 0, 1, enables);
+    // COLOR_BLEND_EQUATION_EXT is a pipeline dynamic state and must always be set
+    // in the command buffer, even when blending is disabled.
+    const VkColorBlendEquationEXT equations[1] = {equation};
+    pfnSetColorBlendEquation_(commandBuffer_, 0, 1, equations);
+}
+
+void VulkanGraphicsCommandEncoder::setColorWriteMask(ColorWriteMask mask) {
+    const VkColorComponentFlags masks[1] = {toVulkan(mask)};
+    pfnSetColorWriteMask_(commandBuffer_, 0, 1, masks);
+}
+
+void VulkanGraphicsCommandEncoder::setPrimitiveTopology(PrimitiveTopology topology) {
+    vkCmdSetPrimitiveTopology(commandBuffer_,
+                              topology == PrimitiveTopology::TriangleList
+                                  ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+                                  : VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
+}
+
+void VulkanGraphicsCommandEncoder::setFillMode(FillMode mode) {
+    pfnSetPolygonMode_(commandBuffer_,
+                       mode == FillMode::Solid ? VK_POLYGON_MODE_FILL : VK_POLYGON_MODE_LINE);
 }
 
 void VulkanGraphicsCommandEncoder::bindPipeline(GraphicsPipelineHandle pipeline) {

@@ -104,6 +104,17 @@ public:
     [[nodiscard]] VkCommandBuffer nativeCommandBuffer() const override { return VK_NULL_HANDLE; }
     void setViewport(const rhi::Viewport& viewport) override { viewports.push_back(viewport); }
     void setScissor(const rhi::Rect& scissor) override { scissors.push_back(scissor); }
+    void setCullMode(rhi::CullMode mode) override { cullModes.push_back(mode); }
+    void setFrontFace(rhi::FrontFace face) override { frontFaces.push_back(face); }
+    void setDepthTestEnable(bool enable) override { depthTestEnables.push_back(enable); }
+    void setDepthWriteEnable(bool enable) override { depthWriteEnables.push_back(enable); }
+    void setDepthCompareOp(rhi::CompareOp compare) override { depthCompareOps.push_back(compare); }
+    void setBlendState(rhi::BlendMode mode) override { blendModes.push_back(mode); }
+    void setColorWriteMask(rhi::ColorWriteMask mask) override { colorWriteMasks.push_back(mask); }
+    void setPrimitiveTopology(rhi::PrimitiveTopology topology) override {
+        primitiveTopologies.push_back(topology);
+    }
+    void setFillMode(rhi::FillMode mode) override { fillModes.push_back(mode); }
     void bindPipeline(rhi::GraphicsPipelineHandle pipeline) override {
         boundPipelines.push_back(pipeline);
     }
@@ -129,6 +140,15 @@ public:
 
     std::vector<rhi::Viewport> viewports;
     std::vector<rhi::Rect> scissors;
+    std::vector<rhi::CullMode> cullModes;
+    std::vector<rhi::FrontFace> frontFaces;
+    std::vector<bool> depthTestEnables;
+    std::vector<bool> depthWriteEnables;
+    std::vector<rhi::CompareOp> depthCompareOps;
+    std::vector<rhi::BlendMode> blendModes;
+    std::vector<rhi::ColorWriteMask> colorWriteMasks;
+    std::vector<rhi::PrimitiveTopology> primitiveTopologies;
+    std::vector<rhi::FillMode> fillModes;
     std::vector<rhi::GraphicsPipelineHandle> boundPipelines;
     std::vector<rhi::BufferHandle> boundVertexBuffers;
     std::vector<rhi::BufferHandle> boundIndexBuffers;

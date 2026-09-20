@@ -94,6 +94,15 @@ public:
     void endRendering() override {}
     void setViewport(const engine::rhi::Viewport&) override {}
     void setScissor(const engine::rhi::Rect&) override {}
+    void setCullMode(engine::rhi::CullMode) override {}
+    void setFrontFace(engine::rhi::FrontFace) override {}
+    void setDepthTestEnable(bool) override {}
+    void setDepthWriteEnable(bool) override {}
+    void setDepthCompareOp(engine::rhi::CompareOp) override {}
+    void setBlendState(engine::rhi::BlendMode) override {}
+    void setColorWriteMask(engine::rhi::ColorWriteMask) override {}
+    void setPrimitiveTopology(engine::rhi::PrimitiveTopology) override {}
+    void setFillMode(engine::rhi::FillMode) override {}
     void bindPipeline(engine::rhi::GraphicsPipelineHandle) override {}
     void bindVertexBuffer(std::uint32_t, engine::rhi::BufferHandle, std::uint64_t) override {}
     void

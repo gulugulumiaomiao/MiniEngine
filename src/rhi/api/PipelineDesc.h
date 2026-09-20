@@ -109,23 +109,10 @@ constexpr bool hasFlag(ColorWriteMask value, ColorWriteMask flag) {
     return (static_cast<std::uint8_t>(value) & static_cast<std::uint8_t>(flag)) != 0;
 }
 
-struct RasterStateDesc {
-    CullMode cull{CullMode::Back};
-    FrontFace frontFace{FrontFace::Clockwise};
-    FillMode fill{FillMode::Solid};
-};
-
-struct DepthStencilStateDesc {
-    bool depthTestEnable{true};
-    bool depthWriteEnable{true};
-    CompareOp depthCompare{CompareOp::LessEqual};
-};
-
-struct BlendStateDesc {
-    BlendMode mode{BlendMode::Off};
-    ColorWriteMask colorWriteMask{ColorWriteMask::All};
-};
-
+// GraphicsPipelineDesc only contains static pipeline state. All dynamic states
+// (cull mode, front face, depth test/write/compare, blend mode, color write mask,
+// primitive topology and fill mode) are set at command buffer record time through
+// the RHI encoder and do not contribute to the pipeline layout or cache key.
 struct GraphicsPipelineDesc {
     ShaderHandle vertexShader;
     std::string vertexEntry{"main"};
@@ -134,10 +121,6 @@ struct GraphicsPipelineDesc {
     std::vector<BindGroupLayoutHandle> bindGroupLayouts;
     std::vector<VertexBindingDesc> vertexBindings;
     std::vector<VertexAttributeDesc> vertexAttributes;
-    PrimitiveTopology topology{PrimitiveTopology::TriangleList};
-    RasterStateDesc raster;
-    DepthStencilStateDesc depthStencil;
-    BlendStateDesc blend;
     std::vector<TextureFormat> colorFormats;
     TextureFormat depthFormat{TextureFormat::Undefined};
 };

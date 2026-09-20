@@ -443,11 +443,8 @@ bool ImGuiRenderer::createPipeline() {
          .offset = static_cast<std::uint32_t>(offsetof(ImDrawVert, col))},
     };
     // ImGui emits both winding orders and expects straight alpha blending; the overlay
-    // draws on top of the finished frame without a depth buffer.
-    desc.raster.cull = rhi::CullMode::None;
-    desc.depthStencil.depthTestEnable = false;
-    desc.depthStencil.depthWriteEnable = false;
-    desc.blend.mode = rhi::BlendMode::Alpha;
+    // draws on top of the finished frame without a depth buffer. These states are dynamic
+    // and are configured on the encoder before each render pass.
     desc.colorFormats = {colorFormat_};
     pipeline_ = device_->createGraphicsPipeline(desc);
     if (!pipeline_) {
@@ -588,6 +585,13 @@ void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
 
     encoder.beginDebugLabel("ImGui", {0.4F, 0.7F, 1.0F, 1.0F});
     encoder.bindPipeline(pipeline_);
+    encoder.setPrimitiveTopology(rhi::PrimitiveTopology::TriangleList);
+    encoder.setFillMode(rhi::FillMode::Solid);
+    encoder.setCullMode(rhi::CullMode::None);
+    encoder.setDepthTestEnable(false);
+    encoder.setDepthWriteEnable(false);
+    encoder.setBlendState(rhi::BlendMode::Alpha);
+    encoder.setColorWriteMask(rhi::ColorWriteMask::All);
     encoder.bindVertexBuffer(0, geometry.vertexBuffer);
     encoder.bindIndexBuffer(geometry.indexBuffer, 0, rhi::IndexFormat::UInt16);
     encoder.setViewport({.width = framebufferWidth, .height = framebufferHeight});
@@ -601,6 +605,13 @@ void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
                 // panels use none, so anything else is reported instead of guessed at.
                 if (command.UserCallback == ImDrawCallback_ResetRenderState) {
                     encoder.bindPipeline(pipeline_);
+                    encoder.setPrimitiveTopology(rhi::PrimitiveTopology::TriangleList);
+                    encoder.setFillMode(rhi::FillMode::Solid);
+                    encoder.setCullMode(rhi::CullMode::None);
+                    encoder.setDepthTestEnable(false);
+                    encoder.setDepthWriteEnable(false);
+                    encoder.setBlendState(rhi::BlendMode::Alpha);
+                    encoder.setColorWriteMask(rhi::ColorWriteMask::All);
                     encoder.bindVertexBuffer(0, geometry.vertexBuffer);
                     encoder.bindIndexBuffer(geometry.indexBuffer, 0, rhi::IndexFormat::UInt16);
                     encoder.setViewport({.width = framebufferWidth, .height = framebufferHeight});

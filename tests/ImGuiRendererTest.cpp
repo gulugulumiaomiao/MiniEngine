@@ -96,8 +96,6 @@ TEST_F(ImGuiRendererTest, GeometryFontsAndColorFormats) {
             pipeline.vertexBindings[0].stride != sizeof(ImDrawVert) ||
             pipeline.vertexAttributes.size() != 3 ||
             pipeline.vertexAttributes[2].format != rhi::VertexFormat::UInt8x4Normalized ||
-            pipeline.blend.mode != rhi::BlendMode::Alpha || pipeline.depthStencil.depthTestEnable ||
-            pipeline.depthStencil.depthWriteEnable || pipeline.raster.cull != rhi::CullMode::None ||
             pipeline.colorFormats.size() != 1 || pipeline.colorFormats[0] != kColorFormat ||
             pipeline.bindGroupLayouts.size() != 1) {
             FAIL() << "UI pipeline state does not match ImGui's requirements";
@@ -106,6 +104,17 @@ TEST_F(ImGuiRendererTest, GeometryFontsAndColorFormats) {
         const ImDrawData& drawData = buildFrame(kDisplaySize);
         MockEncoder encoder;
         renderer.render(encoder, drawData, 0);
+        if (encoder.primitiveTopologies.empty() ||
+            encoder.primitiveTopologies.front() != rhi::PrimitiveTopology::TriangleList ||
+            encoder.fillModes.empty() || encoder.fillModes.front() != rhi::FillMode::Solid ||
+            encoder.cullModes.empty() || encoder.cullModes.front() != rhi::CullMode::None ||
+            encoder.depthTestEnables.empty() || encoder.depthTestEnables.front() ||
+            encoder.depthWriteEnables.empty() || encoder.depthWriteEnables.front() ||
+            encoder.blendModes.empty() || encoder.blendModes.front() != rhi::BlendMode::Alpha ||
+            encoder.colorWriteMasks.empty() ||
+            encoder.colorWriteMasks.front() != rhi::ColorWriteMask::All) {
+            FAIL() << "UI dynamic render state does not match ImGui's requirements";
+        }
 
         // Geometry is host visible so the frame can be written without a staging copy.
         if (device.buffers.size() != 2 ||

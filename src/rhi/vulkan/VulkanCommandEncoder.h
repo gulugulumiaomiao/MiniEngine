@@ -19,6 +19,15 @@ public:
     }
     void setViewport(const Viewport& viewport) override;
     void setScissor(const Rect& scissor) override;
+    void setCullMode(CullMode mode) override;
+    void setFrontFace(FrontFace face) override;
+    void setDepthTestEnable(bool enable) override;
+    void setDepthWriteEnable(bool enable) override;
+    void setDepthCompareOp(CompareOp compare) override;
+    void setBlendState(BlendMode mode) override;
+    void setColorWriteMask(ColorWriteMask mask) override;
+    void setPrimitiveTopology(PrimitiveTopology topology) override;
+    void setFillMode(FillMode mode) override;
     void bindPipeline(GraphicsPipelineHandle pipeline) override;
     void bindVertexBuffer(std::uint32_t slot, BufferHandle buffer, std::uint64_t offset) override;
     void bindIndexBuffer(BufferHandle buffer, std::uint64_t offset, IndexFormat format) override;
@@ -34,6 +43,10 @@ private:
     VkCommandBuffer commandBuffer_{VK_NULL_HANDLE};
     const IDevice& device_;
     VkPipelineLayout boundPipelineLayout_{VK_NULL_HANDLE};
+    PFN_vkCmdSetColorBlendEnableEXT pfnSetColorBlendEnable_{nullptr};
+    PFN_vkCmdSetColorBlendEquationEXT pfnSetColorBlendEquation_{nullptr};
+    PFN_vkCmdSetColorWriteMaskEXT pfnSetColorWriteMask_{nullptr};
+    PFN_vkCmdSetPolygonModeEXT pfnSetPolygonMode_{nullptr};
 };
 
 class VulkanTransferCommandEncoder final : public ITransferCommandEncoder {
