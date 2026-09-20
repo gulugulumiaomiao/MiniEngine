@@ -120,7 +120,7 @@ bool transferMeshAsset(Transfer& archive, MeshAsset& value) {
         version > kMeshVersion) {
         return false;
     }
-    if (version >= 3 && !archive.transfer("build_recipe", value.buildRecipe)) {
+    if (!archive.transfer("build_recipe", value.buildRecipe)) {
         return false;
     }
     return archive.transfer("description", value.desc) &&

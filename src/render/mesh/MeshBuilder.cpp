@@ -310,13 +310,6 @@ VertexLayout layoutFor(PrimitiveVertexLayout preset) {
     return layout;
 }
 
-void writeValue(std::vector<std::byte>& bytes,
-                std::size_t offset,
-                const void* value,
-                std::size_t size) {
-    std::memcpy(bytes.data() + offset, value, size);
-}
-
 } // namespace
 
 std::optional<MeshBuildResult> MeshBuilder::build(const MeshBuildRecipe& recipe) {
@@ -419,7 +412,9 @@ std::optional<MeshBuildResult> MeshBuilder::build(const MeshBuildRecipe& recipe)
     std::vector<std::byte> positionBytes;
     positionBytes.resize(vertices.size() * sizeof(math::Vec3));
     for (std::size_t i = 0; i < vertices.size(); ++i) {
-        writeValue(positionBytes, i * sizeof(math::Vec3), &vertices[i].position, sizeof(math::Vec3));
+        std::memcpy(positionBytes.data() + i * sizeof(math::Vec3),
+                    &vertices[i].position,
+                    sizeof(math::Vec3));
     }
     if (!result.data.setVertexData(0, vertexCount, positionBytes))
         return std::nullopt;
@@ -428,7 +423,9 @@ std::optional<MeshBuildResult> MeshBuilder::build(const MeshBuildRecipe& recipe)
         std::vector<std::byte> normalBytes;
         normalBytes.resize(vertices.size() * sizeof(math::Vec3));
         for (std::size_t i = 0; i < vertices.size(); ++i) {
-            writeValue(normalBytes, i * sizeof(math::Vec3), &vertices[i].normal, sizeof(math::Vec3));
+            std::memcpy(normalBytes.data() + i * sizeof(math::Vec3),
+                        &vertices[i].normal,
+                        sizeof(math::Vec3));
         }
         if (!result.data.setVertexData(1, vertexCount, normalBytes))
             return std::nullopt;
@@ -439,11 +436,12 @@ std::optional<MeshBuildResult> MeshBuilder::build(const MeshBuildRecipe& recipe)
             std::vector<std::byte> uvBytes;
             uvBytes.resize(vertices.size() * sizeof(math::Vec2));
             for (std::size_t i = 0; i < vertices.size(); ++i) {
-                writeValue(tangentBytes,
-                           i * sizeof(math::Vec4),
-                           &vertices[i].tangent,
-                           sizeof(math::Vec4));
-                writeValue(uvBytes, i * sizeof(math::Vec2), &vertices[i].uv, sizeof(math::Vec2));
+                std::memcpy(tangentBytes.data() + i * sizeof(math::Vec4),
+                            &vertices[i].tangent,
+                            sizeof(math::Vec4));
+                std::memcpy(uvBytes.data() + i * sizeof(math::Vec2),
+                            &vertices[i].uv,
+                            sizeof(math::Vec2));
             }
             if (!result.data.setVertexData(2, vertexCount, tangentBytes) ||
                 !result.data.setVertexData(3, vertexCount, uvBytes)) {
@@ -453,7 +451,9 @@ std::optional<MeshBuildResult> MeshBuilder::build(const MeshBuildRecipe& recipe)
             std::vector<std::byte> uvBytes;
             uvBytes.resize(vertices.size() * sizeof(math::Vec2));
             for (std::size_t i = 0; i < vertices.size(); ++i) {
-                writeValue(uvBytes, i * sizeof(math::Vec2), &vertices[i].uv, sizeof(math::Vec2));
+                std::memcpy(uvBytes.data() + i * sizeof(math::Vec2),
+                            &vertices[i].uv,
+                            sizeof(math::Vec2));
             }
             if (!result.data.setVertexData(2, vertexCount, uvBytes))
                 return std::nullopt;
