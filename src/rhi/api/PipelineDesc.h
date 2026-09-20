@@ -40,17 +40,12 @@ enum class VertexInputRate {
     Instance,
 };
 
-struct VertexBindingDesc {
+struct VertexStreamDesc {
     std::uint32_t binding{};
+    std::uint32_t location{};
+    VertexFormat format{VertexFormat::Float32};
     std::uint32_t stride{};
     VertexInputRate inputRate{VertexInputRate::Vertex};
-};
-
-struct VertexAttributeDesc {
-    std::uint32_t location{};
-    std::uint32_t binding{};
-    VertexFormat format{VertexFormat::Float32};
-    std::uint32_t offset{};
 };
 
 enum class PrimitiveTopology {
@@ -119,8 +114,7 @@ struct GraphicsPipelineDesc {
     ShaderHandle fragmentShader;
     std::string fragmentEntry{"main"};
     std::vector<BindGroupLayoutHandle> bindGroupLayouts;
-    std::vector<VertexBindingDesc> vertexBindings;
-    std::vector<VertexAttributeDesc> vertexAttributes;
+    std::vector<VertexStreamDesc> vertexStreams;
     std::vector<TextureFormat> colorFormats;
     TextureFormat depthFormat{TextureFormat::Undefined};
 };

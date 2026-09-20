@@ -96,16 +96,12 @@ bool testDerivedEquality() {
 
     CHECK_MEMBER(VertexSemantic, type, VertexSemanticType::Color);
     CHECK_MEMBER(VertexSemantic, index, 1);
-    CHECK_MEMBER(VertexBinding, binding, 1);
-    CHECK_MEMBER(VertexBinding, stride, 16);
-    CHECK_MEMBER(VertexBinding, inputRate, VertexInputRate::Instance);
-    CHECK_MEMBER(VertexAttribute, semantic, VertexSemantic{VertexSemanticType::Color, 0});
-    CHECK_MEMBER(VertexAttribute, format, VertexFormat::Vec4Float32);
-    CHECK_MEMBER(VertexAttribute, location, 1);
-    CHECK_MEMBER(VertexAttribute, binding, 1);
-    CHECK_MEMBER(VertexAttribute, offset, 16);
-    CHECK_MEMBER(VertexLayout, bindings, std::vector<VertexBinding>{VertexBinding{}});
-    CHECK_MEMBER(VertexLayout, attributes, std::vector<VertexAttribute>{VertexAttribute{}});
+    CHECK_MEMBER(VertexStreamLayout, semantic, VertexSemantic{VertexSemanticType::Color, 0});
+    CHECK_MEMBER(VertexStreamLayout, format, VertexFormat::Vec4Float32);
+    CHECK_MEMBER(VertexStreamLayout, binding, 1);
+    CHECK_MEMBER(VertexStreamLayout, location, 1);
+    CHECK_MEMBER(VertexStreamLayout, inputRate, VertexInputRate::Instance);
+    CHECK_MEMBER(VertexLayout, streams, std::vector<VertexStreamLayout>{VertexStreamLayout{}});
     CHECK_MEMBER(Aabb, minimum, math::Vec3{1.0F});
     CHECK_MEMBER(Aabb, maximum, math::Vec3{1.0F});
     CHECK_MEMBER(BoundingSphere, center, math::Vec3{1.0F});
@@ -201,9 +197,9 @@ bool testDerivedEquality() {
 #undef CHECK_MEMBER
     // 容器长度不变时，布局和节点也必须能识别内部成员的变化。
     VertexLayout layout;
-    layout.bindings.push_back(VertexBinding{});
+    layout.streams.push_back(VertexStreamLayout{});
     VertexLayout changedLayout = layout;
-    changedLayout.bindings[0].stride = 16;
+    changedLayout.streams[0].format = VertexFormat::Vec4Float32;
     SceneNodeAsset node;
     node.components.push_back(CameraComponentAsset{});
     SceneNodeAsset changedNode = node;
@@ -314,7 +310,7 @@ bool testObjectScopes() {
     if (!meshAsset || !checkObjectScopes(*meshAsset) || !checkObjectScopes<SceneAsset>())
         return false;
     return checkObjectScopes<Sample>() && checkObjectScopes<VertexSemantic>() &&
-           checkObjectScopes<VertexBinding>() && checkObjectScopes<VertexAttribute>() &&
+           checkObjectScopes<VertexStreamLayout>() &&
            checkObjectScopes<VertexLayout>() && checkObjectScopes<Aabb>() &&
            checkObjectScopes<BoundingSphere>() && checkObjectScopes<MeshBounds>() &&
            checkObjectScopes<SubMesh>() && checkObjectScopes<MeshDesc>() &&
@@ -336,37 +332,40 @@ bool testObjectScopes() {
 
 bool testLegacyShapeAndFailureScope() {
     using namespace engine;
-    VertexBinding binding{1, 16, VertexInputRate::Vertex};
+    VertexStreamLayout layout{{VertexSemanticType::Position, 0},
+                              VertexFormat::Vec3Float32,
+                              1,
+                              2,
+                              VertexInputRate::Vertex};
     JsonWriter writer;
-    if (!binding.transfer(writer) ||
+    if (!layout.transfer(writer) ||
         nlohmann::json::parse(writer.toString()) !=
-            nlohmann::json{{"binding", 1}, {"stride", 16}, {"input_rate", 0}})
+            nlohmann::json{{"semantic", {{"type", 0}, {"index", 0}}},
+                           {"format", 2},
+                           {"binding", 1},
+                           {"location", 2},
+                           {"input_rate", 0}})
         return false;
-    const std::vector<std::byte> legacy{std::byte{1},
-                                        std::byte{0},
-                                        std::byte{0},
-                                        std::byte{0},
-                                        std::byte{16},
-                                        std::byte{0},
-                                        std::byte{0},
-                                        std::byte{0},
-                                        std::byte{0},
-                                        std::byte{0},
-                                        std::byte{0},
-                                        std::byte{0}};
+    const std::vector<std::byte> legacy{
+        std::byte{0}, std::byte{0}, std::byte{0}, std::byte{0}, // semantic.type
+        std::byte{0},                                           // semantic.index
+        std::byte{2}, std::byte{0}, std::byte{0}, std::byte{0}, // format
+        std::byte{1}, std::byte{0}, std::byte{0}, std::byte{0}, // binding
+        std::byte{2}, std::byte{0}, std::byte{0}, std::byte{0}, // location
+        std::byte{0}, std::byte{0}, std::byte{0}, std::byte{0}  // input_rate
+    };
     BinaryWriter binary;
-    if (!binding.transfer(binary) || binary.bytes() != legacy)
+    if (!layout.transfer(binary) || binary.bytes() != legacy)
         return false;
     BinaryReader binaryReader{legacy};
-    VertexBinding decoded;
-    if (!decoded.transfer(binaryReader) || !binaryReader.finished() || decoded != binding)
+    VertexStreamLayout decoded;
+    if (!decoded.transfer(binaryReader) || !binaryReader.finished() || decoded != layout)
         return false;
 
     // 深层失败后命名字段必须恢复父作用域，显式清错才允许继续。
-    JsonReader reader{
-        R"({"child":{"bindings":[{"binding":0,"stride":"bad","input_rate":0}]},"after":29})"};
-    VertexLayout layout;
-    if (!reader.beginObject({}) || reader.transfer("child", layout) || reader.valid())
+    JsonReader reader{R"json({"child":{"streams":[{"semantic":{"type":0,"index":0},"format":2,"binding":"bad","location":0,"input_rate":0}]},"after":29})json"};
+    VertexLayout vertexLayout;
+    if (!reader.beginObject({}) || reader.transfer("child", vertexLayout) || reader.valid())
         return false;
     reader.clearError();
     std::uint32_t after{};

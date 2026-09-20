@@ -92,10 +92,13 @@ TEST_F(ImGuiRendererTest, GeometryFontsAndColorFormats) {
         if (device.pipelines.size() != 1)
             FAIL() << "expected exactly one UI pipeline";
         const rhi::GraphicsPipelineDesc& pipeline = device.pipelines[0];
-        if (pipeline.vertexBindings.size() != 1 ||
-            pipeline.vertexBindings[0].stride != sizeof(ImDrawVert) ||
-            pipeline.vertexAttributes.size() != 3 ||
-            pipeline.vertexAttributes[2].format != rhi::VertexFormat::UInt8x4Normalized ||
+        if (pipeline.vertexStreams.size() != 3 ||
+            pipeline.vertexStreams[0].format != rhi::VertexFormat::Vec2Float32 ||
+            pipeline.vertexStreams[0].stride != sizeof(math::Vec2) ||
+            pipeline.vertexStreams[1].format != rhi::VertexFormat::Vec2Float32 ||
+            pipeline.vertexStreams[1].stride != sizeof(math::Vec2) ||
+            pipeline.vertexStreams[2].format != rhi::VertexFormat::UInt8x4Normalized ||
+            pipeline.vertexStreams[2].stride != sizeof(std::uint32_t) ||
             pipeline.colorFormats.size() != 1 || pipeline.colorFormats[0] != kColorFormat ||
             pipeline.bindGroupLayouts.size() != 1) {
             FAIL() << "UI pipeline state does not match ImGui's requirements";
@@ -117,17 +120,26 @@ TEST_F(ImGuiRendererTest, GeometryFontsAndColorFormats) {
         }
 
         // Geometry is host visible so the frame can be written without a staging copy.
-        if (device.buffers.size() != 2 ||
+        // ImGui's interleaved vertex is split into three vertex buffers plus one index buffer.
+        if (device.buffers.size() != 4 ||
             device.buffers[0].memoryUsage != rhi::MemoryUsage::Upload ||
             device.buffers[1].memoryUsage != rhi::MemoryUsage::Upload ||
+            device.buffers[2].memoryUsage != rhi::MemoryUsage::Upload ||
+            device.buffers[3].memoryUsage != rhi::MemoryUsage::Upload ||
             !rhi::hasFlag(device.buffers[0].usage, rhi::BufferUsage::Vertex) ||
-            !rhi::hasFlag(device.buffers[1].usage, rhi::BufferUsage::Index)) {
+            !rhi::hasFlag(device.buffers[1].usage, rhi::BufferUsage::Vertex) ||
+            !rhi::hasFlag(device.buffers[2].usage, rhi::BufferUsage::Vertex) ||
+            !rhi::hasFlag(device.buffers[3].usage, rhi::BufferUsage::Index)) {
             FAIL() << "per-frame geometry buffers are wrong";
         }
-        if (device.uploadedBytes.size() != 2 ||
+        if (device.uploadedBytes.size() != 4 ||
             device.uploadedBytes[0] !=
-                static_cast<std::size_t>(drawData.TotalVtxCount) * sizeof(ImDrawVert) ||
+                static_cast<std::size_t>(drawData.TotalVtxCount) * sizeof(math::Vec2) ||
             device.uploadedBytes[1] !=
+                static_cast<std::size_t>(drawData.TotalVtxCount) * sizeof(math::Vec2) ||
+            device.uploadedBytes[2] !=
+                static_cast<std::size_t>(drawData.TotalVtxCount) * sizeof(std::uint32_t) ||
+            device.uploadedBytes[3] !=
                 static_cast<std::size_t>(drawData.TotalIdxCount) * sizeof(ImDrawIdx)) {
             FAIL() << "the whole frame's geometry must be uploaded once";
         }
@@ -188,11 +200,11 @@ TEST_F(ImGuiRendererTest, GeometryFontsAndColorFormats) {
         const std::size_t buffersAfterFirstFrame = device.buffers.size();
         MockEncoder secondEncoder;
         renderer.render(secondEncoder, buildFrame(kDisplaySize), 1);
-        if (device.buffers.size() != buffersAfterFirstFrame + 2)
+        if (device.buffers.size() != buffersAfterFirstFrame + 4)
             FAIL() << "the second frame in flight needs its own geometry buffers";
         MockEncoder thirdEncoder;
         renderer.render(thirdEncoder, buildFrame(kDisplaySize), 0);
-        if (device.buffers.size() != buffersAfterFirstFrame + 2)
+        if (device.buffers.size() != buffersAfterFirstFrame + 4)
             FAIL() << "a frame index must reuse the buffers it already grew";
 
         renderer.shutdown();

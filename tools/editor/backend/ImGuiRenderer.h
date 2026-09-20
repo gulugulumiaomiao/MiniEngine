@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/math/Math.h"
 #include "render/gpu/frame/FrameGpuManager.h"
 #include "rhi/api/PipelineDesc.h"
 #include "rhi/api/RhiTypes.h"
@@ -57,10 +58,12 @@ public:
 
 private:
     // Geometry is double buffered like the rest of the engine's per-frame resources.
+    // ImGui's interleaved vertex is split into one buffer per semantic so the RHI only
+    // needs a single stream description per binding.
     struct Geometry {
-        rhi::BufferHandle vertexBuffer;
+        std::array<rhi::BufferHandle, 3> vertexBuffers{};
+        std::array<std::uint32_t, 3> vertexCapacities{};
         rhi::BufferHandle indexBuffer;
-        std::uint32_t vertexCapacity{};
         std::uint32_t indexCapacity{};
     };
 
@@ -90,8 +93,11 @@ private:
     std::array<SceneTexture, FrameGpuManager::kFramesInFlight> sceneTextures_{};
     std::array<Geometry, FrameGpuManager::kFramesInFlight> geometry_;
     // Reused scratch buffers: the vertex copy applies ImGui's display transform and
-    // the index copy concatenates the draw lists into one range.
-    std::vector<ImDrawVert> vertexStaging_;
+    // deinterleaves the data into one buffer per semantic; the index copy concatenates
+    // the draw lists into one range.
+    std::vector<math::Vec2> positionStaging_;
+    std::vector<math::Vec2> uvStaging_;
+    std::vector<std::uint32_t> colorStaging_;
     std::vector<ImDrawIdx> indexStaging_;
 };
 

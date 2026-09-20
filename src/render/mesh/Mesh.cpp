@@ -15,8 +15,8 @@ namespace engine {
 namespace {
 
 constexpr std::uint32_t kMeshMagic = 0x4853454dU;
-constexpr std::uint16_t kMeshVersion = 3;
-constexpr std::uint16_t kMinimumMeshVersion = 2;
+constexpr std::uint16_t kMeshVersion = 4;
+constexpr std::uint16_t kMinimumMeshVersion = 4;
 
 bool fail(std::string_view message) {
     Log::error("Mesh", "%.*s", static_cast<int>(message.size()), message.data());
@@ -50,22 +50,15 @@ bool VertexSemantic::transfer(Transfer& archive) {
            archive.transfer("index", index) && archive.endObject();
 }
 
-bool VertexBinding::transfer(Transfer& archive) {
-    return archive.beginObject({}) && archive.transfer("binding", binding) &&
-           archive.transfer("stride", stride) && archive.transfer("input_rate", inputRate) &&
-           archive.endObject();
-}
-
-bool VertexAttribute::transfer(Transfer& archive) {
+bool VertexStreamLayout::transfer(Transfer& archive) {
     return archive.beginObject({}) && archive.transfer("semantic", semantic) &&
-           archive.transfer("format", format) && archive.transfer("location", location) &&
-           archive.transfer("binding", binding) && archive.transfer("offset", offset) &&
+           archive.transfer("format", format) && archive.transfer("binding", binding) &&
+           archive.transfer("location", location) && archive.transfer("input_rate", inputRate) &&
            archive.endObject();
 }
 
 bool VertexLayout::transfer(Transfer& archive) {
-    return archive.beginObject({}) && archive.transfer("bindings", bindings) &&
-           archive.transfer("attributes", attributes) && archive.endObject();
+    return archive.beginObject({}) && archive.transfer("streams", streams) && archive.endObject();
 }
 
 bool Aabb::transfer(Transfer& archive) {
@@ -154,62 +147,36 @@ std::uint32_t indexTypeSize(IndexType type) {
     return 0;
 }
 
-const VertexBinding* VertexLayout::findBinding(std::uint32_t binding) const {
-    const auto found = std::ranges::find(bindings, binding, &VertexBinding::binding);
-    return found == bindings.end() ? nullptr : &*found;
+const VertexStreamLayout* VertexLayout::find(std::uint32_t binding) const {
+    const auto found = std::ranges::find(streams, binding, &VertexStreamLayout::binding);
+    return found == streams.end() ? nullptr : &*found;
 }
 
-const VertexAttribute* VertexLayout::find(VertexSemantic semantic) const {
-    const auto found = std::ranges::find(attributes, semantic, &VertexAttribute::semantic);
-    return found == attributes.end() ? nullptr : &*found;
+const VertexStreamLayout* VertexLayout::find(VertexSemantic semantic) const {
+    const auto found = std::ranges::find(streams, semantic, &VertexStreamLayout::semantic);
+    return found == streams.end() ? nullptr : &*found;
 }
 
 bool VertexLayout::validate() const {
-    if (bindings.empty())
-        return fail("VertexLayout has no bindings");
-    if (attributes.empty())
-        return fail("VertexLayout has no attributes");
-
-    std::set<std::uint32_t> bindingIndices;
-    for (const VertexBinding& binding : bindings) {
-        if (binding.stride == 0 || !valid(binding.inputRate)) {
-            return fail("VertexLayout contains an invalid binding");
-        }
-        if (!bindingIndices.insert(binding.binding).second) {
-            return fail("VertexLayout contains a duplicate binding");
-        }
-    }
+    if (streams.empty())
+        return fail("VertexLayout has no streams");
 
     std::set<VertexSemantic> semantics;
+    std::set<std::uint32_t> bindingIndices;
     std::set<std::uint32_t> locations;
-    for (const VertexAttribute& attribute : attributes) {
-        const VertexBinding* binding = findBinding(attribute.binding);
-        const std::uint32_t formatSize = vertexFormatSize(attribute.format);
-        if (!valid(attribute.semantic.type) || !binding || formatSize == 0) {
-            return fail("VertexLayout contains an invalid attribute");
+    for (const VertexStreamLayout& stream : streams) {
+        const std::uint32_t formatSize = vertexFormatSize(stream.format);
+        if (!valid(stream.semantic.type) || formatSize == 0 || !valid(stream.inputRate)) {
+            return fail("VertexLayout contains an invalid stream");
         }
-        if (!semantics.insert(attribute.semantic).second) {
+        if (!semantics.insert(stream.semantic).second) {
             return fail("VertexLayout contains a duplicate semantic");
         }
-        if (!locations.insert(attribute.location).second) {
+        if (!bindingIndices.insert(stream.binding).second) {
+            return fail("VertexLayout contains a duplicate binding");
+        }
+        if (!locations.insert(stream.location).second) {
             return fail("VertexLayout contains a duplicate location");
-        }
-        if (attribute.offset > binding->stride || formatSize > binding->stride - attribute.offset) {
-            return fail("Vertex attribute exceeds its binding stride");
-        }
-    }
-
-    for (std::size_t left = 0; left < attributes.size(); ++left) {
-        for (std::size_t right = left + 1; right < attributes.size(); ++right) {
-            if (attributes[left].binding != attributes[right].binding)
-                continue;
-            const std::uint32_t leftBegin = attributes[left].offset;
-            const std::uint32_t leftEnd = leftBegin + vertexFormatSize(attributes[left].format);
-            const std::uint32_t rightBegin = attributes[right].offset;
-            const std::uint32_t rightEnd = rightBegin + vertexFormatSize(attributes[right].format);
-            if (leftBegin < rightEnd && rightBegin < leftEnd) {
-                return fail("Vertex attributes overlap in one binding");
-            }
         }
     }
     return true;
@@ -217,20 +184,14 @@ bool VertexLayout::validate() const {
 
 std::uint64_t VertexLayout::hash() const {
     Hash64 result = kFnv1a64OffsetBasis;
-    hashAppend(result, static_cast<std::uint32_t>(bindings.size()));
-    for (const VertexBinding& binding : bindings) {
-        hashAppend(result, binding.binding);
-        hashAppend(result, binding.stride);
-        hashAppend(result, binding.inputRate);
-    }
-    hashAppend(result, static_cast<std::uint32_t>(attributes.size()));
-    for (const VertexAttribute& attribute : attributes) {
-        hashAppend(result, attribute.semantic.type);
-        hashAppend(result, attribute.semantic.index);
-        hashAppend(result, attribute.format);
-        hashAppend(result, attribute.location);
-        hashAppend(result, attribute.binding);
-        hashAppend(result, attribute.offset);
+    hashAppend(result, static_cast<std::uint32_t>(streams.size()));
+    for (const VertexStreamLayout& stream : streams) {
+        hashAppend(result, stream.semantic.type);
+        hashAppend(result, stream.semantic.index);
+        hashAppend(result, stream.format);
+        hashAppend(result, stream.binding);
+        hashAppend(result, stream.location);
+        hashAppend(result, stream.inputRate);
     }
     return result;
 }
@@ -300,31 +261,31 @@ Mesh::Mesh(MeshDesc desc, MeshData data, std::optional<MeshBuildRecipe> buildRec
 bool validateMesh(const MeshDesc& desc, const MeshData& data) {
     if (!desc.vertexLayout.validate())
         return false;
-    const VertexAttribute* position = desc.vertexLayout.find({VertexSemanticType::Position, 0});
+    const VertexStreamLayout* position = desc.vertexLayout.find({VertexSemanticType::Position, 0});
     if (!position)
         return fail("VertexLayout requires POSITION0");
-    const VertexBinding* positionBinding = desc.vertexLayout.findBinding(position->binding);
-    if (!positionBinding || positionBinding->inputRate != VertexInputRate::Vertex) {
-        return fail("POSITION0 must use a per-vertex binding");
+    if (position->inputRate != VertexInputRate::Vertex) {
+        return fail("POSITION0 must use a per-vertex stream");
     }
     if (!valid(desc.indexType) || !valid(desc.usage) || !valid(desc.topology)) {
         return fail("MeshDesc contains an invalid enum value");
     }
-    if (data.vertexStreams.size() != desc.vertexLayout.bindings.size()) {
-        return fail("MeshData does not provide every vertex binding");
+    if (data.vertexStreams.size() != desc.vertexLayout.streams.size()) {
+        return fail("MeshData does not provide every vertex stream");
     }
 
     std::uint32_t vertexCount{};
-    for (const VertexBinding& binding : desc.vertexLayout.bindings) {
-        const VertexStream* stream = data.findVertexStream(binding.binding);
+    for (const VertexStreamLayout& layout : desc.vertexLayout.streams) {
+        const VertexStream* stream = data.findVertexStream(layout.binding);
         if (!stream || stream->vertexCount == 0) {
             return fail("MeshData is missing a vertex stream");
         }
-        const std::size_t expected = static_cast<std::size_t>(binding.stride) * stream->vertexCount;
+        const std::uint32_t formatSize = vertexFormatSize(layout.format);
+        const std::size_t expected = static_cast<std::size_t>(formatSize) * stream->vertexCount;
         if (stream->bytes.size() != expected) {
             return fail("Vertex stream byte size does not match its layout");
         }
-        if (binding.inputRate == VertexInputRate::Vertex) {
+        if (layout.inputRate == VertexInputRate::Vertex) {
             if (vertexCount != 0 && vertexCount != stream->vertexCount) {
                 return fail("Per-vertex streams have different vertex counts");
             }
@@ -427,12 +388,16 @@ bool Mesh::updateVertexData(std::uint32_t binding,
     if (desc_.usage == MeshUsage::Static) {
         return fail("Cannot update a Static Mesh");
     }
-    const VertexBinding* layout = desc_.vertexLayout.findBinding(binding);
+    const VertexStreamLayout* layout = desc_.vertexLayout.find(binding);
     VertexStream* stream = data_.findVertexStream(binding);
-    if (!layout || !stream || source.empty() || source.size() % layout->stride != 0) {
+    if (!layout || !stream || source.empty()) {
         return fail("Invalid vertex update");
     }
-    const std::size_t offset = static_cast<std::size_t>(firstVertex) * layout->stride;
+    const std::uint32_t formatSize = vertexFormatSize(layout->format);
+    if (formatSize == 0 || source.size() % formatSize != 0) {
+        return fail("Invalid vertex update");
+    }
+    const std::size_t offset = static_cast<std::size_t>(firstVertex) * formatSize;
     if (offset > stream->bytes.size() || source.size() > stream->bytes.size() - offset) {
         return fail("Vertex update exceeds the stream");
     }

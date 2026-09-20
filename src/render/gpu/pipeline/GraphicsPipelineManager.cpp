@@ -46,11 +46,9 @@ bool GraphicsPipelineManager::initialize(rhi::IDevice& device,
 }
 
 GraphicsPipelineCacheKey GraphicsPipelineManager::makeCacheKey(const ShaderProgram& program,
-                                                               const ShaderPass& pass,
                                                                std::uint64_t vertexLayoutHash,
                                                                rhi::TextureFormat colorFormat,
                                                                rhi::TextureFormat depthFormat) {
-    const RenderStateDesc& state = pass.renderState();
     ShaderHash key = program.id;
     hashAppend(key, program.layout.id);
     hashAppend(key, colorFormat);
@@ -64,8 +62,7 @@ GraphicsPipelineCacheKey GraphicsPipelineManager::makeCacheKey(const ShaderProgr
 }
 
 rhi::GraphicsPipelineDesc
-GraphicsPipelineManager::makeDescription(const ShaderPass& pass,
-                                         const VertexLayout& vertexLayout,
+GraphicsPipelineManager::makeDescription(const VertexLayout& vertexLayout,
                                          rhi::TextureFormat colorFormat,
                                          rhi::TextureFormat depthFormat,
                                          rhi::ShaderHandle vertexShader,
@@ -84,16 +81,14 @@ GraphicsPipelineManager::makeDescription(const ShaderPass& pass,
         desc.colorFormats = {colorFormat};
     }
     desc.depthFormat = depthFormat;
-    for (const VertexBinding& binding : vertexLayout.bindings) {
-        desc.vertexBindings.push_back({binding.binding,
-                                       binding.stride,
-                                       binding.inputRate == VertexInputRate::Vertex
-                                           ? rhi::VertexInputRate::Vertex
-                                           : rhi::VertexInputRate::Instance});
-    }
-    for (const VertexAttribute& attribute : vertexLayout.attributes) {
-        desc.vertexAttributes.push_back(
-            {attribute.location, attribute.binding, toRhi(attribute.format), attribute.offset});
+    for (const VertexStreamLayout& stream : vertexLayout.streams) {
+        desc.vertexStreams.push_back({stream.binding,
+                                      stream.location,
+                                      toRhi(stream.format),
+                                      vertexFormatSize(stream.format),
+                                      stream.inputRate == VertexInputRate::Vertex
+                                          ? rhi::VertexInputRate::Vertex
+                                          : rhi::VertexInputRate::Instance});
     }
     // cull/frontFace/depth/blend/colorMask/topology/fill are dynamic and are set by the
     // encoder before each batch. Use benign defaults for pipeline creation.
@@ -119,15 +114,14 @@ rhi::GraphicsPipelineHandle GraphicsPipelineManager::resolve(const Shader& shade
 
     const ShaderProgram& program = SHADER_GPU_MANAGER.resolveProgram(programHandle);
     const GraphicsPipelineCacheKey key =
-        makeCacheKey(program, pass, mesh.vertexLayoutHash(), colorFormat, depthFormat);
+        makeCacheKey(program, mesh.vertexLayoutHash(), colorFormat, depthFormat);
     if (const GraphicsPipelineGpuResource* cached = cache_.find(key))
         return cached->pipeline;
 
     const CompiledShader& vertex = SHADER_GPU_MANAGER.resolveCompiled(program.vertex);
     const CompiledShader& fragment = SHADER_GPU_MANAGER.resolveCompiled(program.fragment);
     GraphicsPipelineGpuResource created;
-    if (!factory_->create(makeDescription(pass,
-                                          mesh.desc().vertexLayout,
+    if (!factory_->create(makeDescription(mesh.desc().vertexLayout,
                                           colorFormat,
                                           depthFormat,
                                           SHADER_GPU_MANAGER.resolve(program.vertex),

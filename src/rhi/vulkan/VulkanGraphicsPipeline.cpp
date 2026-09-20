@@ -53,19 +53,17 @@ VulkanGraphicsPipeline::VulkanGraphicsPipeline(
     stages[1].pName = desc.fragmentEntry.c_str();
 
     std::vector<VkVertexInputBindingDescription> vertexBindings;
-    vertexBindings.reserve(desc.vertexBindings.size());
-    for (const VertexBindingDesc& binding : desc.vertexBindings) {
-        vertexBindings.push_back({binding.binding,
-                                  binding.stride,
-                                  binding.inputRate == VertexInputRate::Vertex
+    vertexBindings.reserve(desc.vertexStreams.size());
+    std::vector<VkVertexInputAttributeDescription> vertexAttributes;
+    vertexAttributes.reserve(desc.vertexStreams.size());
+    for (const VertexStreamDesc& stream : desc.vertexStreams) {
+        vertexBindings.push_back({stream.binding,
+                                  stream.stride,
+                                  stream.inputRate == VertexInputRate::Vertex
                                       ? VK_VERTEX_INPUT_RATE_VERTEX
                                       : VK_VERTEX_INPUT_RATE_INSTANCE});
-    }
-    std::vector<VkVertexInputAttributeDescription> vertexAttributes;
-    vertexAttributes.reserve(desc.vertexAttributes.size());
-    for (const VertexAttributeDesc& attribute : desc.vertexAttributes) {
         vertexAttributes.push_back(
-            {attribute.location, attribute.binding, toVulkan(attribute.format), attribute.offset});
+            {stream.location, stream.binding, toVulkan(stream.format), 0});
     }
     VkPipelineVertexInputStateCreateInfo vertexInput{
         VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};

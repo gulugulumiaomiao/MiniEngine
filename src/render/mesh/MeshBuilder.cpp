@@ -292,25 +292,21 @@ std::optional<GeneratedMesh> generate(const MeshPrimitive& primitive) {
 
 VertexLayout layoutFor(PrimitiveVertexLayout preset) {
     VertexLayout layout;
-    std::uint32_t stride = 12;
-    layout.attributes.push_back(
-        {{VertexSemanticType::Position, 0}, VertexFormat::Vec3Float32, 0, 0, 0});
+    layout.streams.push_back(
+        {{VertexSemanticType::Position, 0}, VertexFormat::Vec3Float32, 0, 0});
     if (preset != PrimitiveVertexLayout::Position) {
-        layout.attributes.push_back(
-            {{VertexSemanticType::Normal, 0}, VertexFormat::Vec3Float32, 1, 0, 12});
+        layout.streams.push_back(
+            {{VertexSemanticType::Normal, 0}, VertexFormat::Vec3Float32, 1, 1});
         if (preset == PrimitiveVertexLayout::PositionNormalTangentUv) {
-            layout.attributes.push_back(
-                {{VertexSemanticType::Tangent, 0}, VertexFormat::Vec4Float32, 2, 0, 24});
-            layout.attributes.push_back(
-                {{VertexSemanticType::TexCoord, 0}, VertexFormat::Vec2Float32, 3, 0, 40});
-            stride = 48;
+            layout.streams.push_back(
+                {{VertexSemanticType::Tangent, 0}, VertexFormat::Vec4Float32, 2, 2});
+            layout.streams.push_back(
+                {{VertexSemanticType::TexCoord, 0}, VertexFormat::Vec2Float32, 3, 3});
         } else {
-            layout.attributes.push_back(
-                {{VertexSemanticType::TexCoord, 0}, VertexFormat::Vec2Float32, 2, 0, 24});
-            stride = 32;
+            layout.streams.push_back(
+                {{VertexSemanticType::TexCoord, 0}, VertexFormat::Vec2Float32, 2, 2});
         }
     }
-    layout.bindings.push_back({0, stride, VertexInputRate::Vertex});
     return layout;
 }
 
@@ -419,23 +415,50 @@ std::optional<MeshBuildResult> MeshBuilder::build(const MeshBuildRecipe& recipe)
     result.desc.bounds = calculateBounds(allPositions);
     result.desc.keepCpuCopy = recipe.keepCpuCopy;
 
-    const std::uint32_t stride = result.desc.vertexLayout.bindings.front().stride;
-    std::vector<std::byte> vertexBytes(vertices.size() * stride);
+    const std::uint32_t vertexCount = static_cast<std::uint32_t>(vertices.size());
+    std::vector<std::byte> positionBytes;
+    positionBytes.resize(vertices.size() * sizeof(math::Vec3));
     for (std::size_t i = 0; i < vertices.size(); ++i) {
-        const std::size_t base = i * stride;
-        writeValue(vertexBytes, base, &vertices[i].position, 12);
-        if (recipe.vertexLayout != PrimitiveVertexLayout::Position) {
-            writeValue(vertexBytes, base + 12, &vertices[i].normal, 12);
-            if (recipe.vertexLayout == PrimitiveVertexLayout::PositionNormalTangentUv) {
-                writeValue(vertexBytes, base + 24, &vertices[i].tangent, 16);
-                writeValue(vertexBytes, base + 40, &vertices[i].uv, 8);
-            } else {
-                writeValue(vertexBytes, base + 24, &vertices[i].uv, 8);
+        writeValue(positionBytes, i * sizeof(math::Vec3), &vertices[i].position, sizeof(math::Vec3));
+    }
+    if (!result.data.setVertexData(0, vertexCount, positionBytes))
+        return std::nullopt;
+
+    if (recipe.vertexLayout != PrimitiveVertexLayout::Position) {
+        std::vector<std::byte> normalBytes;
+        normalBytes.resize(vertices.size() * sizeof(math::Vec3));
+        for (std::size_t i = 0; i < vertices.size(); ++i) {
+            writeValue(normalBytes, i * sizeof(math::Vec3), &vertices[i].normal, sizeof(math::Vec3));
+        }
+        if (!result.data.setVertexData(1, vertexCount, normalBytes))
+            return std::nullopt;
+
+        if (recipe.vertexLayout == PrimitiveVertexLayout::PositionNormalTangentUv) {
+            std::vector<std::byte> tangentBytes;
+            tangentBytes.resize(vertices.size() * sizeof(math::Vec4));
+            std::vector<std::byte> uvBytes;
+            uvBytes.resize(vertices.size() * sizeof(math::Vec2));
+            for (std::size_t i = 0; i < vertices.size(); ++i) {
+                writeValue(tangentBytes,
+                           i * sizeof(math::Vec4),
+                           &vertices[i].tangent,
+                           sizeof(math::Vec4));
+                writeValue(uvBytes, i * sizeof(math::Vec2), &vertices[i].uv, sizeof(math::Vec2));
             }
+            if (!result.data.setVertexData(2, vertexCount, tangentBytes) ||
+                !result.data.setVertexData(3, vertexCount, uvBytes)) {
+                return std::nullopt;
+            }
+        } else {
+            std::vector<std::byte> uvBytes;
+            uvBytes.resize(vertices.size() * sizeof(math::Vec2));
+            for (std::size_t i = 0; i < vertices.size(); ++i) {
+                writeValue(uvBytes, i * sizeof(math::Vec2), &vertices[i].uv, sizeof(math::Vec2));
+            }
+            if (!result.data.setVertexData(2, vertexCount, uvBytes))
+                return std::nullopt;
         }
     }
-    if (!result.data.setVertexData(0, static_cast<std::uint32_t>(vertices.size()), vertexBytes))
-        return std::nullopt;
     if (indexType == IndexType::UInt16) {
         std::vector<std::uint16_t> packed;
         packed.reserve(indices.size());

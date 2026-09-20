@@ -131,13 +131,9 @@ int main() {
     MeshAsset source;
     source.setAssetPath(VirtualPath{"assets://meshes/test.mesh"});
     source.desc.debugName = "MultiStreamTriangle";
-    source.desc.vertexLayout.bindings = {
-        {0, sizeof(math::Vec3), VertexInputRate::Vertex},
-        {1, sizeof(math::Vec4), VertexInputRate::Vertex},
-    };
-    source.desc.vertexLayout.attributes = {
-        {{VertexSemanticType::Position, 0}, VertexFormat::Vec3Float32, 0, 0, 0},
-        {{VertexSemanticType::Color, 0}, VertexFormat::Vec4Float32, 1, 1, 0},
+    source.desc.vertexLayout.streams = {
+        {{VertexSemanticType::Position, 0}, VertexFormat::Vec3Float32, 0, 0},
+        {{VertexSemanticType::Color, 0}, VertexFormat::Vec4Float32, 1, 1},
     };
     source.desc.indexType = IndexType::UInt16;
     source.desc.usage = MeshUsage::Dynamic;
@@ -298,7 +294,7 @@ int main() {
     if (!mirrored)
         return 15;
     const math::Vec4 mirroredTangent =
-        readAt<math::Vec4>(mirrored->data.vertexStreams[0].bytes, 24);
+        readAt<math::Vec4>(mirrored->data.vertexStreams[2].bytes, 0);
     if (!math::nearlyEqual(mirroredTangent.w, -1.0F))
         return 15;
 
@@ -316,21 +312,14 @@ int main() {
     if (MeshBuilder::build(invalidRecipe))
         return 17;
 
-    // A v2 payload has no recipe field and must remain readable.
-    BinaryWriter v2Writer;
-    std::uint32_t v2Magic = 0x4853454dU;
-    std::uint16_t v2Version = 2;
-    MeshDesc v2Desc = source.desc;
-    MeshData v2Data = source.meshData;
-    if (!v2Writer.beginObject({}) || !v2Writer.transfer("magic", v2Magic) ||
-        !v2Writer.transfer("version", v2Version) || !v2Writer.transfer("description", v2Desc) ||
-        !v2Writer.transfer("mesh_data", v2Data) || !v2Writer.endObject()) {
+    // A payload with no build recipe must remain readable after the stream refactor.
+    BinaryWriter v4Writer;
+    if (!source.transfer(v4Writer))
         return 18;
-    }
-    MeshAsset v2Decoded;
-    BinaryReader v2Reader{v2Writer.bytes()};
-    if (!v2Decoded.transfer(v2Reader) || !v2Reader.finished() || v2Decoded.buildRecipe ||
-        v2Decoded.desc.debugName != source.desc.debugName) {
+    MeshAsset v4Decoded;
+    BinaryReader v4Reader{v4Writer.bytes()};
+    if (!v4Decoded.transfer(v4Reader) || !v4Reader.finished() || v4Decoded.buildRecipe ||
+        v4Decoded.desc.debugName != source.desc.debugName) {
         return 18;
     }
     // The render-side cache is testable without Vulkan and uploads only when

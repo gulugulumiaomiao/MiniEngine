@@ -5,6 +5,7 @@
 #include "rhi/api/Device.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <span>
 
@@ -427,20 +428,11 @@ bool ImGuiRenderer::createPipeline() {
     desc.vertexShader = vertexShader_;
     desc.fragmentShader = fragmentShader_;
     desc.bindGroupLayouts = {textureLayout_};
-    desc.vertexBindings = {{.binding = 0, .stride = static_cast<std::uint32_t>(sizeof(ImDrawVert))}};
-    desc.vertexAttributes = {
-        {.location = 0,
-         .binding = 0,
-         .format = rhi::VertexFormat::Vec2Float32,
-         .offset = static_cast<std::uint32_t>(offsetof(ImDrawVert, pos))},
-        {.location = 1,
-         .binding = 0,
-         .format = rhi::VertexFormat::Vec2Float32,
-         .offset = static_cast<std::uint32_t>(offsetof(ImDrawVert, uv))},
-        {.location = 2,
-         .binding = 0,
-         .format = rhi::VertexFormat::UInt8x4Normalized,
-         .offset = static_cast<std::uint32_t>(offsetof(ImDrawVert, col))},
+    // One semantic per buffer: position, uv and color each have their own binding.
+    desc.vertexStreams = {
+        {0, 0, rhi::VertexFormat::Vec2Float32, sizeof(math::Vec2), rhi::VertexInputRate::Vertex},
+        {1, 1, rhi::VertexFormat::Vec2Float32, sizeof(math::Vec2), rhi::VertexInputRate::Vertex},
+        {2, 2, rhi::VertexFormat::UInt8x4Normalized, sizeof(std::uint32_t), rhi::VertexInputRate::Vertex},
     };
     // ImGui emits both winding orders and expects straight alpha blending; the overlay
     // draws on top of the finished frame without a depth buffer. These states are dynamic
@@ -471,20 +463,26 @@ bool ImGuiRenderer::reserveGeometry(Geometry& geometry,
                                     std::uint32_t indexCount) {
     // Recreating a buffer here is safe: the swapchain waited on this frame's fence, so
     // no in-flight submission still reads the geometry of the frame being recorded.
-    if (vertexCount > geometry.vertexCapacity) {
-        if (geometry.vertexBuffer)
-            device_->destroyBuffer(geometry.vertexBuffer);
-        geometry.vertexCapacity = vertexCount + kGeometrySlack;
-        geometry.vertexBuffer = device_->createBuffer({
-            .size = std::uint64_t{geometry.vertexCapacity} * sizeof(ImDrawVert),
-            .usage = rhi::BufferUsage::Vertex,
-            .memoryUsage = rhi::MemoryUsage::Upload,
-            .debugName = "ImGuiVertexBuffer",
-        });
-        if (!geometry.vertexBuffer) {
-            geometry.vertexCapacity = 0;
-            Log::error("ImGuiRenderer", "Cannot grow the UI vertex buffer");
-            return false;
+    constexpr std::array<std::uint32_t, 3> kVertexStrides{
+        sizeof(math::Vec2), sizeof(math::Vec2), sizeof(std::uint32_t)};
+    constexpr std::array<const char*, 3> kVertexBufferNames{
+        "ImGuiPositionBuffer", "ImGuiUvBuffer", "ImGuiColorBuffer"};
+    for (std::size_t stream = 0; stream < geometry.vertexBuffers.size(); ++stream) {
+        if (vertexCount > geometry.vertexCapacities[stream]) {
+            if (geometry.vertexBuffers[stream])
+                device_->destroyBuffer(geometry.vertexBuffers[stream]);
+            geometry.vertexCapacities[stream] = vertexCount + kGeometrySlack;
+            geometry.vertexBuffers[stream] = device_->createBuffer({
+                .size = std::uint64_t{geometry.vertexCapacities[stream]} * kVertexStrides[stream],
+                .usage = rhi::BufferUsage::Vertex,
+                .memoryUsage = rhi::MemoryUsage::Upload,
+                .debugName = kVertexBufferNames[stream],
+            });
+            if (!geometry.vertexBuffers[stream]) {
+                geometry.vertexCapacities[stream] = 0;
+                Log::error("ImGuiRenderer", "Cannot grow the UI vertex buffer");
+                return false;
+            }
         }
     }
     if (indexCount > geometry.indexCapacity) {
@@ -507,8 +505,10 @@ bool ImGuiRenderer::reserveGeometry(Geometry& geometry,
 }
 
 void ImGuiRenderer::releaseGeometry(Geometry& geometry) {
-    if (geometry.vertexBuffer)
-        device_->destroyBuffer(geometry.vertexBuffer);
+    for (rhi::BufferHandle buffer : geometry.vertexBuffers) {
+        if (buffer)
+            device_->destroyBuffer(buffer);
+    }
     if (geometry.indexBuffer)
         device_->destroyBuffer(geometry.indexBuffer);
     geometry = {};
@@ -564,23 +564,31 @@ void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
 
     // Fold ImGui's screen space transform into the copy the upload needs anyway, so the
     // vertex shader receives clip space positions and needs no uniform buffer. Vulkan's
-    // clip space is y-down like ImGui's, hence no flip.
+    // clip space is y-down like ImGui's, hence no flip. The interleaved ImGui vertex is
+    // deinterleaved into one buffer per semantic to match the engine's stream layout.
     const float scaleX = 2.0F / drawData.DisplaySize.x;
     const float scaleY = 2.0F / drawData.DisplaySize.y;
-    vertexStaging_.clear();
-    vertexStaging_.reserve(vertexCount);
+    positionStaging_.clear();
+    positionStaging_.reserve(vertexCount);
+    uvStaging_.clear();
+    uvStaging_.reserve(vertexCount);
+    colorStaging_.clear();
+    colorStaging_.reserve(vertexCount);
     indexStaging_.clear();
     indexStaging_.reserve(indexCount);
     for (const ImDrawList* list : drawData.CmdLists) {
         for (const ImDrawVert& source : list->VtxBuffer) {
-            ImDrawVert vertex = source;
-            vertex.pos.x = (source.pos.x - drawData.DisplayPos.x) * scaleX - 1.0F;
-            vertex.pos.y = (source.pos.y - drawData.DisplayPos.y) * scaleY - 1.0F;
-            vertexStaging_.push_back(vertex);
+            positionStaging_.push_back(
+                {(source.pos.x - drawData.DisplayPos.x) * scaleX - 1.0F,
+                 (source.pos.y - drawData.DisplayPos.y) * scaleY - 1.0F});
+            uvStaging_.push_back({source.uv.x, source.uv.y});
+            colorStaging_.push_back(source.col);
         }
         indexStaging_.insert(indexStaging_.end(), list->IdxBuffer.begin(), list->IdxBuffer.end());
     }
-    device_->uploadBuffer(geometry.vertexBuffer, asBytes(vertexStaging_));
+    device_->uploadBuffer(geometry.vertexBuffers[0], asBytes(positionStaging_));
+    device_->uploadBuffer(geometry.vertexBuffers[1], asBytes(uvStaging_));
+    device_->uploadBuffer(geometry.vertexBuffers[2], asBytes(colorStaging_));
     device_->uploadBuffer(geometry.indexBuffer, asBytes(indexStaging_));
 
     encoder.beginDebugLabel("ImGui", {0.4F, 0.7F, 1.0F, 1.0F});
@@ -592,7 +600,9 @@ void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
     encoder.setDepthWriteEnable(false);
     encoder.setBlendState(rhi::BlendMode::Alpha);
     encoder.setColorWriteMask(rhi::ColorWriteMask::All);
-    encoder.bindVertexBuffer(0, geometry.vertexBuffer);
+    encoder.bindVertexBuffer(0, geometry.vertexBuffers[0]);
+    encoder.bindVertexBuffer(1, geometry.vertexBuffers[1]);
+    encoder.bindVertexBuffer(2, geometry.vertexBuffers[2]);
     encoder.bindIndexBuffer(geometry.indexBuffer, 0, rhi::IndexFormat::UInt16);
     encoder.setViewport({.width = framebufferWidth, .height = framebufferHeight});
 
@@ -612,7 +622,9 @@ void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
                     encoder.setDepthWriteEnable(false);
                     encoder.setBlendState(rhi::BlendMode::Alpha);
                     encoder.setColorWriteMask(rhi::ColorWriteMask::All);
-                    encoder.bindVertexBuffer(0, geometry.vertexBuffer);
+                    encoder.bindVertexBuffer(0, geometry.vertexBuffers[0]);
+                    encoder.bindVertexBuffer(1, geometry.vertexBuffers[1]);
+                    encoder.bindVertexBuffer(2, geometry.vertexBuffers[2]);
                     encoder.bindIndexBuffer(geometry.indexBuffer, 0, rhi::IndexFormat::UInt16);
                     encoder.setViewport({.width = framebufferWidth, .height = framebufferHeight});
                 } else {

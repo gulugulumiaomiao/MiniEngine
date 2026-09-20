@@ -137,23 +137,23 @@ int main() {
         math::Vec3{1.0F, -1.0F, 0.0F},
         math::Vec3{0.0F, 1.0F, 0.0F},
     };
-    nlohmann::json meshJson{
-        {"name", "ImporterMesh"},
-        {"index_type", "uint16"},
-        {"bindings", {{{"binding", 0}, {"stride", sizeof(math::Vec3)}}}},
-        {"attributes",
-         {{{"semantic", "position"},
-           {"format", "vec3_float32"},
-           {"location", 0},
-           {"binding", 0},
-           {"offset", 0}}}},
-        {"indices", {0, 1, 2}},
-    };
     std::vector<std::uint8_t> positionBytes;
     for (const std::byte value : std::as_bytes(std::span{positions})) {
         positionBytes.push_back(std::to_integer<std::uint8_t>(value));
     }
-    meshJson["vertex_streams"] = {{{"binding", 0}, {"vertex_count", 3}, {"bytes", positionBytes}}};
+    nlohmann::json meshJson{
+        {"name", "ImporterMesh"},
+        {"index_type", "uint16"},
+        {"vertex_streams",
+         {{{"binding", 0},
+           {"location", 0},
+           {"semantic", "position"},
+           {"format", "vec3_float32"},
+           {"input_rate", "vertex"},
+           {"vertex_count", 3},
+           {"bytes", positionBytes}}}},
+        {"indices", {0, 1, 2}},
+    };
     if (!FILE_SYSTEM.writeText(meshPath, meshJson.dump()))
         return 7;
     const AssetMeta meshMeta{1, AssetId::generate(), AssetType::Mesh};

@@ -41,9 +41,8 @@ using namespace engine;
     MeshAsset source;
     source.setAssetPath(VirtualPath{"assets://meshes/triangle.mesh.json"});
     source.desc.debugName = "ExportTriangle";
-    source.desc.vertexLayout.bindings = {{0, sizeof(math::Vec3), VertexInputRate::Vertex}};
-    source.desc.vertexLayout.attributes = {
-        {{VertexSemanticType::Position, 0}, VertexFormat::Vec3Float32, 0, 0, 0},
+    source.desc.vertexLayout.streams = {
+        {{VertexSemanticType::Position, 0}, VertexFormat::Vec3Float32, 0, 0},
     };
     source.desc.indexType = IndexType::UInt16;
     source.desc.bounds = calculateBounds(positions);

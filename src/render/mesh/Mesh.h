@@ -80,54 +80,35 @@ struct MeshBuildRecipe final : public Transferable {
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct VertexBinding final : public Transferable {
-    VertexBinding() = default;
-    VertexBinding(std::uint32_t binding, std::uint32_t stride, VertexInputRate inputRate)
-        : binding(binding), stride(stride), inputRate(inputRate) {}
-
-    std::uint32_t binding{};
-    std::uint32_t stride{};
-    VertexInputRate inputRate{VertexInputRate::Vertex};
-
-    bool operator==(const VertexBinding& other) const {
-        return binding == other.binding && stride == other.stride && inputRate == other.inputRate;
-    }
-    [[nodiscard]] bool transfer(Transfer& archive) override;
-};
-
-struct VertexAttribute final : public Transferable {
-    VertexAttribute() = default;
-    VertexAttribute(VertexSemantic semantic,
-                    VertexFormat format,
-                    std::uint32_t location,
-                    std::uint32_t binding,
-                    std::uint32_t offset)
-        : semantic(semantic), format(format), location(location), binding(binding), offset(offset) {
-    }
+struct VertexStreamLayout final : public Transferable {
+    VertexStreamLayout() = default;
+    VertexStreamLayout(VertexSemantic semantic,
+                       VertexFormat format,
+                       std::uint32_t binding,
+                       std::uint32_t location,
+                       VertexInputRate inputRate = VertexInputRate::Vertex)
+        : semantic(semantic), format(format), binding(binding), location(location), inputRate(inputRate) {}
 
     VertexSemantic semantic;
     VertexFormat format{VertexFormat::Vec3Float32};
-    std::uint32_t location{};
     std::uint32_t binding{};
-    std::uint32_t offset{};
+    std::uint32_t location{};
+    VertexInputRate inputRate{VertexInputRate::Vertex};
 
-    bool operator==(const VertexAttribute& other) const {
-        return semantic == other.semantic && format == other.format && location == other.location &&
-               binding == other.binding && offset == other.offset;
+    bool operator==(const VertexStreamLayout& other) const {
+        return semantic == other.semantic && format == other.format && binding == other.binding &&
+               location == other.location && inputRate == other.inputRate;
     }
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
 struct VertexLayout final : public Transferable {
-    std::vector<VertexBinding> bindings;
-    std::vector<VertexAttribute> attributes;
+    std::vector<VertexStreamLayout> streams;
 
-    bool operator==(const VertexLayout& other) const {
-        return bindings == other.bindings && attributes == other.attributes;
-    }
+    bool operator==(const VertexLayout& other) const { return streams == other.streams; }
 
-    [[nodiscard]] const VertexBinding* findBinding(std::uint32_t binding) const;
-    [[nodiscard]] const VertexAttribute* find(VertexSemantic semantic) const;
+    [[nodiscard]] const VertexStreamLayout* find(std::uint32_t binding) const;
+    [[nodiscard]] const VertexStreamLayout* find(VertexSemantic semantic) const;
     [[nodiscard]] bool validate() const;
     [[nodiscard]] std::uint64_t hash() const;
     [[nodiscard]] bool transfer(Transfer& archive) override;

@@ -119,19 +119,17 @@ bool readBytes(const Json& values, std::vector<std::byte>& result) {
 }
 
 std::optional<MeshBounds> calculateMeshBounds(const MeshAsset& asset) {
-    const VertexAttribute* position =
+    const VertexStreamLayout* position =
         asset.desc.vertexLayout.find({VertexSemanticType::Position, 0});
-    const VertexBinding* binding =
-        position ? asset.desc.vertexLayout.findBinding(position->binding) : nullptr;
     const VertexStream* stream =
         position ? asset.meshData.findVertexStream(position->binding) : nullptr;
-    if (!position || !binding || !stream || position->format != VertexFormat::Vec3Float32) {
+    if (!position || !stream || position->format != VertexFormat::Vec3Float32) {
         return std::nullopt;
     }
+    const std::uint32_t stride = vertexFormatSize(position->format);
     std::vector<math::Vec3> positions(stream->vertexCount);
     for (std::uint32_t index = 0; index < stream->vertexCount; ++index) {
-        const std::size_t offset =
-            static_cast<std::size_t>(index) * binding->stride + position->offset;
+        const std::size_t offset = static_cast<std::size_t>(index) * stride;
         if (offset + sizeof(math::Vec3) > stream->bytes.size())
             return std::nullopt;
         std::memcpy(&positions[index], stream->bytes.data() + offset, sizeof(math::Vec3));
@@ -258,44 +256,31 @@ std::shared_ptr<MeshAsset> parseRawMesh(const VirtualPath& path, const Json& roo
         !readEnum(root, "topology", asset->desc.topology, true))
         return {};
 
-    const auto bindings = root.find("bindings");
-    const auto attributes = root.find("attributes");
     const auto streams = root.find("vertex_streams");
     const auto indices = root.find("indices");
-    if (bindings == root.end() || !bindings->is_array() || attributes == root.end() ||
-        !attributes->is_array() || streams == root.end() || !streams->is_array() ||
-        indices == root.end() || !indices->is_array())
+    if (streams == root.end() || !streams->is_array() || indices == root.end() ||
+        !indices->is_array())
         return {};
 
-    for (const Json& value : *bindings) {
-        if (!value.is_object())
+    for (const Json& value : *streams) {
+        if (!value.is_object() || !value.contains("binding") ||
+            !value["binding"].is_number_unsigned() || !value.contains("location") ||
+            !value["location"].is_number_unsigned() || !value.contains("semantic") ||
+            !value["semantic"].is_string() || !value.contains("format") ||
+            !value["format"].is_string())
             return {};
-        VertexBinding binding;
-        if (!value.contains("binding") || !value.contains("stride") ||
-            !value["binding"].is_number_unsigned() || !value["stride"].is_number_unsigned() ||
-            !readEnum(value, "input_rate", binding.inputRate, true))
-            return {};
-        binding.binding = value["binding"].get<std::uint32_t>();
-        binding.stride = value["stride"].get<std::uint32_t>();
-        asset->desc.vertexLayout.bindings.push_back(binding);
-    }
-    for (const Json& value : *attributes) {
-        if (!value.is_object() || !value.contains("semantic") || !value["semantic"].is_string() ||
-            !value.contains("location") || !value["location"].is_number_unsigned() ||
-            !value.contains("binding") || !value["binding"].is_number_unsigned() ||
-            !value.contains("offset") || !value["offset"].is_number_unsigned())
-            return {};
-        VertexAttribute attribute;
+        VertexStreamLayout layout;
         const auto semantic =
             enumValue<VertexSemanticType>(value["semantic"].get_ref<const std::string&>());
-        if (!semantic || !readEnum(value, "format", attribute.format))
+        if (!semantic || !readEnum(value, "format", layout.format))
             return {};
-        attribute.semantic = {*semantic,
-                              static_cast<std::uint8_t>(value.value("semantic_index", 0U))};
-        attribute.location = value["location"].get<std::uint32_t>();
-        attribute.binding = value["binding"].get<std::uint32_t>();
-        attribute.offset = value["offset"].get<std::uint32_t>();
-        asset->desc.vertexLayout.attributes.push_back(attribute);
+        layout.semantic = {*semantic,
+                           static_cast<std::uint8_t>(value.value("semantic_index", 0U))};
+        layout.binding = value["binding"].get<std::uint32_t>();
+        layout.location = value["location"].get<std::uint32_t>();
+        if (!readEnum(value, "input_rate", layout.inputRate, true))
+            return {};
+        asset->desc.vertexLayout.streams.push_back(layout);
     }
     for (const Json& value : *streams) {
         if (!value.is_object() || !value.contains("binding") ||

@@ -50,12 +50,10 @@ private:
     GraphicsPipelineManager();
 
     [[nodiscard]] static GraphicsPipelineCacheKey makeCacheKey(const ShaderProgram& program,
-                                                               const ShaderPass& pass,
                                                                std::uint64_t vertexLayoutHash,
                                                                rhi::TextureFormat colorFormat,
                                                                rhi::TextureFormat depthFormat);
-    [[nodiscard]] rhi::GraphicsPipelineDesc makeDescription(const ShaderPass& pass,
-                                                            const VertexLayout& vertexLayout,
+    [[nodiscard]] rhi::GraphicsPipelineDesc makeDescription(const VertexLayout& vertexLayout,
                                                             rhi::TextureFormat colorFormat,
                                                             rhi::TextureFormat depthFormat,
                                                             rhi::ShaderHandle vertexShader,
