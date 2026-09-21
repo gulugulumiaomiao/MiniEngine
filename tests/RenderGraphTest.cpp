@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <span>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -56,6 +57,10 @@ public:
         return {};
     }
     void destroyBindGroup(engine::rhi::BindGroupHandle) override {}
+    std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override {
+        return nullptr;
+    }
+    void submitCommand(engine::rhi::ICommandBuffer&, const engine::rhi::SubmitSync&) override {}
     VkDevice device() const override { return VK_NULL_HANDLE; }
     VkInstance instance() const override { return VK_NULL_HANDLE; }
     VkPhysicalDevice physicalDevice() const override { return VK_NULL_HANDLE; }
@@ -80,8 +85,11 @@ public:
     std::vector<engine::rhi::TextureViewHandle> destroyedViews;
 };
 
-class MockGraphicsEncoder final : public engine::rhi::IGraphicsCommandEncoder {
+class MockGraphicsEncoder final : public engine::rhi::ICommandBuffer {
 public:
+    void begin() override { currentState = engine::rhi::CommandState::Recording; }
+    void end() override { currentState = engine::rhi::CommandState::Executable; }
+    [[nodiscard]] engine::rhi::CommandState state() const override { return currentState; }
     void resourceBarriers(std::span<const engine::rhi::TextureBarrier> barriers) override {
         events.push_back("barriers:" + std::to_string(barriers.size()));
         recordedBarriers.insert(recordedBarriers.end(), barriers.begin(), barriers.end());
@@ -114,9 +122,6 @@ public:
         events.push_back("label:" + std::string{name});
     }
     void endDebugLabel() override { events.emplace_back("endLabel"); }
-    [[nodiscard]] VkCommandBuffer nativeCommandBuffer() const override {
-        return VK_NULL_HANDLE;
-    }
     void copyBuffer(const engine::rhi::BufferCopy&) override {}
     void copyImage(const engine::rhi::ImageCopy&) override {}
     void copyBufferToImage(const engine::rhi::BufferImageCopy&) override {}
@@ -125,6 +130,7 @@ public:
     void updateImage(const engine::rhi::ImageUpdate&) override {}
 
     std::vector<std::string> events;
+    engine::rhi::CommandState currentState{engine::rhi::CommandState::Initial};
     std::vector<engine::rhi::TextureBarrier> recordedBarriers;
 };
 
@@ -153,7 +159,7 @@ int main() {
         "Forward",
         std::move(rendering),
         {{imported, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment}},
-        [](rhi::IGraphicsCommandEncoder&) {});
+        [](rhi::ICommandBuffer&) {});
 
     graph.compile(pool);
     MockGraphicsEncoder encoder;
@@ -191,7 +197,7 @@ int main() {
                                    {{transient,
                                      rhi::TextureAspect::Color,
                                      rhi::ResourceState::ColorAttachment}},
-                                   [](rhi::IGraphicsCommandEncoder&) {});
+                                   [](rhi::ICommandBuffer&) {});
 
     transientGraph.compile(pool);
     MockGraphicsEncoder transientEncoder;
@@ -224,13 +230,13 @@ int main() {
                                 {{shadowMap,
                                   rhi::TextureAspect::Depth,
                                   rhi::ResourceState::DepthAttachment}},
-                                [](rhi::IGraphicsCommandEncoder&) {});
+                                [](rhi::ICommandBuffer&) {});
     shadowGraph.addGraphicsPass("Forward",
                                 RgRenderingInfo{},
                                 {{shadowMap,
                                   rhi::TextureAspect::Depth,
                                   rhi::ResourceState::ShaderRead}},
-                                [](rhi::IGraphicsCommandEncoder&) {});
+                                [](rhi::ICommandBuffer&) {});
     shadowGraph.compile(pool);
     MockGraphicsEncoder shadowEncoder;
     shadowGraph.execute(shadowEncoder);

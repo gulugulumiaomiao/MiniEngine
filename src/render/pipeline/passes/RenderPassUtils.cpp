@@ -66,16 +66,16 @@ rhi::ColorWriteMask toRhiColorMask(std::string_view mask) {
     return result;
 }
 
-void applyRenderState(rhi::IGraphicsCommandEncoder& encoder, const RenderStateDesc& state) {
-    encoder.setPrimitiveTopology(toRhi(state.topology));
-    encoder.setFillMode(toRhi(state.fill));
-    encoder.setCullMode(toRhi(state.cull));
-    encoder.setFrontFace(toRhi(state.frontFace));
-    encoder.setDepthTestEnable(state.depthTest != DepthCompare::Always || state.depthWrite);
-    encoder.setDepthWriteEnable(state.depthWrite);
-    encoder.setDepthCompareOp(toRhi(state.depthTest));
-    encoder.setBlendState(toRhi(state.blend));
-    encoder.setColorWriteMask(toRhiColorMask(state.colorMask));
+void applyRenderState(rhi::ICommandBuffer& commandBuffer, const RenderStateDesc& state) {
+    commandBuffer.setPrimitiveTopology(toRhi(state.topology));
+    commandBuffer.setFillMode(toRhi(state.fill));
+    commandBuffer.setCullMode(toRhi(state.cull));
+    commandBuffer.setFrontFace(toRhi(state.frontFace));
+    commandBuffer.setDepthTestEnable(state.depthTest != DepthCompare::Always || state.depthWrite);
+    commandBuffer.setDepthWriteEnable(state.depthWrite);
+    commandBuffer.setDepthCompareOp(toRhi(state.depthTest));
+    commandBuffer.setBlendState(toRhi(state.blend));
+    commandBuffer.setColorWriteMask(toRhiColorMask(state.colorMask));
 }
 
 } // namespace
@@ -84,7 +84,7 @@ void drawFilteredItems(std::uint32_t frameIndex,
                        std::span<const DrawItem> items,
                        rhi::BindGroupHandle sceneBindGroup,
                        rhi::BindGroupHandle globalBindGroup,
-                       rhi::IGraphicsCommandEncoder& encoder) {
+                       rhi::ICommandBuffer& commandBuffer) {
     DrawBatcher batcher;
     BatchedDrawList batched = batcher.build(items);
     if (batched.batches.empty()) {
@@ -106,28 +106,28 @@ void drawFilteredItems(std::uint32_t frameIndex,
     const ShaderPass* boundShaderPass = nullptr;
     for (const DrawBatch& batch : batched.batches) {
         if (batch.pipeline != boundPipeline) {
-            encoder.bindPipeline(batch.pipeline);
-            encoder.bindGroup(0, sceneBindGroup);
+            commandBuffer.bindPipeline(batch.pipeline);
+            commandBuffer.bindGroup(0, sceneBindGroup);
             boundPipeline = batch.pipeline;
             boundGlobal = {}; // Pipeline change may require set 2 rebind.
         }
         if (batch.shaderPass != boundShaderPass) {
-            applyRenderState(encoder, batch.shaderPass->renderState());
+            applyRenderState(commandBuffer, batch.shaderPass->renderState());
             boundShaderPass = batch.shaderPass;
         }
         if (batch.materialBindGroup != boundMaterial) {
-            encoder.bindGroup(1, batch.materialBindGroup);
+            commandBuffer.bindGroup(1, batch.materialBindGroup);
             boundMaterial = batch.materialBindGroup;
         }
         if (globalBindGroup && globalBindGroup != boundGlobal) {
-            encoder.bindGroup(2, globalBindGroup);
+            commandBuffer.bindGroup(2, globalBindGroup);
             boundGlobal = globalBindGroup;
         }
         for (const DrawItem::VertexBuffer& vertex : batch.vertexBuffers) {
-            encoder.bindVertexBuffer(vertex.binding, vertex.buffer);
+            commandBuffer.bindVertexBuffer(vertex.binding, vertex.buffer);
         }
-        encoder.bindIndexBuffer(batch.indexBuffer, 0, batch.indexFormat);
-        encoder.drawIndexed({.indexCount = batch.indexCount,
+        commandBuffer.bindIndexBuffer(batch.indexBuffer, 0, batch.indexFormat);
+        commandBuffer.drawIndexed({.indexCount = batch.indexCount,
                              .instanceCount = batch.instanceCount,
                              .firstIndex = batch.firstIndex,
                              .vertexOffset = batch.vertexOffset,

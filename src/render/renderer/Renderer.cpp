@@ -6,7 +6,7 @@
 #include "render/render_target/RenderTarget.h"
 #include "render/gpu/frame/FrameGpuManager.h"
 #include "render/gpu/pipeline/GraphicsPipelineManager.h"
-#include "rhi/api/CommandEncoder.h"
+#include "rhi/api/CommandBuffer.h"
 #include "runtime/window/Window.h"
 
 #include <span>
@@ -72,28 +72,28 @@ void Renderer::renderFrame(const RenderScene& scene) {
         // no draw items the acquired swapchain image was never transitioned and is
         // still in the undefined layout. Presenting it unmodified trips the validation
         // layer, so clear it into PRESENT_SRC ourselves.
-        rhi::IGraphicsCommandEncoder& encoder = swapchain_->encoder();
+        rhi::ICommandBuffer& commandBuffer = swapchain_->commandBuffer();
         const rhi::TextureHandle texture = swapchain_->currentTexture();
         const rhi::TextureBarrier toAttachment{
             .texture = texture,
             .before = rhi::ResourceState::Undefined,
             .after = rhi::ResourceState::ColorAttachment,
         };
-        encoder.resourceBarriers(std::span{&toAttachment, 1});
-        encoder.beginRendering({
+        commandBuffer.resourceBarriers(std::span{&toAttachment, 1});
+        commandBuffer.beginRendering({
             .renderArea = {.width = swapchain_->width(), .height = swapchain_->height()},
             .colorAttachments = {{
                 .view = swapchain_->currentTextureView(),
                 .loadOp = rhi::LoadOp::Clear,
             }},
         });
-        encoder.endRendering();
+        commandBuffer.endRendering();
         const rhi::TextureBarrier toPresent{
             .texture = texture,
             .before = rhi::ResourceState::ColorAttachment,
             .after = rhi::ResourceState::Present,
         };
-        encoder.resourceBarriers(std::span{&toPresent, 1});
+        commandBuffer.resourceBarriers(std::span{&toPresent, 1});
     }
     const bool resized = window_.consumeResize();
     const rhi::FrameStatus status = swapchain_->endFrame();

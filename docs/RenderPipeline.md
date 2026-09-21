@@ -22,7 +22,7 @@ Engine::loop
        endFrame / resize 处理
   → IRenderPipeline::render(RenderContext&)
        MiniForwardPipeline（行为等价）
-  → RenderGraph v1 → RHI encoder → Vulkan
+  → RenderGraph v1 → RHI command buffer → Vulkan
 ```
 
 ## 新增源码
@@ -30,7 +30,7 @@ Engine::loop
 ```text
 src/render/pipeline/
 ├── RenderPipeline.h/.cpp       IRenderPipeline 接口 + RenderPipelineRegistry
-├── RenderContext.h/.cpp        帧上下文（device/encoder/swapchain/forward target/scene 门面）
+├── RenderContext.h/.cpp        帧上下文（device/commandBuffer/swapchain/forward target/scene 门面）
 └── MiniForwardPipeline.h/.cpp  第一条管线，把原 Renderer 渲染逻辑迁入
 ```
 
@@ -50,7 +50,7 @@ public:
 ### RenderContext
 
 栈上每帧构造，封装 pass 所需的帧基础设施：
-- `device()` / `swapchain()` / `encoder()`
+- `device()` / `swapchain()` / `commandBuffer()`
 - `currentForwardTarget()` —— 当前 in-flight 帧的 depth target
 - `frameIndex()` / `frameSerial()`
 - `scene()` —— 本帧 `RenderScene` 快照
@@ -93,7 +93,7 @@ public:
 ### MiniForwardPipeline
 
 - 把原 `Renderer::renderFrame` 中 L74-245 的 DrawList 构建、材质 resolve、`RenderGraph` 录制逻辑原样迁入。
-- 通过 `RenderContext` 访问 swapchain、forward target、encoder，不再直接依赖 `Renderer` 私有状态。
+- 通过 `RenderContext` 访问 swapchain、forward target、commandBuffer，不再直接依赖 `Renderer` 私有状态。
 - `onSwapchainChanged` 当前为空；forward target 的 resize 仍由 `Renderer::recreateSwapchain` 处理。
 
 ## 验证

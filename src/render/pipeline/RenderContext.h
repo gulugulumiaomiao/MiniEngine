@@ -14,7 +14,7 @@ class RgTexturePool;
 namespace rhi {
 class IDevice;
 class ISwapchain;
-class IGraphicsCommandEncoder;
+class ICommandBuffer;
 } // namespace rhi
 
 class RenderContext final {
@@ -23,7 +23,7 @@ public:
 
     [[nodiscard]] rhi::IDevice& device() const;
     [[nodiscard]] rhi::ISwapchain& swapchain() const;
-    [[nodiscard]] rhi::IGraphicsCommandEncoder& encoder() const;
+    [[nodiscard]] rhi::ICommandBuffer& commandBuffer() const;
     [[nodiscard]] RenderTarget& currentForwardTarget() const;
     [[nodiscard]] RgTexturePool& rgTexturePool() const;
     [[nodiscard]] std::uint32_t frameIndex() const;

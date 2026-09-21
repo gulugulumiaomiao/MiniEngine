@@ -1,7 +1,7 @@
 #pragma once
 
 #include "render/renderer/DrawList.h"
-#include "rhi/api/CommandEncoder.h"
+#include "rhi/api/CommandBuffer.h"
 
 #include <cstdint>
 #include <span>
@@ -17,6 +17,6 @@ void drawFilteredItems(std::uint32_t frameIndex,
                        std::span<const DrawItem> items,
                        rhi::BindGroupHandle sceneBindGroup,
                        rhi::BindGroupHandle globalBindGroup,
-                       rhi::IGraphicsCommandEncoder& encoder);
+                       rhi::ICommandBuffer& commandBuffer);
 
 } // namespace engine

@@ -70,7 +70,7 @@ int main() {
 
     // Record a simple clear operation
     {
-        auto& encoder = swapchain.encoder();
+        auto& commandBuffer = swapchain.commandBuffer();
         RenderingInfo rendering;
         rendering.renderArea = {0, 0, swapchain.width(), swapchain.height()};
         rendering.colorAttachments.push_back({
@@ -79,8 +79,8 @@ int main() {
             StoreOp::Store,
             {0.0F, 0.0F, 0.0F, 1.0F},
         });
-        encoder.beginRendering(rendering);
-        encoder.endRendering();
+        commandBuffer.beginRendering(rendering);
+        commandBuffer.endRendering();
     }
 
     status = swapchain.endFrame();
@@ -95,7 +95,7 @@ int main() {
     }
 
     {
-        auto& encoder = swapchain.encoder();
+        auto& commandBuffer = swapchain.commandBuffer();
         RenderingInfo rendering;
         rendering.renderArea = {0, 0, swapchain.width(), swapchain.height()};
         rendering.colorAttachments.push_back({
@@ -104,8 +104,8 @@ int main() {
             StoreOp::Store,
             {1.0F, 0.0F, 0.0F, 1.0F},
         });
-        encoder.beginRendering(rendering);
-        encoder.endRendering();
+        commandBuffer.beginRendering(rendering);
+        commandBuffer.endRendering();
     }
 
     status = swapchain.endFrame();
@@ -124,7 +124,7 @@ int main() {
     }
 
     {
-        auto& encoder = swapchain.encoder();
+        auto& commandBuffer = swapchain.commandBuffer();
         RenderingInfo rendering;
         rendering.renderArea = {0, 0, swapchain.width(), swapchain.height()};
         rendering.colorAttachments.push_back({
@@ -133,8 +133,8 @@ int main() {
             StoreOp::Store,
             {0.0F, 1.0F, 0.0F, 1.0F},
         });
-        encoder.beginRendering(rendering);
-        encoder.endRendering();
+        commandBuffer.beginRendering(rendering);
+        commandBuffer.endRendering();
     }
 
     status = swapchain.endFrame();
@@ -149,7 +149,7 @@ int main() {
     }
 
     {
-        auto& encoder = swapchain.encoder();
+        auto& commandBuffer = swapchain.commandBuffer();
         RenderingInfo rendering;
         rendering.renderArea = {0, 0, swapchain.width(), swapchain.height()};
         rendering.colorAttachments.push_back({
@@ -158,8 +158,8 @@ int main() {
             StoreOp::Store,
             {0.0F, 0.0F, 1.0F, 1.0F},
         });
-        encoder.beginRendering(rendering);
-        encoder.endRendering();
+        commandBuffer.beginRendering(rendering);
+        commandBuffer.endRendering();
     }
 
     status = swapchain.endFrame();

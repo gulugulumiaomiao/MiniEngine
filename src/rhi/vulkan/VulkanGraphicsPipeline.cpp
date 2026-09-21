@@ -94,7 +94,7 @@ VulkanGraphicsPipeline::VulkanGraphicsPipeline(
     multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
     // Color blend and depth/stencil states are fully dynamic; use benign defaults
-    // for pipeline creation and let the encoder configure them per batch.
+    // for pipeline creation and let the command buffer configure them per batch.
     std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(desc.colorFormats.size());
     VkPipelineColorBlendStateCreateInfo colorBlending{
         VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};

@@ -2,7 +2,7 @@
 
 #include "render/render_graph/RgTexturePool.h"
 #include "render/render_graph/RgTypes.h"
-#include "rhi/api/CommandEncoder.h"
+#include "rhi/api/CommandBuffer.h"
 
 #include <functional>
 #include <string>
@@ -22,13 +22,13 @@ namespace engine {
 //     acquiring transient textures from the pool.
 //
 // Execution phase:
-//   - execute(encoder) emits barriers, calls beginRendering and runs each pass callback.
+//   - execute(commandBuffer) emits barriers, calls beginRendering and runs each pass callback.
 //
 // After execution the caller should call reset() (or let the destructor do it) so transient
 // textures are released back to the pool.
 class RenderGraph final {
 public:
-    using ExecuteCallback = std::function<void(rhi::IGraphicsCommandEncoder&)>;
+    using ExecuteCallback = std::function<void(rhi::ICommandBuffer&)>;
 
     struct ImportedTexture {
         rhi::TextureHandle texture;
@@ -57,7 +57,7 @@ public:
                          ExecuteCallback execute);
 
     void compile(RgTexturePool& pool);
-    void execute(rhi::IGraphicsCommandEncoder& encoder) const;
+    void execute(rhi::ICommandBuffer& commandBuffer) const;
     void reset();
 
     // Resolves a texture node to its RHI view; valid after compile() and before reset().

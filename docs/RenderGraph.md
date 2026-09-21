@@ -18,7 +18,7 @@ RenderGraph v2
   createTexture(transient)  → RgTextureHandle
   addGraphicsPass(name, RgRenderingInfo, usages, callback)
   compile(RgTexturePool&)   → 解析 RgTextureHandle → rhi::TextureHandle/View
-  execute(encoder)          → barriers + beginRendering + callbacks + final barriers（仅 imported 纹理）
+  execute(commandBuffer)          → barriers + beginRendering + callbacks + final barriers（仅 imported 纹理）
   reset()                   → 释放临时纹理回池
 ```
 
@@ -67,14 +67,14 @@ rendering.depthAttachments.push_back({shadowMap, LoadOp::Clear, StoreOp::Store, 
 graph.addGraphicsPass("ShadowCaster",
                       std::move(rendering),
                       {{shadowMap, TextureAspect::Depth, ResourceState::DepthAttachment}},
-                      [](IGraphicsCommandEncoder& encoder) { /* draw shadow casters */ });
+                      [](ICommandBuffer& commandBuffer) { /* draw shadow casters */ });
 ```
 
 ### 编译与执行
 
 ```cpp
 graph.compile(rgTexturePool);
-graph.execute(encoder);
+graph.execute(commandBuffer);
 graph.reset();
 ```
 

@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <vector>
 
@@ -59,6 +60,10 @@ public:
         return {};
     }
     void destroyBindGroup(engine::rhi::BindGroupHandle) override {}
+    std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override {
+        return nullptr;
+    }
+    void submitCommand(engine::rhi::ICommandBuffer&, const engine::rhi::SubmitSync&) override {}
     VkDevice device() const override { return VK_NULL_HANDLE; }
     VkInstance instance() const override { return VK_NULL_HANDLE; }
     VkPhysicalDevice physicalDevice() const override { return VK_NULL_HANDLE; }
@@ -85,8 +90,11 @@ public:
     bool failNextView{};
 };
 
-class FakeEncoder final : public engine::rhi::IGraphicsCommandEncoder {
+class FakeEncoder final : public engine::rhi::ICommandBuffer {
 public:
+    void begin() override { currentState = engine::rhi::CommandState::Recording; }
+    void end() override { currentState = engine::rhi::CommandState::Executable; }
+    [[nodiscard]] engine::rhi::CommandState state() const override { return currentState; }
     void resourceBarriers(std::span<const engine::rhi::TextureBarrier> values) override {
         barriers.insert(barriers.end(), values.begin(), values.end());
     }
@@ -114,9 +122,6 @@ public:
     void drawIndexed(const engine::rhi::DrawIndexedArguments&) override {}
     void beginDebugLabel(std::string_view, const engine::math::Vec4&) override {}
     void endDebugLabel() override {}
-    [[nodiscard]] VkCommandBuffer nativeCommandBuffer() const override {
-        return VK_NULL_HANDLE;
-    }
     void copyBuffer(const engine::rhi::BufferCopy&) override {}
     void copyImage(const engine::rhi::ImageCopy&) override {}
     void copyBufferToImage(const engine::rhi::BufferImageCopy&) override {}
@@ -124,6 +129,7 @@ public:
     void updateBuffer(const engine::rhi::BufferUpdate&) override {}
     void updateImage(const engine::rhi::ImageUpdate&) override {}
 
+    engine::rhi::CommandState currentState{engine::rhi::CommandState::Initial};
     std::vector<engine::rhi::TextureBarrier> barriers;
 };
 
@@ -197,7 +203,7 @@ int main() {
                                {{color0, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment},
                                 {color1, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment},
                                 {depth, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment}},
-                               [](rhi::IGraphicsCommandEncoder&) {});
+                               [](rhi::ICommandBuffer&) {});
     firstGraph.compile(pool);
     FakeEncoder firstEncoder;
     firstGraph.execute(firstEncoder);
@@ -225,7 +231,7 @@ int main() {
                                 {{c0b, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment},
                                  {c1b, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment},
                                  {db, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment}},
-                                [](rhi::IGraphicsCommandEncoder&) {});
+                                [](rhi::ICommandBuffer&) {});
     secondGraph.compile(pool);
     FakeEncoder secondEncoder;
     secondGraph.execute(secondEncoder);

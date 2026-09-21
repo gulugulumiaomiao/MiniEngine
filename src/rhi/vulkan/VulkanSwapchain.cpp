@@ -7,6 +7,7 @@
 #include <array>
 #include <limits>
 #include <ranges>
+#include <span>
 #include <string>
 
 namespace engine::rhi::vulkan {
@@ -40,7 +41,7 @@ VulkanSwapchain::VulkanSwapchain(VulkanDevice& device, const SwapchainDesc& desc
 
 VulkanSwapchain::~VulkanSwapchain() {
     device_.waitIdle();
-    encoder_.reset();
+    commandBuffer_.reset();
     destroy();
     for (const Frame& frame : frames_) {
         vkDestroyFence(device(), frame.inFlight, nullptr);
@@ -198,7 +199,7 @@ FrameStatus VulkanSwapchain::beginFrame() {
     Frame& frame = frames_[currentFrame_];
     check(vkWaitForFences(device(), 1, &frame.inFlight, VK_TRUE, UINT64_MAX), "vkWaitForFences");
     // The fence we just waited on proves that this slot's previous submission finished,
-    // so its encoder staging buffers can be destroyed safely.
+    // so its command buffer staging buffers can be destroyed safely.
     device_.collectStagingBuffers();
     const VkResult acquire = vkAcquireNextImageKHR(
         device(), swapchain_, UINT64_MAX, frame.imageAvailable, VK_NULL_HANDLE, &imageIndex_);
@@ -208,37 +209,24 @@ FrameStatus VulkanSwapchain::beginFrame() {
         check(acquire, "vkAcquireNextImageKHR");
     }
     check(vkResetFences(device(), 1, &frame.inFlight), "vkResetFences");
-    check(vkResetCommandBuffer(frame.commandBuffer, 0), "vkResetCommandBuffer");
-    VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    check(vkBeginCommandBuffer(frame.commandBuffer, &beginInfo), "vkBeginCommandBuffer");
-    
+    // The wrapper does not own the pooled VkCommandBuffer; begin() resets and reopens
+    // it for this frame's recording.
+    commandBuffer_ = std::make_unique<VulkanCommandBuffer>(frame.commandBuffer, device_);
+    commandBuffer_->begin();
+
     // On first use, transition from UNDEFINED to COLOR_ATTACHMENT_OPTIMAL
     if (!imageInitialized_[imageIndex_]) {
-        VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-        barrier.srcAccessMask = 0;
-        barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = images_[imageIndex_];
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
-        vkCmdPipelineBarrier(
-            frame.commandBuffer,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            0,
-            0, nullptr,
-            0, nullptr,
-            1, &barrier);
+        const TextureBarrier toColorAttachment{currentTexture(),
+                                               TextureAspect::Color,
+                                               ResourceState::Undefined,
+                                               ResourceState::ColorAttachment,
+                                               0,
+                                               1,
+                                               0,
+                                               1};
+        commandBuffer_->resourceBarriers(std::span{&toColorAttachment, 1});
     }
-    
-    encoder_ = std::make_unique<VulkanGraphicsCommandEncoder>(frame.commandBuffer, device_);
+
     frameOpen_ = true;
     return FrameStatus::Ready;
 }
@@ -247,23 +235,18 @@ FrameStatus VulkanSwapchain::endFrame() {
     if (!frameOpen_)
         Log::fatal("VulkanSwapchain", "No frame is open");
     Frame& frame = frames_[currentFrame_];
-    encoder_.reset();
     // Note: Layout transition to PRESENT_SRC_KHR is handled by RenderGraph
-    check(vkEndCommandBuffer(frame.commandBuffer), "vkEndCommandBuffer");
-    const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    const VkSemaphore finished = renderFinished_[imageIndex_];
-    // Encoder staging buffers recorded this frame retire once this submission's fence
-    // is signaled; tag them before submitting so collection sees the fence.
+    commandBuffer_->end();
+    // Command buffer staging buffers recorded this frame retire once this submission's
+    // fence is signaled; tag them before submitting so collection sees the fence.
     device_.tagPendingStagingBuffers(frame.inFlight);
-    VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &frame.imageAvailable;
-    submitInfo.pWaitDstStageMask = &waitStage;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &frame.commandBuffer;
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &finished;
-    check(vkQueueSubmit(device_.graphicsQueue(), 1, &submitInfo, frame.inFlight), "vkQueueSubmit");
+    device_.submitCommand(*commandBuffer_,
+                          SubmitSync{frame.imageAvailable,
+                                     renderFinished_[imageIndex_],
+                                     frame.inFlight,
+                                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT});
+    commandBuffer_.reset();
+    const VkSemaphore finished = renderFinished_[imageIndex_];
     VkPresentInfoKHR presentInfo{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = &finished;
@@ -291,10 +274,10 @@ void VulkanSwapchain::resize(std::uint32_t width, std::uint32_t height) {
     create();
 }
 
-IGraphicsCommandEncoder& VulkanSwapchain::encoder() {
-    if (!encoder_)
-        Log::fatal("VulkanSwapchain", "No active command encoder");
-    return *encoder_;
+ICommandBuffer& VulkanSwapchain::commandBuffer() {
+    if (!commandBuffer_)
+        Log::fatal("VulkanSwapchain", "No active command buffer");
+    return *commandBuffer_;
 }
 
 TextureHandle VulkanSwapchain::currentTexture() const {

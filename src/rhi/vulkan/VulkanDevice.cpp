@@ -417,34 +417,22 @@ void VulkanDevice::uploadBuffer(BufferHandle destination,
         return;
     }
 
-    VulkanBuffer staging{allocator_,
-                         data.size_bytes(),
-                         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                         VMA_MEMORY_USAGE_AUTO,
-                         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT};
-    staging.upload(data);
+    const BufferDesc stagingDesc{data.size_bytes(),
+                                 BufferUsage::TransferSource,
+                                 MemoryUsage::Upload,
+                                 "upload staging"};
+    const BufferHandle staging = createBuffer(stagingDesc);
+    requireBuffer(staging).upload(data);
 
-    VkCommandBufferAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-    allocateInfo.commandPool = commandPool_;
-    allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocateInfo.commandBufferCount = 1;
-    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
-    check(vkAllocateCommandBuffers(device_, &allocateInfo, &commandBuffer),
-          "vkAllocateCommandBuffers(upload)");
+    std::unique_ptr<ICommandBuffer> command = createCommandBuffer();
+    command->begin();
+    command->copyBuffer({staging, destination, 0, offset, data.size_bytes()});
+    command->end();
+    submitCommand(*command, SubmitSync{});
+    waitIdle();
 
-    VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    check(vkBeginCommandBuffer(commandBuffer, &beginInfo), "vkBeginCommandBuffer(upload)");
-    const VkBufferCopy copy{0, offset, data.size_bytes()};
-    vkCmdCopyBuffer(commandBuffer, staging.handle(), target.handle(), 1, &copy);
-    check(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer(upload)");
-
-    VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
-    check(vkQueueSubmit(graphicsQueue_, 1, &submitInfo, VK_NULL_HANDLE), "vkQueueSubmit(upload)");
-    check(vkQueueWaitIdle(graphicsQueue_), "vkQueueWaitIdle(upload)");
-    vkFreeCommandBuffers(device_, commandPool_, 1, &commandBuffer);
+    destroyBuffer(staging);
+    // command is freed after waitIdle, so its VkCommandBuffer is no longer in use.
 }
 
 VkImage VulkanDevice::TextureResource::handle() const {
@@ -500,91 +488,56 @@ void VulkanDevice::uploadTexture(TextureHandle destination,
         suppliedMips[region.mipLevel] = true;
         totalSize += region.data.size_bytes();
     }
-    VulkanBuffer staging{allocator_,
-                         totalSize,
-                         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                         VMA_MEMORY_USAGE_AUTO,
-                         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT};
+    const BufferDesc stagingDesc{totalSize,
+                                 BufferUsage::TransferSource,
+                                 MemoryUsage::Upload,
+                                 "texture upload staging"};
+    const BufferHandle staging = createBuffer(stagingDesc);
     std::uint64_t stagingOffset{};
-    std::vector<VkBufferImageCopy> copies;
+    std::vector<BufferImageCopy> copies;
     copies.reserve(regions.size());
     for (const TextureUploadRegion& region : regions) {
-        staging.upload(region.data, stagingOffset);
-        VkBufferImageCopy copy{};
-        copy.bufferOffset = stagingOffset;
-        copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copy.imageSubresource.mipLevel = region.mipLevel;
-        copy.imageSubresource.baseArrayLayer = region.arrayLayer;
-        copy.imageSubresource.layerCount = 1;
-        copy.imageExtent = {region.width, region.height, 1};
-        copies.push_back(copy);
+        requireBuffer(staging).upload(region.data, stagingOffset);
+        copies.push_back(BufferImageCopy{staging,
+                                         destination,
+                                         stagingOffset,
+                                         0,
+                                         0,
+                                         region.mipLevel,
+                                         region.arrayLayer,
+                                         {},
+                                         Extent3D{region.width, region.height, 1}});
         stagingOffset += region.data.size_bytes();
     }
 
-    VkCommandBufferAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-    allocateInfo.commandPool = commandPool_;
-    allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocateInfo.commandBufferCount = 1;
-    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
-    check(vkAllocateCommandBuffers(device_, &allocateInfo, &commandBuffer),
-          "vkAllocateCommandBuffers(texture upload)");
-    VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    check(vkBeginCommandBuffer(commandBuffer, &beginInfo), "vkBeginCommandBuffer(texture upload)");
+    std::unique_ptr<ICommandBuffer> command = createCommandBuffer();
+    command->begin();
+    const TextureBarrier toCopyDestination{destination,
+                                           TextureAspect::Color,
+                                           ResourceState::Undefined,
+                                           ResourceState::CopyDestination,
+                                           0,
+                                           kRemainingMipLevels,
+                                           0,
+                                           1};
+    command->resourceBarriers(std::span{&toCopyDestination, 1});
+    for (const BufferImageCopy& copy : copies) {
+        command->copyBufferToImage(copy);
+    }
+    const TextureBarrier toShaderRead{destination,
+                                      TextureAspect::Color,
+                                      ResourceState::CopyDestination,
+                                      ResourceState::ShaderRead,
+                                      0,
+                                      kRemainingMipLevels,
+                                      0,
+                                      1};
+    command->resourceBarriers(std::span{&toShaderRead, 1});
+    command->end();
+    submitCommand(*command, SubmitSync{});
+    waitIdle();
 
-    VkImageMemoryBarrier toTransfer{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-    toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    toTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    toTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    toTransfer.image = image.handle();
-    toTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    toTransfer.subresourceRange.levelCount = image.mipCount();
-    toTransfer.subresourceRange.layerCount = 1;
-    vkCmdPipelineBarrier(commandBuffer,
-                         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                         VK_PIPELINE_STAGE_TRANSFER_BIT,
-                         0,
-                         0,
-                         nullptr,
-                         0,
-                         nullptr,
-                         1,
-                         &toTransfer);
-    vkCmdCopyBufferToImage(commandBuffer,
-                           staging.handle(),
-                           image.handle(),
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                           static_cast<std::uint32_t>(copies.size()),
-                           copies.data());
-    VkImageMemoryBarrier toShaderRead{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-    toShaderRead.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    toShaderRead.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    toShaderRead.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    toShaderRead.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    toShaderRead.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    toShaderRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    toShaderRead.image = image.handle();
-    toShaderRead.subresourceRange = toTransfer.subresourceRange;
-    vkCmdPipelineBarrier(commandBuffer,
-                         VK_PIPELINE_STAGE_TRANSFER_BIT,
-                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                         0,
-                         0,
-                         nullptr,
-                         0,
-                         nullptr,
-                         1,
-                         &toShaderRead);
-    check(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer(texture upload)");
-    VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
-    check(vkQueueSubmit(graphicsQueue_, 1, &submitInfo, VK_NULL_HANDLE),
-          "vkQueueSubmit(texture upload)");
-    check(vkQueueWaitIdle(graphicsQueue_), "vkQueueWaitIdle(texture upload)");
-    vkFreeCommandBuffers(device_, commandPool_, 1, &commandBuffer);
+    destroyBuffer(staging);
     resource->uploaded = true;
 }
 
@@ -740,6 +693,44 @@ void VulkanDevice::destroyBindGroup(BindGroupHandle handle) {
     (void)bindGroups_.release(handle);
 }
 
+std::unique_ptr<ICommandBuffer> VulkanDevice::createCommandBuffer() {
+    VkCommandBufferAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    allocateInfo.commandPool = commandPool_;
+    allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocateInfo.commandBufferCount = 1;
+    VkCommandBuffer commandBuffer{VK_NULL_HANDLE};
+    check(vkAllocateCommandBuffers(device_, &allocateInfo, &commandBuffer),
+          "vkAllocateCommandBuffers");
+    return std::make_unique<VulkanCommandBuffer>(commandBuffer, *this, /*owned=*/true);
+}
+
+void VulkanDevice::submitCommand(ICommandBuffer& command, const SubmitSync& sync) {
+    if (command.state() != CommandState::Executable) {
+        Log::fatal("VulkanDevice",
+                   "submitCommand requires a command buffer that finished recording (call end() "
+                   "first)");
+    }
+    const auto* native = dynamic_cast<const IVulkanCommandBuffer*>(&command);
+    if (!native) {
+        Log::fatal("VulkanDevice", "submitCommand requires a Vulkan command buffer");
+    }
+    VkCommandBuffer nativeCommandBuffer = native->nativeCommandBuffer();
+    VkSemaphore waitSemaphore = sync.waitSemaphore;
+    VkSemaphore signalSemaphore = sync.signalSemaphore;
+    VkPipelineStageFlags waitStage = sync.waitStage;
+    VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    submitInfo.waitSemaphoreCount = waitSemaphore != VK_NULL_HANDLE ? 1U : 0U;
+    submitInfo.pWaitSemaphores = waitSemaphore != VK_NULL_HANDLE ? &waitSemaphore : nullptr;
+    // Ignored by Vulkan when waitSemaphoreCount is zero.
+    submitInfo.pWaitDstStageMask = &waitStage;
+    submitInfo.signalSemaphoreCount = signalSemaphore != VK_NULL_HANDLE ? 1U : 0U;
+    submitInfo.pSignalSemaphores =
+        signalSemaphore != VK_NULL_HANDLE ? &signalSemaphore : nullptr;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &nativeCommandBuffer;
+    check(vkQueueSubmit(graphicsQueue_, 1, &submitInfo, sync.signalFence), "vkQueueSubmit");
+}
+
 void VulkanDevice::waitIdle() {
     if (device_ != VK_NULL_HANDLE) {
         check(vkDeviceWaitIdle(device_), "vkDeviceWaitIdle");
@@ -753,7 +744,7 @@ BufferHandle VulkanDevice::acquireStagingBuffer(std::uint64_t size) {
     const BufferDesc desc{size,
                           BufferUsage::TransferSource,
                           MemoryUsage::Upload,
-                          "encoder staging"};
+                          "command buffer staging"};
     const BufferHandle handle = createBuffer(desc);
     pendingStagingBuffers_.push_back(StagingBuffer{handle, VK_NULL_HANDLE});
     return handle;

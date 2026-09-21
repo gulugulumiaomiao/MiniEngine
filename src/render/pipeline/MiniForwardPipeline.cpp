@@ -44,7 +44,7 @@ void MiniForwardPipeline::render(RenderContext& context) {
         FRAME_GPU_MANAGER.bindShadowMap(context.frameIndex(),
                                         graph.resolvedTextureView(shadowOutput_.shadowMap));
     }
-    graph.execute(context.encoder());
+    graph.execute(context.commandBuffer());
     graph.reset();
 }
 

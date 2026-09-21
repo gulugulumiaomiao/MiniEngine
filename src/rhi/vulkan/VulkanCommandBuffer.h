@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rhi/api/CommandEncoder.h"
+#include "rhi/api/CommandBuffer.h"
 #include "rhi/api/Device.h"
 
 #include <vulkan/vulkan.h>
@@ -9,16 +9,37 @@ namespace engine::rhi::vulkan {
 
 class VulkanDevice;
 
-class VulkanGraphicsCommandEncoder final : public IGraphicsCommandEncoder {
+// Backend extension of ICommandBuffer exposing the raw VkCommandBuffer for adjacent
+// tooling (e.g. editor UI overlays) that records into the same buffer outside of the
+// RHI abstraction.
+class IVulkanCommandBuffer : public ICommandBuffer {
 public:
-    VulkanGraphicsCommandEncoder(VkCommandBuffer commandBuffer, VulkanDevice& device);
+    [[nodiscard]] virtual VkCommandBuffer nativeCommandBuffer() const = 0;
+};
+
+class VulkanCommandBuffer final : public IVulkanCommandBuffer {
+public:
+    // owned: the wrapper frees the VkCommandBuffer on destruction. Buffers handed
+    // out by VulkanDevice::createCommandBuffer are owned; swapchain frame buffers
+    // are pooled by the swapchain and only wrapped.
+    VulkanCommandBuffer(VkCommandBuffer commandBuffer,
+                        VulkanDevice& device,
+                        bool owned = false);
+    ~VulkanCommandBuffer() override;
+
+    VulkanCommandBuffer(const VulkanCommandBuffer&) = delete;
+    VulkanCommandBuffer& operator=(const VulkanCommandBuffer&) = delete;
+
+    void begin() override;
+    void end() override;
+    [[nodiscard]] CommandState state() const override { return state_; }
+    [[nodiscard]] VkCommandBuffer nativeCommandBuffer() const override {
+        return commandBuffer_;
+    }
 
     void resourceBarriers(std::span<const TextureBarrier> barriers) override;
     void beginRendering(const RenderingInfo& info) override;
     void endRendering() override;
-    [[nodiscard]] VkCommandBuffer nativeCommandBuffer() const override {
-        return commandBuffer_;
-    }
     void setViewport(const Viewport& viewport) override;
     void setScissor(const Rect& scissor) override;
     void setCullMode(CullMode mode) override;
@@ -49,8 +70,14 @@ public:
     void updateImage(const ImageUpdate& update) override;
 
 private:
+    // Every record* entry point funnels through ensureRecording so an out-of-order
+    // call fails fast instead of hitting Vulkan validation at submit time.
+    void ensureRecording(const char* operation);
+
     VkCommandBuffer commandBuffer_{VK_NULL_HANDLE};
     VulkanDevice& device_;
+    bool owned_{false};
+    CommandState state_{CommandState::Initial};
     VkPipelineLayout boundPipelineLayout_{VK_NULL_HANDLE};
     PFN_vkCmdSetColorBlendEnableEXT pfnSetColorBlendEnable_{nullptr};
     PFN_vkCmdSetColorBlendEquationEXT pfnSetColorBlendEquation_{nullptr};

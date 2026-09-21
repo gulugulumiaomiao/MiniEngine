@@ -107,7 +107,7 @@ constexpr bool hasFlag(ColorWriteMask value, ColorWriteMask flag) {
 // GraphicsPipelineDesc only contains static pipeline state. All dynamic states
 // (cull mode, front face, depth test/write/compare, blend mode, color write mask,
 // primitive topology and fill mode) are set at command buffer record time through
-// the RHI encoder and do not contribute to the pipeline layout or cache key.
+// the RHI command buffer and do not contribute to the pipeline layout or cache key.
 struct GraphicsPipelineDesc {
     ShaderHandle vertexShader;
     std::string vertexEntry{"main"};

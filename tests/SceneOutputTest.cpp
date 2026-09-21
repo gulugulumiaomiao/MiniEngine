@@ -15,7 +15,7 @@ public:
     rhi::FrameStatus beginFrame() override { ++begins; return status; }
     rhi::FrameStatus endFrame() override { slot = (slot + 1) % 2; return rhi::FrameStatus::Ready; }
     void resize(std::uint32_t w, std::uint32_t h) override { width_ = w; height_ = h; }
-    rhi::IGraphicsCommandEncoder& encoder() override { return commands; }
+    rhi::ICommandBuffer& commandBuffer() override { return commands; }
     rhi::TextureHandle currentTexture() const override { return {99, 1}; }
     rhi::TextureViewHandle currentTextureView() const override { return {99, 1}; }
     rhi::ResourceState currentTextureState() const override { return rhi::ResourceState::Undefined; }
@@ -39,7 +39,7 @@ public:
         ForwardPass pass;
         pass.execute(context, graph, list);
         graph.compile(context.rgTexturePool());
-        graph.execute(context.encoder());
+        graph.execute(context.commandBuffer());
         backbufferWritten = context.backBufferWritten();
     }
     int calls{};

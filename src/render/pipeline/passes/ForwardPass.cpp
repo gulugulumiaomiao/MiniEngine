@@ -100,20 +100,20 @@ void ForwardPass::execute(RenderContext& context,
                           std::move(rendering),
                           std::move(resources),
                           [items = std::move(items), &context](
-                              rhi::IGraphicsCommandEncoder& encoder) mutable {
-                              encoder.setViewport({0.0F,
-                                                   0.0F,
-                                                   static_cast<float>(context.sceneWidth()),
-                                                   static_cast<float>(context.sceneHeight()),
-                                                   0.0F,
-                                                   1.0F});
-                              encoder.setScissor(
+                              rhi::ICommandBuffer& commandBuffer) mutable {
+                              commandBuffer.setViewport({0.0F,
+                                                         0.0F,
+                                                         static_cast<float>(context.sceneWidth()),
+                                                         static_cast<float>(context.sceneHeight()),
+                                                         0.0F,
+                                                         1.0F});
+                              commandBuffer.setScissor(
                                   {0, 0, context.sceneWidth(), context.sceneHeight()});
                               drawFilteredItems(context.frameIndex(),
                                                 items,
                                                 FRAME_GPU_MANAGER.sceneBindGroup(context.frameIndex()),
                                                 GLOBAL_UNIFORM_GPU_MANAGER.resolve(context.frameIndex()),
-                                                encoder);
+                                                commandBuffer);
                           });
 }
 

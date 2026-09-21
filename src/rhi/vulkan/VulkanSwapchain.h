@@ -1,7 +1,7 @@
 #pragma once
 
 #include "rhi/api/Swapchain.h"
-#include "rhi/vulkan/VulkanCommandEncoder.h"
+#include "rhi/vulkan/VulkanCommandBuffer.h"
 
 #include <vulkan/vulkan.h>
 
@@ -26,7 +26,7 @@ public:
     [[nodiscard]] FrameStatus endFrame() override;
     void resize(std::uint32_t width, std::uint32_t height) override;
 
-    [[nodiscard]] IGraphicsCommandEncoder& encoder() override;
+    [[nodiscard]] ICommandBuffer& commandBuffer() override;
     [[nodiscard]] TextureHandle currentTexture() const override;
     [[nodiscard]] TextureViewHandle currentTextureView() const override;
     [[nodiscard]] ResourceState currentTextureState() const override;
@@ -71,7 +71,8 @@ private:
     std::vector<bool> imageInitialized_;
     std::vector<VkSemaphore> renderFinished_;
     std::array<Frame, kFramesInFlight> frames_{};
-    std::unique_ptr<VulkanGraphicsCommandEncoder> encoder_;
+    // Wraps the current frame's pooled VkCommandBuffer (not owned by the wrapper).
+    std::unique_ptr<VulkanCommandBuffer> commandBuffer_;
     std::uint32_t currentFrame_{};
     std::uint32_t imageIndex_{};
     bool frameOpen_{};

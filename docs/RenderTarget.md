@@ -68,7 +68,7 @@ graph.addGraphicsPass("GBuffer",
                       target.renderingInfo(),
                       target.writeUsages(),
                       recordDraws);
-graph.execute(encoder);
+graph.execute(commandBuffer);
 ```
 
 - `import()` 声明附件的初始状态和整张图执行后的目标状态；

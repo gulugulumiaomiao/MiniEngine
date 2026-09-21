@@ -25,8 +25,8 @@ rhi::ISwapchain& RenderContext::swapchain() const {
     return renderer_.swapchain();
 }
 
-rhi::IGraphicsCommandEncoder& RenderContext::encoder() const {
-    return renderer_.swapchain().encoder();
+rhi::ICommandBuffer& RenderContext::commandBuffer() const {
+    return renderer_.swapchain().commandBuffer();
 }
 
 RenderTarget& RenderContext::currentForwardTarget() const {

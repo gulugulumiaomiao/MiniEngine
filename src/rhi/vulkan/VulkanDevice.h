@@ -3,7 +3,7 @@
 #include "core/base/HandlePool.h"
 #include "rhi/RhiFactory.h"
 #include "rhi/api/Device.h"
-#include "rhi/vulkan/VulkanCommandEncoder.h"
+#include "rhi/vulkan/VulkanCommandBuffer.h"
 
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
@@ -74,6 +74,9 @@ public:
     [[nodiscard]] BindGroupHandle createBindGroup(const BindGroupDesc& desc) override;
     void destroyBindGroup(BindGroupHandle handle) override;
 
+    [[nodiscard]] std::unique_ptr<ICommandBuffer> createCommandBuffer() override;
+    void submitCommand(ICommandBuffer& command, const SubmitSync& sync) override;
+
     void waitIdle() override;
 
     [[nodiscard]] VkInstance instance() const override { return instance_; }
@@ -108,9 +111,9 @@ public:
     [[nodiscard]] TextureViewHandle registerExternalTextureView(VkImageView view);
     void unregisterExternalTextureView(TextureViewHandle handle);
 
-    // Encoder staging support. Encoders run while the frame command buffer is still
-    // being recorded, so scratch buffers must outlive the encoder itself. The device
-    // owns them: endFrame tags them with the submitting frame's fence and they are
+    // Command buffer staging support. update* commands run while a command buffer is
+    // being recorded, so scratch buffers must outlive the recording itself. The device
+    // owns them: submitCommand tags them with the submitting frame's fence and they are
     // destroyed once that fence has been signaled.
     [[nodiscard]] BufferHandle acquireStagingBuffer(std::uint64_t size);
     void tagPendingStagingBuffers(VkFence fence);
@@ -183,7 +186,7 @@ private:
     void destroyPipelineLayoutsReferencing(BindGroupLayoutHandle handle);
     void clear();
 
-    // Scratch buffer created for an encoder staging upload; retired once the frame
+    // Scratch buffer created for a command buffer staging upload; retired once the frame
     // that recorded the copy has completed.
     struct StagingBuffer {
         BufferHandle handle;

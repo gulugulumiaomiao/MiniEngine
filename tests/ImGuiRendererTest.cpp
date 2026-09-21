@@ -2,7 +2,7 @@
 
 #include "TestRenderDevice.h"
 #include <gtest/gtest.h>
-#include "rhi/api/CommandEncoder.h"
+#include "rhi/api/CommandBuffer.h"
 #include "rhi/api/Device.h"
 
 #include <cstddef>

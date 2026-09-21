@@ -1,7 +1,7 @@
 #include "tools/editor/backend/ImGuiRenderer.h"
 
 #include "core/logging/Log.h"
-#include "rhi/api/CommandEncoder.h"
+#include "rhi/api/CommandBuffer.h"
 #include "rhi/api/Device.h"
 
 #include <algorithm>
@@ -542,7 +542,7 @@ bool ImGuiRenderer::setSceneTexture(std::uint32_t frameIndex, rhi::TextureViewHa
     return true;
 }
 
-void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
+void ImGuiRenderer::render(rhi::ICommandBuffer& commandBuffer,
                            const ImDrawData& drawData,
                            std::uint32_t frameIndex) {
     if (!device_ || !pipeline_ || drawData.TotalIdxCount <= 0)
@@ -591,20 +591,20 @@ void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
     device_->uploadBuffer(geometry.vertexBuffers[2], asBytes(colorStaging_));
     device_->uploadBuffer(geometry.indexBuffer, asBytes(indexStaging_));
 
-    encoder.beginDebugLabel("ImGui", {0.4F, 0.7F, 1.0F, 1.0F});
-    encoder.bindPipeline(pipeline_);
-    encoder.setPrimitiveTopology(rhi::PrimitiveTopology::TriangleList);
-    encoder.setFillMode(rhi::FillMode::Solid);
-    encoder.setCullMode(rhi::CullMode::None);
-    encoder.setDepthTestEnable(false);
-    encoder.setDepthWriteEnable(false);
-    encoder.setBlendState(rhi::BlendMode::Alpha);
-    encoder.setColorWriteMask(rhi::ColorWriteMask::All);
-    encoder.bindVertexBuffer(0, geometry.vertexBuffers[0]);
-    encoder.bindVertexBuffer(1, geometry.vertexBuffers[1]);
-    encoder.bindVertexBuffer(2, geometry.vertexBuffers[2]);
-    encoder.bindIndexBuffer(geometry.indexBuffer, 0, rhi::IndexFormat::UInt16);
-    encoder.setViewport({.width = framebufferWidth, .height = framebufferHeight});
+    commandBuffer.beginDebugLabel("ImGui", {0.4F, 0.7F, 1.0F, 1.0F});
+    commandBuffer.bindPipeline(pipeline_);
+    commandBuffer.setPrimitiveTopology(rhi::PrimitiveTopology::TriangleList);
+    commandBuffer.setFillMode(rhi::FillMode::Solid);
+    commandBuffer.setCullMode(rhi::CullMode::None);
+    commandBuffer.setDepthTestEnable(false);
+    commandBuffer.setDepthWriteEnable(false);
+    commandBuffer.setBlendState(rhi::BlendMode::Alpha);
+    commandBuffer.setColorWriteMask(rhi::ColorWriteMask::All);
+    commandBuffer.bindVertexBuffer(0, geometry.vertexBuffers[0]);
+    commandBuffer.bindVertexBuffer(1, geometry.vertexBuffers[1]);
+    commandBuffer.bindVertexBuffer(2, geometry.vertexBuffers[2]);
+    commandBuffer.bindIndexBuffer(geometry.indexBuffer, 0, rhi::IndexFormat::UInt16);
+    commandBuffer.setViewport({.width = framebufferWidth, .height = framebufferHeight});
 
     std::uint32_t vertexBase{};
     std::uint32_t indexBase{};
@@ -614,19 +614,19 @@ void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
                 // Draw callbacks may only reset the state this backend owns; the editor
                 // panels use none, so anything else is reported instead of guessed at.
                 if (command.UserCallback == ImDrawCallback_ResetRenderState) {
-                    encoder.bindPipeline(pipeline_);
-                    encoder.setPrimitiveTopology(rhi::PrimitiveTopology::TriangleList);
-                    encoder.setFillMode(rhi::FillMode::Solid);
-                    encoder.setCullMode(rhi::CullMode::None);
-                    encoder.setDepthTestEnable(false);
-                    encoder.setDepthWriteEnable(false);
-                    encoder.setBlendState(rhi::BlendMode::Alpha);
-                    encoder.setColorWriteMask(rhi::ColorWriteMask::All);
-                    encoder.bindVertexBuffer(0, geometry.vertexBuffers[0]);
-                    encoder.bindVertexBuffer(1, geometry.vertexBuffers[1]);
-                    encoder.bindVertexBuffer(2, geometry.vertexBuffers[2]);
-                    encoder.bindIndexBuffer(geometry.indexBuffer, 0, rhi::IndexFormat::UInt16);
-                    encoder.setViewport({.width = framebufferWidth, .height = framebufferHeight});
+                    commandBuffer.bindPipeline(pipeline_);
+                    commandBuffer.setPrimitiveTopology(rhi::PrimitiveTopology::TriangleList);
+                    commandBuffer.setFillMode(rhi::FillMode::Solid);
+                    commandBuffer.setCullMode(rhi::CullMode::None);
+                    commandBuffer.setDepthTestEnable(false);
+                    commandBuffer.setDepthWriteEnable(false);
+                    commandBuffer.setBlendState(rhi::BlendMode::Alpha);
+                    commandBuffer.setColorWriteMask(rhi::ColorWriteMask::All);
+                    commandBuffer.bindVertexBuffer(0, geometry.vertexBuffers[0]);
+                    commandBuffer.bindVertexBuffer(1, geometry.vertexBuffers[1]);
+                    commandBuffer.bindVertexBuffer(2, geometry.vertexBuffers[2]);
+                    commandBuffer.bindIndexBuffer(geometry.indexBuffer, 0, rhi::IndexFormat::UInt16);
+                    commandBuffer.setViewport({.width = framebufferWidth, .height = framebufferHeight});
                 } else {
                     Log::warn("ImGuiRenderer", "Ignoring an unsupported ImGui draw callback");
                 }
@@ -650,7 +650,7 @@ void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
             if (maxX <= minX || maxY <= minY)
                 continue;
 
-            encoder.setScissor({
+            commandBuffer.setScissor({
                 .x = static_cast<std::int32_t>(minX),
                 .y = static_cast<std::int32_t>(minY),
                 .width = static_cast<std::uint32_t>(maxX - minX),
@@ -660,8 +660,8 @@ void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
                 ? sceneTextures_[frameIndex].group : toBindGroup(command.GetTexID());
             if (!group)
                 continue;
-            encoder.bindGroup(0, group);
-            encoder.drawIndexed({
+            commandBuffer.bindGroup(0, group);
+            commandBuffer.drawIndexed({
                 .indexCount = command.ElemCount,
                 .firstIndex = command.IdxOffset + indexBase,
                 .vertexOffset = static_cast<std::int32_t>(command.VtxOffset + vertexBase),
@@ -670,7 +670,7 @@ void ImGuiRenderer::render(rhi::IGraphicsCommandEncoder& encoder,
         vertexBase += static_cast<std::uint32_t>(list->VtxBuffer.Size);
         indexBase += static_cast<std::uint32_t>(list->IdxBuffer.Size);
     }
-    encoder.endDebugLabel();
+    commandBuffer.endDebugLabel();
 }
 
 } // namespace engine::editor

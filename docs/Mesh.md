@@ -267,6 +267,6 @@ Debug 模式下 `FileWatcher` 的事件由 `AssetImportPipeline` 处理。Mesh �
 - `src/rhi/api/Device.h`、`ResourceDesc.h`：设备接口和 API 无关的资源描述。
 - `src/rhi/vulkan/VulkanDevice.cpp`：Buffer/Shader/Pipeline 资源表和 Vulkan staging 上传。
 - `src/render/renderer/Renderer.cpp`：上传以及 DrawList/RenderGraph 编排。
-- `src/rhi/vulkan/VulkanSwapchain.cpp`、`VulkanCommandEncoder.cpp`：命令记录、提交与 Vulkan draw 调用。
+- `src/rhi/vulkan/VulkanSwapchain.cpp`、`VulkanCommandBuffer.cpp`：命令记录、提交与 Vulkan draw 调用。
 
 `MeshTest` 覆盖多种图元、布局和包围体、组合变换/材质槽、索引升级、非法参数、配方 round-trip、v2 数据以及运行时版本更新；`AssetImporterTest` 覆盖 raw 与 procedural `.mesh.json`；`AssetPipelineTest` 覆盖导入和 Mesh 热替换。

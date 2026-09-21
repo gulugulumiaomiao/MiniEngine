@@ -91,7 +91,7 @@ GraphicsPipelineManager::makeDescription(const VertexLayout& vertexLayout,
                                           : rhi::VertexInputRate::Instance});
     }
     // cull/frontFace/depth/blend/colorMask/topology/fill are dynamic and are set by the
-    // encoder before each batch. Use benign defaults for pipeline creation.
+    // command buffer before each batch. Use benign defaults for pipeline creation.
     return desc;
 }
 

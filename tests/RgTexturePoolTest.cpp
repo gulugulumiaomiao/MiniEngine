@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <vector>
 
@@ -54,6 +55,10 @@ public:
         return {};
     }
     void destroyBindGroup(engine::rhi::BindGroupHandle) override {}
+    std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override {
+        return nullptr;
+    }
+    void submitCommand(engine::rhi::ICommandBuffer&, const engine::rhi::SubmitSync&) override {}
     VkDevice device() const override { return VK_NULL_HANDLE; }
     VkInstance instance() const override { return VK_NULL_HANDLE; }
     VkPhysicalDevice physicalDevice() const override { return VK_NULL_HANDLE; }

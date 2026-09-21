@@ -107,7 +107,7 @@ overlay 是 present 之前的最后写入者，必须把获取到的 backbuffer 
 无 UI 且 backbuffer 已写 -> 直接返回
 否则 barrier(Undefined 或 Present -> ColorAttachment)
      beginRendering(Load 或 Clear)
-     有 UI 则 ImGuiRenderer::render(encoder, drawData, frameIndex)
+     有 UI 则 ImGuiRenderer::render(commandBuffer, drawData, frameIndex)
      endRendering
      barrier(ColorAttachment -> Present)
 ```

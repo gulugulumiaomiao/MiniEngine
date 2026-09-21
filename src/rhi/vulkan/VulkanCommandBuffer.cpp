@@ -1,4 +1,4 @@
-#include "rhi/vulkan/VulkanCommandEncoder.h"
+#include "rhi/vulkan/VulkanCommandBuffer.h"
 
 #include "core/logging/Log.h"
 
@@ -47,7 +47,7 @@ VulkanState mapState(ResourceState state) {
     case ResourceState::Present:
         return {VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR};
     }
-    Log::fatal("VulkanCommandEncoder", "Unsupported RHI resource state");
+    Log::fatal("VulkanCommandBuffer", "Unsupported RHI resource state");
 }
 
 VkAttachmentLoadOp mapLoadOp(LoadOp operation) {
@@ -56,7 +56,7 @@ VkAttachmentLoadOp mapLoadOp(LoadOp operation) {
     case LoadOp::Clear: return VK_ATTACHMENT_LOAD_OP_CLEAR;
     case LoadOp::DontCare: return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     }
-    Log::fatal("VulkanCommandEncoder", "Unsupported RHI load operation");
+    Log::fatal("VulkanCommandBuffer", "Unsupported RHI load operation");
 }
 
 VkAttachmentStoreOp mapStoreOp(StoreOp operation) {
@@ -132,7 +132,7 @@ std::uint32_t bytesPerPixel(TextureFormat format) {
     case TextureFormat::Undefined:
         break;
     }
-    Log::fatal("VulkanCommandEncoder", "Unsupported RHI texture format");
+    Log::fatal("VulkanCommandBuffer", "Unsupported RHI texture format");
 }
 
 VkImageSubresourceLayers imageSubresource(std::uint32_t mipLevel, std::uint32_t arrayLayer) {
@@ -156,9 +156,10 @@ VkExtent3D toVulkan(const Extent3D& extent) {
 
 } // namespace
 
-VulkanGraphicsCommandEncoder::VulkanGraphicsCommandEncoder(VkCommandBuffer commandBuffer,
-                                                           VulkanDevice& device)
-    : commandBuffer_(commandBuffer), device_(device) {
+VulkanCommandBuffer::VulkanCommandBuffer(VkCommandBuffer commandBuffer,
+                                         VulkanDevice& device,
+                                         bool owned)
+    : commandBuffer_(commandBuffer), device_(device), owned_(owned) {
     pfnSetColorBlendEnable_ = reinterpret_cast<PFN_vkCmdSetColorBlendEnableEXT>(
         vkGetDeviceProcAddr(device.device(), "vkCmdSetColorBlendEnableEXT"));
     pfnSetColorBlendEquation_ = reinterpret_cast<PFN_vkCmdSetColorBlendEquationEXT>(
@@ -169,10 +170,55 @@ VulkanGraphicsCommandEncoder::VulkanGraphicsCommandEncoder(VkCommandBuffer comma
         vkGetDeviceProcAddr(device.device(), "vkCmdSetPolygonModeEXT"));
 }
 
-void VulkanGraphicsCommandEncoder::resourceBarriers(std::span<const TextureBarrier> barriers) {
+VulkanCommandBuffer::~VulkanCommandBuffer() {
+    if (owned_ && commandBuffer_ != VK_NULL_HANDLE) {
+        vkFreeCommandBuffers(device_.device(), device_.commandPool(), 1, &commandBuffer_);
+    }
+}
+
+void VulkanCommandBuffer::begin() {
+    if (state_ == CommandState::Recording) {
+        Log::fatal("VulkanCommandBuffer", "begin() requires an Initial or Executable command buffer");
+    }
+    // Re-beginning an Executable buffer resets it for another pass (frame buffers
+    // are pooled and reused). The buffer must not be pending execution; callers
+    // wait on its fence first (e.g. swapchain beginFrame).
+    if (state_ == CommandState::Executable) {
+        if (vkResetCommandBuffer(commandBuffer_, 0) != VK_SUCCESS) {
+            Log::fatal("VulkanCommandBuffer", "vkResetCommandBuffer failed");
+        }
+    }
+    boundPipelineLayout_ = VK_NULL_HANDLE;
+    VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    if (vkBeginCommandBuffer(commandBuffer_, &beginInfo) != VK_SUCCESS) {
+        Log::fatal("VulkanCommandBuffer", "vkBeginCommandBuffer failed");
+    }
+    state_ = CommandState::Recording;
+}
+
+void VulkanCommandBuffer::end() {
+    if (state_ != CommandState::Recording) {
+        Log::fatal("VulkanCommandBuffer", "end() requires a Recording command buffer");
+    }
+    if (vkEndCommandBuffer(commandBuffer_) != VK_SUCCESS) {
+        Log::fatal("VulkanCommandBuffer", "vkEndCommandBuffer failed");
+    }
+    state_ = CommandState::Executable;
+}
+
+void VulkanCommandBuffer::ensureRecording(const char* operation) {
+    if (state_ != CommandState::Recording) {
+        Log::fatal("VulkanCommandBuffer",
+                   std::string(operation) + " requires a Recording command buffer");
+    }
+}
+
+void VulkanCommandBuffer::resourceBarriers(std::span<const TextureBarrier> barriers) {
     if (barriers.empty()) {
         return;
     }
+    ensureRecording("resourceBarriers");
     std::vector<VkImageMemoryBarrier> imageBarriers;
     imageBarriers.reserve(barriers.size());
     VkPipelineStageFlags sourceStages{};
@@ -211,7 +257,8 @@ void VulkanGraphicsCommandEncoder::resourceBarriers(std::span<const TextureBarri
                          imageBarriers.data());
 }
 
-void VulkanGraphicsCommandEncoder::beginRendering(const RenderingInfo& info) {
+void VulkanCommandBuffer::beginRendering(const RenderingInfo& info) {
+    ensureRecording("beginRendering");
     std::vector<VkRenderingAttachmentInfo> colors;
     colors.reserve(info.colorAttachments.size());
     for (const ColorAttachment& attachment : info.colorAttachments) {
@@ -238,7 +285,7 @@ void VulkanGraphicsCommandEncoder::beginRendering(const RenderingInfo& info) {
         depths.push_back(native);
     }
     if (depths.size() > 1) {
-        Log::fatal("VulkanCommandEncoder", "RHI supports at most one depth attachment per pass");
+        Log::fatal("VulkanCommandBuffer", "RHI supports at most one depth attachment per pass");
     }
     VkRenderingInfo native{VK_STRUCTURE_TYPE_RENDERING_INFO};
     native.renderArea.offset = {info.renderArea.x, info.renderArea.y};
@@ -250,11 +297,13 @@ void VulkanGraphicsCommandEncoder::beginRendering(const RenderingInfo& info) {
     vkCmdBeginRendering(commandBuffer_, &native);
 }
 
-void VulkanGraphicsCommandEncoder::endRendering() {
+void VulkanCommandBuffer::endRendering() {
+    ensureRecording("endRendering");
     vkCmdEndRendering(commandBuffer_);
 }
 
-void VulkanGraphicsCommandEncoder::setViewport(const Viewport& viewport) {
+void VulkanCommandBuffer::setViewport(const Viewport& viewport) {
+    ensureRecording("setViewport");
     const VkViewport native{viewport.x,
                             viewport.y,
                             viewport.width,
@@ -264,32 +313,39 @@ void VulkanGraphicsCommandEncoder::setViewport(const Viewport& viewport) {
     vkCmdSetViewport(commandBuffer_, 0, 1, &native);
 }
 
-void VulkanGraphicsCommandEncoder::setScissor(const Rect& scissor) {
+void VulkanCommandBuffer::setScissor(const Rect& scissor) {
+    ensureRecording("setScissor");
     const VkRect2D native{{scissor.x, scissor.y}, {scissor.width, scissor.height}};
     vkCmdSetScissor(commandBuffer_, 0, 1, &native);
 }
 
-void VulkanGraphicsCommandEncoder::setCullMode(CullMode mode) {
+void VulkanCommandBuffer::setCullMode(CullMode mode) {
+    ensureRecording("setCullMode");
     vkCmdSetCullMode(commandBuffer_, toVulkan(mode));
 }
 
-void VulkanGraphicsCommandEncoder::setFrontFace(FrontFace face) {
+void VulkanCommandBuffer::setFrontFace(FrontFace face) {
+    ensureRecording("setFrontFace");
     vkCmdSetFrontFace(commandBuffer_, toVulkan(face));
 }
 
-void VulkanGraphicsCommandEncoder::setDepthTestEnable(bool enable) {
+void VulkanCommandBuffer::setDepthTestEnable(bool enable) {
+    ensureRecording("setDepthTestEnable");
     vkCmdSetDepthTestEnable(commandBuffer_, enable ? VK_TRUE : VK_FALSE);
 }
 
-void VulkanGraphicsCommandEncoder::setDepthWriteEnable(bool enable) {
+void VulkanCommandBuffer::setDepthWriteEnable(bool enable) {
+    ensureRecording("setDepthWriteEnable");
     vkCmdSetDepthWriteEnable(commandBuffer_, enable ? VK_TRUE : VK_FALSE);
 }
 
-void VulkanGraphicsCommandEncoder::setDepthCompareOp(CompareOp compare) {
+void VulkanCommandBuffer::setDepthCompareOp(CompareOp compare) {
+    ensureRecording("setDepthCompareOp");
     vkCmdSetDepthCompareOp(commandBuffer_, toVulkan(compare));
 }
 
-void VulkanGraphicsCommandEncoder::setBlendState(BlendMode mode) {
+void VulkanCommandBuffer::setBlendState(BlendMode mode) {
+    ensureRecording("setBlendState");
     VkColorBlendEquationEXT equation{};
     VkBool32 enable = VK_FALSE;
     toVulkanBlend(mode, equation, enable);
@@ -301,40 +357,46 @@ void VulkanGraphicsCommandEncoder::setBlendState(BlendMode mode) {
     pfnSetColorBlendEquation_(commandBuffer_, 0, 1, equations);
 }
 
-void VulkanGraphicsCommandEncoder::setColorWriteMask(ColorWriteMask mask) {
+void VulkanCommandBuffer::setColorWriteMask(ColorWriteMask mask) {
+    ensureRecording("setColorWriteMask");
     const VkColorComponentFlags masks[1] = {toVulkan(mask)};
     pfnSetColorWriteMask_(commandBuffer_, 0, 1, masks);
 }
 
-void VulkanGraphicsCommandEncoder::setPrimitiveTopology(PrimitiveTopology topology) {
+void VulkanCommandBuffer::setPrimitiveTopology(PrimitiveTopology topology) {
+    ensureRecording("setPrimitiveTopology");
     vkCmdSetPrimitiveTopology(commandBuffer_,
                               topology == PrimitiveTopology::TriangleList
                                   ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
                                   : VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
 }
 
-void VulkanGraphicsCommandEncoder::setFillMode(FillMode mode) {
+void VulkanCommandBuffer::setFillMode(FillMode mode) {
+    ensureRecording("setFillMode");
     pfnSetPolygonMode_(commandBuffer_,
                        mode == FillMode::Solid ? VK_POLYGON_MODE_FILL : VK_POLYGON_MODE_LINE);
 }
 
-void VulkanGraphicsCommandEncoder::bindPipeline(GraphicsPipelineHandle pipeline) {
+void VulkanCommandBuffer::bindPipeline(GraphicsPipelineHandle pipeline) {
+    ensureRecording("bindPipeline");
     const ResolvedPipeline native = device_.resolvePipeline(pipeline);
     boundPipelineLayout_ = native.layout;
     vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, native.pipeline);
 }
 
-void VulkanGraphicsCommandEncoder::bindVertexBuffer(std::uint32_t slot,
-                                                    BufferHandle buffer,
-                                                    std::uint64_t offset) {
+void VulkanCommandBuffer::bindVertexBuffer(std::uint32_t slot,
+                                           BufferHandle buffer,
+                                           std::uint64_t offset) {
+    ensureRecording("bindVertexBuffer");
     const VkBuffer native = device_.resolveBuffer(buffer);
     const VkDeviceSize nativeOffset = offset;
     vkCmdBindVertexBuffers(commandBuffer_, slot, 1, &native, &nativeOffset);
 }
 
-void VulkanGraphicsCommandEncoder::bindIndexBuffer(BufferHandle buffer,
-                                                   std::uint64_t offset,
-                                                   IndexFormat format) {
+void VulkanCommandBuffer::bindIndexBuffer(BufferHandle buffer,
+                                          std::uint64_t offset,
+                                          IndexFormat format) {
+    ensureRecording("bindIndexBuffer");
     vkCmdBindIndexBuffer(commandBuffer_,
                          device_.resolveBuffer(buffer),
                          offset,
@@ -342,11 +404,12 @@ void VulkanGraphicsCommandEncoder::bindIndexBuffer(BufferHandle buffer,
                                                        : VK_INDEX_TYPE_UINT32);
 }
 
-void VulkanGraphicsCommandEncoder::bindGroup(std::uint32_t set,
-                                             BindGroupHandle group,
-                                             std::span<const std::uint32_t> dynamicOffsets) {
+void VulkanCommandBuffer::bindGroup(std::uint32_t set,
+                                    BindGroupHandle group,
+                                    std::span<const std::uint32_t> dynamicOffsets) {
+    ensureRecording("bindGroup");
     if (boundPipelineLayout_ == VK_NULL_HANDLE) {
-        Log::fatal("VulkanCommandEncoder", "bindGroup requires a bound graphics pipeline");
+        Log::fatal("VulkanCommandBuffer", "bindGroup requires a bound graphics pipeline");
     }
     const VkDescriptorSet descriptor = device_.resolveBindGroup(group);
     vkCmdBindDescriptorSets(commandBuffer_,
@@ -359,7 +422,8 @@ void VulkanGraphicsCommandEncoder::bindGroup(std::uint32_t set,
                             dynamicOffsets.data());
 }
 
-void VulkanGraphicsCommandEncoder::draw(const DrawArguments& arguments) {
+void VulkanCommandBuffer::draw(const DrawArguments& arguments) {
+    ensureRecording("draw");
     vkCmdDraw(commandBuffer_,
               arguments.vertexCount,
               arguments.instanceCount,
@@ -367,7 +431,8 @@ void VulkanGraphicsCommandEncoder::draw(const DrawArguments& arguments) {
               arguments.firstInstance);
 }
 
-void VulkanGraphicsCommandEncoder::drawIndexed(const DrawIndexedArguments& arguments) {
+void VulkanCommandBuffer::drawIndexed(const DrawIndexedArguments& arguments) {
+    ensureRecording("drawIndexed");
     vkCmdDrawIndexed(commandBuffer_,
                      arguments.indexCount,
                      arguments.instanceCount,
@@ -376,7 +441,8 @@ void VulkanGraphicsCommandEncoder::drawIndexed(const DrawIndexedArguments& argum
                      arguments.firstInstance);
 }
 
-void VulkanGraphicsCommandEncoder::beginDebugLabel(std::string_view name, const math::Vec4& color) {
+void VulkanCommandBuffer::beginDebugLabel(std::string_view name, const math::Vec4& color) {
+    ensureRecording("beginDebugLabel");
 #if defined(MINI_DEBUG)
     const auto begin = reinterpret_cast<PFN_vkCmdBeginDebugUtilsLabelEXT>(
         vkGetDeviceProcAddr(device_.device(), "vkCmdBeginDebugUtilsLabelEXT"));
@@ -396,7 +462,8 @@ void VulkanGraphicsCommandEncoder::beginDebugLabel(std::string_view name, const 
 #endif
 }
 
-void VulkanGraphicsCommandEncoder::endDebugLabel() {
+void VulkanCommandBuffer::endDebugLabel() {
+    ensureRecording("endDebugLabel");
 #if defined(MINI_DEBUG)
     const auto end = reinterpret_cast<PFN_vkCmdEndDebugUtilsLabelEXT>(
         vkGetDeviceProcAddr(device_.device(), "vkCmdEndDebugUtilsLabelEXT"));
@@ -406,7 +473,8 @@ void VulkanGraphicsCommandEncoder::endDebugLabel() {
 #endif
 }
 
-void VulkanGraphicsCommandEncoder::copyBuffer(const BufferCopy& copy) {
+void VulkanCommandBuffer::copyBuffer(const BufferCopy& copy) {
+    ensureRecording("copyBuffer");
     const VkBufferCopy native{copy.sourceOffset, copy.destinationOffset, copy.size};
     vkCmdCopyBuffer(commandBuffer_,
                     device_.resolveBuffer(copy.source),
@@ -415,7 +483,8 @@ void VulkanGraphicsCommandEncoder::copyBuffer(const BufferCopy& copy) {
                     &native);
 }
 
-void VulkanGraphicsCommandEncoder::copyImage(const ImageCopy& copy) {
+void VulkanCommandBuffer::copyImage(const ImageCopy& copy) {
+    ensureRecording("copyImage");
     // Callers are responsible for transitioning the images to CopySource/CopyDestination
     // states (via resourceBarriers) before recording the copy.
     VkImageCopy native{};
@@ -433,7 +502,8 @@ void VulkanGraphicsCommandEncoder::copyImage(const ImageCopy& copy) {
                    &native);
 }
 
-void VulkanGraphicsCommandEncoder::copyBufferToImage(const BufferImageCopy& copy) {
+void VulkanCommandBuffer::copyBufferToImage(const BufferImageCopy& copy) {
+    ensureRecording("copyBufferToImage");
     VkBufferImageCopy native{};
     native.bufferOffset = copy.bufferOffset;
     native.bufferRowLength = copy.bufferRowLength;
@@ -449,7 +519,8 @@ void VulkanGraphicsCommandEncoder::copyBufferToImage(const BufferImageCopy& copy
                            &native);
 }
 
-void VulkanGraphicsCommandEncoder::copyImageToBuffer(const BufferImageCopy& copy) {
+void VulkanCommandBuffer::copyImageToBuffer(const BufferImageCopy& copy) {
+    ensureRecording("copyImageToBuffer");
     VkBufferImageCopy native{};
     native.bufferOffset = copy.bufferOffset;
     native.bufferRowLength = copy.bufferRowLength;
@@ -465,7 +536,8 @@ void VulkanGraphicsCommandEncoder::copyImageToBuffer(const BufferImageCopy& copy
                            &native);
 }
 
-void VulkanGraphicsCommandEncoder::updateBuffer(const BufferUpdate& update) {
+void VulkanCommandBuffer::updateBuffer(const BufferUpdate& update) {
+    ensureRecording("updateBuffer");
     if (update.data.empty()) {
         return;
     }
@@ -477,16 +549,17 @@ void VulkanGraphicsCommandEncoder::updateBuffer(const BufferUpdate& update) {
     copyBuffer(copy);
 }
 
-void VulkanGraphicsCommandEncoder::updateImage(const ImageUpdate& update) {
+void VulkanCommandBuffer::updateImage(const ImageUpdate& update) {
+    ensureRecording("updateImage");
     if (update.extent.width == 0 || update.extent.height == 0 || update.extent.depth == 0) {
-        Log::fatal("VulkanCommandEncoder", "Image update extent must not be empty");
+        Log::fatal("VulkanCommandBuffer", "Image update extent must not be empty");
     }
     const std::uint64_t pixelCount = static_cast<std::uint64_t>(update.extent.width) *
                                      update.extent.height * update.extent.depth;
     const std::uint64_t expectedSize =
         pixelCount * bytesPerPixel(device_.textureFormat(update.destination));
     if (update.data.size_bytes() != expectedSize) {
-        Log::fatal("VulkanCommandEncoder", "Image update data does not match the extent");
+        Log::fatal("VulkanCommandBuffer", "Image update data does not match the extent");
     }
     const BufferHandle staging = device_.acquireStagingBuffer(update.data.size_bytes());
     device_.uploadBuffer(staging, update.data);

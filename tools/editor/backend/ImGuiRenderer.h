@@ -15,7 +15,7 @@ namespace engine {
 
 namespace rhi {
 class IDevice;
-class IGraphicsCommandEncoder;
+class ICommandBuffer;
 } // namespace rhi
 
 } // namespace engine
@@ -52,7 +52,7 @@ public:
 
     // Records the draw calls for drawData. frameIndex selects the geometry buffers;
     // the swapchain fence already proved that frame's buffers are free to overwrite.
-    void render(rhi::IGraphicsCommandEncoder& encoder,
+    void render(rhi::ICommandBuffer& commandBuffer,
                 const ImDrawData& drawData,
                 std::uint32_t frameIndex);
 

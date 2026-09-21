@@ -75,19 +75,19 @@ void ShadowCasterPass::execute(RenderContext& context,
                            frameIndex = context.frameIndex(),
                            globalBindGroup = GLOBAL_UNIFORM_GPU_MANAGER.resolve(
                                context.frameIndex())](
-                              rhi::IGraphicsCommandEncoder& encoder) mutable {
-                              encoder.setViewport({0.0F,
-                                                   0.0F,
-                                                   static_cast<float>(size),
-                                                   static_cast<float>(size),
-                                                   0.0F,
-                                                   1.0F});
-                              encoder.setScissor({0, 0, size, size});
+                              rhi::ICommandBuffer& commandBuffer) mutable {
+                              commandBuffer.setViewport({0.0F,
+                                                         0.0F,
+                                                         static_cast<float>(size),
+                                                         static_cast<float>(size),
+                                                         0.0F,
+                                                         1.0F});
+                              commandBuffer.setScissor({0, 0, size, size});
                               drawFilteredItems(frameIndex,
                                                 items,
                                                 FRAME_GPU_MANAGER.sceneBindGroup(frameIndex),
                                                 globalBindGroup,
-                                                encoder);
+                                                commandBuffer);
                           });
 }
 

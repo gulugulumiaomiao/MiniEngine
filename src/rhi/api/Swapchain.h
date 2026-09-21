@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rhi/api/CommandEncoder.h"
+#include "rhi/api/CommandBuffer.h"
 #include "rhi/api/PipelineDesc.h"
 
 #include <cstdint>
@@ -26,7 +26,9 @@ public:
     [[nodiscard]] virtual FrameStatus endFrame() = 0;
     virtual void resize(std::uint32_t width, std::uint32_t height) = 0;
 
-    [[nodiscard]] virtual IGraphicsCommandEncoder& encoder() = 0;
+    // The frame command buffer; valid between beginFrame() and endFrame(). Recording
+    // starts inside beginFrame() and endFrame() seals and submits it to the device.
+    [[nodiscard]] virtual ICommandBuffer& commandBuffer() = 0;
     [[nodiscard]] virtual TextureHandle currentTexture() const = 0;
     [[nodiscard]] virtual TextureViewHandle currentTextureView() const = 0;
     [[nodiscard]] virtual ResourceState currentTextureState() const = 0;

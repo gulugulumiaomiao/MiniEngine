@@ -15,15 +15,15 @@ DrawList（后端无关的绘制包）
     │
     ▼
 RenderGraph（Pass、附件、资源状态）
-    │ 调用 IGraphicsCommandEncoder
+    │ 调用 ICommandBuffer
     ▼
-VulkanGraphicsCommandEncoder
+VulkanCommandBuffer
     │ 解析带 generation 的 RHI handle
     ▼
 VkCommandBuffer / Vulkan 资源
 ```
 
-上层只能看到 `rhi::BufferHandle`、`GraphicsPipelineHandle` 等句柄，不能看到 `VkBuffer`、`VkPipeline` 或 `VkDescriptorSet`。原生对象只允许在 Vulkan 后端和 Vulkan encoder 中出现。
+上层只能看到 `rhi::BufferHandle`、`GraphicsPipelineHandle` 等句柄，不能看到 `VkBuffer`、`VkPipeline` 或 `VkDescriptorSet`。原生对象只允许在 Vulkan 后端和 Vulkan command buffer 实现中出现。
 
 ## 七步实施记录
 
@@ -40,7 +40,7 @@ VkCommandBuffer / Vulkan 资源
 
 ### 2. 定义命令编码接口
 
-`src/rhi/api/CommandEncoder.h` 只保留 `IGraphicsCommandEncoder` 一个编码接口，覆盖：
+`src/rhi/api/CommandBuffer.h` 定义 `ICommandBuffer` 命令缓冲接口，覆盖：
 
 - 屏障、动态渲染、viewport、scissor、pipeline、VB/IB、bind group、draw 和 debug label；
 - 传输命令：`copyBuffer`、`copyImage`、`copyBufferToImage`、`copyImageToBuffer`、`updateBuffer`、`updateImage`（早期版本单独拆出的 `ITransferCommandEncoder` 已合并进来并删除）。
@@ -50,20 +50,20 @@ VkCommandBuffer / Vulkan 资源
 接口描述渲染意图，不复制 Vulkan 的创建流程。`ISwapchain` 负责帧 acquire/present，
 其 Vulkan 实现内部管理命令缓冲、队列提交、fence 和 semaphore。
 
-### 3. 实现 Vulkan encoder 和资源解析
+### 3. 实现 Vulkan command buffer 和资源解析
 
-`src/rhi/vulkan/VulkanCommandEncoder.*` 完成 RHI 到 Vulkan 的映射：
+`src/rhi/vulkan/VulkanCommandBuffer.*` 完成 RHI 到 Vulkan 的映射：
 
 - `ResourceState` 转换为 stage、access mask 和 image layout；
 - `RenderingInfo` 转换为 Vulkan 1.3 Dynamic Rendering；
 - RHI 句柄通过 `IVulkanResourceResolver` 转换为原生对象；
 - Debug 构建使用 `VK_EXT_debug_utils` 标记 Pass，Release 构建不编译这些调用；
-- encoder 记住当前 pipeline layout，从而安全绑定 descriptor set。
+- command buffer 记住当前 pipeline layout，从而安全绑定 descriptor set。
 
 资源解析按职责拆分：`VulkanDevice` 创建并拥有 Vulkan instance、surface、physical/logical
 device、queue、allocator、descriptor pool 和 command pool，同时管理并校验 Buffer、Shader、
 GraphicsPipeline、BindGroupLayout 与 BindGroup 句柄；`VulkanSwapchain` 管理交换链图片、
-命令缓冲、逐帧同步与提交，并为 encoder 解析当前 back buffer。
+命令缓冲、逐帧同步与提交，并为 command buffer 解析当前 back buffer。
 
 ### 4. 迁移绘制命令
 
@@ -79,8 +79,8 @@ vkCmdDrawIndexed
 vkCmdPipelineBarrier
 ```
 
-这些操作全部经过 `IGraphicsCommandEncoder`。`VkCommandBuffer` 的 begin/end、分配、提交和
-同步均封装在 `VulkanSwapchain` 内部。
+这些操作全部经过 `ICommandBuffer`。`ICommandBuffer` 的 begin/end 生命周期、分配与同步封装在接口中，
+提交由 `IDevice::submitCommand` 完成。
 
 ### 5. Renderer 构建 DrawList
 
@@ -92,7 +92,8 @@ vkCmdPipelineBarrier
 
 ### 6. 迁移 GPU buffer copy
 
-Mesh 上传的 staging buffer 和 device-local buffer 都进入带 generation 的 buffer 资源表。`uploadBuffer` 内部通过一次性 command buffer 录制 `IGraphicsCommandEncoder::copyBuffer`（Vulkan 后端实现），不再直接调用 `vkCmdCopyBuffer`。
+Mesh 上传的 staging buffer 和 device-local buffer 都进入带 generation 的 buffer 资源表。`uploadBuffer` 内部通过 `IDevice::createCommandBuffer` 创建一次性 command buffer，
+录制 `ICommandBuffer::copyBuffer`（Vulkan 后端实现），不再直接调用 `vkCmdCopyBuffer`。
 
 第一版仍会 `vkQueueWaitIdle`，实现简单且资源生命周期明确。资源批量加载后应改为 upload context：持久 command pool、批量 copy、timeline semaphore 和延迟释放 staging buffer。
 
@@ -116,9 +117,9 @@ Mesh 上传的 staging buffer 和 device-local buffer 都进入带 generation �
   → 选择逐帧场景/材质 BindGroup
   → 上传 Renderer 已提取到 DrawList 的对象数据快照
   → Renderer 已构建好的 DrawList 交给后端
-  → begin VkCommandBuffer
+  → begin command buffer
   → RenderGraph 生成附件屏障并执行 Forward Pass
-  → RHI encoder 录制绑定和 drawIndexed
+  → RHI command buffer 录制绑定和 drawIndexed
   → RenderGraph 转换到 Present
   → end、submit、present
 ```
@@ -127,8 +128,8 @@ Mesh 上传的 staging buffer 和 device-local buffer 都进入带 generation �
 
 新增上层绘制能力时，按以下顺序判断：
 
-1. 如果是通用图形动作，例如 indirect draw、push constants，加入 RHI encoder；
-2. 如果是资源创建或生命周期，加入后端资源接口和句柄表，不加入 command encoder；
+1. 如果是通用图形动作，例如 indirect draw、push constants，加入 RHI command buffer；
+2. 如果是资源创建或生命周期，加入后端资源接口和句柄表，不加入 command buffer；
 3. 如果是 Pass 依赖、附件或资源状态，加入 RenderGraph；
 4. 如果是“画哪些对象以及顺序”，加入 DrawList 构建阶段；
 5. 如果只是 Vulkan 特有优化，留在 Vulkan 实现内部，不泄漏到 Renderer。
@@ -147,7 +148,7 @@ ShaderLab 的 `ShadowCaster → Forward → 后处理` 多 Pass 链路。
 
 ## 验证
 
-`tests/RenderGraphTest.cpp` 使用 Mock encoder 验证：
+`tests/RenderGraphTest.cpp` 使用 Mock command buffer 验证：
 
 - Pass 执行顺序为 label、barrier、begin rendering、callback、end rendering、end label；
 - 首次屏障为 `Undefined → ColorAttachment`；

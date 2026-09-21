@@ -3,7 +3,7 @@
 #include "core/logging/Log.h"
 #include "render/pipeline/RenderContext.h"
 #include "render/render_target/RenderTarget.h"
-#include "rhi/api/CommandEncoder.h"
+#include "rhi/api/CommandBuffer.h"
 #include "rhi/api/Swapchain.h"
 #include "tools/editor/backend/ImGuiStyleConfig.h"
 
@@ -148,7 +148,7 @@ void ImGuiLayer::recordOverlay(RenderContext& context) {
     if (!hasUi && backBufferWritten)
         return;
 
-    rhi::IGraphicsCommandEncoder& encoder = context.encoder();
+    rhi::ICommandBuffer& commandBuffer = context.commandBuffer();
     if (context.offscreenScene() && context.sceneWidth() != 0 && context.sceneHeight() != 0) {
         if (!imguiRenderer_.setSceneTexture(context.frameIndex(), context.currentForwardTarget().colorView(0)))
             Log::error("ImGuiLayer", "Cannot bind the Scene View texture");
@@ -159,9 +159,9 @@ void ImGuiLayer::recordOverlay(RenderContext& context) {
         .before = needsClear ? rhi::ResourceState::Undefined : rhi::ResourceState::Present,
         .after = rhi::ResourceState::ColorAttachment,
     };
-    encoder.resourceBarriers(std::span{&toAttachment, 1});
+    commandBuffer.resourceBarriers(std::span{&toAttachment, 1});
 
-    encoder.beginRendering({
+    commandBuffer.beginRendering({
         .renderArea = {.width = swapchain.width(), .height = swapchain.height()},
         .colorAttachments = {{
             .view = swapchain.currentTextureView(),
@@ -169,15 +169,15 @@ void ImGuiLayer::recordOverlay(RenderContext& context) {
         }},
     });
     if (hasUi)
-        imguiRenderer_.render(encoder, *drawData, context.frameIndex());
-    encoder.endRendering();
+        imguiRenderer_.render(commandBuffer, *drawData, context.frameIndex());
+    commandBuffer.endRendering();
 
     const rhi::TextureBarrier toPresent{
         .texture = swapchain.currentTexture(),
         .before = rhi::ResourceState::ColorAttachment,
         .after = rhi::ResourceState::Present,
     };
-    encoder.resourceBarriers(std::span{&toPresent, 1});
+    commandBuffer.resourceBarriers(std::span{&toPresent, 1});
 }
 
 void ImGuiLayer::onSwapchainRecreated(Renderer& renderer) {

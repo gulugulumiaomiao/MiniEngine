@@ -9,9 +9,13 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
 
 namespace engine::rhi {
+
+class ICommandBuffer;
+struct SubmitSync;
 
 struct ResolvedPipeline {
     VkPipeline pipeline{VK_NULL_HANDLE};
@@ -49,6 +53,12 @@ public:
     virtual void destroyBindGroupLayout(BindGroupLayoutHandle handle) = 0;
     [[nodiscard]] virtual BindGroupHandle createBindGroup(const BindGroupDesc& desc) = 0;
     virtual void destroyBindGroup(BindGroupHandle handle) = 0;
+
+    // Command buffers are allocated from the device and submitted through it. A
+    // command buffer must be in the Executable state (end() called) at submit time;
+    // submitting a buffer that is still recording or was never begun is an error.
+    [[nodiscard]] virtual std::unique_ptr<ICommandBuffer> createCommandBuffer() = 0;
+    virtual void submitCommand(ICommandBuffer& command, const SubmitSync& sync) = 0;
 
     [[nodiscard]] virtual VkDevice device() const = 0;
     [[nodiscard]] virtual VkInstance instance() const = 0;
