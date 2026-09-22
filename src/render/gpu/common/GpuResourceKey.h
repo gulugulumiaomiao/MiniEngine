@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/base/RID.h"
 #include "core/math/hash.h"
 
 #include <cstddef>
@@ -25,10 +26,8 @@ struct SourceVersionKeyHash {
     }
 };
 
-// Packs a render handle into a single integer so it can be used as a cache key. The
-// generation occupies the high half, which keeps recycled indices distinct.
-template <typename Handle> [[nodiscard]] std::uint64_t handleKey(Handle handle) {
-    return (static_cast<std::uint64_t>(handle.generation) << 32U) | handle.index;
-}
+// Packs a render handle into a single integer so it can be used as a cache key. RID already
+// stores the generation in the high half, which keeps recycled indices distinct.
+[[nodiscard]] inline std::uint64_t handleKey(RID handle) { return handle.value(); }
 
 } // namespace engine

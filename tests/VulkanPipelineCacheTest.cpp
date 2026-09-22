@@ -137,12 +137,12 @@ private:
 };
 
 struct Fixture {
-    engine::rhi::ShaderHandle vertex;
-    engine::rhi::ShaderHandle fragment;
-    engine::rhi::BindGroupLayoutHandle layout;
+    engine::rhi::RID vertex;
+    engine::rhi::RID fragment;
+    engine::rhi::RID layout;
 };
 
-engine::rhi::BindGroupLayoutHandle createLayout(engine::rhi::vulkan::VulkanDevice& device,
+engine::rhi::RID createLayout(engine::rhi::vulkan::VulkanDevice& device,
                                                 std::uint32_t bindingCount) {
     std::vector<engine::rhi::BindGroupLayoutEntry> entries(bindingCount);
     for (std::uint32_t index = 0; index < bindingCount; ++index) {
@@ -263,8 +263,8 @@ int main() {
         const Fixture fixture = createFixture(device);
         engine::rhi::GraphicsPipelineDesc desc = basePipelineDesc(fixture);
 
-        const engine::rhi::GraphicsPipelineHandle first = device.createGraphicsPipeline(desc);
-        const engine::rhi::GraphicsPipelineHandle second = device.createGraphicsPipeline(desc);
+        const engine::rhi::RID first = device.createGraphicsPipeline(desc);
+        const engine::rhi::RID second = device.createGraphicsPipeline(desc);
         if (device.resolvePipeline(first).layout == VK_NULL_HANDLE ||
             device.resolvePipeline(first).layout != device.resolvePipeline(second).layout) {
             return 1;
@@ -272,15 +272,15 @@ int main() {
 
         // Destroying a pipeline must not invalidate the shared layout cache.
         device.destroyGraphicsPipeline(first);
-        const engine::rhi::GraphicsPipelineHandle third = device.createGraphicsPipeline(desc);
+        const engine::rhi::RID third = device.createGraphicsPipeline(desc);
         if (device.resolvePipeline(third).layout != device.resolvePipeline(second).layout) {
             return 2;
         }
 
         // A different bind group layout gets a different pipeline layout.
-        const engine::rhi::BindGroupLayoutHandle other = createLayout(device, 2);
+        const engine::rhi::RID other = createLayout(device, 2);
         desc.bindGroupLayouts = {other};
-        const engine::rhi::GraphicsPipelineHandle fourth = device.createGraphicsPipeline(desc);
+        const engine::rhi::RID fourth = device.createGraphicsPipeline(desc);
         if (device.resolvePipeline(fourth).layout == VK_NULL_HANDLE ||
             device.resolvePipeline(fourth).layout == device.resolvePipeline(second).layout) {
             return 3;
@@ -293,9 +293,9 @@ int main() {
         device.destroyGraphicsPipeline(fourth);
         device.destroyBindGroupLayout(fixture.layout);
         device.destroyBindGroupLayout(other);
-        const engine::rhi::BindGroupLayoutHandle recreated = createLayout(device, 1);
+        const engine::rhi::RID recreated = createLayout(device, 1);
         desc.bindGroupLayouts = {recreated};
-        const engine::rhi::GraphicsPipelineHandle fifth = device.createGraphicsPipeline(desc);
+        const engine::rhi::RID fifth = device.createGraphicsPipeline(desc);
         if (device.resolvePipeline(fifth).layout == VK_NULL_HANDLE ||
             device.resolvePipeline(fifth).pipeline == VK_NULL_HANDLE) {
             return 4;
@@ -319,7 +319,7 @@ int main() {
         auto& device = static_cast<engine::rhi::vulkan::VulkanDevice&>(*context.device);
         const Fixture fixture = createFixture(device);
         engine::rhi::GraphicsPipelineDesc desc = basePipelineDesc(fixture);
-        const engine::rhi::GraphicsPipelineHandle pipeline = device.createGraphicsPipeline(desc);
+        const engine::rhi::RID pipeline = device.createGraphicsPipeline(desc);
         if (device.resolvePipeline(pipeline).layout == VK_NULL_HANDLE ||
             device.resolvePipeline(pipeline).pipeline == VK_NULL_HANDLE) {
             return 6;
@@ -342,7 +342,7 @@ int main() {
         engine::rhi::vulkan::VulkanDevice device{surface};
         const Fixture fixture = createFixture(device);
         engine::rhi::GraphicsPipelineDesc desc = basePipelineDesc(fixture);
-        const engine::rhi::GraphicsPipelineHandle pipeline = device.createGraphicsPipeline(desc);
+        const engine::rhi::RID pipeline = device.createGraphicsPipeline(desc);
         if (device.resolvePipeline(pipeline).layout == VK_NULL_HANDLE ||
             device.resolvePipeline(pipeline).pipeline == VK_NULL_HANDLE) {
             return 9;

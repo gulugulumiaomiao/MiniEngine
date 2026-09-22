@@ -48,7 +48,7 @@ public:
     // generation zero cannot collide with encoded live RHI handles.
     static constexpr ImTextureID kSceneTextureId = 1;
     // Called after the selected slot's fence, never while that slot is in flight.
-    [[nodiscard]] bool setSceneTexture(std::uint32_t frameIndex, rhi::TextureViewHandle view);
+    [[nodiscard]] bool setSceneTexture(std::uint32_t frameIndex, rhi::RID view);
 
     // Records the draw calls for drawData. frameIndex selects the geometry buffers;
     // the swapchain fence already proved that frame's buffers are free to overwrite.
@@ -61,9 +61,9 @@ private:
     // ImGui's interleaved vertex is split into one buffer per semantic so the RHI only
     // needs a single stream description per binding.
     struct Geometry {
-        std::array<rhi::BufferHandle, 3> vertexBuffers{};
+        std::array<rhi::RID, 3> vertexBuffers{};
         std::array<std::uint32_t, 3> vertexCapacities{};
-        rhi::BufferHandle indexBuffer;
+        rhi::RID indexBuffer;
         std::uint32_t indexCapacity{};
     };
 
@@ -77,17 +77,17 @@ private:
 
     rhi::IDevice* device_{};
     rhi::PixelFormat colorFormat_{rhi::PixelFormat::Undefined};
-    rhi::ShaderHandle vertexShader_;
-    rhi::ShaderHandle fragmentShader_;
-    rhi::BindGroupLayoutHandle textureLayout_;
-    rhi::GraphicsPipelineHandle pipeline_;
-    rhi::TextureHandle fontTexture_;
-    rhi::TextureViewHandle fontView_;
-    rhi::SamplerHandle sampler_;
-    rhi::BindGroupHandle fontBindGroup_;
+    rhi::RID vertexShader_;
+    rhi::RID fragmentShader_;
+    rhi::RID textureLayout_;
+    rhi::RID pipeline_;
+    rhi::RID fontTexture_;
+    rhi::RID fontView_;
+    rhi::RID sampler_;
+    rhi::RID fontBindGroup_;
     struct SceneTexture {
-        rhi::TextureViewHandle view;
-        rhi::BindGroupHandle group;
+        rhi::RID view;
+        rhi::RID group;
     };
     std::array<SceneTexture, FrameGpuManager::kFramesInFlight> sceneTextures_{};
     std::array<Geometry, FrameGpuManager::kFramesInFlight> geometry_;

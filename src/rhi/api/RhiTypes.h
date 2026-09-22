@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/base/Handle.h"
+#include "core/base/RID.h"
 #include "core/math/Math.h"
 
 #include <cstddef>
@@ -10,23 +10,9 @@
 
 namespace engine::rhi {
 
-struct BufferHandleTag;
-struct TextureHandleTag;
-struct TextureViewHandleTag;
-struct GraphicsPipelineHandleTag;
-struct BindGroupHandleTag;
-struct ShaderHandleTag;
-struct BindGroupLayoutHandleTag;
-struct SamplerHandleTag;
-
-using BufferHandle = Handle<BufferHandleTag>;
-using TextureHandle = Handle<TextureHandleTag>;
-using TextureViewHandle = Handle<TextureViewHandleTag>;
-using GraphicsPipelineHandle = Handle<GraphicsPipelineHandleTag>;
-using BindGroupHandle = Handle<BindGroupHandleTag>;
-using ShaderHandle = Handle<ShaderHandleTag>;
-using BindGroupLayoutHandle = Handle<BindGroupLayoutHandleTag>;
-using SamplerHandle = Handle<SamplerHandleTag>;
+// Every RHI resource handle is the unified 64-bit engine::RID. This alias exposes the
+// name as rhi::RID so namespace-qualified call sites keep compiling.
+using RID = ::engine::RID;
 
 enum class IndexFormat { UInt16, UInt32 };
 enum class LoadOp { Load, Clear, DontCare };
@@ -71,14 +57,14 @@ struct Rect {
 };
 
 struct ColorAttachment {
-    TextureViewHandle view;
+    RID view;
     LoadOp loadOp{LoadOp::Load};
     StoreOp storeOp{StoreOp::Store};
     math::Vec4 clearColor{0.0F};
 };
 
 struct DepthAttachment {
-    TextureViewHandle view;
+    RID view;
     LoadOp loadOp{LoadOp::Clear};
     StoreOp storeOp{StoreOp::Store};
     float clearDepth{1.0F};
@@ -106,8 +92,8 @@ struct DrawIndexedArguments {
 };
 
 struct BufferCopy {
-    BufferHandle source;
-    BufferHandle destination;
+    RID source;
+    RID destination;
     std::uint64_t sourceOffset{};
     std::uint64_t destinationOffset{};
     std::uint64_t size{};
@@ -126,8 +112,8 @@ struct Extent3D {
 };
 
 struct ImageCopy {
-    TextureHandle source;
-    TextureHandle destination;
+    RID source;
+    RID destination;
     std::uint32_t sourceMipLevel{};
     std::uint32_t destinationMipLevel{};
     std::uint32_t sourceArrayLayer{};
@@ -138,8 +124,8 @@ struct ImageCopy {
 };
 
 struct BufferImageCopy {
-    BufferHandle buffer;
-    TextureHandle texture;
+    RID buffer;
+    RID texture;
     std::uint64_t bufferOffset{};
     std::uint32_t bufferRowLength{};
     std::uint32_t bufferImageHeight{};
@@ -150,13 +136,13 @@ struct BufferImageCopy {
 };
 
 struct BufferUpdate {
-    BufferHandle destination;
+    RID destination;
     std::uint64_t offset{};
     std::span<const std::byte> data;
 };
 
 struct ImageUpdate {
-    TextureHandle destination;
+    RID destination;
     std::uint32_t mipLevel{};
     std::uint32_t arrayLayer{};
     Offset3D offset;
@@ -165,7 +151,7 @@ struct ImageUpdate {
 };
 
 struct TextureBarrier {
-    TextureHandle texture;
+    RID texture;
     TextureAspect aspect{TextureAspect::Color};
     ResourceState before{ResourceState::Undefined};
     ResourceState after{ResourceState::Undefined};

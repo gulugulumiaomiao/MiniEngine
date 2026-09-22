@@ -79,10 +79,10 @@ int main() {
     const Shader runtimeShader{asset};
     const ShaderPass& pass = runtimeShader.defaultSubShader().requirePass(ShaderPassType::Forward);
     ShaderCompilePipeline pipeline;
-    const ShaderProgramHandle programHandle = pipeline.getOrCreate(runtimeShader, pass);
-    const ShaderProgram& program = pipeline.resolve(programHandle);
-    const CompiledShader& vertex = pipeline.resolve(program.vertex);
-    const CompiledShader& fragment = pipeline.resolve(program.fragment);
+    const RID programHandle = pipeline.getOrCreate(runtimeShader, pass);
+    const ShaderProgram& program = pipeline.resolveProgram(programHandle);
+    const CompiledShader& vertex = pipeline.resolveCompiled(program.vertex);
+    const CompiledShader& fragment = pipeline.resolveCompiled(program.fragment);
     if (vertex.stage != ShaderStage::Vertex || fragment.stage != ShaderStage::Fragment ||
         program.layout.vertexInputs.size() != 2 || program.layout.fragmentOutputs.size() != 1 ||
         program.layout.descriptors.empty() || program.layout.id == 0) {
@@ -102,9 +102,9 @@ int main() {
     ShaderCompilePipelineConfig packagedConfig;
     packagedConfig.mode = ShaderCompileMode::PackagedRuntime;
     ShaderCompilePipeline packagedPipeline{std::move(packagedConfig)};
-    const ShaderProgramHandle packagedHandle = packagedPipeline.getOrCreate(runtimeShader, pass);
+    const RID packagedHandle = packagedPipeline.getOrCreate(runtimeShader, pass);
     if (!packagedHandle ||
-        packagedPipeline.resolve(packagedHandle).layout.id != program.layout.id) {
+        packagedPipeline.resolveProgram(packagedHandle).layout.id != program.layout.id) {
         return 14;
     }
 
@@ -129,19 +129,19 @@ int main() {
     }
     const VirtualPath vertexBinaryPath = vertex.binaryPath;
     const CompiledShaderId vertexId = vertex.id;
-    const CompiledShaderHandle vertexHandle = program.vertex;
+    const RID vertexHandle = program.vertex;
     const std::vector<CompiledShaderId> invalidated = pipeline.invalidate(vertexBinaryPath);
     if (invalidated.size() != 1 || invalidated.front() != vertexId) {
         return 6;
     }
-    const ShaderProgramHandle rebuiltProgramHandle = pipeline.getOrCreate(runtimeShader, pass);
-    if (!rebuiltProgramHandle || rebuiltProgramHandle.index != programHandle.index ||
-        rebuiltProgramHandle.generation == programHandle.generation) {
+    const RID rebuiltProgramHandle = pipeline.getOrCreate(runtimeShader, pass);
+    if (!rebuiltProgramHandle || rebuiltProgramHandle.index() != programHandle.index() ||
+        rebuiltProgramHandle.generation() == programHandle.generation()) {
         return 15;
     }
-    const CompiledShaderHandle rebuiltVertex = pipeline.resolve(rebuiltProgramHandle).vertex;
-    if (rebuiltVertex.index != vertexHandle.index ||
-        rebuiltVertex.generation == vertexHandle.generation) {
+    const RID rebuiltVertex = pipeline.resolveProgram(rebuiltProgramHandle).vertex;
+    if (rebuiltVertex.index() != vertexHandle.index() ||
+        rebuiltVertex.generation() == vertexHandle.generation()) {
         return 16;
     }
     test::shutdownAssetEnvironment();

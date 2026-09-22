@@ -12,18 +12,18 @@
 namespace engine {
 
 struct RenderObject {
-    MeshHandle mesh;
-    std::vector<MaterialHandle> materials;
+    RID mesh;
+    std::vector<RID> materials;
     math::Mat44 transform{1.0F};
     std::uint32_t layerMask{1};
     float boundsRadius{0.0F}; // Bounding sphere radius in world units; 0 treats the object as a point.
     bool castShadow{true};
     bool receiveShadow{true};
 
-    [[nodiscard]] MaterialHandle material(std::uint32_t slot) const {
+    [[nodiscard]] RID material(std::uint32_t slot) const {
         if (slot < materials.size() && materials[slot])
             return materials[slot];
-        return !materials.empty() ? materials.front() : MaterialHandle{};
+        return !materials.empty() ? materials.front() : RID{};
     }
 };
 

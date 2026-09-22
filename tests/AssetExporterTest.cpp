@@ -127,7 +127,7 @@ protected:
     [[nodiscard]] Material loadRuntimeMaterial(const VirtualPath& path) {
         const auto source = ASSET_MANAGER.loadAsset<MaterialAsset>(path);
         EXPECT_TRUE(source);
-        const ShaderHandle shaderHandle = SHADER_MANAGER.load(source->shader);
+        const RID shaderHandle = SHADER_MANAGER.load(source->shader);
         EXPECT_TRUE(shaderHandle);
         return source->instantiate(shaderHandle);
     }
@@ -259,7 +259,7 @@ TEST_F(AssetExporterTest, MaterialRejectsBadTargetsAndUnexportableTypes) {
                                                     error));
     EXPECT_FALSE(error.empty());
     error.clear();
-    // 默认构造的 Material 没有绑定 ShaderHandle，提取阶段即失败。
+    // 默认构造的 Material 没有绑定 RID，提取阶段即失败。
     Material orphan;
     EXPECT_FALSE(ASSET_EXPORT_PIPELINE.saveMaterial(
         orphan, VirtualPath{"assets://materials/orphan.material.json"}, error));

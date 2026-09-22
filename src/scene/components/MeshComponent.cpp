@@ -25,7 +25,7 @@ bool MeshComponentAsset::transfer(Transfer& archive) {
            archive.transfer("layer_mask", layerMask) && archive.endObject();
 }
 
-void MeshComponent::setAssetMesh(MeshHandle mesh) {
+void MeshComponent::setAssetMesh(RID mesh) {
     releaseOwnedMesh();
     sourceType_ = MeshComponentSourceType::Asset;
     mesh_ = mesh;

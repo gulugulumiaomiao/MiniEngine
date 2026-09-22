@@ -26,13 +26,13 @@ protected:
 TEST_F(MeshGuidIdentityTest, LoadByGuidReturnsSameHandle) {
     using namespace engine;
     const VirtualPath path{"assets://meshes/procedural_showcase.mesh.json"};
-    const MeshHandle byPath = MESH_MANAGER.load(path);
+    const RID byPath = MESH_MANAGER.load(path);
     ASSERT_TRUE(byPath);
 
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const MeshHandle byId = MESH_MANAGER.load(*assetId);
+    const RID byId = MESH_MANAGER.load(*assetId);
     EXPECT_EQ(byId, byPath);
     EXPECT_EQ(MESH_MANAGER.find(*assetId), MESH_MANAGER.find(byPath));
 }
@@ -40,10 +40,10 @@ TEST_F(MeshGuidIdentityTest, LoadByGuidReturnsSameHandle) {
 TEST_F(MeshGuidIdentityTest, CloneReturnsDifferentHandleAndIsNotAssetBacked) {
     using namespace engine;
     const VirtualPath path{"assets://meshes/procedural_showcase.mesh.json"};
-    const MeshHandle original = MESH_MANAGER.load(path);
+    const RID original = MESH_MANAGER.load(path);
     ASSERT_TRUE(original);
 
-    const MeshHandle cloned = MESH_MANAGER.clone(original);
+    const RID cloned = MESH_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
     EXPECT_NE(cloned, original);
 
@@ -60,13 +60,13 @@ TEST_F(MeshGuidIdentityTest, CloneReturnsDifferentHandleAndIsNotAssetBacked) {
 TEST_F(MeshGuidIdentityTest, CloneDoesNotAppearInAssetIndex) {
     using namespace engine;
     const VirtualPath path{"assets://meshes/procedural_showcase.mesh.json"};
-    const MeshHandle original = MESH_MANAGER.load(path);
+    const RID original = MESH_MANAGER.load(path);
     ASSERT_TRUE(original);
 
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const MeshHandle cloned = MESH_MANAGER.clone(original);
+    const RID cloned = MESH_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
 
     EXPECT_EQ(MESH_MANAGER.find(*assetId), MESH_MANAGER.find(original));
@@ -79,9 +79,9 @@ TEST_F(MeshGuidIdentityTest, RefreshAssetUpdatesOriginalButNotClone) {
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const MeshHandle original = MESH_MANAGER.load(path);
+    const RID original = MESH_MANAGER.load(path);
     ASSERT_TRUE(original);
-    const MeshHandle cloned = MESH_MANAGER.clone(original);
+    const RID cloned = MESH_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
 
     Mesh* originalData = MESH_MANAGER.find(original);

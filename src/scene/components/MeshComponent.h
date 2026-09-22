@@ -34,7 +34,7 @@ struct MeshComponentAsset final : public Transferable {
 
 class MeshComponent final : public Component {
 public:
-    void setAssetMesh(MeshHandle mesh);
+    void setAssetMesh(RID mesh);
     void setPrimitive(const PlaneGeometry& geometry);
     void setPrimitive(const BoxGeometry& geometry);
     void setPrimitive(const UvSphereGeometry& geometry);
@@ -43,7 +43,7 @@ public:
     [[nodiscard]] bool applyPrimitiveChanges();
 
     [[nodiscard]] MeshComponentSourceType sourceType() const { return sourceType_; }
-    [[nodiscard]] MeshHandle mesh() const { return mesh_; }
+    [[nodiscard]] RID mesh() const { return mesh_; }
     [[nodiscard]] const MeshBuildRecipe* primitiveRecipe() const {
         return primitiveRecipe_ ? &*primitiveRecipe_ : nullptr;
     }
@@ -70,7 +70,7 @@ private:
     void releaseOwnedMesh();
 
     MeshComponentSourceType sourceType_{MeshComponentSourceType::Asset};
-    MeshHandle mesh_;
+    RID mesh_;
     std::optional<MeshBuildRecipe> primitiveRecipe_;
     bool ownsRuntimeMesh_{};
     bool primitiveDirty_{};

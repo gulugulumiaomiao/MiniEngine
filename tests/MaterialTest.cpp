@@ -39,8 +39,8 @@ int main() {
         cachedMaterialA->shader.string() != "assets://shaders/vertex_color.shader.json") {
         return 17;
     }
-    const MaterialHandle warm = materials.load(cachedMaterialA->assetPath());
-    const MaterialHandle coolShared =
+    const RID warm = materials.load(cachedMaterialA->assetPath());
+    const RID coolShared =
         materials.load(VirtualPath{"assets://materials/cool_vertex_color.material.json"});
     Material& warmData = *materials.find(warm);
     const auto warmAssetId = ASSET_DATABASE.findGuid(cachedMaterialA->assetPath());
@@ -48,9 +48,9 @@ int main() {
         materials.find(*warmAssetId) != &warmData || materials.size() != 2) {
         return 24;
     }
-    const MaterialHandle errorMaterial = materials.errorMaterial();
+    const RID errorMaterial = materials.errorMaterial();
     const Material* errorData = materials.find(errorMaterial);
-    const MaterialHandle failedMaterial =
+    const RID failedMaterial =
         materials.load(VirtualPath{"assets://shaders/builtin_color.shader.json"});
     if (!errorData || failedMaterial != errorMaterial ||
         errorData->shaderHandle() != SHADER_MANAGER.builtinColor() ||
@@ -131,9 +131,9 @@ int main() {
         return 19;
     }
     materials.destroy(coolShared);
-    const MaterialHandle reused =
+    const RID reused =
         materials.load(VirtualPath{"assets://materials/cool_vertex_color.material.json"});
-    if (reused.index != coolShared.index || reused.generation == coolShared.generation) {
+    if (reused.index() != coolShared.index() || reused.generation() == coolShared.generation()) {
         return 10;
     }
     if (materials.find(reused) == nullptr) {
@@ -151,12 +151,12 @@ int main() {
     // fallback is always reachable because the Error Material and the built-in Shader
     // ship inside the fixture asset root (assets://), exactly as they ship in every
     // project's assets/ after the built-in content copy.
-    const MaterialHandle invalid =
+    const RID invalid =
         valueMaterials.load(VirtualPath{"assets://material_invalid.material.json"});
     if (!invalid || invalid != valueMaterials.errorMaterial()) {
         return 14;
     }
-    const MaterialHandle values =
+    const RID values =
         valueMaterials.load(VirtualPath{"assets://material_values.material.json"});
     Material& valueData = *valueMaterials.find(values);
     if (valueData.getFloat("FloatValue") != 2.5F || valueData.getFloat("RangeValue") != 0.25F ||

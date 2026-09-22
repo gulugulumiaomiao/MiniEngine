@@ -30,7 +30,7 @@ void collectStats(Node& node, SceneStats& stats) {
         ++stats.meshes;
     if (node.getComponent<LightComponent>() != nullptr)
         ++stats.lights;
-    for (const NodeHandle child : node.children()) {
+    for (const RID child : node.children()) {
         if (Node* childNode = node.scene().findNode(child))
             collectStats(*childNode, stats);
     }
@@ -39,7 +39,7 @@ void collectStats(Node& node, SceneStats& stats) {
 const CameraComponent* findPrimaryCamera(Node& node) {
     if (const CameraComponent* camera = node.getComponent<CameraComponent>(); camera && camera->primary)
         return camera;
-    for (const NodeHandle child : node.children()) {
+    for (const RID child : node.children()) {
         if (Node* childNode = node.scene().findNode(child)) {
             if (const CameraComponent* camera = findPrimaryCamera(*childNode))
                 return camera;

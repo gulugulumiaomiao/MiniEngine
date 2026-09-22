@@ -25,15 +25,15 @@ public:
 
 private:
     struct ResolvedMaterialPass {
-        MaterialHandle material;
+        RID material;
         const ShaderPass* pass{};
-        rhi::GraphicsPipelineHandle pipeline;
+        rhi::RID pipeline;
 
         [[nodiscard]] explicit operator bool() const { return static_cast<bool>(pipeline); }
     };
 
     [[nodiscard]] ResolvedMaterialPass resolveMaterialPass(const RenderContext& context,
-                                                           MaterialHandle materialHandle,
+                                                           RID materialHandle,
                                                            const Mesh& meshInstance,
                                                            RenderPhase phase) const;
 

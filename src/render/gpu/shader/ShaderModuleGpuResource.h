@@ -5,7 +5,7 @@
 namespace engine {
 
 struct ShaderModuleGpuResource {
-    rhi::ShaderHandle shader;
+    rhi::RID shader;
 };
 
 } // namespace engine

@@ -7,7 +7,7 @@
 namespace engine {
 
 struct GraphicsPipelineGpuResource {
-    rhi::GraphicsPipelineHandle pipeline;
+    rhi::RID pipeline;
     std::uint64_t program{};
     std::uint64_t vertex{};
     std::uint64_t fragment{};

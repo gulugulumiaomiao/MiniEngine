@@ -1,19 +1,5 @@
 #pragma once
 
-#include "core/base/Handle.h"
-
-#include <cstdint>
-
-namespace engine {
-
-struct MeshHandleTag;
-struct MaterialHandleTag;
-struct ShaderHandleTag;
-struct TextureHandleTag;
-
-using MeshHandle = Handle<MeshHandleTag>;
-using MaterialHandle = Handle<MaterialHandleTag>;
-using ShaderHandle = Handle<ShaderHandleTag>;
-using TextureHandle = Handle<TextureHandleTag>;
-
-} // namespace engine
+// Historical render handle aliases (RID/RID/RID/RID)
+// are now the unified engine::RID.
+#include "core/base/RID.h"

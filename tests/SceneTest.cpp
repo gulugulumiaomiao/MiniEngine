@@ -43,9 +43,9 @@ int main() {
     using namespace engine;
 
     Scene scene{"Test Scene"};
-    const NodeHandle sceneRootHandle = scene.rootHandle();
-    const NodeHandle rootHandle = scene.createNode("Root");
-    const NodeHandle childHandle = scene.createNode("Child");
+    const RID sceneRootHandle = scene.rootHandle();
+    const RID rootHandle = scene.createNode("Root");
+    const RID childHandle = scene.createNode("Child");
     Node* sceneRoot = scene.findNode(sceneRootHandle);
     Node* root = scene.findNode(rootHandle);
     Node* child = scene.findNode(childHandle);
@@ -104,23 +104,23 @@ int main() {
 
     MeshComponent* mesh = child->addComponent<MeshComponent>();
     MaterialComponent* material = child->addComponent<MaterialComponent>();
-    mesh->setAssetMesh(MeshHandle{7, 2});
-    material->setMaterial(0, MaterialHandle{3, 1});
-    material->setMaterial(2, MaterialHandle{8, 4});
-    if (mesh->mesh() != MeshHandle{7, 2} || material->material(1) != MaterialHandle{3, 1} ||
-        material->material(2) != MaterialHandle{8, 4} ||
+    mesh->setAssetMesh(RID{7, 2});
+    material->setMaterial(0, RID{3, 1});
+    material->setMaterial(2, RID{8, 4});
+    if (mesh->mesh() != RID{7, 2} || material->material(1) != RID{3, 1} ||
+        material->material(2) != RID{8, 4} ||
         root->removeComponent<TransformComponent>()) {
         return 12;
     }
 
-    const NodeHandle cameraHandle = scene.createNode("Camera");
+    const RID cameraHandle = scene.createNode("Camera");
     Node* cameraNode = scene.findNode(cameraHandle);
     CameraComponent* camera = cameraNode->addComponent<CameraComponent>();
     camera->primary = true;
     camera->priority = 10;
     cameraNode->transform().setLocalPosition({0.0F, 0.0F, 5.0F});
 
-    const NodeHandle lightHandle = scene.createNode("Sun");
+    const RID lightHandle = scene.createNode("Sun");
     Node* lightNode = scene.findNode(lightHandle);
     LightComponent* light = lightNode->addComponent<LightComponent>();
     light->type = LightType::Directional;
@@ -131,8 +131,8 @@ int main() {
     scene.buildRenderScene(renderScene, 16.0F / 9.0F);
     if (renderScene.objects().size() != 1 || !renderScene.camera() ||
         renderScene.lights().size() != 1 ||
-        renderScene.objects().front().mesh != MeshHandle{7, 2} ||
-        renderScene.objects().front().material(1) != MaterialHandle{3, 1} ||
+        renderScene.objects().front().mesh != RID{7, 2} ||
+        renderScene.objects().front().material(1) != RID{3, 1} ||
         !near(renderScene.camera()->worldPosition, {0.0F, 0.0F, 5.0F}) ||
         !near(renderScene.lights().front().direction, {0.0F, 0.0F, -1.0F}) ||
         renderScene.lights().front().intensity != 2.0F) {
@@ -153,8 +153,8 @@ int main() {
         scene.findNode(childHandle) || scene.nodeCount() != 1) {
         return 14;
     }
-    const NodeHandle reused = scene.createNode("Reused");
-    if (reused.index != rootHandle.index || reused.generation == rootHandle.generation ||
+    const RID reused = scene.createNode("Reused");
+    if (reused.index() != rootHandle.index() || reused.generation() == rootHandle.generation() ||
         scene.findNode(reused)->parent() != sceneRootHandle) {
         return 15;
     }
@@ -166,12 +166,12 @@ int main() {
 
     MESH_MANAGER.clear();
     Scene primitiveScene{"Primitive Scene"};
-    const NodeHandle primitiveNodeHandle = primitiveScene.createNode("Sphere");
+    const RID primitiveNodeHandle = primitiveScene.createNode("Sphere");
     MeshComponent* primitiveMesh =
         primitiveScene.findNode(primitiveNodeHandle)->addComponent<MeshComponent>();
     primitiveMesh->setPrimitive(UvSphereGeometry{1.0F, 16, 8});
     primitiveScene.update(0.0F);
-    const MeshHandle primitiveHandle = primitiveMesh->mesh();
+    const RID primitiveHandle = primitiveMesh->mesh();
     const Mesh* firstPrimitive = MESH_MANAGER.find(primitiveHandle);
     if (!primitiveHandle || !firstPrimitive ||
         primitiveMesh->sourceType() != MeshComponentSourceType::Primitive ||

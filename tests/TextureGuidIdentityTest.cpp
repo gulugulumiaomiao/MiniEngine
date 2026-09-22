@@ -30,13 +30,13 @@ protected:
 TEST_F(TextureGuidIdentityTest, LoadByGuidReturnsSameHandle) {
     using namespace engine;
     const VirtualPath path{"assets://textures/checker.png"};
-    const TextureHandle byPath = TEXTURE_MANAGER.load(path);
+    const RID byPath = TEXTURE_MANAGER.load(path);
     ASSERT_TRUE(byPath);
 
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const TextureHandle byId = TEXTURE_MANAGER.load(*assetId);
+    const RID byId = TEXTURE_MANAGER.load(*assetId);
     EXPECT_EQ(byId, byPath);
     EXPECT_EQ(TEXTURE_MANAGER.find(*assetId), TEXTURE_MANAGER.find(byPath));
 }
@@ -44,10 +44,10 @@ TEST_F(TextureGuidIdentityTest, LoadByGuidReturnsSameHandle) {
 TEST_F(TextureGuidIdentityTest, CloneReturnsDifferentHandleAndIsNotAssetBacked) {
     using namespace engine;
     const VirtualPath path{"assets://textures/checker.png"};
-    const TextureHandle original = TEXTURE_MANAGER.load(path);
+    const RID original = TEXTURE_MANAGER.load(path);
     ASSERT_TRUE(original);
 
-    const TextureHandle cloned = TEXTURE_MANAGER.clone(original);
+    const RID cloned = TEXTURE_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
     EXPECT_NE(cloned, original);
 
@@ -64,13 +64,13 @@ TEST_F(TextureGuidIdentityTest, CloneReturnsDifferentHandleAndIsNotAssetBacked) 
 TEST_F(TextureGuidIdentityTest, CloneDoesNotAppearInAssetIndex) {
     using namespace engine;
     const VirtualPath path{"assets://textures/checker.png"};
-    const TextureHandle original = TEXTURE_MANAGER.load(path);
+    const RID original = TEXTURE_MANAGER.load(path);
     ASSERT_TRUE(original);
 
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const TextureHandle cloned = TEXTURE_MANAGER.clone(original);
+    const RID cloned = TEXTURE_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
 
     EXPECT_EQ(TEXTURE_MANAGER.find(*assetId), TEXTURE_MANAGER.find(original));
@@ -83,9 +83,9 @@ TEST_F(TextureGuidIdentityTest, RefreshAssetUpdatesOriginalButNotClone) {
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const TextureHandle original = TEXTURE_MANAGER.load(path);
+    const RID original = TEXTURE_MANAGER.load(path);
     ASSERT_TRUE(original);
-    const TextureHandle cloned = TEXTURE_MANAGER.clone(original);
+    const RID cloned = TEXTURE_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
 
     Texture* originalData = TEXTURE_MANAGER.find(original);

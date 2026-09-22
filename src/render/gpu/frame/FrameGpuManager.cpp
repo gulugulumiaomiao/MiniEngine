@@ -119,7 +119,7 @@ void FrameGpuManager::upload(std::uint32_t frameIndex, const DrawList& drawList)
         device_->uploadBuffer(frame.objectBuffer, std::as_bytes(std::span{drawList.objects}));
 }
 
-void FrameGpuManager::bindShadowMap(std::uint32_t frameIndex, rhi::TextureViewHandle view) {
+void FrameGpuManager::bindShadowMap(std::uint32_t frameIndex, rhi::RID view) {
     if (!initialized() || frameIndex >= frames_.size() || !view)
         return;
     FrameResources& frame = frames_[frameIndex];
@@ -149,7 +149,7 @@ void FrameGpuManager::bindShadowMap(std::uint32_t frameIndex, rhi::TextureViewHa
     frame.sceneBindGroup = device_->createBindGroup({sceneLayout_, bindings, "Scene bind group"});
 }
 
-rhi::BindGroupHandle FrameGpuManager::sceneBindGroup(std::uint32_t frameIndex) const {
+rhi::RID FrameGpuManager::sceneBindGroup(std::uint32_t frameIndex) const {
     if (frameIndex >= frames_.size())
         return {};
     return frames_[frameIndex].sceneBindGroup;

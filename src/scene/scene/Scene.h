@@ -29,22 +29,22 @@ public:
     [[nodiscard]] std::string_view name() const { return name_; }
     void setName(std::string name) { name_ = std::move(name); }
 
-    [[nodiscard]] NodeHandle createNode(std::string name = "Node");
-    [[nodiscard]] bool destroyNode(NodeHandle node);
+    [[nodiscard]] RID createNode(std::string name = "Node");
+    [[nodiscard]] bool destroyNode(RID node);
     void clear();
 
 #if defined(MINI_EDITOR)
     // finalIndex 是从目标子列表排除源节点后的插入位置，换父节点时保持世界变换。
     [[nodiscard]] bool
-    canMoveNode(NodeHandle node, NodeHandle parent, std::size_t finalIndex, std::string& error);
+    canMoveNode(RID node, RID parent, std::size_t finalIndex, std::string& error);
     [[nodiscard]] NodeMoveResult
-    moveNode(NodeHandle node, NodeHandle parent, std::size_t finalIndex, std::string& error);
+    moveNode(RID node, RID parent, std::size_t finalIndex, std::string& error);
 #endif
 
-    [[nodiscard]] Node* findNode(NodeHandle node) { return nodes_.find(node); }
-    [[nodiscard]] const Node* findNode(NodeHandle node) const { return nodes_.find(node); }
+    [[nodiscard]] Node* findNode(RID node) { return nodes_.find(node); }
+    [[nodiscard]] const Node* findNode(RID node) const { return nodes_.find(node); }
     [[nodiscard]] std::size_t nodeCount() const { return nodes_.size(); }
-    [[nodiscard]] NodeHandle rootHandle() const { return root_; }
+    [[nodiscard]] RID rootHandle() const { return root_; }
     [[nodiscard]] Node& root() { return *nodes_.find(root_); }
     [[nodiscard]] const Node& root() const { return *nodes_.find(root_); }
 
@@ -59,8 +59,8 @@ private:
     void extractRenderNode(Node& node, RenderScene& output, float aspectRatio);
 
     std::string name_;
-    HandlePool<Node, NodeHandle> nodes_;
-    NodeHandle root_;
+    HandlePool<Node, RID> nodes_;
+    RID root_;
 };
 
 } // namespace engine

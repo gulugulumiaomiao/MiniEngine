@@ -30,9 +30,9 @@ GraphicsPipelineManager::GraphicsPipelineManager() = default;
 GraphicsPipelineManager::~GraphicsPipelineManager() = default;
 
 bool GraphicsPipelineManager::initialize(rhi::IDevice& device,
-                                         rhi::BindGroupLayoutHandle sceneLayout,
-                                         rhi::BindGroupLayoutHandle materialLayout,
-                                         rhi::BindGroupLayoutHandle globalLayout) {
+                                         rhi::RID sceneLayout,
+                                         rhi::RID materialLayout,
+                                         rhi::RID globalLayout) {
     if (initialized()) {
         Log::error("GraphicsPipelineManager", "Manager is already initialized");
         return false;
@@ -65,9 +65,9 @@ rhi::GraphicsPipelineDesc
 GraphicsPipelineManager::makeDescription(const VertexLayout& vertexLayout,
                                          rhi::PixelFormat colorFormat,
                                          rhi::PixelFormat depthFormat,
-                                         rhi::ShaderHandle vertexShader,
+                                         rhi::RID vertexShader,
                                          std::string vertexEntry,
-                                         rhi::ShaderHandle fragmentShader,
+                                         rhi::RID fragmentShader,
                                          std::string fragmentEntry) const {
     rhi::GraphicsPipelineDesc desc;
     desc.vertexShader = vertexShader;
@@ -95,7 +95,7 @@ GraphicsPipelineManager::makeDescription(const VertexLayout& vertexLayout,
     return desc;
 }
 
-rhi::GraphicsPipelineHandle GraphicsPipelineManager::resolve(const Shader& shader,
+rhi::RID GraphicsPipelineManager::resolve(const Shader& shader,
                                                              const ShaderPass& pass,
                                                              const ShaderVariantKey& variant,
                                                              const Mesh& mesh,
@@ -103,7 +103,7 @@ rhi::GraphicsPipelineHandle GraphicsPipelineManager::resolve(const Shader& shade
                                                              rhi::PixelFormat depthFormat) {
     if (!initialized())
         return {};
-    const ShaderProgramHandle programHandle =
+    const RID programHandle =
         SHADER_GPU_MANAGER.getOrCreateProgram(shader, pass, variant);
     if (!programHandle) {
         Log::error("GraphicsPipelineManager",

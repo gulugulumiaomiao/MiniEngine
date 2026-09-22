@@ -25,10 +25,10 @@ public:
     ~GraphicsPipelineManager();
 
     [[nodiscard]] bool initialize(rhi::IDevice& device,
-                                  rhi::BindGroupLayoutHandle sceneLayout,
-                                  rhi::BindGroupLayoutHandle materialLayout,
-                                  rhi::BindGroupLayoutHandle globalLayout);
-    [[nodiscard]] rhi::GraphicsPipelineHandle resolve(const Shader& shader,
+                                  rhi::RID sceneLayout,
+                                  rhi::RID materialLayout,
+                                  rhi::RID globalLayout);
+    [[nodiscard]] rhi::RID resolve(const Shader& shader,
                                                       const ShaderPass& pass,
                                                       const ShaderVariantKey& variant,
                                                       const Mesh& mesh,
@@ -56,15 +56,15 @@ private:
     [[nodiscard]] rhi::GraphicsPipelineDesc makeDescription(const VertexLayout& vertexLayout,
                                                             rhi::PixelFormat colorFormat,
                                                             rhi::PixelFormat depthFormat,
-                                                            rhi::ShaderHandle vertexShader,
+                                                            rhi::RID vertexShader,
                                                             std::string vertexEntry,
-                                                            rhi::ShaderHandle fragmentShader,
+                                                            rhi::RID fragmentShader,
                                                             std::string fragmentEntry) const;
     void invalidate(std::span<const CompiledShaderId> shaders, std::uint64_t retireSerial);
 
-    rhi::BindGroupLayoutHandle sceneLayout_;
-    rhi::BindGroupLayoutHandle materialLayout_;
-    rhi::BindGroupLayoutHandle globalLayout_;
+    rhi::RID sceneLayout_;
+    rhi::RID materialLayout_;
+    rhi::RID globalLayout_;
     GraphicsPipelineCache cache_;
     std::unique_ptr<GraphicsPipelineGpuFactory> factory_;
     std::vector<RetiredPipeline> retired_;

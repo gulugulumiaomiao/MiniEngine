@@ -40,7 +40,7 @@ DrawListBuilder::DrawListBuilder(std::string_view renderPipeline)
 
 DrawListBuilder::ResolvedMaterialPass
 DrawListBuilder::resolveMaterialPass(const RenderContext& context,
-                                     MaterialHandle materialHandle,
+                                     RID materialHandle,
                                      const Mesh& meshInstance,
                                      RenderPhase phase) const {
     const Material* material = MATERIAL_MANAGER.find(materialHandle);
@@ -138,7 +138,7 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
         }
         Mesh* meshInstance = MESH_MANAGER.find(object.mesh);
         if (!meshInstance) {
-            Log::warn("DrawListBuilder", "Skipping object with an invalid MeshHandle");
+            Log::warn("DrawListBuilder", "Skipping object with an invalid RID");
             continue;
         }
         const MeshDrawInfo mesh = MESH_GPU_MANAGER.resolve(object.mesh);
@@ -150,7 +150,7 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
         drawList.objects.push_back({object.transform});
 
         for (const MeshDrawInfo::Range& range : mesh.subMeshes) {
-            const MaterialHandle requestedMaterial = object.material(range.materialSlot);
+            const RID requestedMaterial = object.material(range.materialSlot);
             for (const RenderPhase renderPhase : phases) {
                 if (renderPhase == RenderPhase::ShadowCaster && !object.castShadow) {
                     continue;

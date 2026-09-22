@@ -27,35 +27,35 @@ class IDevice {
 public:
     virtual ~IDevice() = default;
 
-    [[nodiscard]] virtual BufferHandle createBuffer(const BufferDesc& desc) = 0;
-    virtual void destroyBuffer(BufferHandle handle) = 0;
-    virtual void uploadBuffer(BufferHandle destination,
+    [[nodiscard]] virtual RID createBuffer(const BufferDesc& desc) = 0;
+    virtual void destroyBuffer(RID handle) = 0;
+    virtual void uploadBuffer(RID destination,
                               std::span<const std::byte> data,
                               std::uint64_t offset = 0) = 0;
 
-    [[nodiscard]] virtual TextureHandle createTexture(const TextureDesc& desc) = 0;
-    virtual void destroyTexture(TextureHandle handle) = 0;
-    virtual void uploadTexture(TextureHandle destination,
+    [[nodiscard]] virtual RID createTexture(const TextureDesc& desc) = 0;
+    virtual void destroyTexture(RID handle) = 0;
+    virtual void uploadTexture(RID destination,
                                std::span<const TextureUploadRegion> regions) = 0;
-    [[nodiscard]] virtual TextureViewHandle createTextureView(TextureHandle texture,
+    [[nodiscard]] virtual RID createTextureView(RID texture,
                                                               const TextureViewDesc& desc) = 0;
-    [[nodiscard]] virtual TextureViewHandle defaultTextureView(TextureHandle texture) const = 0;
-    virtual void destroyTextureView(TextureViewHandle handle) = 0;
-    [[nodiscard]] virtual SamplerHandle createSampler(const SamplerDesc& desc) = 0;
-    virtual void destroySampler(SamplerHandle handle) = 0;
+    [[nodiscard]] virtual RID defaultTextureView(RID texture) const = 0;
+    virtual void destroyTextureView(RID handle) = 0;
+    [[nodiscard]] virtual RID createSampler(const SamplerDesc& desc) = 0;
+    virtual void destroySampler(RID handle) = 0;
 
-    [[nodiscard]] virtual ShaderHandle createShader(const ShaderDesc& desc) = 0;
-    virtual void destroyShader(ShaderHandle handle) = 0;
+    [[nodiscard]] virtual RID createShader(const ShaderDesc& desc) = 0;
+    virtual void destroyShader(RID handle) = 0;
 
-    [[nodiscard]] virtual GraphicsPipelineHandle
+    [[nodiscard]] virtual RID
     createGraphicsPipeline(const GraphicsPipelineDesc& desc) = 0;
-    virtual void destroyGraphicsPipeline(GraphicsPipelineHandle handle) = 0;
+    virtual void destroyGraphicsPipeline(RID handle) = 0;
 
-    [[nodiscard]] virtual BindGroupLayoutHandle
+    [[nodiscard]] virtual RID
     createBindGroupLayout(const BindGroupLayoutDesc& desc) = 0;
-    virtual void destroyBindGroupLayout(BindGroupLayoutHandle handle) = 0;
-    [[nodiscard]] virtual BindGroupHandle createBindGroup(const BindGroupDesc& desc) = 0;
-    virtual void destroyBindGroup(BindGroupHandle handle) = 0;
+    virtual void destroyBindGroupLayout(RID handle) = 0;
+    [[nodiscard]] virtual RID createBindGroup(const BindGroupDesc& desc) = 0;
+    virtual void destroyBindGroup(RID handle) = 0;
 
     // Command buffers are allocated from the device and submitted through it. A
     // command buffer must be in the Executable state (end() called) at submit time;
@@ -68,13 +68,13 @@ public:
     [[nodiscard]] virtual VkPhysicalDevice physicalDevice() const = 0;
     [[nodiscard]] virtual VkQueue graphicsQueue() const = 0;
     [[nodiscard]] virtual std::uint32_t graphicsQueueFamily() const = 0;
-    [[nodiscard]] virtual VkBuffer resolveBuffer(BufferHandle handle) const = 0;
-    [[nodiscard]] virtual IRHITexture* resolveTextureResource(TextureHandle handle) = 0;
-    [[nodiscard]] virtual const IRHITexture* resolveTextureResource(TextureHandle handle) const = 0;
-    [[nodiscard]] virtual VkImage resolveTexture(TextureHandle handle) const = 0;
-    [[nodiscard]] virtual VkImageView resolveTextureView(TextureViewHandle handle) const = 0;
-    [[nodiscard]] virtual ResolvedPipeline resolvePipeline(GraphicsPipelineHandle handle) const = 0;
-    [[nodiscard]] virtual VkDescriptorSet resolveBindGroup(BindGroupHandle handle) const = 0;
+    [[nodiscard]] virtual VkBuffer resolveBuffer(RID handle) const = 0;
+    [[nodiscard]] virtual IRHITexture* resolveTextureResource(RID handle) = 0;
+    [[nodiscard]] virtual const IRHITexture* resolveTextureResource(RID handle) const = 0;
+    [[nodiscard]] virtual VkImage resolveTexture(RID handle) const = 0;
+    [[nodiscard]] virtual VkImageView resolveTextureView(RID handle) const = 0;
+    [[nodiscard]] virtual ResolvedPipeline resolvePipeline(RID handle) const = 0;
+    [[nodiscard]] virtual VkDescriptorSet resolveBindGroup(RID handle) const = 0;
 
     virtual void waitIdle() = 0;
 };

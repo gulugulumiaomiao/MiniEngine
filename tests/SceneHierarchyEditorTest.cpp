@@ -37,24 +37,24 @@ bool ordering() {
     const auto a = scene.createNode("A"), b = scene.createNode("B"), c = scene.createNode("C");
     std::string error;
     CHECK(scene.canMoveNode(a, root, 2, error));
-    CHECK((scene.root().children() == std::vector<NodeHandle>{a, b, c}));
+    CHECK((scene.root().children() == std::vector<RID>{a, b, c}));
     CHECK(scene.moveNode(a, root, 2, error) == NodeMoveResult::Changed);
-    CHECK((scene.root().children() == std::vector<NodeHandle>{b, c, a}));
+    CHECK((scene.root().children() == std::vector<RID>{b, c, a}));
     CHECK(scene.moveNode(a, root, 0, error) == NodeMoveResult::Changed);
-    CHECK((scene.root().children() == std::vector<NodeHandle>{a, b, c}));
+    CHECK((scene.root().children() == std::vector<RID>{a, b, c}));
     CHECK(scene.moveNode(a, root, 0, error) == NodeMoveResult::Unchanged);
     CHECK(scene.moveNode(c, root, 1, error) == NodeMoveResult::Changed);
-    CHECK((scene.root().children() == std::vector<NodeHandle>{a, c, b}));
+    CHECK((scene.root().children() == std::vector<RID>{a, c, b}));
     CHECK(scene.moveNode(c, a, 0, error) == NodeMoveResult::Changed);
     CHECK(scene.moveNode(b, a, 0, error) == NodeMoveResult::Changed);
-    CHECK((scene.findNode(a)->children() == std::vector<NodeHandle>{b, c}));
+    CHECK((scene.findNode(a)->children() == std::vector<RID>{b, c}));
     CHECK(scene.moveNode(b, a, 1, error) == NodeMoveResult::Changed);
-    CHECK((scene.findNode(a)->children() == std::vector<NodeHandle>{c, b}));
+    CHECK((scene.findNode(a)->children() == std::vector<RID>{c, b}));
     const auto d = scene.createNode("D");
     CHECK(scene.moveNode(a, d, 0, error) == NodeMoveResult::Changed);
     CHECK(scene.findNode(b)->parent() == a && scene.findNode(c)->parent() == a);
     CHECK(scene.moveNode(a, root, 0, error) == NodeMoveResult::Changed);
-    CHECK((scene.root().children() == std::vector<NodeHandle>{a, d}));
+    CHECK((scene.root().children() == std::vector<RID>{a, d}));
     return true;
 }
 
@@ -68,7 +68,7 @@ bool rejectedMoves() {
     const auto oldLocal = scene.findNode(a)->transform().localMatrix();
     std::string error;
     for (const auto [node, parent, index] :
-         std::vector<std::tuple<NodeHandle, NodeHandle, std::size_t>>{
+         std::vector<std::tuple<RID, RID, std::size_t>>{
              {root, a, 0}, {a, a, 0}, {a, b, 0}, {{999, 1}, a, 0}, {a, {}, 0}, {a, root, 9}}) {
         CHECK(!scene.canMoveNode(node, parent, index, error) && !error.empty());
         CHECK(scene.moveNode(node, parent, index, error) == NodeMoveResult::Rejected);
@@ -79,7 +79,7 @@ bool rejectedMoves() {
     const auto gone = scene.createNode("Gone");
     CHECK(scene.destroyNode(gone));
     const auto reused = scene.createNode("Reused");
-    CHECK(gone.index == reused.index && gone.generation != reused.generation);
+    CHECK(gone.index() == reused.index() && gone.generation() != reused.generation());
     CHECK(scene.moveNode(gone, root, 0, error) == NodeMoveResult::Rejected);
     return true;
 }

@@ -9,22 +9,22 @@ namespace engine {
 
 class MaterialManager final
     : public Singleton<MaterialManager>,
-      public KeyedHandleRegistry<Material, MaterialHandle, AssetId> {
+      public KeyedHandleRegistry<Material, RID, AssetId> {
 public:
-    [[nodiscard]] MaterialHandle load(const AssetId& assetId);
-    [[nodiscard]] MaterialHandle load(const VirtualPath& materialAssetPath);
-    [[nodiscard]] MaterialHandle errorMaterial();
-    [[nodiscard]] MaterialHandle clone(MaterialHandle source);
+    [[nodiscard]] RID load(const AssetId& assetId);
+    [[nodiscard]] RID load(const VirtualPath& materialAssetPath);
+    [[nodiscard]] RID errorMaterial();
+    [[nodiscard]] RID clone(RID source);
     void refreshAsset(const AssetId& assetId);
     void refreshAsset(const VirtualPath& materialPath);
-    void setShader(MaterialHandle handle, const VirtualPath& shaderPath);
+    void setShader(RID handle, const VirtualPath& shaderPath);
     void refreshShader(const AssetId& shaderAssetId);
 
 private:
     friend class Singleton<MaterialManager>;
     MaterialManager() = default;
 
-    [[nodiscard]] MaterialHandle loadFromPath(const VirtualPath& materialPath,
+    [[nodiscard]] RID loadFromPath(const VirtualPath& materialPath,
                                               const AssetId& assetId);
     [[nodiscard]] AssetId keyOf(const Material& material) const override {
         return material.assetId();

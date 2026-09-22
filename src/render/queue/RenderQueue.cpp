@@ -53,15 +53,15 @@ std::uint64_t DrawSorter::computeKey(const DrawItem& item,
     }
 
     if (hasFlag(criteria, SortingCriteria::Pipeline)) {
-        key |= static_cast<std::uint64_t>(item.pipeline.index) << 24;
+        key |= static_cast<std::uint64_t>(item.pipeline.index()) << 24;
     }
 
     if (hasFlag(criteria, SortingCriteria::Material)) {
-        key |= static_cast<std::uint64_t>(item.material.index) << 12;
+        key |= static_cast<std::uint64_t>(item.material.index()) << 12;
     }
 
     if (hasFlag(criteria, SortingCriteria::Mesh)) {
-        key |= static_cast<std::uint64_t>(item.mesh.index) & 0xFFFULL;
+        key |= static_cast<std::uint64_t>(item.mesh.index()) & 0xFFFULL;
     }
 
     return key;

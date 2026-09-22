@@ -99,7 +99,7 @@ void RenderGraph::execute(rhi::ICommandBuffer& commandBuffer) const {
 
     struct State {
         RgTextureHandle handle;
-        rhi::TextureHandle texture;
+        rhi::RID texture;
         rhi::TextureAspect aspect;
         rhi::ResourceState current;
         rhi::ResourceState final;
@@ -167,7 +167,7 @@ void RenderGraph::reset() {
     compiled_ = false;
 }
 
-rhi::TextureViewHandle RenderGraph::resolvedTextureView(RgTextureHandle handle) const {
+rhi::RID RenderGraph::resolvedTextureView(RgTextureHandle handle) const {
     return resolveNode(handle).resolvedView;
 }
 

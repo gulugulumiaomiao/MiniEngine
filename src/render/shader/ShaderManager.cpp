@@ -17,12 +17,12 @@ const VirtualPath kBuiltinColorShaderPath{"assets://shaders/builtin_color.shader
 
 } // namespace
 
-ShaderHandle ShaderManager::load(const AssetId& assetId) {
+RID ShaderManager::load(const AssetId& assetId) {
     if (!assetId.valid()) {
         Log::error("ShaderManager", "Invalid Shader AssetId");
         return {};
     }
-    if (const ShaderHandle existing = findHandle(assetId); existing) {
+    if (const RID existing = findHandle(assetId); existing) {
         return existing;
     }
     const std::optional<VirtualPath> path = ASSET_DATABASE.findPath(assetId);
@@ -34,7 +34,7 @@ ShaderHandle ShaderManager::load(const AssetId& assetId) {
     return loadFromPath(*path, assetId);
 }
 
-ShaderHandle ShaderManager::load(const VirtualPath& shaderPath) {
+RID ShaderManager::load(const VirtualPath& shaderPath) {
     if (!shaderPath.valid()) {
         Log::error("ShaderManager", "Invalid Shader path: %s", shaderPath.string().c_str());
         return {};
@@ -45,13 +45,13 @@ ShaderHandle ShaderManager::load(const VirtualPath& shaderPath) {
             "ShaderManager", "Shader path has no AssetId: %s", shaderPath.string().c_str());
         return {};
     }
-    if (const ShaderHandle existing = findHandle(*assetId); existing) {
+    if (const RID existing = findHandle(*assetId); existing) {
         return existing;
     }
     return loadFromPath(shaderPath, *assetId);
 }
 
-ShaderHandle ShaderManager::loadFromPath(const VirtualPath& shaderPath, const AssetId& assetId) {
+RID ShaderManager::loadFromPath(const VirtualPath& shaderPath, const AssetId& assetId) {
     const std::shared_ptr<ShaderAsset> asset = ASSET_MANAGER.loadAsset<ShaderAsset>(shaderPath);
     if (!asset) {
         return {};
@@ -61,11 +61,11 @@ ShaderHandle ShaderManager::loadFromPath(const VirtualPath& shaderPath, const As
     return insert(std::move(shader));
 }
 
-ShaderHandle ShaderManager::builtinColor() {
+RID ShaderManager::builtinColor() {
     return load(kBuiltinColorShaderPath);
 }
 
-ShaderHandle ShaderManager::clone(ShaderHandle source) {
+RID ShaderManager::clone(RID source) {
     Shader* shader = find(source);
     if (!shader) {
         Log::error("ShaderManager", "Cannot clone an invalid Shader");
@@ -112,7 +112,7 @@ void ShaderManager::refreshAsset(const VirtualPath& shaderPath) {
     refreshAsset(*assetId);
 }
 
-ShaderHandle ShaderManager::findHandle(const VirtualPath& shaderPath) const {
+RID ShaderManager::findHandle(const VirtualPath& shaderPath) const {
     const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(shaderPath);
     if (!assetId) {
         return {};
@@ -120,10 +120,10 @@ ShaderHandle ShaderManager::findHandle(const VirtualPath& shaderPath) const {
     return KeyedHandleRegistry::findHandle(*assetId);
 }
 
-bool ShaderManager::replace(ShaderHandle handle, Shader shader) {
+bool ShaderManager::replace(RID handle, Shader shader) {
     Shader* current = find(handle);
     if (!current) {
-        Log::error("ShaderManager", "Cannot replace an invalid ShaderHandle");
+        Log::error("ShaderManager", "Cannot replace an invalid RID");
         return false;
     }
     if (current->assetPath() != shader.assetPath()) {
@@ -147,7 +147,7 @@ bool ShaderManager::replace(const VirtualPath& shaderPath) {
     if (!assetId) {
         return true;
     }
-    const ShaderHandle handle = findHandle(*assetId);
+    const RID handle = findHandle(*assetId);
     if (!handle) {
         return true;
     }

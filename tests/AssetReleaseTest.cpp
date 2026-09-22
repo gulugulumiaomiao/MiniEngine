@@ -34,7 +34,7 @@ int main() {
         return 3;
     }
 
-    const MaterialHandle runtime = MATERIAL_MANAGER.load(material->assetPath());
+    const RID runtime = MATERIAL_MANAGER.load(material->assetPath());
     if (!runtime || MATERIAL_MANAGER.find(runtime)->shader().name() != "MiniEngine/VertexColor") {
         return 4;
     }

@@ -60,11 +60,11 @@ std::unique_ptr<Scene> SceneAsset::instantiate(const SceneInstantiationContext& 
     }
 
     auto scene = std::make_unique<Scene>(name);
-    std::unordered_map<SceneNodeAssetId, NodeHandle> handles;
+    std::unordered_map<SceneNodeAssetId, RID> handles;
     handles.reserve(nodes.size());
 
     for (const SceneNodeAsset& source : nodes) {
-        const NodeHandle handle = scene->createNode(source.name);
+        const RID handle = scene->createNode(source.name);
         Node* node = scene->findNode(handle);
         if (!node || !handles.emplace(source.id, handle).second)
             return {};
@@ -83,7 +83,7 @@ std::unique_ptr<Scene> SceneAsset::instantiate(const SceneInstantiationContext& 
                         if (value.sourceType == MeshComponentSourceType::Asset) {
                             if (!context.loadMesh)
                                 return false;
-                            const MeshHandle mesh = context.loadMesh(value.mesh);
+                            const RID mesh = context.loadMesh(value.mesh);
                             if (!mesh)
                                 return false;
                             runtime->setAssetMesh(mesh);
@@ -102,7 +102,7 @@ std::unique_ptr<Scene> SceneAsset::instantiate(const SceneInstantiationContext& 
                         if (!value.materials.empty() && !context.loadMaterial)
                             return false;
                         for (std::size_t slot = 0; slot < value.materials.size(); ++slot) {
-                            const MaterialHandle material =
+                            const RID material =
                                 context.loadMaterial(value.materials[slot]);
                             if (!material)
                                 return false;

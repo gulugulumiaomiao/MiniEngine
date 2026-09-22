@@ -389,7 +389,7 @@ VmaAllocator VulkanDevice::allocator() const {
     return allocator_;
 }
 
-BufferHandle VulkanDevice::createBuffer(const BufferDesc& desc) {
+RID VulkanDevice::createBuffer(const BufferDesc& desc) {
     if (desc.size == 0 || desc.usage == BufferUsage::None) {
         Log::fatal("VulkanDevice", "Invalid buffer description");
     }
@@ -401,11 +401,11 @@ BufferHandle VulkanDevice::createBuffer(const BufferDesc& desc) {
     });
 }
 
-void VulkanDevice::destroyBuffer(BufferHandle handle) {
+void VulkanDevice::destroyBuffer(RID handle) {
     (void)buffers_.release(handle);
 }
 
-void VulkanDevice::uploadBuffer(BufferHandle destination,
+void VulkanDevice::uploadBuffer(RID destination,
                                 std::span<const std::byte> data,
                                 std::uint64_t offset) {
     VulkanBuffer& target = requireBuffer(destination);
@@ -420,7 +420,7 @@ void VulkanDevice::uploadBuffer(BufferHandle destination,
 
     const BufferDesc stagingDesc{
         data.size_bytes(), BufferUsage::TransferSource, MemoryUsage::Upload, "upload staging"};
-    const BufferHandle staging = createBuffer(stagingDesc);
+    const RID staging = createBuffer(stagingDesc);
     requireBuffer(staging).upload(data);
 
     std::unique_ptr<ICommandBuffer> command = createCommandBuffer();
@@ -434,7 +434,7 @@ void VulkanDevice::uploadBuffer(BufferHandle destination,
     // command is freed after waitIdle, so its VkCommandBuffer is no longer in use.
 }
 
-TextureHandle VulkanDevice::createTexture(const TextureDesc& desc) {
+RID VulkanDevice::createTexture(const TextureDesc& desc) {
     if (desc.dimension != TextureType::Texture2D || desc.format == PixelFormat::Undefined ||
         desc.width == 0 || desc.height == 0 || desc.depth != 1 || desc.arrayLayers != 1 ||
         desc.mipCount == 0 || desc.usage == TextureUsage::None) {
@@ -444,7 +444,7 @@ TextureHandle VulkanDevice::createTexture(const TextureDesc& desc) {
         (isDepthFormat(desc.format) && hasFlag(desc.usage, TextureUsage::ColorAttachment))) {
         Log::fatal("VulkanDevice", "Texture format and attachment usage do not match");
     }
-    const TextureHandle handle =
+    const RID handle =
         textures_.emplace(*this, allocator_, desc, toVulkan(desc.format), toVulkan(desc.usage));
     VulkanTexture* texture = textures_.find(handle);
     const TextureViewDesc defaultDesc{.type = desc.dimension,
@@ -457,16 +457,16 @@ TextureHandle VulkanDevice::createTexture(const TextureDesc& desc) {
     return handle;
 }
 
-void VulkanDevice::destroyTexture(TextureHandle handle) {
+void VulkanDevice::destroyTexture(RID handle) {
     VulkanTexture* texture = textures_.find(handle);
     if (!texture)
         return;
-    for (TextureViewHandle view : texture->viewHandles())
+    for (RID view : texture->viewHandles())
         (void)textureViews_.release(view);
     (void)textures_.release(handle);
 }
 
-void VulkanDevice::uploadTexture(TextureHandle destination,
+void VulkanDevice::uploadTexture(RID destination,
                                  std::span<const TextureUploadRegion> regions) {
     VulkanTexture* resource = textures_.find(destination);
     if (!resource || resource->uploaded() || regions.empty())
@@ -495,7 +495,7 @@ void VulkanDevice::uploadTexture(TextureHandle destination,
     }
     const BufferDesc stagingDesc{
         totalSize, BufferUsage::TransferSource, MemoryUsage::Upload, "texture upload staging"};
-    const BufferHandle staging = createBuffer(stagingDesc);
+    const RID staging = createBuffer(stagingDesc);
     std::uint64_t stagingOffset{};
     std::vector<BufferImageCopy> copies;
     copies.reserve(regions.size());
@@ -544,7 +544,7 @@ void VulkanDevice::uploadTexture(TextureHandle destination,
     resource->markUploaded();
 }
 
-TextureViewHandle VulkanDevice::createTextureView(TextureHandle textureHandle,
+RID VulkanDevice::createTextureView(RID textureHandle,
                                                   const TextureViewDesc& desc) {
     VulkanTexture* texture = textures_.find(textureHandle);
     if (!texture)
@@ -552,7 +552,7 @@ TextureViewHandle VulkanDevice::createTextureView(TextureHandle textureHandle,
     return texture->createView(desc);
 }
 
-TextureViewHandle VulkanDevice::acquireTextureView(VulkanTexture& texture,
+RID VulkanDevice::acquireTextureView(VulkanTexture& texture,
                                                    const TextureViewDesc& desc) {
     if (desc.type != TextureType::Texture2D || desc.mipCount == 0 || desc.layerCount != 1 ||
         desc.baseLayer != 0) {
@@ -565,22 +565,22 @@ TextureViewHandle VulkanDevice::acquireTextureView(VulkanTexture& texture,
         normalized.mipCount > texture.mipCount() - normalized.baseMip) {
         Log::fatal("VulkanDevice", "TextureView does not match its Texture");
     }
-    if (const TextureViewHandle existing = texture.findView(normalized))
+    if (const RID existing = texture.findView(normalized))
         return existing;
-    const TextureViewHandle view =
+    const RID view =
         textureViews_.insert(VulkanTextureView{device_, texture, normalized});
     texture.cacheView(normalized, view);
     return view;
 }
 
-TextureViewHandle VulkanDevice::defaultTextureView(TextureHandle texture) const {
+RID VulkanDevice::defaultTextureView(RID texture) const {
     const VulkanTexture* resource = textures_.find(texture);
     if (!resource || !resource->defaultView())
         Log::fatal("VulkanDevice", "Texture has no default view");
     return resource->defaultView();
 }
 
-void VulkanDevice::destroyTextureView(TextureViewHandle handle) {
+void VulkanDevice::destroyTextureView(RID handle) {
     VulkanTextureView* view = textureViews_.find(handle);
     if (!view)
         return;
@@ -589,22 +589,22 @@ void VulkanDevice::destroyTextureView(TextureViewHandle handle) {
     (void)textureViews_.release(handle);
 }
 
-SamplerHandle VulkanDevice::createSampler(const SamplerDesc& desc) {
+RID VulkanDevice::createSampler(const SamplerDesc& desc) {
     SamplerDesc clamped = desc;
     clamped.maxAnisotropy = std::min(clamped.maxAnisotropy, maxSamplerAnisotropy_);
     if (clamped.maxAnisotropy < 1.0F)
         clamped.maxAnisotropy = 1.0F;
     // Identical descriptors share one VkSampler; only create on a cache miss.
-    if (const SamplerHandle existing = samplers_.findHandle(clamped))
+    if (const RID existing = samplers_.findHandle(clamped))
         return existing;
     return samplers_.insert(VulkanSampler{device_, clamped, maxSamplerAnisotropy_});
 }
 
-void VulkanDevice::destroySampler(SamplerHandle handle) {
+void VulkanDevice::destroySampler(RID handle) {
     (void)samplers_.destroy(handle);
 }
 
-ShaderHandle VulkanDevice::createShader(const ShaderDesc& desc) {
+RID VulkanDevice::createShader(const ShaderDesc& desc) {
     if (desc.bytecode.empty()) {
         Log::fatal("VulkanDevice", "Cannot create an empty shader");
     }
@@ -612,11 +612,11 @@ ShaderHandle VulkanDevice::createShader(const ShaderDesc& desc) {
         std::make_unique<VulkanShaderModule>(device_, desc.stage, desc.bytecode, desc.debugName)});
 }
 
-void VulkanDevice::destroyShader(ShaderHandle handle) {
+void VulkanDevice::destroyShader(RID handle) {
     (void)shaders_.release(handle);
 }
 
-GraphicsPipelineHandle VulkanDevice::createGraphicsPipeline(const GraphicsPipelineDesc& desc) {
+RID VulkanDevice::createGraphicsPipeline(const GraphicsPipelineDesc& desc) {
     if (!desc.vertexShader || !desc.fragmentShader ||
         (desc.colorFormats.empty() && desc.depthFormat == PixelFormat::Undefined) ||
         std::ranges::any_of(desc.colorFormats,
@@ -634,11 +634,11 @@ GraphicsPipelineHandle VulkanDevice::createGraphicsPipeline(const GraphicsPipeli
                                                  pipelineCache_)});
 }
 
-void VulkanDevice::destroyGraphicsPipeline(GraphicsPipelineHandle handle) {
+void VulkanDevice::destroyGraphicsPipeline(RID handle) {
     (void)pipelines_.release(handle);
 }
 
-BindGroupLayoutHandle VulkanDevice::createBindGroupLayout(const BindGroupLayoutDesc& desc) {
+RID VulkanDevice::createBindGroupLayout(const BindGroupLayoutDesc& desc) {
     if (desc.entries.empty()) {
         Log::fatal("VulkanDevice", "Cannot create an empty bind group layout");
     }
@@ -655,14 +655,14 @@ BindGroupLayoutHandle VulkanDevice::createBindGroupLayout(const BindGroupLayoutD
         BindGroupLayoutResource{std::make_unique<VulkanDescriptorSetLayout>(device_, bindings)});
 }
 
-void VulkanDevice::destroyBindGroupLayout(BindGroupLayoutHandle handle) {
+void VulkanDevice::destroyBindGroupLayout(RID handle) {
     // Pipelines must be destroyed before the layouts they reference; drop the
     // cached pipeline layouts that still point at this descriptor set layout.
     destroyPipelineLayoutsReferencing(handle);
     (void)bindGroupLayouts_.release(handle);
 }
 
-BindGroupHandle VulkanDevice::createBindGroup(const BindGroupDesc& desc) {
+RID VulkanDevice::createBindGroup(const BindGroupDesc& desc) {
     const VkDescriptorSet descriptor =
         descriptorAllocator_->allocate(resolveBindGroupLayout(desc.layout));
     std::vector<VkDescriptorBufferInfo> bufferInfos;
@@ -699,7 +699,7 @@ BindGroupHandle VulkanDevice::createBindGroup(const BindGroupDesc& desc) {
     return bindGroups_.insert(BindGroupResource{descriptor});
 }
 
-void VulkanDevice::destroyBindGroup(BindGroupHandle handle) {
+void VulkanDevice::destroyBindGroup(RID handle) {
     BindGroupResource* resource = bindGroups_.find(handle);
     if (!resource)
         return;
@@ -750,13 +750,13 @@ void VulkanDevice::waitIdle() {
     }
 }
 
-BufferHandle VulkanDevice::acquireStagingBuffer(std::uint64_t size) {
+RID VulkanDevice::acquireStagingBuffer(std::uint64_t size) {
     if (size == 0) {
         Log::fatal("VulkanDevice", "Staging buffer size must be positive");
     }
     const BufferDesc desc{
         size, BufferUsage::TransferSource, MemoryUsage::Upload, "command buffer staging"};
-    const BufferHandle handle = createBuffer(desc);
+    const RID handle = createBuffer(desc);
     pendingStagingBuffers_.push_back(StagingBuffer{handle, VK_NULL_HANDLE});
     return handle;
 }
@@ -787,15 +787,15 @@ void VulkanDevice::retireStagingBuffers(std::vector<StagingBuffer>& pending) {
     }
 }
 
-VulkanBuffer& VulkanDevice::requireBuffer(BufferHandle handle) {
+VulkanBuffer& VulkanDevice::requireBuffer(RID handle) {
     return const_cast<VulkanBuffer&>(std::as_const(*this).requireBuffer(handle));
 }
 
-VulkanDevice::BufferResource& VulkanDevice::requireBufferResource(BufferHandle handle) {
+VulkanDevice::BufferResource& VulkanDevice::requireBufferResource(RID handle) {
     return const_cast<BufferResource&>(std::as_const(*this).requireBufferResource(handle));
 }
 
-const VulkanDevice::BufferResource& VulkanDevice::requireBufferResource(BufferHandle handle) const {
+const VulkanDevice::BufferResource& VulkanDevice::requireBufferResource(RID handle) const {
     const BufferResource* resource = buffers_.find(handle);
     if (!resource) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI buffer handle");
@@ -803,37 +803,37 @@ const VulkanDevice::BufferResource& VulkanDevice::requireBufferResource(BufferHa
     return *resource;
 }
 
-const VulkanBuffer& VulkanDevice::requireBuffer(BufferHandle handle) const {
+const VulkanBuffer& VulkanDevice::requireBuffer(RID handle) const {
     return *requireBufferResource(handle).resource;
 }
 
-VkBuffer VulkanDevice::resolveBuffer(BufferHandle handle) const {
+VkBuffer VulkanDevice::resolveBuffer(RID handle) const {
     return requireBuffer(handle).handle();
 }
 
-IRHITexture* VulkanDevice::resolveTextureResource(TextureHandle handle) {
+IRHITexture* VulkanDevice::resolveTextureResource(RID handle) {
     return textures_.find(handle);
 }
 
-const IRHITexture* VulkanDevice::resolveTextureResource(TextureHandle handle) const {
+const IRHITexture* VulkanDevice::resolveTextureResource(RID handle) const {
     return textures_.find(handle);
 }
 
-VkImage VulkanDevice::resolveTexture(TextureHandle handle) const {
+VkImage VulkanDevice::resolveTexture(RID handle) const {
     const VulkanTexture* resource = textures_.find(handle);
     if (!resource)
         Log::fatal("VulkanDevice", "Invalid or stale RHI texture handle");
     return resource->handle();
 }
 
-PixelFormat VulkanDevice::textureFormat(TextureHandle handle) const {
+PixelFormat VulkanDevice::textureFormat(RID handle) const {
     const VulkanTexture* resource = textures_.find(handle);
     if (!resource)
         Log::fatal("VulkanDevice", "RHI texture handle has no tracked format");
     return resource->format();
 }
 
-VkImageView VulkanDevice::resolveTextureView(TextureViewHandle handle) const {
+VkImageView VulkanDevice::resolveTextureView(RID handle) const {
     const VulkanTextureView* resource = textureViews_.find(handle);
     if (!resource) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI texture view handle");
@@ -841,7 +841,7 @@ VkImageView VulkanDevice::resolveTextureView(TextureViewHandle handle) const {
     return resource->handle();
 }
 
-VkSampler VulkanDevice::resolveSampler(SamplerHandle handle) const {
+VkSampler VulkanDevice::resolveSampler(RID handle) const {
     const VulkanSampler* resource = samplers_.find(handle);
     if (!resource) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI sampler handle");
@@ -849,7 +849,7 @@ VkSampler VulkanDevice::resolveSampler(SamplerHandle handle) const {
     return resource->handle();
 }
 
-VkShaderModule VulkanDevice::resolveShader(ShaderHandle handle) const {
+VkShaderModule VulkanDevice::resolveShader(RID handle) const {
     const ShaderResource* resource = shaders_.find(handle);
     if (!resource) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI shader handle");
@@ -857,7 +857,7 @@ VkShaderModule VulkanDevice::resolveShader(ShaderHandle handle) const {
     return resource->resource->handle();
 }
 
-VkDescriptorSetLayout VulkanDevice::resolveBindGroupLayout(BindGroupLayoutHandle handle) const {
+VkDescriptorSetLayout VulkanDevice::resolveBindGroupLayout(RID handle) const {
     const BindGroupLayoutResource* resource = bindGroupLayouts_.find(handle);
     if (!resource) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI bind group layout handle");
@@ -865,7 +865,7 @@ VkDescriptorSetLayout VulkanDevice::resolveBindGroupLayout(BindGroupLayoutHandle
     return resource->resource->handle();
 }
 
-ResolvedPipeline VulkanDevice::resolvePipeline(GraphicsPipelineHandle handle) const {
+ResolvedPipeline VulkanDevice::resolvePipeline(RID handle) const {
     const PipelineResource* resource = pipelines_.find(handle);
     if (!resource) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI graphics pipeline handle");
@@ -873,7 +873,7 @@ ResolvedPipeline VulkanDevice::resolvePipeline(GraphicsPipelineHandle handle) co
     return {resource->resource->handle(), resource->resource->layout()};
 }
 
-VkDescriptorSet VulkanDevice::resolveBindGroup(BindGroupHandle handle) const {
+VkDescriptorSet VulkanDevice::resolveBindGroup(RID handle) const {
     const BindGroupResource* resource = bindGroups_.find(handle);
     if (!resource) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI bind group handle");
@@ -881,17 +881,17 @@ VkDescriptorSet VulkanDevice::resolveBindGroup(BindGroupHandle handle) const {
     return resource->resource;
 }
 
-TextureHandle VulkanDevice::registerExternalTexture(VkImage image,
+RID VulkanDevice::registerExternalTexture(VkImage image,
                                                     const TextureDesc& desc,
                                                     VkFormat nativeFormat) {
     return textures_.emplace(*this, image, desc, nativeFormat);
 }
 
-void VulkanDevice::unregisterExternalTexture(TextureHandle handle) {
+void VulkanDevice::unregisterExternalTexture(RID handle) {
     destroyTexture(handle);
 }
 
-TextureViewHandle VulkanDevice::registerExternalTextureView(TextureHandle textureHandle,
+RID VulkanDevice::registerExternalTextureView(RID textureHandle,
                                                             VkImageView view,
                                                             const TextureViewDesc& desc) {
     VulkanTexture* texture = textures_.find(textureHandle);
@@ -900,14 +900,14 @@ TextureViewHandle VulkanDevice::registerExternalTextureView(TextureHandle textur
     TextureViewDesc normalized = desc;
     if (normalized.format == PixelFormat::Undefined)
         normalized.format = texture->format();
-    const TextureViewHandle handle =
+    const RID handle =
         textureViews_.insert(VulkanTextureView{device_, *texture, view, normalized});
     texture->cacheView(normalized, handle);
     texture->setDefaultView(handle);
     return handle;
 }
 
-void VulkanDevice::unregisterExternalTextureView(TextureViewHandle handle) {
+void VulkanDevice::unregisterExternalTextureView(RID handle) {
     destroyTextureView(handle);
 }
 
@@ -971,7 +971,7 @@ VkPipelineLayout VulkanDevice::acquirePipelineLayout(const PipelineLayoutKey& ke
         return found->second;
     std::vector<VkDescriptorSetLayout> layouts;
     layouts.reserve(key.size());
-    for (BindGroupLayoutHandle handle : key)
+    for (RID handle : key)
         layouts.push_back(resolveBindGroupLayout(handle));
     VkPipelineLayoutCreateInfo info{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     info.setLayoutCount = static_cast<std::uint32_t>(layouts.size());
@@ -984,7 +984,7 @@ VkPipelineLayout VulkanDevice::acquirePipelineLayout(const PipelineLayoutKey& ke
     return layout;
 }
 
-void VulkanDevice::destroyPipelineLayoutsReferencing(BindGroupLayoutHandle handle) {
+void VulkanDevice::destroyPipelineLayoutsReferencing(RID handle) {
     for (auto entry = pipelineLayouts_.begin(); entry != pipelineLayouts_.end();) {
         if (std::find(entry->first.begin(), entry->first.end(), handle) != entry->first.end()) {
             vkDestroyPipelineLayout(device_, entry->second, nullptr);

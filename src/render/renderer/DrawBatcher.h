@@ -12,11 +12,11 @@ namespace engine {
 // material bind group, vertex/index buffers and index range collapsed into a
 // single drawIndexed invocation.
 struct DrawBatch {
-    rhi::GraphicsPipelineHandle pipeline;
-    rhi::BindGroupHandle materialBindGroup;
+    rhi::RID pipeline;
+    rhi::RID materialBindGroup;
     const ShaderPass* shaderPass{};
     std::vector<DrawItem::VertexBuffer> vertexBuffers;
-    rhi::BufferHandle indexBuffer;
+    rhi::RID indexBuffer;
     rhi::IndexFormat indexFormat{rhi::IndexFormat::UInt32};
     std::uint32_t indexCount{};
     std::uint32_t firstIndex{};

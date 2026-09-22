@@ -15,7 +15,7 @@ bool MeshGpuFactory::create(const MeshGpuCreateInfo& request, MeshGpuResource& d
     MeshGpuResource uploaded;
     uploaded.drawInfo.vertexBuffers.reserve(mesh.data().vertexStreams.size());
     for (const VertexStream& stream : mesh.data().vertexStreams) {
-        const rhi::BufferHandle buffer = device_.createBuffer({
+        const rhi::RID buffer = device_.createBuffer({
             .size = stream.bytes.size(),
             .usage = rhi::BufferUsage::Vertex | rhi::BufferUsage::TransferDestination,
             .memoryUsage = rhi::MemoryUsage::DeviceLocal,

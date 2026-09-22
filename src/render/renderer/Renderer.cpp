@@ -73,7 +73,7 @@ void Renderer::renderFrame(const RenderScene& scene) {
         // still in the undefined layout. Presenting it unmodified trips the validation
         // layer, so clear it into PRESENT_SRC ourselves.
         rhi::ICommandBuffer& commandBuffer = swapchain_->commandBuffer();
-        const rhi::TextureHandle texture = swapchain_->currentTexture();
+        const rhi::RID texture = swapchain_->currentTexture();
         const rhi::TextureBarrier toAttachment{
             .texture = texture,
             .before = rhi::ResourceState::Undefined,

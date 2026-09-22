@@ -53,12 +53,12 @@ public:
     virtual void setColorWriteMask(ColorWriteMask mask) = 0;
     virtual void setPrimitiveTopology(PrimitiveTopology topology) = 0;
     virtual void setFillMode(FillMode mode) = 0;
-    virtual void bindPipeline(GraphicsPipelineHandle pipeline) = 0;
+    virtual void bindPipeline(RID pipeline) = 0;
     virtual void
-    bindVertexBuffer(std::uint32_t slot, BufferHandle buffer, std::uint64_t offset = 0) = 0;
-    virtual void bindIndexBuffer(BufferHandle buffer, std::uint64_t offset, IndexFormat format) = 0;
+    bindVertexBuffer(std::uint32_t slot, RID buffer, std::uint64_t offset = 0) = 0;
+    virtual void bindIndexBuffer(RID buffer, std::uint64_t offset, IndexFormat format) = 0;
     virtual void bindGroup(std::uint32_t set,
-                           BindGroupHandle group,
+                           RID group,
                            std::span<const std::uint32_t> dynamicOffsets = {}) = 0;
     virtual void draw(const DrawArguments& arguments) = 0;
     virtual void drawIndexed(const DrawIndexedArguments& arguments) = 0;

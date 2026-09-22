@@ -24,8 +24,8 @@ public:
     void shutdown();
 
     // Binds the frame's shadow map view to scene binding 3; rebuilds only on view change.
-    void bindShadowMap(std::uint32_t frameIndex, rhi::TextureViewHandle view);
-    [[nodiscard]] rhi::BindGroupHandle sceneBindGroup(std::uint32_t frameIndex) const;
+    void bindShadowMap(std::uint32_t frameIndex, rhi::RID view);
+    [[nodiscard]] rhi::RID sceneBindGroup(std::uint32_t frameIndex) const;
 
     // Per-frame instance table management. Batches draw multiple instances per
     // drawIndexed call; the table maps each instance slot to an object row.
@@ -37,17 +37,17 @@ public:
                               std::uint32_t baseSlot,
                               std::span<const std::uint32_t> objectRows);
 
-    [[nodiscard]] rhi::BindGroupLayoutHandle sceneLayout() const { return sceneLayout_; }
-    [[nodiscard]] rhi::BindGroupLayoutHandle materialLayout() const { return materialLayout_; }
+    [[nodiscard]] rhi::RID sceneLayout() const { return sceneLayout_; }
+    [[nodiscard]] rhi::RID materialLayout() const { return materialLayout_; }
     [[nodiscard]] bool initialized() const { return device_ != nullptr; }
 
 private:
     struct FrameResources {
-        rhi::BufferHandle sceneBuffer;
-        rhi::BufferHandle objectBuffer;
-        rhi::BufferHandle instanceTable;
-        rhi::BindGroupHandle sceneBindGroup;
-        rhi::TextureViewHandle shadowView;
+        rhi::RID sceneBuffer;
+        rhi::RID objectBuffer;
+        rhi::RID instanceTable;
+        rhi::RID sceneBindGroup;
+        rhi::RID shadowView;
         std::uint32_t instancesUsed{};
     };
 
@@ -55,11 +55,11 @@ private:
     FrameGpuManager() = default;
 
     rhi::IDevice* device_{};
-    rhi::BindGroupLayoutHandle sceneLayout_;
-    rhi::BindGroupLayoutHandle materialLayout_;
-    rhi::SamplerHandle shadowSampler_;
-    rhi::TextureHandle placeholderTexture_;
-    rhi::TextureViewHandle placeholderView_;
+    rhi::RID sceneLayout_;
+    rhi::RID materialLayout_;
+    rhi::RID shadowSampler_;
+    rhi::RID placeholderTexture_;
+    rhi::RID placeholderView_;
     std::array<FrameResources, kFramesInFlight> frames_{};
 };
 

@@ -191,8 +191,8 @@ TEST_F(ImGuiRendererTest, GeometryFontsAndColorFormats) {
                 FAIL() << "clip rects were not clamped to the framebuffer";
             }
         }
-        for (const rhi::BindGroupHandle& group : encoder.boundGroups) {
-            if (group.index != device.bindGroups || group.generation != 1)
+        for (const rhi::RID& group : encoder.boundGroups) {
+            if (group.index() != device.bindGroups || group.generation() != 1)
                 FAIL() << "draws must sample the bind group registered for the atlas";
         }
 
@@ -246,7 +246,7 @@ TEST_F(ImGuiRendererTest, SceneBindingsAreCachedPerAcquiredFrameAndReleased) {
     ASSERT_TRUE(renderer.setSceneTexture(0, {40, 2})); // same index, new generation
     EXPECT_EQ(device.bindGroups, 4U);
     EXPECT_EQ(device.destroyedBindGroups, 1);
-    EXPECT_EQ(device.bindGroupEntries[0].textureView.generation, 2U);
+    EXPECT_EQ(device.bindGroupEntries[0].textureView.generation(), 2U);
     EXPECT_FALSE(renderer.setSceneTexture(FrameGpuManager::kFramesInFlight, {42, 1}));
     renderer.shutdown();
     EXPECT_EQ(device.destroyedBindGroups, 4);
@@ -270,11 +270,11 @@ TEST_F(ImGuiRendererTest, LogicalSceneImageUsesTheAcquiredSlotAndSkipsMissingBin
     MockEncoder slot1;
     renderer.render(slot1, imageFrame(), 1);
     ASSERT_EQ(slot1.boundGroups.size(), 1U);
-    EXPECT_EQ(slot1.boundGroups[0].index, 3U);
+    EXPECT_EQ(slot1.boundGroups[0].index(), 3U);
     MockEncoder slot0;
     renderer.render(slot0, imageFrame(), 0);
     ASSERT_EQ(slot0.boundGroups.size(), 1U);
-    EXPECT_EQ(slot0.boundGroups[0].index, 2U);
+    EXPECT_EQ(slot0.boundGroups[0].index(), 2U);
     EXPECT_FALSE(renderer.setSceneTexture(0, {}));
     MockEncoder missing;
     renderer.render(missing, imageFrame(), 0);

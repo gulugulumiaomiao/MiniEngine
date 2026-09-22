@@ -15,8 +15,8 @@ namespace engine {
 class Scene;
 
 struct SceneInstantiationContext {
-    std::function<MeshHandle(const VirtualPath&)> loadMesh;
-    std::function<MaterialHandle(const VirtualPath&)> loadMaterial;
+    std::function<RID(const VirtualPath&)> loadMesh;
+    std::function<RID(const VirtualPath&)> loadMaterial;
 };
 
 class SceneAsset final : public Asset {

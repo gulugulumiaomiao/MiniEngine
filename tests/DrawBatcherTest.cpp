@@ -15,9 +15,9 @@ engine::DrawItem makeItem(std::uint32_t pipelineIndex,
                           std::uint32_t indexBufferIndex = 1,
                           engine::rhi::IndexFormat indexFormat = engine::rhi::IndexFormat::UInt32) {
     engine::DrawItem item;
-    item.pipeline = engine::rhi::GraphicsPipelineHandle{pipelineIndex, 1};
-    item.materialBindGroup = engine::rhi::BindGroupHandle{materialBindGroupIndex, 1};
-    item.indexBuffer = engine::rhi::BufferHandle{indexBufferIndex, 1};
+    item.pipeline = engine::rhi::RID{pipelineIndex, 1};
+    item.materialBindGroup = engine::rhi::RID{materialBindGroupIndex, 1};
+    item.indexBuffer = engine::rhi::RID{indexBufferIndex, 1};
     item.indexFormat = indexFormat;
     item.arguments = {.indexCount = indexCount,
                       .instanceCount = 1,
@@ -95,15 +95,15 @@ int main() {
             makeItem(1, 1, 60, 0, 0, 0),
             makeItem(1, 1, 60, 0, 0, 1, /*indexBufferIndex=*/2), // index buffer change
         };
-        items[1].vertexBuffers.push_back({0, rhi::BufferHandle{5, 1}});
+        items[1].vertexBuffers.push_back({0, rhi::RID{5, 1}});
 
         std::vector<DrawItem> formatChange{
             makeItem(1, 1, 60, 0, 0, 0),
             makeItem(1, 1, 60, 0, 0, 1, 1, engine::rhi::IndexFormat::UInt16),
         };
-        formatChange[0].vertexBuffers.push_back({0, rhi::BufferHandle{5, 1}});
-        formatChange[1].vertexBuffers.push_back({0, rhi::BufferHandle{5, 1}});
-        formatChange[1].vertexBuffers[0].buffer = rhi::BufferHandle{9, 1}; // VB change
+        formatChange[0].vertexBuffers.push_back({0, rhi::RID{5, 1}});
+        formatChange[1].vertexBuffers.push_back({0, rhi::RID{5, 1}});
+        formatChange[1].vertexBuffers[0].buffer = rhi::RID{9, 1}; // VB change
 
         const BatchedDrawList batchedA = batcher.build(items);
         assert(batchedA.batches.size() == 2); // size mismatch + index buffer mismatch

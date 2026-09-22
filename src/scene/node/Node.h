@@ -65,19 +65,19 @@ public:
     Node& operator=(Node&&) noexcept = default;
     ~Node() = default;
 
-    [[nodiscard]] NodeHandle handle() const { return handle_; }
+    [[nodiscard]] RID handle() const { return handle_; }
     [[nodiscard]] Scene& scene() { return *scene_; }
     [[nodiscard]] const Scene& scene() const { return *scene_; }
     [[nodiscard]] std::string_view name() const { return name_; }
     void setName(std::string name) { name_ = std::move(name); }
 
-    [[nodiscard]] NodeHandle parent() const { return parent_; }
-    [[nodiscard]] const std::vector<NodeHandle>& children() const { return children_; }
+    [[nodiscard]] RID parent() const { return parent_; }
+    [[nodiscard]] const std::vector<RID>& children() const { return children_; }
 
     [[nodiscard]] bool activeSelf() const { return activeSelf_; }
     [[nodiscard]] bool activeInHierarchy() const { return activeInHierarchy_; }
     void setActive(bool active);
-    [[nodiscard]] bool setParent(NodeHandle parent = {});
+    [[nodiscard]] bool setParent(RID parent = {});
     [[nodiscard]] bool setParent(Node& parent);
     void markTransformDirty();
 
@@ -134,18 +134,18 @@ private:
 
     explicit Node(Scene& scene, std::string name) : scene_(&scene), name_(std::move(name)) {}
 
-    void initialize(NodeHandle handle);
+    void initialize(RID handle);
     void detachComponents();
     void refreshActiveSubtree(bool parentActive);
     void updateComponentsSubtree(float deltaTime);
     void updateTransformSubtree(const math::Mat44& parentWorld, bool parentChanged);
-    [[nodiscard]] bool wouldCreateCycle(NodeHandle parent) const;
+    [[nodiscard]] bool wouldCreateCycle(RID parent) const;
 
     Scene* scene_{};
-    NodeHandle handle_;
+    RID handle_;
     std::string name_;
-    NodeHandle parent_;
-    std::vector<NodeHandle> children_;
+    RID parent_;
+    std::vector<RID> children_;
     std::vector<std::unique_ptr<Component>> components_;
     TransformComponent* transform_{};
     bool activeSelf_{true};

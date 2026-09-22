@@ -171,14 +171,14 @@ void VulkanSwapchain::destroy() {
         vkDestroySemaphore(device(), semaphore, nullptr);
     }
     renderFinished_.clear();
-    for (TextureViewHandle handle : textureViewHandles_) {
+    for (RID handle : textureViewHandles_) {
         device_.unregisterExternalTextureView(handle);
     }
     textureViewHandles_.clear();
     for (VkImageView view : imageViews_)
         vkDestroyImageView(device(), view, nullptr);
     imageViews_.clear();
-    for (TextureHandle handle : textureHandles_) {
+    for (RID handle : textureHandles_) {
         device_.unregisterExternalTexture(handle);
     }
     textureHandles_.clear();
@@ -295,10 +295,10 @@ ICommandBuffer& VulkanSwapchain::commandBuffer() {
     return *commandBuffer_;
 }
 
-TextureHandle VulkanSwapchain::currentTexture() const {
+RID VulkanSwapchain::currentTexture() const {
     return textureHandles_[imageIndex_];
 }
-TextureViewHandle VulkanSwapchain::currentTextureView() const {
+RID VulkanSwapchain::currentTextureView() const {
     return textureViewHandles_[imageIndex_];
 }
 ResourceState VulkanSwapchain::currentTextureState() const {

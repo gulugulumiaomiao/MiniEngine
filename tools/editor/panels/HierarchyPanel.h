@@ -26,15 +26,15 @@ public:
     void syncDocument();
 
     // 单选兼容视图：空集返回无效句柄，否则返回 primary（首个选中项）。
-    [[nodiscard]] NodeHandle selection() const {
-        return selection_.empty() ? NodeHandle{} : selection_.primary();
+    [[nodiscard]] RID selection() const {
+        return selection_.empty() ? RID{} : selection_.primary();
     }
-    [[nodiscard]] const SelectionSet<NodeHandle>& selectionSet() const { return selection_; }
+    [[nodiscard]] const SelectionSet<RID>& selectionSet() const { return selection_; }
     // 用户指向性选择操作(左/右键点击、点空白取消、创建与拖动后的聚焦)的计数,
     // 选择值是否变化、是否重复点击同一节点都推进。EditorApplication 靠它仲裁
     // Inspector 的"最后交互优先";代码驱动的清空与失效清理不计入。
     [[nodiscard]] std::uint64_t selectionClickStamp() const { return selectionClickStamp_; }
-    void select(NodeHandle handle) {
+    void select(RID handle) {
         if (handle)
             selection_.select(handle);
         else
@@ -48,36 +48,36 @@ private:
         Action action;
         std::uint64_t revision;
         // Delete/SetActive 作用于整个集合；Move 只使用首个元素。
-        std::vector<NodeHandle> nodes;
-        NodeHandle parent{};
+        std::vector<RID> nodes;
+        RID parent{};
         std::size_t index{};
         bool active{};
     };
 
-    void drawNode(NodeHandle handle);
-    void drawContextMenu(NodeHandle handle);
-    Drop drawDropTarget(NodeHandle handle, const ImVec2& min, const ImVec2& max, bool rootTarget);
-    void drawRename(NodeHandle handle);
-    void beginRename(NodeHandle handle);
-    void expandAncestors(NodeHandle handle);
+    void drawNode(RID handle);
+    void drawContextMenu(RID handle);
+    Drop drawDropTarget(RID handle, const ImVec2& min, const ImVec2& max, bool rootTarget);
+    void drawRename(RID handle);
+    void beginRename(RID handle);
+    void expandAncestors(RID handle);
     void applyRequest();
-    void applyDelete(const std::vector<NodeHandle>& nodes);
-    void applySetActive(const std::vector<NodeHandle>& nodes, bool active);
+    void applyDelete(const std::vector<RID>& nodes);
+    void applySetActive(const std::vector<RID>& nodes, bool active);
 
     SceneDocument& document_;
     std::uint64_t revision_{};
-    SelectionSet<NodeHandle> selection_;
+    SelectionSet<RID> selection_;
     std::uint64_t selectionClickStamp_{};
     // 按下节点行时暂存的潜在拖动组；拖动源激活时整组随行。
-    SelectionSet<NodeHandle> dragStartSelection_;
+    SelectionSet<RID> dragStartSelection_;
     // 本帧可见行顺序，供 Shift 范围选择使用。
-    std::vector<NodeHandle> visibleNodes_;
-    NodeHandle renameTarget_;
+    std::vector<RID> visibleNodes_;
+    RID renameTarget_;
     std::vector<char> renameBuffer_;
     bool focusRename_{};
     std::optional<Request> pending_;
-    std::vector<NodeHandle> expand_;
-    NodeHandle hoverTarget_{};
+    std::vector<RID> expand_;
+    RID hoverTarget_{};
     double hoverSince_{};
     bool hoverSeen_{};
     std::string statusMessage_;

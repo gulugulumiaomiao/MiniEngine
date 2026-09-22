@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/base/Handle.h"
+#include "core/base/RID.h"
 #include "core/base/KeyedHandleRegistry.h"
 #include "core/math/hash.h"
 #include "render/shader/Shader.h"
@@ -26,9 +26,6 @@ using ShaderProgramLayoutId = ShaderHash;
 
 enum class ShaderCompileMode { DevelopmentRuntime, OfflineTool, PackagedRuntime };
 
-struct CompiledShaderHandleTag;
-using CompiledShaderHandle = Handle<CompiledShaderHandleTag>;
-
 struct CompiledShader {
     CompiledShaderId id{};
     ShaderStage stage{ShaderStage::Vertex};
@@ -45,14 +42,11 @@ struct ShaderProgramLayout {
     std::vector<ShaderStageVariable> fragmentOutputs;
 };
 
-struct ShaderProgramHandleTag;
-using ShaderProgramHandle = Handle<ShaderProgramHandleTag>;
-
 struct ShaderProgram {
     ShaderProgramId id{};
     ShaderVariantKey variant;
-    CompiledShaderHandle vertex;
-    CompiledShaderHandle fragment;
+    RID vertex;
+    RID fragment;
     CompiledShaderId vertexId{};
     CompiledShaderId fragmentId{};
     ShaderProgramLayout layout;
@@ -69,10 +63,10 @@ struct ShaderCompilePipelineConfig {
 class ShaderCompilePipeline final {
 public:
     explicit ShaderCompilePipeline(ShaderCompilePipelineConfig config = {});
-    [[nodiscard]] ShaderProgramHandle
+    [[nodiscard]] RID
     getOrCreate(const Shader& shader, const ShaderPass& pass, const ShaderVariantKey& variant = {});
-    [[nodiscard]] const ShaderProgram& resolve(ShaderProgramHandle handle) const;
-    [[nodiscard]] const CompiledShader& resolve(CompiledShaderHandle handle) const;
+    [[nodiscard]] const ShaderProgram& resolveProgram(RID handle) const;
+    [[nodiscard]] const CompiledShader& resolveCompiled(RID handle) const;
     [[nodiscard]] std::vector<CompiledShaderId> invalidate(const VirtualPath& changedFile);
     [[nodiscard]] std::vector<CompiledShaderId> invalidateChanged();
     void clear();
@@ -83,11 +77,11 @@ private:
         std::string source;
     };
     class CompiledShaderCache final
-        : public KeyedHandleRegistry<CompiledShader, CompiledShaderHandle, CompiledShaderId> {
+        : public KeyedHandleRegistry<CompiledShader, RID, CompiledShaderId> {
     public:
-        [[nodiscard]] std::optional<CompiledShaderHandle> findPath(ShaderHash pathKey) const;
-        void rememberPath(ShaderHash pathKey, CompiledShaderHandle handle);
-        [[nodiscard]] const CompiledShader& resolve(CompiledShaderHandle handle) const;
+        [[nodiscard]] std::optional<RID> findPath(ShaderHash pathKey) const;
+        void rememberPath(ShaderHash pathKey, RID handle);
+        [[nodiscard]] const CompiledShader& resolve(RID handle) const;
         [[nodiscard]] std::vector<CompiledShaderId>
         invalidatePaths(std::span<const VirtualPath> paths);
         void clear() override;
@@ -100,12 +94,12 @@ private:
             return shader.id;
         }
 
-        std::unordered_map<ShaderHash, CompiledShaderHandle> pathEntries_;
+        std::unordered_map<ShaderHash, RID> pathEntries_;
     };
     class ShaderProgramCache final
-        : public KeyedHandleRegistry<ShaderProgram, ShaderProgramHandle, ShaderProgramId> {
+        : public KeyedHandleRegistry<ShaderProgram, RID, ShaderProgramId> {
     public:
-        [[nodiscard]] const ShaderProgram& resolve(ShaderProgramHandle handle) const;
+        [[nodiscard]] const ShaderProgram& resolve(RID handle) const;
         void invalidate(std::span<const CompiledShaderId> shaders);
         void clear() override;
 
@@ -139,16 +133,16 @@ private:
                                                       const SpirvReflection& fragment,
                                                       const VirtualPath& vertexPath,
                                                       const VirtualPath& fragmentPath);
-    [[nodiscard]] CompiledShaderHandle compileStage(const Shader& shader,
+    [[nodiscard]] RID compileStage(const Shader& shader,
                                                     const ShaderPass& pass,
                                                     ShaderStage stage,
                                                     const ShaderVariantKey& variant);
-    [[nodiscard]] CompiledShaderHandle loadCompiledShader(const VirtualPath& binaryPath,
+    [[nodiscard]] RID loadCompiledShader(const VirtualPath& binaryPath,
                                                           ShaderStage stage,
                                                           std::string_view entryPoint,
                                                           const ShaderVariantKey& variant,
                                                           std::span<const std::byte> bytecode);
-    [[nodiscard]] CompiledShaderHandle loadPackagedShader(const VirtualPath& binaryPath,
+    [[nodiscard]] RID loadPackagedShader(const VirtualPath& binaryPath,
                                                           ShaderStage stage,
                                                           std::string_view entryPoint,
                                                           const ShaderVariantKey& variant);

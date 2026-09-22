@@ -48,27 +48,27 @@ VulkanTexture::~VulkanTexture() {
         vmaDestroyImage(allocator_, image_, allocation_);
 }
 
-TextureViewHandle VulkanTexture::createView(const TextureViewDesc& desc) {
+RID VulkanTexture::createView(const TextureViewDesc& desc) {
     return device_->acquireTextureView(*this, desc);
 }
 
-TextureViewHandle VulkanTexture::findView(const TextureViewDesc& desc) const {
+RID VulkanTexture::findView(const TextureViewDesc& desc) const {
     const auto found = views_.find(desc);
-    return found == views_.end() ? TextureViewHandle{} : found->second;
+    return found == views_.end() ? RID{} : found->second;
 }
 
-void VulkanTexture::cacheView(const TextureViewDesc& desc, TextureViewHandle view) {
+void VulkanTexture::cacheView(const TextureViewDesc& desc, RID view) {
     views_.insert_or_assign(desc, view);
 }
 
-void VulkanTexture::removeView(TextureViewHandle view) {
+void VulkanTexture::removeView(RID view) {
     std::erase_if(views_, [view](const auto& entry) { return entry.second == view; });
     if (defaultView_ == view)
         defaultView_ = {};
 }
 
-std::vector<TextureViewHandle> VulkanTexture::viewHandles() const {
-    std::vector<TextureViewHandle> result;
+std::vector<RID> VulkanTexture::viewHandles() const {
+    std::vector<RID> result;
     result.reserve(views_.size());
     for (const auto& [desc, handle] : views_) {
         (void)desc;

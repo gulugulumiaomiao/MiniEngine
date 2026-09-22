@@ -17,7 +17,7 @@ struct MaterialGpuCreateInfo {
 class MaterialGpuFactory final
     : public IGpuResourceFactory<MaterialGpuCreateInfo, MaterialGpuResource> {
 public:
-    MaterialGpuFactory(rhi::IDevice& device, rhi::BindGroupLayoutHandle layout)
+    MaterialGpuFactory(rhi::IDevice& device, rhi::RID layout)
         : IGpuResourceFactory(device), layout_(layout) {}
 
     [[nodiscard]] bool create(const MaterialGpuCreateInfo& createInfo,
@@ -29,7 +29,7 @@ public:
     [[nodiscard]] bool updateUniforms(const Material& material, MaterialGpuResource& resource);
 
 private:
-    rhi::BindGroupLayoutHandle layout_;
+    rhi::RID layout_;
 };
 
 } // namespace engine

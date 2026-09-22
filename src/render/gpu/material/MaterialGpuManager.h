@@ -26,9 +26,9 @@ public:
     ~MaterialGpuManager();
 
     [[nodiscard]] bool initialize(rhi::IDevice& device,
-                                  rhi::BindGroupLayoutHandle materialLayout,
+                                  rhi::RID materialLayout,
                                   std::uint32_t frameCount);
-    [[nodiscard]] rhi::BindGroupHandle resolve(MaterialHandle handle);
+    [[nodiscard]] rhi::RID resolve(RID handle);
     void beginFrame(std::uint32_t frameIndex);
     void shutdown();
     [[nodiscard]] bool initialized() const { return factory_ != nullptr; }
@@ -37,7 +37,7 @@ private:
     friend class Singleton<MaterialGpuManager>;
     MaterialGpuManager();
 
-    [[nodiscard]] static std::uint64_t cacheKey(MaterialHandle handle);
+    [[nodiscard]] static std::uint64_t cacheKey(RID handle);
     // Resolves the material's texture properties into textureScratch_ and reports whether
     // every one of them is available.
     [[nodiscard]] bool collectTextureBindings(const Material& material);

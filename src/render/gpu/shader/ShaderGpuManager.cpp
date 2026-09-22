@@ -37,25 +37,25 @@ bool ShaderGpuManager::initialize(rhi::IDevice& device) {
     return true;
 }
 
-ShaderProgramHandle ShaderGpuManager::getOrCreateProgram(const Shader& shader,
+RID ShaderGpuManager::getOrCreateProgram(const Shader& shader,
                                                          const ShaderPass& pass,
                                                          const ShaderVariantKey& variant) {
     return initialized() ? compilePipeline_->getOrCreate(shader, pass, variant)
-                         : ShaderProgramHandle{};
+                         : RID{};
 }
 
-const ShaderProgram& ShaderGpuManager::resolveProgram(ShaderProgramHandle handle) const {
-    return compilePipeline_->resolve(handle);
+const ShaderProgram& ShaderGpuManager::resolveProgram(RID handle) const {
+    return compilePipeline_->resolveProgram(handle);
 }
 
-const CompiledShader& ShaderGpuManager::resolveCompiled(CompiledShaderHandle handle) const {
-    return compilePipeline_->resolve(handle);
+const CompiledShader& ShaderGpuManager::resolveCompiled(RID handle) const {
+    return compilePipeline_->resolveCompiled(handle);
 }
 
-rhi::ShaderHandle ShaderGpuManager::resolve(CompiledShaderHandle handle) {
+rhi::RID ShaderGpuManager::resolve(RID handle) {
     if (!initialized())
         return {};
-    const CompiledShader& shader = compilePipeline_->resolve(handle);
+    const CompiledShader& shader = compilePipeline_->resolveCompiled(handle);
     if (const ShaderModuleGpuResource* cached = cache_.find(shader.id))
         return cached->shader;
     ShaderModuleGpuResource created;

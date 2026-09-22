@@ -40,19 +40,19 @@ public:
     }
 
     [[nodiscard]] const Resource* find(HandleType handle) const {
-        if (handle.index >= slots_.size())
+        if (handle.index() >= slots_.size())
             return nullptr;
-        const Slot& slot = slots_[handle.index];
-        return slot.value && slot.generation == handle.generation ? &*slot.value : nullptr;
+        const Slot& slot = slots_[handle.index()];
+        return slot.value && slot.generation == handle.generation() ? &*slot.value : nullptr;
     }
 
     [[nodiscard]] bool release(HandleType handle) {
         if (!find(handle))
             return false;
-        Slot& slot = slots_[handle.index];
+        Slot& slot = slots_[handle.index()];
         slot.value.reset();
         incrementGeneration(slot);
-        freeList_.push_back(handle.index);
+        freeList_.push_back(handle.index());
         --activeCount_;
         return true;
     }

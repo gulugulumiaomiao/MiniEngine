@@ -230,12 +230,12 @@ int main() {
         .loadMesh =
             [&loadedMeshes](const VirtualPath& path) {
                 loadedMeshes.push_back(path);
-                return MeshHandle{7, 1};
+                return RID{7, 1};
             },
         .loadMaterial =
             [&loadedMaterials](const VirtualPath& path) {
                 loadedMaterials.push_back(path);
-                return MaterialHandle{9, 1};
+                return RID{9, 1};
             },
     };
     std::unique_ptr<Scene> runtime = decoded.instantiate(context);
@@ -249,8 +249,8 @@ int main() {
     if (!runtimeWorld || runtimeWorld->name() != "World" ||
         runtimeWorld->transform().localPosition() != math::Vec3{1.0F, 2.0F, 3.0F} ||
         !runtimeWorld->getComponent<MeshComponent>() ||
-        runtimeWorld->getComponent<MeshComponent>()->mesh() != MeshHandle{7, 1} ||
-        runtimeWorld->getComponent<MaterialComponent>()->material(0) != MaterialHandle{9, 1} ||
+        runtimeWorld->getComponent<MeshComponent>()->mesh() != RID{7, 1} ||
+        runtimeWorld->getComponent<MaterialComponent>()->material(0) != RID{9, 1} ||
         runtimeWorld->children().size() != 1) {
         return 13;
     }
@@ -259,7 +259,7 @@ int main() {
         return 14;
     }
     const Node* runtimePrimitive{};
-    for (NodeHandle child : runtime->root().children()) {
+    for (RID child : runtime->root().children()) {
         const Node* candidate = runtime->findNode(child);
         if (candidate && candidate->name() == "Runtime Sphere")
             runtimePrimitive = candidate;
@@ -270,7 +270,7 @@ int main() {
         !runtimePrimitive->getComponent<MeshComponent>()->mesh()) {
         return 17;
     }
-    const MeshHandle runtimePrimitiveHandle =
+    const RID runtimePrimitiveHandle =
         runtimePrimitive->getComponent<MeshComponent>()->mesh();
     runtime.reset();
     if (MESH_MANAGER.find(runtimePrimitiveHandle) || MESH_MANAGER.size() != 0)

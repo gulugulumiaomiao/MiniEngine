@@ -127,12 +127,12 @@ bool dragging() {
     CHECK(ui.document.dirty() && ui.panel.selection() == b);
     // A 已展开，C 位于第四行；插到 A 之前后根层顺序必须变为 C、A。
     ui.drag(ui.row(3), ui.row(1, 0.1F));
-    CHECK((scene.root().children() == std::vector<NodeHandle>{c, a}));
+    CHECK((scene.root().children() == std::vector<RID>{c, a}));
     ui.drag(ui.row(3), {100, 400});
     CHECK(scene.findNode(b)->parent() == root);
-    CHECK((scene.root().children() == std::vector<NodeHandle>{c, a, b}));
+    CHECK((scene.root().children() == std::vector<RID>{c, a, b}));
     ui.drag(ui.row(1), ui.row(3, 0.9F));
-    CHECK((scene.root().children() == std::vector<NodeHandle>{a, b, c}));
+    CHECK((scene.root().children() == std::vector<RID>{a, b, c}));
     // 拖入自己和后代都不得改变树。
     ui.drag(ui.row(2), ui.row(1));
     CHECK(scene.findNode(b)->parent() == a);
@@ -200,7 +200,7 @@ bool hoverAndScroll() {
         ui.frame();
     ui.button(0, false);
     ui.settle();
-    CHECK((scene.findNode(parent)->children() == std::vector<NodeHandle>{child, source}));
+    CHECK((scene.findNode(parent)->children() == std::vector<RID>{child, source}));
     ui.click(ui.row(2));
     CHECK(ui.panel.selection() == child);
     // 大树的滚动只跟随拖动方向，不需要离开 Hierarchy。
@@ -322,12 +322,12 @@ bool multiDrag() {
     ui.modClick(ImGuiKey_ModCtrl, ui.row(2));
     CHECK(ui.panel.selectionSet().size() == 2);
     ui.drag(ui.row(1), ui.row(4, 0.9F));
-    CHECK((scene.root().children() == std::vector<NodeHandle>{c, d, a, b}));
+    CHECK((scene.root().children() == std::vector<RID>{c, d, a, b}));
     CHECK(ui.panel.selectionSet().size() == 2 && ui.panel.selectionSet().contains(a));
     // 选择仍为 {A,B}，再拖 A 到 D 中央：整组成为 D 的子节点并保持相对顺序。
     ui.drag(ui.row(3), ui.row(2, 0.5F));
-    CHECK((scene.findNode(d)->children() == std::vector<NodeHandle>{a, b}));
-    CHECK((scene.root().children() == std::vector<NodeHandle>{c, d}));
+    CHECK((scene.findNode(d)->children() == std::vector<RID>{a, b}));
+    CHECK((scene.root().children() == std::vector<RID>{c, d}));
     // 点击箭头展开 D（会清掉选择），重新组选后拖回根层顶部：跨父级批量且世界位置不变。
     ui.click({15, ui.row(2).y});
     ui.click(ui.row(3));
@@ -335,14 +335,14 @@ bool multiDrag() {
     scene.findNode(b)->transform().setLocalPosition({3, 0, 0});
     const auto worldBefore = scene.findNode(b)->transform().worldPosition();
     ui.drag(ui.row(3), ui.row(1, 0.1F));
-    CHECK((scene.root().children() == std::vector<NodeHandle>{a, b, c, d}));
+    CHECK((scene.root().children() == std::vector<RID>{a, b, c, d}));
     CHECK(scene.findNode(d)->children().empty());
     CHECK(scene.findNode(b)->transform().worldPosition() == worldBefore);
     // 目标是拖动集合成员（Before B / Into B）时整组拒绝，树不变。
     ui.drag(ui.row(1), ui.row(2, 0.1F));
-    CHECK((scene.root().children() == std::vector<NodeHandle>{a, b, c, d}));
+    CHECK((scene.root().children() == std::vector<RID>{a, b, c, d}));
     ui.drag(ui.row(1), ui.row(2, 0.5F));
-    CHECK((scene.root().children() == std::vector<NodeHandle>{a, b, c, d}));
+    CHECK((scene.root().children() == std::vector<RID>{a, b, c, d}));
     // Shift 范围选择后从组内拖 B 到 D 之后：整组按可见顺序落在 D 后。
     // 与上一拖动起点同位置的快速单击会构成双击进入重命名（重命名框占据额外一行，
     // 后续行整体下移），先推进时间打破双击窗口。
@@ -351,12 +351,12 @@ bool multiDrag() {
     ui.modClick(ImGuiKey_ModShift, ui.row(3));
     CHECK(ui.panel.selectionSet().size() == 3);
     ui.drag(ui.row(2), ui.row(4, 0.9F));
-    CHECK((scene.root().children() == std::vector<NodeHandle>{d, a, b, c}));
+    CHECK((scene.root().children() == std::vector<RID>{d, a, b, c}));
     // 无修饰点击组外节点后拖动只携带该节点（单拖回归）。
     ui.click(ui.row(1));
     CHECK(ui.panel.selectionSet().size() == 1);
     ui.drag(ui.row(1), ui.row(3, 0.1F));
-    CHECK((scene.root().children() == std::vector<NodeHandle>{a, d, b, c}));
+    CHECK((scene.root().children() == std::vector<RID>{a, d, b, c}));
     CHECK(ui.panel.selectionSet().size() == 1 && ui.panel.selection() == d);
     return true;
 }

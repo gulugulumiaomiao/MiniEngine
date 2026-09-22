@@ -13,7 +13,7 @@ using namespace engine;
 // assert what the renderer asked the RHI for.
 class MockRhiTexture final : public rhi::IRHITexture {
 public:
-    MockRhiTexture(rhi::TextureDesc desc, rhi::TextureViewHandle defaultView)
+    MockRhiTexture(rhi::TextureDesc desc, rhi::RID defaultView)
         : desc_(std::move(desc)), defaultView_(defaultView) {}
 
     rhi::TextureType type() const override { return desc_.dimension; }
@@ -23,12 +23,12 @@ public:
     std::uint32_t depth() const override { return desc_.depth; }
     std::uint32_t arrayLayers() const override { return desc_.arrayLayers; }
     std::uint32_t mipCount() const override { return desc_.mipCount; }
-    rhi::TextureViewHandle defaultView() const override { return defaultView_; }
-    rhi::TextureViewHandle createView(const rhi::TextureViewDesc&) override { return defaultView_; }
+    rhi::RID defaultView() const override { return defaultView_; }
+    rhi::RID createView(const rhi::TextureViewDesc&) override { return defaultView_; }
 
 private:
     rhi::TextureDesc desc_;
-    rhi::TextureViewHandle defaultView_;
+    rhi::RID defaultView_;
 };
 
 class MockEncoder final : public rhi::ICommandBuffer {
@@ -54,19 +54,19 @@ public:
         primitiveTopologies.push_back(topology);
     }
     void setFillMode(rhi::FillMode mode) override { fillModes.push_back(mode); }
-    void bindPipeline(rhi::GraphicsPipelineHandle pipeline) override {
+    void bindPipeline(rhi::RID pipeline) override {
         boundPipelines.push_back(pipeline);
     }
-    void bindVertexBuffer(std::uint32_t, rhi::BufferHandle buffer, std::uint64_t) override {
+    void bindVertexBuffer(std::uint32_t, rhi::RID buffer, std::uint64_t) override {
         boundVertexBuffers.push_back(buffer);
     }
     void
-    bindIndexBuffer(rhi::BufferHandle buffer, std::uint64_t, rhi::IndexFormat format) override {
+    bindIndexBuffer(rhi::RID buffer, std::uint64_t, rhi::IndexFormat format) override {
         boundIndexBuffers.push_back(buffer);
         indexFormats.push_back(format);
     }
     void bindGroup(std::uint32_t set,
-                   rhi::BindGroupHandle group,
+                   rhi::RID group,
                    std::span<const std::uint32_t>) override {
         boundSets.push_back(set);
         boundGroups.push_back(group);
@@ -100,12 +100,12 @@ public:
     std::vector<rhi::ColorWriteMask> colorWriteMasks;
     std::vector<rhi::PrimitiveTopology> primitiveTopologies;
     std::vector<rhi::FillMode> fillModes;
-    std::vector<rhi::GraphicsPipelineHandle> boundPipelines;
-    std::vector<rhi::BufferHandle> boundVertexBuffers;
-    std::vector<rhi::BufferHandle> boundIndexBuffers;
+    std::vector<rhi::RID> boundPipelines;
+    std::vector<rhi::RID> boundVertexBuffers;
+    std::vector<rhi::RID> boundIndexBuffers;
     std::vector<rhi::IndexFormat> indexFormats;
     std::vector<std::uint32_t> boundSets;
-    std::vector<rhi::BindGroupHandle> boundGroups;
+    std::vector<rhi::RID> boundGroups;
     std::vector<rhi::DrawIndexedArguments> draws;
     std::vector<rhi::TextureBarrier> barriers;
     std::vector<rhi::RenderingInfo> renderings;
@@ -119,68 +119,68 @@ public:
 
 class MockDevice final : public rhi::IDevice {
 public:
-    rhi::BufferHandle createBuffer(const rhi::BufferDesc& desc) override {
+    rhi::RID createBuffer(const rhi::BufferDesc& desc) override {
         buffers.push_back(desc);
         return {static_cast<std::uint32_t>(buffers.size()), 1};
     }
-    void destroyBuffer(rhi::BufferHandle) override { ++destroyedBuffers; }
-    void uploadBuffer(rhi::BufferHandle, std::span<const std::byte> data, std::uint64_t) override {
+    void destroyBuffer(rhi::RID) override { ++destroyedBuffers; }
+    void uploadBuffer(rhi::RID, std::span<const std::byte> data, std::uint64_t) override {
         uploadedBytes.push_back(data.size_bytes());
     }
 
-    rhi::TextureHandle createTexture(const rhi::TextureDesc& desc) override {
+    rhi::RID createTexture(const rhi::TextureDesc& desc) override {
         textures.push_back(desc);
-        const rhi::TextureHandle handle{static_cast<std::uint32_t>(textures.size()), 1};
-        const rhi::TextureViewHandle defaultView{++views, 1};
+        const rhi::RID handle{static_cast<std::uint32_t>(textures.size()), 1};
+        const rhi::RID defaultView{++views, 1};
         textureResources.push_back(std::make_unique<MockRhiTexture>(desc, defaultView));
-        defaultTextureViews.emplace(handle.index, defaultView);
+        defaultTextureViews.emplace(handle.index(), defaultView);
         return handle;
     }
-    void destroyTexture(rhi::TextureHandle handle) override {
+    void destroyTexture(rhi::RID handle) override {
         ++destroyedTextures;
-        if (defaultTextureViews.erase(handle.index) > 0)
+        if (defaultTextureViews.erase(handle.index()) > 0)
             ++destroyedViews;
     }
-    void uploadTexture(rhi::TextureHandle, std::span<const rhi::TextureUploadRegion>) override {
+    void uploadTexture(rhi::RID, std::span<const rhi::TextureUploadRegion>) override {
         ++textureUploads;
     }
-    rhi::TextureViewHandle createTextureView(rhi::TextureHandle,
+    rhi::RID createTextureView(rhi::RID,
                                              const rhi::TextureViewDesc&) override {
         return {++views, 1};
     }
-    rhi::TextureViewHandle defaultTextureView(rhi::TextureHandle texture) const override {
-        const auto found = defaultTextureViews.find(texture.index);
-        return found == defaultTextureViews.end() ? rhi::TextureViewHandle{} : found->second;
+    rhi::RID defaultTextureView(rhi::RID texture) const override {
+        const auto found = defaultTextureViews.find(texture.index());
+        return found == defaultTextureViews.end() ? rhi::RID{} : found->second;
     }
-    void destroyTextureView(rhi::TextureViewHandle) override { ++destroyedViews; }
-    rhi::SamplerHandle createSampler(const rhi::SamplerDesc& desc) override {
+    void destroyTextureView(rhi::RID) override { ++destroyedViews; }
+    rhi::RID createSampler(const rhi::SamplerDesc& desc) override {
         samplers.push_back(desc);
         return {static_cast<std::uint32_t>(samplers.size()), 1};
     }
-    void destroySampler(rhi::SamplerHandle) override { ++destroyedSamplers; }
-    rhi::ShaderHandle createShader(const rhi::ShaderDesc& desc) override {
+    void destroySampler(rhi::RID) override { ++destroyedSamplers; }
+    rhi::RID createShader(const rhi::ShaderDesc& desc) override {
         shaders.push_back(desc.stage);
         shaderBytecode.emplace_back(desc.bytecode.begin(), desc.bytecode.end());
         return {static_cast<std::uint32_t>(shaders.size()), 1};
     }
-    void destroyShader(rhi::ShaderHandle) override { ++destroyedShaders; }
-    rhi::GraphicsPipelineHandle
+    void destroyShader(rhi::RID) override { ++destroyedShaders; }
+    rhi::RID
     createGraphicsPipeline(const rhi::GraphicsPipelineDesc& desc) override {
         pipelines.push_back(desc);
         return {static_cast<std::uint32_t>(pipelines.size()), 1};
     }
-    void destroyGraphicsPipeline(rhi::GraphicsPipelineHandle) override { ++destroyedPipelines; }
-    rhi::BindGroupLayoutHandle
+    void destroyGraphicsPipeline(rhi::RID) override { ++destroyedPipelines; }
+    rhi::RID
     createBindGroupLayout(const rhi::BindGroupLayoutDesc& desc) override {
         layoutEntries.assign(desc.entries.begin(), desc.entries.end());
         return {++layouts, 1};
     }
-    void destroyBindGroupLayout(rhi::BindGroupLayoutHandle) override { ++destroyedLayouts; }
-    rhi::BindGroupHandle createBindGroup(const rhi::BindGroupDesc& desc) override {
+    void destroyBindGroupLayout(rhi::RID) override { ++destroyedLayouts; }
+    rhi::RID createBindGroup(const rhi::BindGroupDesc& desc) override {
         bindGroupEntries.assign(desc.entries.begin(), desc.entries.end());
         return {++bindGroups, 1};
     }
-    void destroyBindGroup(rhi::BindGroupHandle) override { ++destroyedBindGroups; }
+    void destroyBindGroup(rhi::RID) override { ++destroyedBindGroups; }
 
     std::unique_ptr<rhi::ICommandBuffer> createCommandBuffer() override {
         ++commandBuffers;
@@ -193,27 +193,27 @@ public:
     VkPhysicalDevice physicalDevice() const override { return VK_NULL_HANDLE; }
     VkQueue graphicsQueue() const override { return VK_NULL_HANDLE; }
     std::uint32_t graphicsQueueFamily() const override { return 0; }
-    VkBuffer resolveBuffer(rhi::BufferHandle) const override { return VK_NULL_HANDLE; }
-    rhi::IRHITexture* resolveTextureResource(rhi::TextureHandle handle) override {
-        return handle.index > 0 && handle.index <= textureResources.size()
-                   ? textureResources[handle.index - 1].get()
+    VkBuffer resolveBuffer(rhi::RID) const override { return VK_NULL_HANDLE; }
+    rhi::IRHITexture* resolveTextureResource(rhi::RID handle) override {
+        return handle.index() > 0 && handle.index() <= textureResources.size()
+                   ? textureResources[handle.index() - 1].get()
                    : nullptr;
     }
-    const rhi::IRHITexture* resolveTextureResource(rhi::TextureHandle handle) const override {
-        return handle.index > 0 && handle.index <= textureResources.size()
-                   ? textureResources[handle.index - 1].get()
+    const rhi::IRHITexture* resolveTextureResource(rhi::RID handle) const override {
+        return handle.index() > 0 && handle.index() <= textureResources.size()
+                   ? textureResources[handle.index() - 1].get()
                    : nullptr;
     }
-    VkImage resolveTexture(rhi::TextureHandle) const override { return VK_NULL_HANDLE; }
-    VkImageView resolveTextureView(rhi::TextureViewHandle) const override { return VK_NULL_HANDLE; }
-    rhi::ResolvedPipeline resolvePipeline(rhi::GraphicsPipelineHandle) const override { return {}; }
-    VkDescriptorSet resolveBindGroup(rhi::BindGroupHandle) const override { return VK_NULL_HANDLE; }
+    VkImage resolveTexture(rhi::RID) const override { return VK_NULL_HANDLE; }
+    VkImageView resolveTextureView(rhi::RID) const override { return VK_NULL_HANDLE; }
+    rhi::ResolvedPipeline resolvePipeline(rhi::RID) const override { return {}; }
+    VkDescriptorSet resolveBindGroup(rhi::RID) const override { return VK_NULL_HANDLE; }
     void waitIdle() override {}
 
     std::vector<rhi::BufferDesc> buffers;
     std::vector<rhi::TextureDesc> textures;
     std::vector<std::unique_ptr<MockRhiTexture>> textureResources;
-    std::unordered_map<std::uint32_t, rhi::TextureViewHandle> defaultTextureViews;
+    std::unordered_map<std::uint32_t, rhi::RID> defaultTextureViews;
     std::vector<rhi::SamplerDesc> samplers;
     std::vector<rhi::ShaderStage> shaders;
     std::vector<std::vector<std::byte>> shaderBytecode;

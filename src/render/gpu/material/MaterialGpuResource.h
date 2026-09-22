@@ -9,9 +9,9 @@
 namespace engine {
 
 struct MaterialGpuResource {
-    rhi::BufferHandle uniformBuffer;
+    rhi::RID uniformBuffer;
     std::uint64_t uniformCapacity{};
-    rhi::BindGroupHandle bindGroup;
+    rhi::RID bindGroup;
 
     // Persistent-residency bookkeeping. The slot keeps its GPU resources across
     // frames; these fields let the manager decide between a full rebuild, a

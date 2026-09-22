@@ -28,13 +28,13 @@ protected:
 TEST_F(MaterialGuidIdentityTest, LoadByGuidReturnsSameHandle) {
     using namespace engine;
     const VirtualPath path{"assets://materials/warm_vertex_color.material.json"};
-    const MaterialHandle byPath = MATERIAL_MANAGER.load(path);
+    const RID byPath = MATERIAL_MANAGER.load(path);
     ASSERT_TRUE(byPath);
 
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const MaterialHandle byId = MATERIAL_MANAGER.load(*assetId);
+    const RID byId = MATERIAL_MANAGER.load(*assetId);
     EXPECT_EQ(byId, byPath);
     EXPECT_EQ(MATERIAL_MANAGER.find(*assetId), MATERIAL_MANAGER.find(byPath));
 }
@@ -42,10 +42,10 @@ TEST_F(MaterialGuidIdentityTest, LoadByGuidReturnsSameHandle) {
 TEST_F(MaterialGuidIdentityTest, CloneReturnsDifferentHandleAndIsNotAssetBacked) {
     using namespace engine;
     const VirtualPath path{"assets://materials/warm_vertex_color.material.json"};
-    const MaterialHandle original = MATERIAL_MANAGER.load(path);
+    const RID original = MATERIAL_MANAGER.load(path);
     ASSERT_TRUE(original);
 
-    const MaterialHandle cloned = MATERIAL_MANAGER.clone(original);
+    const RID cloned = MATERIAL_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
     EXPECT_NE(cloned, original);
 
@@ -62,10 +62,10 @@ TEST_F(MaterialGuidIdentityTest, CloneReturnsDifferentHandleAndIsNotAssetBacked)
 TEST_F(MaterialGuidIdentityTest, CloneDoesNotShareRuntimeState) {
     using namespace engine;
     const VirtualPath path{"assets://materials/warm_vertex_color.material.json"};
-    const MaterialHandle original = MATERIAL_MANAGER.load(path);
+    const RID original = MATERIAL_MANAGER.load(path);
     ASSERT_TRUE(original);
 
-    const MaterialHandle cloned = MATERIAL_MANAGER.clone(original);
+    const RID cloned = MATERIAL_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
 
     Material* originalData = MATERIAL_MANAGER.find(original);
@@ -86,9 +86,9 @@ TEST_F(MaterialGuidIdentityTest, RefreshAssetUpdatesOriginalButNotClone) {
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const MaterialHandle original = MATERIAL_MANAGER.load(path);
+    const RID original = MATERIAL_MANAGER.load(path);
     ASSERT_TRUE(original);
-    const MaterialHandle cloned = MATERIAL_MANAGER.clone(original);
+    const RID cloned = MATERIAL_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
 
     Material* originalData = MATERIAL_MANAGER.find(original);

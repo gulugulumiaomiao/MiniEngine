@@ -31,8 +31,8 @@ public:
     using ExecuteCallback = std::function<void(rhi::ICommandBuffer&)>;
 
     struct ImportedTexture {
-        rhi::TextureHandle texture;
-        rhi::TextureViewHandle view;
+        rhi::RID texture;
+        rhi::RID view;
         rhi::ResourceState initialState{rhi::ResourceState::Undefined};
         rhi::ResourceState finalState{rhi::ResourceState::Undefined};
         rhi::TextureAspect aspect{rhi::TextureAspect::Color};
@@ -63,7 +63,7 @@ public:
     // Resolves a texture node to its RHI view; valid after compile() and before reset().
     // Pipelines use this to bind graph-allocated textures (e.g. the shadow map) into bind
     // groups between compile and execute.
-    [[nodiscard]] rhi::TextureViewHandle resolvedTextureView(RgTextureHandle handle) const;
+    [[nodiscard]] rhi::RID resolvedTextureView(RgTextureHandle handle) const;
 
     [[nodiscard]] bool compiled() const { return compiled_; }
     [[nodiscard]] std::size_t passCount() const { return passes_.size(); }
@@ -72,8 +72,8 @@ public:
 private:
     struct TextureNode {
         // Imported source.
-        rhi::TextureHandle texture;
-        rhi::TextureViewHandle view;
+        rhi::RID texture;
+        rhi::RID view;
         rhi::ResourceState initialState{rhi::ResourceState::Undefined};
         rhi::ResourceState finalState{rhi::ResourceState::Undefined};
         rhi::TextureAspect aspect{rhi::TextureAspect::Color};
@@ -84,8 +84,8 @@ private:
         bool isTransient{false};
 
         // Resolved during compile().
-        rhi::TextureHandle resolvedTexture;
-        rhi::TextureViewHandle resolvedView;
+        rhi::RID resolvedTexture;
+        rhi::RID resolvedView;
         RgTexturePool::PooledTexture* poolEntry{};
     };
 

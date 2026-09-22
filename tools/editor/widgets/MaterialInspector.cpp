@@ -27,7 +27,7 @@ constexpr float kSaveDebounceSeconds = 0.5F;
 
 } // namespace
 
-void MaterialInspector::draw(MaterialHandle material) {
+void MaterialInspector::draw(RID material) {
     Material* data = MATERIAL_MANAGER.find(material);
     if (data == nullptr) {
         ImGui::TextDisabled("Invalid material handle");
@@ -47,7 +47,7 @@ void MaterialInspector::draw(MaterialHandle material) {
     // The handle index scopes every control id to this instance, so the
     // component view and the asset view can both embed the widget (and a
     // detached clone never collides with its source asset).
-    ImGui::PushID(static_cast<int>(material.index));
+    ImGui::PushID(static_cast<int>(material.index()));
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (!data->isAssetBacked())
             ImGui::TextDisabled("Runtime-only (detached) - edits do not write back");
@@ -95,7 +95,7 @@ void MaterialInspector::drawIdentity(Material& data) {
     }
 }
 
-void MaterialInspector::drawShaderCombo(MaterialHandle handle, Material& data) {
+void MaterialInspector::drawShaderCombo(RID handle, Material& data) {
     const VirtualPath current = data.shader().assetPath();
     VirtualPath chosen;
     if (assetCombo("Shader", collectAssets(AssetType::Shader), current, chosen) &&
@@ -238,7 +238,7 @@ void MaterialInspector::saveNow(const VirtualPath& path) {
         status_ = "Not saved (file removed): " + path.string();
         return;
     }
-    const MaterialHandle handle = MATERIAL_MANAGER.load(path);
+    const RID handle = MATERIAL_MANAGER.load(path);
     const Material* data = MATERIAL_MANAGER.find(handle);
     if (data == nullptr || !(data->assetPath() == path)) {
         // load() failed (bad source, unmounted assets://) and fell back to the

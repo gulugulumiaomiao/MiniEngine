@@ -51,11 +51,11 @@ public:
     void setColorWriteMask(ColorWriteMask mask) override;
     void setPrimitiveTopology(PrimitiveTopology topology) override;
     void setFillMode(FillMode mode) override;
-    void bindPipeline(GraphicsPipelineHandle pipeline) override;
-    void bindVertexBuffer(std::uint32_t slot, BufferHandle buffer, std::uint64_t offset) override;
-    void bindIndexBuffer(BufferHandle buffer, std::uint64_t offset, IndexFormat format) override;
+    void bindPipeline(RID pipeline) override;
+    void bindVertexBuffer(std::uint32_t slot, RID buffer, std::uint64_t offset) override;
+    void bindIndexBuffer(RID buffer, std::uint64_t offset, IndexFormat format) override;
     void bindGroup(std::uint32_t set,
-                   BindGroupHandle group,
+                   RID group,
                    std::span<const std::uint32_t> dynamicOffsets) override;
     void draw(const DrawArguments& arguments) override;
     void drawIndexed(const DrawIndexedArguments& arguments) override;

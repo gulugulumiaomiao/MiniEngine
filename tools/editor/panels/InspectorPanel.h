@@ -34,7 +34,7 @@ public:
     // or asset must also reclaim the panel.
     enum class InspectionMode { Nodes, Asset };
 
-    void draw(const SelectionSet<NodeHandle>& selection);
+    void draw(const SelectionSet<RID>& selection);
 
     // Project-window asset inspection (EditorApplication bridges the Project
     // selection in). draw() re-validates the path, so a deleted or renamed
@@ -60,10 +60,10 @@ public:
 
 private:
     void drawNodeHeader(Node& node);
-    void drawMultiHeader(const SelectionSet<NodeHandle>& selection);
-    void drawMultiActive(const SelectionSet<NodeHandle>& selection);
-    void drawMultiTransform(const SelectionSet<NodeHandle>& selection);
-    [[nodiscard]] std::vector<Node*> collectNodes(const SelectionSet<NodeHandle>& selection) const;
+    void drawMultiHeader(const SelectionSet<RID>& selection);
+    void drawMultiActive(const SelectionSet<RID>& selection);
+    void drawMultiTransform(const SelectionSet<RID>& selection);
+    [[nodiscard]] std::vector<Node*> collectNodes(const SelectionSet<RID>& selection) const;
     void drawTransform(Node& node);
     void drawMesh(Node& node);
     void drawMaterial(Node& node);

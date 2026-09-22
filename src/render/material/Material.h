@@ -32,7 +32,7 @@ public:
     std::vector<std::string> keywords;
     std::optional<int> renderQueue;
 
-    [[nodiscard]] Material instantiate(ShaderHandle shaderHandle) const;
+    [[nodiscard]] Material instantiate(RID shaderHandle) const;
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 // Source .material.json parsing and validation live in asset/format/MaterialAssetFormat.
@@ -50,11 +50,11 @@ public:
     [[nodiscard]] AssetId assetId() const { return assetId_; }
     [[nodiscard]] bool isAssetBacked() const { return assetId_.valid(); }
     [[nodiscard]] const Shader& shader() const;
-    [[nodiscard]] ShaderHandle shaderHandle() const { return shaderHandle_; }
+    [[nodiscard]] RID shaderHandle() const { return shaderHandle_; }
     // 写回专用：只暴露 override（nullopt = 沿用 shader 默认），生效值 renderQueue
     // 字段是派生状态，写回时不得显式化。
     [[nodiscard]] std::optional<int> renderQueueOverride() const { return renderQueueOverride_; }
-    void setShader(ShaderHandle shader);
+    void setShader(RID shader);
 
     // Editor write path: an override re-derives the effective renderQueue, and
     // clearing it (nullopt) falls back to the current Shader's sub-shader
@@ -100,17 +100,17 @@ private:
     void initialize(AssetId assetId,
                     VirtualPath assetPath,
                     std::string materialName,
-                    ShaderHandle shader,
+                    RID shader,
                     std::optional<int> renderQueueOverride);
-    void rebuildForShader(ShaderHandle shader, bool preserveValues);
-    void rebuildFromAsset(const MaterialAsset& asset, ShaderHandle newShader);
+    void rebuildForShader(RID shader, bool preserveValues);
+    void rebuildFromAsset(const MaterialAsset& asset, RID newShader);
     [[nodiscard]] ShaderValue propertyValue(const ShaderPropertyDesc& property) const;
     void setPropertyValue(std::string_view name, const ShaderValue& value);
     void markChanged();
 
     AssetId assetId_;
     VirtualPath assetPath_;
-    ShaderHandle shaderHandle_;
+    RID shaderHandle_;
     std::uint64_t shaderRevision_{};
     std::optional<int> renderQueueOverride_;
     std::unordered_map<std::string, TextureBinding> textureBindings_;

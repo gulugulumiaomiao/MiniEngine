@@ -15,8 +15,8 @@ namespace engine {
 // been sorted and to have valid pipelines/bind groups.
 void drawFilteredItems(std::uint32_t frameIndex,
                        std::span<const DrawItem> items,
-                       rhi::BindGroupHandle sceneBindGroup,
-                       rhi::BindGroupHandle globalBindGroup,
+                       rhi::RID sceneBindGroup,
+                       rhi::RID globalBindGroup,
                        rhi::ICommandBuffer& commandBuffer);
 
 } // namespace engine

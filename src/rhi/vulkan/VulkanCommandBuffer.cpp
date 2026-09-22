@@ -375,7 +375,7 @@ void VulkanCommandBuffer::setFillMode(FillMode mode) {
                        mode == FillMode::Solid ? VK_POLYGON_MODE_FILL : VK_POLYGON_MODE_LINE);
 }
 
-void VulkanCommandBuffer::bindPipeline(GraphicsPipelineHandle pipeline) {
+void VulkanCommandBuffer::bindPipeline(RID pipeline) {
     ensureRecording("bindPipeline");
     const ResolvedPipeline native = device_.resolvePipeline(pipeline);
     boundPipelineLayout_ = native.layout;
@@ -383,7 +383,7 @@ void VulkanCommandBuffer::bindPipeline(GraphicsPipelineHandle pipeline) {
 }
 
 void VulkanCommandBuffer::bindVertexBuffer(std::uint32_t slot,
-                                           BufferHandle buffer,
+                                           RID buffer,
                                            std::uint64_t offset) {
     ensureRecording("bindVertexBuffer");
     const VkBuffer native = device_.resolveBuffer(buffer);
@@ -391,7 +391,7 @@ void VulkanCommandBuffer::bindVertexBuffer(std::uint32_t slot,
     vkCmdBindVertexBuffers(commandBuffer_, slot, 1, &native, &nativeOffset);
 }
 
-void VulkanCommandBuffer::bindIndexBuffer(BufferHandle buffer,
+void VulkanCommandBuffer::bindIndexBuffer(RID buffer,
                                           std::uint64_t offset,
                                           IndexFormat format) {
     ensureRecording("bindIndexBuffer");
@@ -403,7 +403,7 @@ void VulkanCommandBuffer::bindIndexBuffer(BufferHandle buffer,
 }
 
 void VulkanCommandBuffer::bindGroup(std::uint32_t set,
-                                    BindGroupHandle group,
+                                    RID group,
                                     std::span<const std::uint32_t> dynamicOffsets) {
     ensureRecording("bindGroup");
     if (boundPipelineLayout_ == VK_NULL_HANDLE) {
@@ -541,7 +541,7 @@ void VulkanCommandBuffer::updateBuffer(const BufferUpdate& update) {
     }
     // Vulkan has no arbitrary-size in-command update, so stage the payload in a
     // host-visible scratch buffer owned by the device and copy from there.
-    const BufferHandle staging = device_.acquireStagingBuffer(update.data.size_bytes());
+    const RID staging = device_.acquireStagingBuffer(update.data.size_bytes());
     device_.uploadBuffer(staging, update.data);
     const BufferCopy copy{staging, update.destination, 0, update.offset, update.data.size_bytes()};
     copyBuffer(copy);
@@ -559,7 +559,7 @@ void VulkanCommandBuffer::updateImage(const ImageUpdate& update) {
     if (update.data.size_bytes() != expectedSize) {
         Log::fatal("VulkanCommandBuffer", "Image update data does not match the extent");
     }
-    const BufferHandle staging = device_.acquireStagingBuffer(update.data.size_bytes());
+    const RID staging = device_.acquireStagingBuffer(update.data.size_bytes());
     device_.uploadBuffer(staging, update.data);
     const BufferImageCopy copy{staging,
                                update.destination,

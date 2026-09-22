@@ -1,13 +1,4 @@
 #pragma once
 
-#include "core/base/Handle.h"
-
-namespace engine {
-
-struct SceneHandleTag;
-struct NodeHandleTag;
-
-using SceneHandle = Handle<SceneHandleTag>;
-using NodeHandle = Handle<NodeHandleTag>;
-
-} // namespace engine
+// RID/RID are now the unified engine::RID.
+#include "core/base/RID.h"

@@ -122,20 +122,20 @@ struct BindGroupLayoutDesc {
 struct BindGroupEntry {
     std::uint32_t binding{};
     BindingType type{BindingType::UniformBuffer};
-    BufferHandle buffer;
+    RID buffer;
     std::uint64_t offset{};
     std::uint64_t size{};
-    TextureViewHandle textureView;
-    SamplerHandle sampler;
+    RID textureView;
+    RID sampler;
 };
 
 struct TextureBinding {
-    TextureViewHandle view;
-    SamplerHandle sampler;
+    RID view;
+    RID sampler;
 };
 
 struct BindGroupDesc {
-    BindGroupLayoutHandle layout;
+    RID layout;
     std::span<const BindGroupEntry> entries;
     std::string debugName;
 };

@@ -21,7 +21,7 @@ struct NodePayload {
     std::uint64_t revision;
     // 0 表示多选超出拖动上限，接收端拒绝整组。
     std::uint32_t count;
-    NodeHandle nodes[kMaxDragNodes];
+    RID nodes[kMaxDragNodes];
 };
 
 } // namespace
@@ -41,7 +41,7 @@ void HierarchyPanel::syncDocument() {
     }
     if (document_.valid()) {
         selection_.removeIf(
-            [this](NodeHandle handle) { return !document_.scene().findNode(handle); });
+            [this](RID handle) { return !document_.scene().findNode(handle); });
         if (!document_.scene().findNode(renameTarget_))
             renameTarget_ = {};
     }
@@ -58,7 +58,7 @@ void HierarchyPanel::draw() {
     ImGui::PushID(static_cast<int>(revision_));
     hoverSeen_ = false;
     visibleNodes_.clear();
-    const NodeHandle root = document_.scene().rootHandle();
+    const RID root = document_.scene().rootHandle();
     drawNode(root);
 
     if (!statusMessage_.empty())
@@ -111,14 +111,14 @@ void HierarchyPanel::draw() {
     applyRequest();
 }
 
-void HierarchyPanel::drawNode(NodeHandle handle) {
+void HierarchyPanel::drawNode(RID handle) {
     const Node* node = document_.scene().findNode(handle);
     if (!node)
         return;
     const bool root = handle == document_.scene().rootHandle();
     visibleNodes_.push_back(handle);
-    ImGui::PushID(static_cast<int>(handle.index));
-    ImGui::PushID(static_cast<int>(handle.generation));
+    ImGui::PushID(static_cast<int>(handle.index()));
+    ImGui::PushID(static_cast<int>(handle.generation()));
     const auto expand = std::ranges::find(expand_, handle);
     if (expand != expand_.end()) {
         ImGui::SetNextItemOpen(true);
@@ -166,18 +166,18 @@ void HierarchyPanel::drawNode(NodeHandle handle) {
     }
     if (!root && renameTarget_ != handle &&
         ImGui::BeginDragDropSource(ImGuiDragDropFlags_PayloadAutoExpire)) {
-        std::vector<NodeHandle> sources;
+        std::vector<RID> sources;
         if (dragStartSelection_.contains(handle))
             sources = dragStartSelection_.items();
         else
             sources = {handle};
         // 按可见行顺序稳定排序，批量插入时保持树中的相对顺序；折叠的选中项排在末尾。
-        const auto visibleIndex = [this](NodeHandle candidate) {
+        const auto visibleIndex = [this](RID candidate) {
             const auto it = std::ranges::find(visibleNodes_, candidate);
             return it != visibleNodes_.end() ? static_cast<std::size_t>(it - visibleNodes_.begin())
                                              : visibleNodes_.size();
         };
-        std::stable_sort(sources.begin(), sources.end(), [&](NodeHandle lhs, NodeHandle rhs) {
+        std::stable_sort(sources.begin(), sources.end(), [&](RID lhs, RID rhs) {
             return visibleIndex(lhs) < visibleIndex(rhs);
         });
         NodePayload payload{revision_, 0, {}};
@@ -203,7 +203,7 @@ void HierarchyPanel::drawNode(NodeHandle handle) {
 
     if (opened) {
         ImGui::Indent();
-        for (const NodeHandle child : node->children())
+        for (const RID child : node->children())
             drawNode(child);
         ImGui::Unindent();
     }
@@ -219,7 +219,7 @@ void HierarchyPanel::drawNode(NodeHandle handle) {
     }
 }
 
-HierarchyPanel::Drop HierarchyPanel::drawDropTarget(NodeHandle handle,
+HierarchyPanel::Drop HierarchyPanel::drawDropTarget(RID handle,
                                                     const ImVec2& min,
                                                     const ImVec2& max,
                                                     bool rootTarget) {
@@ -239,7 +239,7 @@ HierarchyPanel::Drop HierarchyPanel::drawDropTarget(NodeHandle handle,
 
     Scene& scene = document_.scene();
     const Node* target = scene.findNode(handle);
-    const auto isSource = [&source](NodeHandle candidate) {
+    const auto isSource = [&source](RID candidate) {
         return std::find(source.nodes, source.nodes + source.count, candidate) !=
                source.nodes + source.count;
     };
@@ -247,14 +247,14 @@ HierarchyPanel::Drop HierarchyPanel::drawDropTarget(NodeHandle handle,
     const float fraction = (ImGui::GetIO().MousePos.y - min.y) / std::max(max.y - min.y, 1.0F);
     if (!rootTarget)
         drop = fraction < 0.25F ? Drop::Before : (fraction > 0.75F ? Drop::After : Drop::Into);
-    const NodeHandle parent =
-        drop == Drop::Into ? handle : (target ? target->parent() : NodeHandle{});
+    const RID parent =
+        drop == Drop::Into ? handle : (target ? target->parent() : RID{});
     const Node* parentNode = scene.findNode(parent);
     // 插入位在排除全部拖动节点后的同级列表上计算，之后逐个以 index、index+1… 插入，
     // 源集合最终按可见顺序占据连续位置。
     std::size_t index = 0;
     if (parentNode) {
-        for (const NodeHandle child : parentNode->children()) {
+        for (const RID child : parentNode->children()) {
             if (drop != Drop::Into && child == handle) {
                 if (drop == Drop::After && !isSource(child))
                     ++index;
@@ -309,7 +309,7 @@ HierarchyPanel::Drop HierarchyPanel::drawDropTarget(NodeHandle handle,
             accepted && accepted->IsDelivery()) {
             pending_ = Request{Action::Move,
                                source.revision,
-                               std::vector<NodeHandle>(source.nodes, source.nodes + source.count),
+                               std::vector<RID>(source.nodes, source.nodes + source.count),
                                parent,
                                index};
         }
@@ -321,7 +321,7 @@ HierarchyPanel::Drop HierarchyPanel::drawDropTarget(NodeHandle handle,
     return valid ? drop : Drop::None;
 }
 
-void HierarchyPanel::drawContextMenu(NodeHandle handle) {
+void HierarchyPanel::drawContextMenu(RID handle) {
     if (!ImGui::BeginPopupContextItem("##node-menu"))
         return;
     const bool root = handle == document_.scene().rootHandle();
@@ -346,7 +346,7 @@ void HierarchyPanel::drawContextMenu(NodeHandle handle) {
     ImGui::EndPopup();
 }
 
-void HierarchyPanel::beginRename(NodeHandle handle) {
+void HierarchyPanel::beginRename(RID handle) {
     const Node* node = document_.scene().findNode(handle);
     if (!node || handle == document_.scene().rootHandle())
         return;
@@ -357,7 +357,7 @@ void HierarchyPanel::beginRename(NodeHandle handle) {
     focusRename_ = true;
 }
 
-void HierarchyPanel::drawRename(NodeHandle handle) {
+void HierarchyPanel::drawRename(RID handle) {
     if (renameTarget_ != handle)
         return;
     if (focusRename_)
@@ -384,7 +384,7 @@ void HierarchyPanel::drawRename(NodeHandle handle) {
     }
 }
 
-void HierarchyPanel::expandAncestors(NodeHandle handle) {
+void HierarchyPanel::expandAncestors(RID handle) {
     for (const Node* node = document_.scene().findNode(handle); node;
          node = document_.scene().findNode(node->parent())) {
         if (std::ranges::find(expand_, node->handle()) == expand_.end())
@@ -404,7 +404,7 @@ void HierarchyPanel::applyRequest() {
     if (request.action == Action::Create) {
         if (!scene.findNode(request.parent))
             return;
-        const NodeHandle created = scene.createNode("Node");
+        const RID created = scene.createNode("Node");
         Node* node = scene.findNode(created);
         if (!node)
             return;
@@ -428,10 +428,10 @@ void HierarchyPanel::applyRequest() {
         if (!parentNode)
             return;
         // 锚点集合：排除全部源后的同级列表中，插入位之前的前缀元素。
-        std::vector<NodeHandle> prefix;
+        std::vector<RID> prefix;
         {
             std::size_t remaining = request.index;
-            for (const NodeHandle child : parentNode->children()) {
+            for (const RID child : parentNode->children()) {
                 if (remaining == 0)
                     break;
                 if (std::find(request.nodes.begin(), request.nodes.end(), child) ==
@@ -449,7 +449,7 @@ void HierarchyPanel::applyRequest() {
             const auto& children = scene.findNode(request.parent)->children();
             std::size_t insertIndex = 0;
             std::size_t position = 0;
-            for (const NodeHandle child : children) {
+            for (const RID child : children) {
                 if (child == request.nodes[i])
                     continue; // moveNode 会先移除该源，不计入位置
                 const bool anchor =
@@ -482,11 +482,11 @@ void HierarchyPanel::applyRequest() {
     }
 }
 
-void HierarchyPanel::applyDelete(const std::vector<NodeHandle>& nodes) {
+void HierarchyPanel::applyDelete(const std::vector<RID>& nodes) {
     Scene& scene = document_.scene();
-    NodeHandle lastParent{};
+    RID lastParent{};
     bool anyDeleted = false;
-    for (const NodeHandle handle : nodes) {
+    for (const RID handle : nodes) {
         const Node* node = scene.findNode(handle);
         // Scene Root 不可删除；父级先被销毁时子级句柄已失效，自然跳过。
         if (!node || handle == scene.rootHandle())
@@ -498,17 +498,17 @@ void HierarchyPanel::applyDelete(const std::vector<NodeHandle>& nodes) {
     if (!anyDeleted)
         return;
     // 清掉失效句柄；全部删光时选中原父节点，与单删行为一致。
-    selection_.removeIf([&scene](NodeHandle handle) { return !scene.findNode(handle); });
+    selection_.removeIf([&scene](RID handle) { return !scene.findNode(handle); });
     if (selection_.empty())
         selection_.select(lastParent);
     renameTarget_ = {};
     document_.markDirty();
 }
 
-void HierarchyPanel::applySetActive(const std::vector<NodeHandle>& nodes, bool active) {
+void HierarchyPanel::applySetActive(const std::vector<RID>& nodes, bool active) {
     Scene& scene = document_.scene();
     bool anyChanged = false;
-    for (const NodeHandle handle : nodes) {
+    for (const RID handle : nodes) {
         if (Node* node = scene.findNode(handle)) {
             node->setActive(active);
             anyChanged = true;

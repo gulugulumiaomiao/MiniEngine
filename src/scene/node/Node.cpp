@@ -13,7 +13,7 @@ bool SceneNodeAsset::transfer(Transfer& archive) {
            archive.endObject();
 }
 
-void Node::initialize(NodeHandle handle) {
+void Node::initialize(RID handle) {
     handle_ = handle;
     auto transform = std::make_unique<TransformComponent>();
     transform_ = transform.get();
@@ -29,7 +29,7 @@ void Node::setActive(bool active) {
     refreshActiveSubtree(!parent || parent->activeInHierarchy_);
 }
 
-bool Node::setParent(NodeHandle parentHandle) {
+bool Node::setParent(RID parentHandle) {
     if (handle_ == scene_->rootHandle()) {
         Log::warn("Node", "Scene root cannot be reparented");
         return false;
@@ -68,7 +68,7 @@ bool Node::setParent(Node& parent) {
 
 void Node::markTransformDirty() {
     transform_->markWorldDirty();
-    for (NodeHandle child : children_) {
+    for (RID child : children_) {
         if (Node* childNode = scene_->findNode(child)) {
             childNode->markTransformDirty();
         }
@@ -96,7 +96,7 @@ void Node::refreshActiveSubtree(bool parentActive) {
     for (const std::unique_ptr<Component>& component : components_) {
         component->setOwnerActive(activeInHierarchy_);
     }
-    for (NodeHandle child : children_) {
+    for (RID child : children_) {
         if (Node* childNode = scene_->findNode(child)) {
             childNode->refreshActiveSubtree(activeInHierarchy_);
         }
@@ -107,7 +107,7 @@ void Node::updateComponentsSubtree(float deltaTime) {
     for (const std::unique_ptr<Component>& component : components_) {
         component->update(deltaTime);
     }
-    for (NodeHandle child : children_) {
+    for (RID child : children_) {
         if (Node* childNode = scene_->findNode(child)) {
             childNode->updateComponentsSubtree(deltaTime);
         }
@@ -117,14 +117,14 @@ void Node::updateComponentsSubtree(float deltaTime) {
 void Node::updateTransformSubtree(const math::Mat44& parentWorld, bool parentChanged) {
     const bool changed = transform_->updateWorld(parentWorld, parentChanged);
     const math::Mat44& world = transform_->worldMatrix_;
-    for (NodeHandle child : children_) {
+    for (RID child : children_) {
         if (Node* childNode = scene_->findNode(child)) {
             childNode->updateTransformSubtree(world, changed);
         }
     }
 }
 
-bool Node::wouldCreateCycle(NodeHandle parentHandle) const {
+bool Node::wouldCreateCycle(RID parentHandle) const {
     const Node* candidate = scene_->findNode(parentHandle);
     while (candidate) {
         if (candidate->handle_ == handle_)

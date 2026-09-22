@@ -378,7 +378,7 @@ ShaderHash ShaderCompilePipeline::makeCompiledShaderPathKey(const VirtualPath& b
     return hash;
 }
 
-std::optional<CompiledShaderHandle>
+std::optional<RID>
 ShaderCompilePipeline::CompiledShaderCache::findPath(ShaderHash pathKey) const {
     if (const auto found = pathEntries_.find(pathKey);
         found != pathEntries_.end() && find(found->second)) {
@@ -388,7 +388,7 @@ ShaderCompilePipeline::CompiledShaderCache::findPath(ShaderHash pathKey) const {
 }
 
 void ShaderCompilePipeline::CompiledShaderCache::rememberPath(ShaderHash pathKey,
-                                                              CompiledShaderHandle handle) {
+                                                              RID handle) {
     if (find(handle))
         pathEntries_[pathKey] = handle;
 }
@@ -400,7 +400,7 @@ bool ShaderCompilePipeline::CompiledShaderCache::containsPath(std::span<const Vi
 }
 
 const CompiledShader&
-ShaderCompilePipeline::CompiledShaderCache::resolve(CompiledShaderHandle handle) const {
+ShaderCompilePipeline::CompiledShaderCache::resolve(RID handle) const {
     const CompiledShader* shader = find(handle);
     if (!shader)
         Log::fatal("CompiledShaderCache", "Invalid or stale compiled shader handle");
@@ -409,7 +409,7 @@ ShaderCompilePipeline::CompiledShaderCache::resolve(CompiledShaderHandle handle)
 
 void ShaderCompilePipeline::CompiledShaderCache::removeId(CompiledShaderId id,
                                                           std::vector<CompiledShaderId>& removed) {
-    const CompiledShaderHandle handle = findHandle(id);
+    const RID handle = findHandle(id);
     if (!handle)
         return;
     std::erase_if(pathEntries_,
@@ -437,7 +437,7 @@ void ShaderCompilePipeline::CompiledShaderCache::clear() {
 }
 
 const ShaderProgram&
-ShaderCompilePipeline::ShaderProgramCache::resolve(ShaderProgramHandle handle) const {
+ShaderCompilePipeline::ShaderProgramCache::resolve(RID handle) const {
     const ShaderProgram* program = find(handle);
     if (!program)
         Log::fatal("ShaderProgramCache", "Invalid or stale shader program handle");
@@ -466,7 +466,7 @@ ShaderCompilePipeline::ShaderCompilePipeline(ShaderCompilePipelineConfig config)
     : config_(std::move(config)), preprocessor_(config_.preprocessorConfig),
       compiler_(config_.intermediateRoot) {}
 
-CompiledShaderHandle ShaderCompilePipeline::loadCompiledShader(const VirtualPath& binaryPath,
+RID ShaderCompilePipeline::loadCompiledShader(const VirtualPath& binaryPath,
                                                                ShaderStage stage,
                                                                std::string_view entryPoint,
                                                                const ShaderVariantKey& variant,
@@ -477,7 +477,7 @@ CompiledShaderHandle ShaderCompilePipeline::loadCompiledShader(const VirtualPath
         return {};
     }
     const CompiledShaderId id = makeCompiledShaderId(bytecode, stage, entryPoint, variant);
-    if (const CompiledShaderHandle cached = compiledShadersCache_.findHandle(id); cached)
+    if (const RID cached = compiledShadersCache_.findHandle(id); cached)
         return cached;
     const auto reflection = reflectSpirv(bytecode, binaryPath);
     if (!reflection || reflection->stage != stage)
@@ -490,7 +490,7 @@ CompiledShaderHandle ShaderCompilePipeline::loadCompiledShader(const VirtualPath
                                          binaryPath});
 }
 
-CompiledShaderHandle ShaderCompilePipeline::loadPackagedShader(
+RID ShaderCompilePipeline::loadPackagedShader(
     const VirtualPath& binaryPath,
     ShaderStage stage,
     std::string_view entryPoint,
@@ -504,14 +504,14 @@ CompiledShaderHandle ShaderCompilePipeline::loadPackagedShader(
             "ShaderCompilePipeline", "Invalid or missing SPIR-V: %s", binaryPath.string().c_str());
         return {};
     }
-    const CompiledShaderHandle handle =
+    const RID handle =
         loadCompiledShader(binaryPath, stage, entryPoint, variant, *bytecode);
     if (handle)
         compiledShadersCache_.rememberPath(pathKey, handle);
     return handle;
 }
 
-CompiledShaderHandle ShaderCompilePipeline::compileStage(const Shader& shader,
+RID ShaderCompilePipeline::compileStage(const Shader& shader,
                                                          const ShaderPass& pass,
                                                          ShaderStage stage,
                                                          const ShaderVariantKey& variant) {
@@ -615,14 +615,14 @@ ShaderCompilePipeline::mergeLayout(const CompiledShader& vertex, const CompiledS
     return layout;
 }
 
-ShaderProgramHandle ShaderCompilePipeline::getOrCreate(const Shader& shader,
+RID ShaderCompilePipeline::getOrCreate(const Shader& shader,
                                                        const ShaderPass& pass,
                                                        const ShaderVariantKey& variant) {
-    const CompiledShaderHandle vertexHandle =
+    const RID vertexHandle =
         compileStage(shader, pass, ShaderStage::Vertex, variant);
     if (!vertexHandle)
         return {};
-    const CompiledShaderHandle fragmentHandle =
+    const RID fragmentHandle =
         compileStage(shader, pass, ShaderStage::Fragment, variant);
     if (!fragmentHandle)
         return {};
@@ -633,7 +633,7 @@ ShaderProgramHandle ShaderCompilePipeline::getOrCreate(const Shader& shader,
     hashAppend(id, variant.keywordBits);
     hashAppend(id, variant.meshFeatureBits);
     hashAppend(id, variant.platformFeatureBits);
-    if (const ShaderProgramHandle cached = programsCache_.findHandle(id); cached)
+    if (const RID cached = programsCache_.findHandle(id); cached)
         return cached;
     if (!validateSpirvReflection(shader,
                                  pass,
@@ -655,11 +655,11 @@ ShaderProgramHandle ShaderCompilePipeline::getOrCreate(const Shader& shader,
                                   std::move(*layout)});
 }
 
-const ShaderProgram& ShaderCompilePipeline::resolve(ShaderProgramHandle handle) const {
+const ShaderProgram& ShaderCompilePipeline::resolveProgram(RID handle) const {
     return programsCache_.resolve(handle);
 }
 
-const CompiledShader& ShaderCompilePipeline::resolve(CompiledShaderHandle handle) const {
+const CompiledShader& ShaderCompilePipeline::resolveCompiled(RID handle) const {
     return compiledShadersCache_.resolve(handle);
 }
 

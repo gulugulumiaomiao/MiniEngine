@@ -25,7 +25,7 @@ class MaterialInspector final {
 public:
     // Draws the editor for the material the handle points at. Safe to call
     // every frame with any handle, including invalid ones.
-    void draw(MaterialHandle material);
+    void draw(RID material);
 
     // Writes any pending debounced edit to disk immediately (target switch,
     // editor shutdown, project close).
@@ -33,7 +33,7 @@ public:
 
 private:
     void drawIdentity(Material& data);
-    void drawShaderCombo(MaterialHandle handle, Material& data);
+    void drawShaderCombo(RID handle, Material& data);
     void drawRenderQueue(Material& data);
     void drawProperties(Material& data);
     void drawKeywords(Material& data);

@@ -9,7 +9,7 @@ namespace engine::editor {
 // One panel's ordered multi-selection. Implements the Unity-style modifier clicks: a
 // plain click replaces the selection, Ctrl toggles a single item, Shift selects the
 // range between the anchor item and the clicked item over the panel's visible order.
-// T only needs default construction and operator==, so both NodeHandle and VirtualPath
+// T only needs default construction and operator==, so both RID and VirtualPath
 // work. The container keeps selection order so panels can show a stable primary item.
 template <typename T>
 class SelectionSet {

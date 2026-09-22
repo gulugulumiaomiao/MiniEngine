@@ -40,20 +40,20 @@ static_assert(sizeof(ObjectDrawData) == 64, "ObjectDrawData must match the std43
 struct DrawItem {
     const ShaderPass* shaderPass{};
     RenderPhase renderPhase{RenderPhase::Forward};
-    MeshHandle mesh;
-    rhi::GraphicsPipelineHandle pipeline;
-    MaterialHandle material;
-    rhi::BindGroupHandle materialBindGroup;
-    rhi::GraphicsPipelineHandle fallbackPipeline;
-    MaterialHandle fallbackMaterial;
+    RID mesh;
+    rhi::RID pipeline;
+    RID material;
+    rhi::RID materialBindGroup;
+    rhi::RID fallbackPipeline;
+    RID fallbackMaterial;
     struct VertexBuffer {
         std::uint32_t binding{};
-        rhi::BufferHandle buffer;
+        rhi::RID buffer;
 
         [[nodiscard]] bool operator==(const VertexBuffer&) const = default;
     };
     std::vector<VertexBuffer> vertexBuffers;
-    rhi::BufferHandle indexBuffer;
+    rhi::RID indexBuffer;
     rhi::IndexFormat indexFormat{rhi::IndexFormat::UInt32};
     rhi::DrawIndexedArguments arguments;
     int renderQueue{2000};
@@ -68,7 +68,7 @@ struct DrawList {
 
 struct MeshDrawInfo {
     std::vector<DrawItem::VertexBuffer> vertexBuffers;
-    rhi::BufferHandle indexBuffer;
+    rhi::RID indexBuffer;
     rhi::IndexFormat indexFormat{rhi::IndexFormat::UInt32};
     struct Range {
         std::uint32_t firstIndex{};

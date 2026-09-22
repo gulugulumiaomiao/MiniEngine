@@ -65,8 +65,8 @@ bool decomposeLocal(const math::Mat44& matrix, NodeMove& move) {
 }
 
 bool prepareNodeMove(Scene& scene,
-                     NodeHandle handle,
-                     NodeHandle parentHandle,
+                     RID handle,
+                     RID parentHandle,
                      std::size_t finalIndex,
                      NodeMove& move,
                      std::string& error) {
@@ -134,16 +134,16 @@ bool prepareNodeMove(Scene& scene,
 
 } // namespace
 
-bool Scene::canMoveNode(NodeHandle node,
-                        NodeHandle parent,
+bool Scene::canMoveNode(RID node,
+                        RID parent,
                         std::size_t finalIndex,
                         std::string& error) {
     NodeMove move;
     return prepareNodeMove(*this, node, parent, finalIndex, move, error);
 }
 
-NodeMoveResult Scene::moveNode(NodeHandle handle,
-                               NodeHandle parentHandle,
+NodeMoveResult Scene::moveNode(RID handle,
+                               RID parentHandle,
                                std::size_t finalIndex,
                                std::string& error) {
     NodeMove move;
@@ -184,9 +184,9 @@ Scene::~Scene() {
     (void)nodes_.release(root_);
 }
 
-NodeHandle Scene::createNode(std::string name) {
+RID Scene::createNode(std::string name) {
     Node node{*this, std::move(name)};
-    const NodeHandle handle = nodes_.insert(std::move(node));
+    const RID handle = nodes_.insert(std::move(node));
     Node* created = nodes_.find(handle);
     created->initialize(handle);
     created->parent_ = root_;
@@ -194,7 +194,7 @@ NodeHandle Scene::createNode(std::string name) {
     return handle;
 }
 
-bool Scene::destroyNode(NodeHandle handle) {
+bool Scene::destroyNode(RID handle) {
     if (handle == root_) {
         Log::warn("Scene", "Scene root cannot be destroyed");
         return false;
@@ -203,8 +203,8 @@ bool Scene::destroyNode(NodeHandle handle) {
     if (!node)
         return false;
 
-    const std::vector<NodeHandle> children = node->children_;
-    for (NodeHandle child : children) {
+    const std::vector<RID> children = node->children_;
+    for (RID child : children) {
         (void)destroyNode(child);
     }
 
@@ -219,8 +219,8 @@ void Scene::clear() {
     Node* rootNode = nodes_.find(root_);
     if (!rootNode)
         return;
-    const std::vector<NodeHandle> children = rootNode->children_;
-    for (NodeHandle child : children)
+    const std::vector<RID> children = rootNode->children_;
+    for (RID child : children)
         (void)destroyNode(child);
 }
 
@@ -311,7 +311,7 @@ void Scene::extractRenderNode(Node& node, RenderScene& output, float aspectRatio
         });
     }
 
-    for (NodeHandle child : node.children_) {
+    for (RID child : node.children_) {
         if (Node* childNode = nodes_.find(child)) {
             extractRenderNode(*childNode, output, aspectRatio);
         }

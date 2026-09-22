@@ -63,11 +63,11 @@ public:
     [[nodiscard]] bool hasDepthAttachment() const { return depth_.has_value(); }
     [[nodiscard]] const RenderTargetDesc& desc() const { return desc_; }
 
-    [[nodiscard]] rhi::TextureHandle colorTexture(std::size_t index) const;
-    [[nodiscard]] rhi::TextureViewHandle colorView(std::size_t index) const;
+    [[nodiscard]] rhi::RID colorTexture(std::size_t index) const;
+    [[nodiscard]] rhi::RID colorView(std::size_t index) const;
     [[nodiscard]] rhi::PixelFormat colorFormat(std::size_t index) const;
-    [[nodiscard]] rhi::TextureHandle depthTexture() const;
-    [[nodiscard]] rhi::TextureViewHandle depthView() const;
+    [[nodiscard]] rhi::RID depthTexture() const;
+    [[nodiscard]] rhi::RID depthView() const;
     [[nodiscard]] rhi::PixelFormat depthFormat() const;
 
     [[nodiscard]] rhi::RenderingInfo renderingInfo() const;
@@ -85,8 +85,8 @@ public:
 
 private:
     struct Attachment {
-        rhi::TextureHandle texture;
-        rhi::TextureViewHandle view;
+        rhi::RID texture;
+        rhi::RID view;
         rhi::PixelFormat format{rhi::PixelFormat::Undefined};
         rhi::ResourceState state{rhi::ResourceState::Undefined};
     };

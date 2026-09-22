@@ -165,7 +165,7 @@ void EditorApplication::openProject(const std::filesystem::path& root) {
     // the listener) and then brought them back up, which installs the Engine's own
     // auto-reload listener. reattachUi takes the slot back now, otherwise every
     // external scene change bypasses SceneDocument: the Engine would reload behind
-    // our back, rebuild the Scene and invalidate the NodeHandle held by
+    // our back, rebuild the Scene and invalidate the RID held by
     // HierarchyPanel, and suppressNextChange_ would never get to swallow the
     // editor's own atomic write.
     reattachUi();

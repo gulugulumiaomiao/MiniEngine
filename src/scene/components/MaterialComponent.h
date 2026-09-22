@@ -22,26 +22,26 @@ struct MaterialComponentAsset final : public Transferable {
 
 class MaterialComponent final : public Component {
 public:
-    void setMaterial(std::uint32_t slot, MaterialHandle material) {
+    void setMaterial(std::uint32_t slot, RID material) {
         if (materials_.size() <= slot)
             materials_.resize(slot + 1);
         materials_[slot] = material;
     }
 
-    [[nodiscard]] MaterialHandle material(std::uint32_t slot) const {
+    [[nodiscard]] RID material(std::uint32_t slot) const {
         if (slot < materials_.size() && materials_[slot]) {
             return materials_[slot];
         }
-        return !materials_.empty() ? materials_.front() : MaterialHandle{};
+        return !materials_.empty() ? materials_.front() : RID{};
     }
 
-    [[nodiscard]] const std::vector<MaterialHandle>& materials() const { return materials_; }
+    [[nodiscard]] const std::vector<RID>& materials() const { return materials_; }
 
     void clearMaterials() { materials_.clear(); }
 
 private:
     // Handles are non-owning. MaterialManager controls material lifetime.
-    std::vector<MaterialHandle> materials_;
+    std::vector<RID> materials_;
 };
 
 } // namespace engine

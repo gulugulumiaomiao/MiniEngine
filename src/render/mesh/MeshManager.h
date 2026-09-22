@@ -12,36 +12,36 @@
 namespace engine {
 
 class MeshManager final : public Singleton<MeshManager>,
-                          public KeyedHandleRegistry<Mesh, MeshHandle, AssetId> {
+                          public KeyedHandleRegistry<Mesh, RID, AssetId> {
 public:
-    [[nodiscard]] MeshHandle load(const AssetId& assetId);
-    [[nodiscard]] MeshHandle load(const VirtualPath& meshPath);
-    [[nodiscard]] MeshHandle clone(MeshHandle source);
+    [[nodiscard]] RID load(const AssetId& assetId);
+    [[nodiscard]] RID load(const VirtualPath& meshPath);
+    [[nodiscard]] RID clone(RID source);
     void refreshAsset(const AssetId& assetId);
     void refreshAsset(const VirtualPath& meshPath);
 
-    [[nodiscard]] MeshHandle createRuntime(const MeshBuildRecipe& recipe);
-    [[nodiscard]] bool rebuildRuntime(MeshHandle handle, const MeshBuildRecipe& recipe);
-    [[nodiscard]] bool destroyRuntime(MeshHandle handle);
+    [[nodiscard]] RID createRuntime(const MeshBuildRecipe& recipe);
+    [[nodiscard]] bool rebuildRuntime(RID handle, const MeshBuildRecipe& recipe);
+    [[nodiscard]] bool destroyRuntime(RID handle);
 
-    [[nodiscard]] MeshHandle insert(Mesh mesh);
-    [[nodiscard]] MeshHandle insertUnkeyed(Mesh mesh);
+    [[nodiscard]] RID insert(Mesh mesh);
+    [[nodiscard]] RID insertUnkeyed(Mesh mesh);
 
-    using KeyedHandleRegistry<Mesh, MeshHandle, AssetId>::find;
+    using KeyedHandleRegistry<Mesh, RID, AssetId>::find;
     [[nodiscard]] Mesh* find(const VirtualPath& meshPath);
     [[nodiscard]] const Mesh* find(const VirtualPath& meshPath) const;
 
-    using KeyedHandleRegistry<Mesh, MeshHandle, AssetId>::findHandle;
-    [[nodiscard]] MeshHandle findHandle(const VirtualPath& meshPath) const;
+    using KeyedHandleRegistry<Mesh, RID, AssetId>::findHandle;
+    [[nodiscard]] RID findHandle(const VirtualPath& meshPath) const;
 
-    [[nodiscard]] bool destroy(MeshHandle handle);
-    void setDestroyObserver(std::function<void(MeshHandle)> observer) {
+    [[nodiscard]] bool destroy(RID handle);
+    void setDestroyObserver(std::function<void(RID)> observer) {
         destroyObserver_ = std::move(observer);
     }
     void clear() override;
     [[nodiscard]] std::size_t size() const { return KeyedHandleRegistry::size(); }
 
-    [[nodiscard]] bool replace(MeshHandle handle, Mesh mesh);
+    [[nodiscard]] bool replace(RID handle, Mesh mesh);
     [[nodiscard]] bool replace(const VirtualPath& meshPath);
 
 private:
@@ -50,9 +50,9 @@ private:
 
     [[nodiscard]] AssetId keyOf(const Mesh& mesh) const override { return mesh.assetId(); }
     [[nodiscard]] bool validate(const Mesh& mesh) const override;
-    [[nodiscard]] MeshHandle loadFromPath(const VirtualPath& path, const AssetId& assetId);
+    [[nodiscard]] RID loadFromPath(const VirtualPath& path, const AssetId& assetId);
 
-    std::function<void(MeshHandle)> destroyObserver_;
+    std::function<void(RID)> destroyObserver_;
 };
 
 } // namespace engine

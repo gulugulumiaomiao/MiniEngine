@@ -177,7 +177,7 @@ const Value* requireValue(const ShaderValue& value, std::string_view name) {
 const Shader& Material::shader() const {
     const Shader* shader = SHADER_MANAGER.find(shaderHandle_);
     if (!shader)
-        Log::fatal("Material", "Invalid or stale ShaderHandle");
+        Log::fatal("Material", "Invalid or stale RID");
     return *shader;
 }
 
@@ -199,23 +199,23 @@ ShaderValue Material::propertyValue(const ShaderPropertyDesc& property) const {
 void Material::initialize(AssetId assetId,
                           VirtualPath assetPath,
                           std::string materialName,
-                          ShaderHandle shader,
+                          RID shader,
                           std::optional<int> renderQueueOverride) {
     assetId_ = assetId;
     assetPath_ = std::move(assetPath);
     name = std::move(materialName);
     renderQueueOverride_ = renderQueueOverride;
     if (!SHADER_MANAGER.find(shader)) {
-        Log::error("Material", "ShaderHandle must be valid");
+        Log::error("Material", "RID must be valid");
         return;
     }
     rebuildForShader(shader, false);
 }
 
-void Material::setShader(ShaderHandle shader) {
+void Material::setShader(RID shader) {
     const Shader* value = SHADER_MANAGER.find(shader);
     if (!value) {
-        Log::error("Material", "ShaderHandle must be valid");
+        Log::error("Material", "RID must be valid");
         return;
     }
     if (shaderHandle_ == shader && shaderRevision_ == value->revision()) {
@@ -228,7 +228,7 @@ void Material::setRenderQueue(std::optional<int> queueOverride) {
     if (renderQueueOverride_ == queueOverride)
         return;
     if (!SHADER_MANAGER.find(shaderHandle_)) {
-        Log::error("Material", "setRenderQueue requires a valid ShaderHandle");
+        Log::error("Material", "setRenderQueue requires a valid RID");
         return;
     }
     renderQueueOverride_ = queueOverride;
@@ -251,10 +251,10 @@ void Material::setKeywordEnabled(const std::string& keyword, bool enabled) {
     markChanged();
 }
 
-void Material::rebuildForShader(ShaderHandle newShaderHandle, bool preserveValues) {
+void Material::rebuildForShader(RID newShaderHandle, bool preserveValues) {
     const Shader* newShaderValue = SHADER_MANAGER.find(newShaderHandle);
     if (!newShaderValue) {
-        Log::error("Material", "ShaderHandle must be valid");
+        Log::error("Material", "RID must be valid");
         return;
     }
     const Shader& newShader = *newShaderValue;
@@ -307,7 +307,7 @@ void Material::rebuildForShader(ShaderHandle newShaderHandle, bool preserveValue
     *this = std::move(replacement);
 }
 
-Material MaterialAsset::instantiate(ShaderHandle shaderHandle) const {
+Material MaterialAsset::instantiate(RID shaderHandle) const {
     Material material;
     const AssetId assetId = ASSET_DATABASE.findGuid(assetPath()).value_or(AssetId{});
     material.initialize(assetId, assetPath(), name, shaderHandle, renderQueue);
@@ -538,10 +538,10 @@ Material Material::clone() const {
     return copy;
 }
 
-void Material::rebuildFromAsset(const MaterialAsset& asset, ShaderHandle newShader) {
+void Material::rebuildFromAsset(const MaterialAsset& asset, RID newShader) {
     const Shader* newShaderValue = SHADER_MANAGER.find(newShader);
     if (!newShaderValue) {
-        Log::error("Material", "ShaderHandle must be valid");
+        Log::error("Material", "RID must be valid");
         return;
     }
 

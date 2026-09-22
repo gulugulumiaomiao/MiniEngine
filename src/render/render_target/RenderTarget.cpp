@@ -177,11 +177,11 @@ RenderTarget::Attachment& RenderTarget::requireDepth() {
     return const_cast<Attachment&>(std::as_const(*this).requireDepth());
 }
 
-rhi::TextureHandle RenderTarget::colorTexture(std::size_t index) const {
+rhi::RID RenderTarget::colorTexture(std::size_t index) const {
     return requireColor(index).texture;
 }
 
-rhi::TextureViewHandle RenderTarget::colorView(std::size_t index) const {
+rhi::RID RenderTarget::colorView(std::size_t index) const {
     return requireColor(index).view;
 }
 
@@ -189,11 +189,11 @@ rhi::PixelFormat RenderTarget::colorFormat(std::size_t index) const {
     return requireColor(index).format;
 }
 
-rhi::TextureHandle RenderTarget::depthTexture() const {
+rhi::RID RenderTarget::depthTexture() const {
     return requireDepth().texture;
 }
 
-rhi::TextureViewHandle RenderTarget::depthView() const {
+rhi::RID RenderTarget::depthView() const {
     return requireDepth().view;
 }
 

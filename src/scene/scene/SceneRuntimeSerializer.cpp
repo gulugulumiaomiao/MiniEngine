@@ -71,7 +71,7 @@ bool isIdentityPartTransform(const MeshPrimitivePart& part) {
                                            std::string& error,
                                            std::string_view nodeName) {
     result.enabled = component.enabled();
-    for (MaterialHandle handle : component.materials()) {
+    for (RID handle : component.materials()) {
         const Material* material = handle ? MATERIAL_MANAGER.find(handle) : nullptr;
         if (!material || !material->assetPath().valid() ||
             material->assetPath().scheme() != "assets" ||
@@ -86,7 +86,7 @@ bool isIdentityPartTransform(const MeshPrimitivePart& part) {
 }
 
 [[nodiscard]] bool exportNode(const Scene& scene,
-                              NodeHandle handle,
+                              RID handle,
                               std::optional<SceneNodeAssetId> parentId,
                               SceneNodeAssetId& nextId,
                               SceneAsset& asset,
@@ -151,7 +151,7 @@ bool isIdentityPartTransform(const MeshPrimitivePart& part) {
 
     asset.nodes.push_back(std::move(nodeAsset));
     const SceneNodeAssetId ownId = asset.nodes.back().id;
-    for (NodeHandle child : node->children()) {
+    for (RID child : node->children()) {
         if (!exportNode(scene, child, ownId, nextId, asset, error))
             return false;
     }
@@ -168,7 +168,7 @@ std::unique_ptr<SceneAsset> exportSceneToAsset(const Scene& scene,
     asset->setAssetPath(targetPath);
 
     SceneNodeAssetId nextId = 1;
-    for (NodeHandle child : scene.root().children()) {
+    for (RID child : scene.root().children()) {
         if (!exportNode(scene, child, std::nullopt, nextId, *asset, error))
             return nullptr;
     }

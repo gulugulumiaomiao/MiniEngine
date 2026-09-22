@@ -20,11 +20,11 @@ bool MeshGpuManager::initialize(rhi::IDevice& device) {
     }
     device_ = &device;
     factory_ = std::make_unique<MeshGpuFactory>(device);
-    MESH_MANAGER.setDestroyObserver([this](MeshHandle handle) { invalidate(handle); });
+    MESH_MANAGER.setDestroyObserver([this](RID handle) { invalidate(handle); });
     return true;
 }
 
-MeshDrawInfo MeshGpuManager::resolve(MeshHandle handle) {
+MeshDrawInfo MeshGpuManager::resolve(RID handle) {
     Mesh* mesh = MESH_MANAGER.find(handle);
     if (!initialized() || !mesh)
         return {};
@@ -45,7 +45,7 @@ MeshDrawInfo MeshGpuManager::resolve(MeshHandle handle) {
     return stored.stored->drawInfo;
 }
 
-void MeshGpuManager::invalidate(MeshHandle handle) {
+void MeshGpuManager::invalidate(RID handle) {
     if (!initialized())
         return;
     releaseBySource(cache_, *factory_, *device_, MeshGpuCache::sourceKey(handle));

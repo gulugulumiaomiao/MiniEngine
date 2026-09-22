@@ -104,7 +104,7 @@ public:
     [[nodiscard]] const TextureDesc& desc() const { return desc_; }
     [[nodiscard]] std::span<const TextureMipData> mipData() const { return mipData_; }
     [[nodiscard]] std::uint64_t version() const { return version_; }
-    [[nodiscard]] rhi::TextureHandle rhiHandle() const { return texture_; }
+    [[nodiscard]] rhi::RID rhiHandle() const { return texture_; }
     [[nodiscard]] rhi::IRHITexture* rhiTexture() const { return rhiTexture_; }
     [[nodiscard]] const TextureView& defaultView() const { return defaultView_; }
     [[nodiscard]] const rhi::SamplerDesc defaultSamplerDesc() const {
@@ -120,7 +120,7 @@ private:
             TextureDesc desc,
             std::vector<TextureMipData> mipData,
             std::uint64_t version,
-            rhi::TextureHandle texture,
+            rhi::RID texture,
             TextureView defaultView,
             rhi::IRHITexture& rhiTexture);
 
@@ -129,7 +129,7 @@ private:
     TextureDesc desc_;
     std::vector<TextureMipData> mipData_;
     std::uint64_t version_{1};
-    rhi::TextureHandle texture_;
+    rhi::RID texture_;
     TextureView defaultView_;
     rhi::IRHITexture* rhiTexture_{};
 };

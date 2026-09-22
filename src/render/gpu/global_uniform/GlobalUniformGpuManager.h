@@ -30,8 +30,8 @@ public:
     void beginFrame(std::uint32_t frameIndex);
     void shutdown();
 
-    [[nodiscard]] rhi::BindGroupHandle resolve(std::uint32_t frameIndex) const;
-    [[nodiscard]] rhi::BindGroupLayoutHandle bindGroupLayout() const { return layout_; }
+    [[nodiscard]] rhi::RID resolve(std::uint32_t frameIndex) const;
+    [[nodiscard]] rhi::RID bindGroupLayout() const { return layout_; }
     [[nodiscard]] bool initialized() const { return device_ != nullptr; }
 
 private:
@@ -39,8 +39,8 @@ private:
     GlobalUniformGpuManager();
 
     struct FrameResources {
-        rhi::BufferHandle uniformBuffer;
-        rhi::BindGroupHandle bindGroup;
+        rhi::RID uniformBuffer;
+        rhi::RID bindGroup;
         std::uint64_t uniformVersion{};
         std::uint64_t uniformSize{};
         std::vector<TextureBinding> textureBindings;
@@ -49,7 +49,7 @@ private:
     void updateFrame(std::uint32_t frameIndex);
 
     rhi::IDevice* device_{};
-    rhi::BindGroupLayoutHandle layout_;
+    rhi::RID layout_;
     std::vector<FrameResources> frames_;
     std::uint64_t lastLayoutVersion_{};
 };

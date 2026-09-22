@@ -21,8 +21,8 @@ class IDevice;
 class RgTexturePool final {
 public:
     struct PooledTexture {
-        rhi::TextureHandle texture;
-        rhi::TextureViewHandle view;
+        rhi::RID texture;
+        rhi::RID view;
         rhi::PixelFormat format{rhi::PixelFormat::Undefined};
         std::uint32_t width{};
         std::uint32_t height{};

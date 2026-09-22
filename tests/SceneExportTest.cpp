@@ -29,7 +29,7 @@ namespace {
 
 using namespace engine;
 
-[[nodiscard]] MeshHandle registerTriangleMesh() {
+[[nodiscard]] RID registerTriangleMesh() {
     MESH_MANAGER.clear();
     constexpr std::array positions{
         math::Vec3{-1.0F, -1.0F, 0.0F},
@@ -55,7 +55,7 @@ using namespace engine;
     return MESH_MANAGER.insertUnkeyed(source.instantiate());
 }
 
-[[nodiscard]] std::unique_ptr<Scene> buildExportScene(MeshHandle mesh, MaterialHandle material) {
+[[nodiscard]] std::unique_ptr<Scene> buildExportScene(RID mesh, RID material) {
     auto scene = std::make_unique<Scene>("Export Roundtrip");
 
     Node* world = scene->findNode(scene->createNode("World"));
@@ -105,7 +105,7 @@ int main() {
     if (!test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR))
         return 30;
 
-    const MeshHandle meshHandle = registerTriangleMesh();
+    const RID meshHandle = registerTriangleMesh();
     if (!meshHandle)
         return 31;
 
@@ -113,10 +113,10 @@ int main() {
     MaterialAsset materialAsset;
     materialAsset.setAssetPath(VirtualPath{"assets://materials/test_export.material.json"});
     materialAsset.name = "Export Material";
-    const ShaderHandle builtinShader = SHADER_MANAGER.builtinColor();
+    const RID builtinShader = SHADER_MANAGER.builtinColor();
     if (!builtinShader)
         return 32;
-    const MaterialHandle materialHandle =
+    const RID materialHandle =
         MATERIAL_MANAGER.insert(materialAsset.instantiate(builtinShader));
     if (!materialHandle)
         return 33;
@@ -240,7 +240,7 @@ int main() {
         Scene broken;
         broken.findNode(broken.createNode("Broken"))
             ->addComponent<MeshComponent>()
-            ->setAssetMesh(MeshHandle{999, 1});
+            ->setAssetMesh(RID{999, 1});
         error.clear();
         if (exportSceneToAsset(broken, targetPath, error) ||
             error.find("Broken") == std::string::npos) {
@@ -268,7 +268,7 @@ int main() {
         Scene broken;
         broken.findNode(broken.createNode("Unshaded"))
             ->addComponent<MaterialComponent>()
-            ->setMaterial(0, MaterialHandle{999, 1});
+            ->setMaterial(0, RID{999, 1});
         error.clear();
         if (exportSceneToAsset(broken, targetPath, error) ||
             error.find("Unshaded") == std::string::npos) {

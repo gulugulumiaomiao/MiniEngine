@@ -26,65 +26,65 @@ public:
         bool alive{true};
     };
 
-    engine::rhi::BufferHandle createBuffer(const engine::rhi::BufferDesc& desc) override {
+    engine::rhi::RID createBuffer(const engine::rhi::BufferDesc& desc) override {
         buffers.push_back({desc, std::vector<std::byte>(desc.size), true});
         ++createdBuffers;
         return {static_cast<std::uint32_t>(buffers.size() - 1), 1};
     }
 
-    void destroyBuffer(engine::rhi::BufferHandle handle) override {
-        if (handle.index >= buffers.size() || !buffers[handle.index].alive)
+    void destroyBuffer(engine::rhi::RID handle) override {
+        if (handle.index() >= buffers.size() || !buffers[handle.index()].alive)
             return;
-        buffers[handle.index].alive = false;
+        buffers[handle.index()].alive = false;
         ++destroyedBuffers;
     }
 
-    void uploadBuffer(engine::rhi::BufferHandle destination,
+    void uploadBuffer(engine::rhi::RID destination,
                       std::span<const std::byte> data,
                       std::uint64_t offset) override {
-        if (destination.index >= buffers.size())
+        if (destination.index() >= buffers.size())
             return;
-        BufferRecord& target = buffers[destination.index];
+        BufferRecord& target = buffers[destination.index()];
         std::ranges::copy(data, target.bytes.begin() + static_cast<std::ptrdiff_t>(offset));
         ++uploads;
     }
 
-    engine::rhi::TextureHandle createTexture(const engine::rhi::TextureDesc&) override {
+    engine::rhi::RID createTexture(const engine::rhi::TextureDesc&) override {
         return {};
     }
-    void destroyTexture(engine::rhi::TextureHandle) override {}
-    void uploadTexture(engine::rhi::TextureHandle,
+    void destroyTexture(engine::rhi::RID) override {}
+    void uploadTexture(engine::rhi::RID,
                        std::span<const engine::rhi::TextureUploadRegion>) override {}
-    engine::rhi::TextureViewHandle createTextureView(engine::rhi::TextureHandle,
+    engine::rhi::RID createTextureView(engine::rhi::RID,
                                                      const engine::rhi::TextureViewDesc&) override {
         return {};
     }
-    engine::rhi::TextureViewHandle
-    defaultTextureView(engine::rhi::TextureHandle) const override {
+    engine::rhi::RID
+    defaultTextureView(engine::rhi::RID) const override {
         return {};
     }
-    void destroyTextureView(engine::rhi::TextureViewHandle) override {}
-    engine::rhi::SamplerHandle createSampler(const engine::rhi::SamplerDesc&) override {
+    void destroyTextureView(engine::rhi::RID) override {}
+    engine::rhi::RID createSampler(const engine::rhi::SamplerDesc&) override {
         return {};
     }
-    void destroySampler(engine::rhi::SamplerHandle) override {}
+    void destroySampler(engine::rhi::RID) override {}
 
-    engine::rhi::ShaderHandle createShader(const engine::rhi::ShaderDesc&) override { return {}; }
-    void destroyShader(engine::rhi::ShaderHandle) override {}
-    engine::rhi::GraphicsPipelineHandle
+    engine::rhi::RID createShader(const engine::rhi::ShaderDesc&) override { return {}; }
+    void destroyShader(engine::rhi::RID) override {}
+    engine::rhi::RID
     createGraphicsPipeline(const engine::rhi::GraphicsPipelineDesc&) override {
         return {};
     }
-    void destroyGraphicsPipeline(engine::rhi::GraphicsPipelineHandle) override {}
-    engine::rhi::BindGroupLayoutHandle
+    void destroyGraphicsPipeline(engine::rhi::RID) override {}
+    engine::rhi::RID
     createBindGroupLayout(const engine::rhi::BindGroupLayoutDesc&) override {
         return {};
     }
-    void destroyBindGroupLayout(engine::rhi::BindGroupLayoutHandle) override {}
-    engine::rhi::BindGroupHandle createBindGroup(const engine::rhi::BindGroupDesc&) override {
+    void destroyBindGroupLayout(engine::rhi::RID) override {}
+    engine::rhi::RID createBindGroup(const engine::rhi::BindGroupDesc&) override {
         return {};
     }
-    void destroyBindGroup(engine::rhi::BindGroupHandle) override {}
+    void destroyBindGroup(engine::rhi::RID) override {}
     std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override { return nullptr; }
     void submitCommand(engine::rhi::ICommandBuffer&, const engine::rhi::SubmitSync&) override {}
     VkDevice device() const override { return VK_NULL_HANDLE; }
@@ -92,24 +92,24 @@ public:
     VkPhysicalDevice physicalDevice() const override { return VK_NULL_HANDLE; }
     VkQueue graphicsQueue() const override { return VK_NULL_HANDLE; }
     std::uint32_t graphicsQueueFamily() const override { return 0; }
-    VkBuffer resolveBuffer(engine::rhi::BufferHandle) const override { return VK_NULL_HANDLE; }
+    VkBuffer resolveBuffer(engine::rhi::RID) const override { return VK_NULL_HANDLE; }
     engine::rhi::IRHITexture*
-    resolveTextureResource(engine::rhi::TextureHandle) override {
+    resolveTextureResource(engine::rhi::RID) override {
         return nullptr;
     }
     const engine::rhi::IRHITexture*
-    resolveTextureResource(engine::rhi::TextureHandle) const override {
+    resolveTextureResource(engine::rhi::RID) const override {
         return nullptr;
     }
-    VkImage resolveTexture(engine::rhi::TextureHandle) const override { return VK_NULL_HANDLE; }
-    VkImageView resolveTextureView(engine::rhi::TextureViewHandle) const override {
+    VkImage resolveTexture(engine::rhi::RID) const override { return VK_NULL_HANDLE; }
+    VkImageView resolveTextureView(engine::rhi::RID) const override {
         return VK_NULL_HANDLE;
     }
     engine::rhi::ResolvedPipeline
-    resolvePipeline(engine::rhi::GraphicsPipelineHandle) const override {
+    resolvePipeline(engine::rhi::RID) const override {
         return {};
     }
-    VkDescriptorSet resolveBindGroup(engine::rhi::BindGroupHandle) const override {
+    VkDescriptorSet resolveBindGroup(engine::rhi::RID) const override {
         return VK_NULL_HANDLE;
     }
     void waitIdle() override { ++waits; }
@@ -219,7 +219,7 @@ int main() {
     if (decoded.transfer(invalidReader) || decoded.desc.debugName != originalName) {
         return 7;
     }
-    const MeshHandle handle = MESH_MANAGER.insertUnkeyed(decoded.instantiate());
+    const RID handle = MESH_MANAGER.insertUnkeyed(decoded.instantiate());
     if (!handle || MESH_MANAGER.find(handle) == nullptr || MESH_MANAGER.size() != 1) {
         return 8;
     }
@@ -239,24 +239,24 @@ int main() {
         return 11;
     }
 
-    const MeshHandle runtimePlane = MESH_MANAGER.createRuntime(planeRecipe);
-    const MeshHandle secondRuntimePlane = MESH_MANAGER.createRuntime(planeRecipe);
+    const RID runtimePlane = MESH_MANAGER.createRuntime(planeRecipe);
+    const RID secondRuntimePlane = MESH_MANAGER.createRuntime(planeRecipe);
     const Mesh* runtimePlaneMesh = MESH_MANAGER.find(runtimePlane);
     if (!runtimePlane || !secondRuntimePlane || runtimePlane == secondRuntimePlane ||
         !runtimePlaneMesh || runtimePlaneMesh->assetPath().valid() || MESH_MANAGER.size() != 2) {
         return 20;
     }
     const std::uint64_t runtimeVersion = runtimePlaneMesh->version();
-    std::vector<MeshHandle> destroyedRuntimeMeshes;
+    std::vector<RID> destroyedRuntimeMeshes;
     MESH_MANAGER.setDestroyObserver(
-        [&destroyedRuntimeMeshes](MeshHandle handle) { destroyedRuntimeMeshes.push_back(handle); });
+        [&destroyedRuntimeMeshes](RID handle) { destroyedRuntimeMeshes.push_back(handle); });
     planeRecipe.parts[0].primitive = PlaneGeometry{{4.0F, 4.0F}, 2, 2};
     if (!MESH_MANAGER.rebuildRuntime(runtimePlane, planeRecipe) ||
         MESH_MANAGER.find(runtimePlane)->version() != runtimeVersion + 1 ||
         MESH_MANAGER.find(runtimePlane)->data().indexCount != 24 ||
         !MESH_MANAGER.destroyRuntime(runtimePlane) || MESH_MANAGER.find(runtimePlane) ||
         !MESH_MANAGER.destroyRuntime(secondRuntimePlane) || MESH_MANAGER.size() != 0 ||
-        destroyedRuntimeMeshes != std::vector<MeshHandle>{runtimePlane, secondRuntimePlane}) {
+        destroyedRuntimeMeshes != std::vector<RID>{runtimePlane, secondRuntimePlane}) {
         return 21;
     }
     MESH_MANAGER.setDestroyObserver({});
@@ -343,7 +343,7 @@ int main() {
     MeshGpuCache gpuCache;
     MeshGpuFactory gpuFactory{fakeDevice};
     Mesh gpuMesh = source.instantiate();
-    const MeshHandle gpuHandle{7, 1};
+    const RID gpuHandle{7, 1};
     MeshGpuResource firstResource;
     if (!gpuFactory.create({gpuMesh}, firstResource))
         return 19;

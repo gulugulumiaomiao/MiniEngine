@@ -11,7 +11,7 @@ class Material;
 class MaterialAsset;
 
 // 运行时 Material → MaterialAsset 提取（对称 scene 模块的 exportSceneToAsset）。
-// error 接收人类可读的失败原因；空结果表示至少有一项无法表达（如 ShaderHandle
+// error 接收人类可读的失败原因；空结果表示至少有一项无法表达（如 RID
 // 失效）。renderQueue 只提取 override：写回生效值会把 shader 默认显式化，破坏
 // 源文件的省略语义。
 [[nodiscard]] std::unique_ptr<MaterialAsset> exportMaterialToAsset(const Material& material,

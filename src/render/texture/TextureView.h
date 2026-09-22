@@ -9,18 +9,18 @@ namespace engine {
 class TextureView final {
 public:
     TextureView() = default;
-    TextureView(rhi::TextureHandle texture, rhi::TextureViewHandle view, rhi::TextureViewDesc desc)
+    TextureView(rhi::RID texture, rhi::RID view, rhi::TextureViewDesc desc)
         : texture_(texture), view_(view), desc_(desc) {}
 
-    [[nodiscard]] rhi::TextureHandle textureHandle() const { return texture_; }
-    [[nodiscard]] rhi::TextureViewHandle rhiHandle() const { return view_; }
+    [[nodiscard]] rhi::RID textureHandle() const { return texture_; }
+    [[nodiscard]] rhi::RID rhiHandle() const { return view_; }
     [[nodiscard]] const rhi::TextureViewDesc& desc() const { return desc_; }
     [[nodiscard]] explicit operator bool() const { return static_cast<bool>(view_); }
     [[nodiscard]] bool operator==(const TextureView&) const = default;
 
 private:
-    rhi::TextureHandle texture_;
-    rhi::TextureViewHandle view_;
+    rhi::RID texture_;
+    rhi::RID view_;
     rhi::TextureViewDesc desc_;
 };
 

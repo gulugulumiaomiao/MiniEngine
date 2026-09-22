@@ -16,11 +16,11 @@ namespace {
 class FakeRhiTexture final : public engine::rhi::IRHITexture {
 public:
     FakeRhiTexture(engine::rhi::TextureDesc desc,
-                   engine::rhi::TextureViewHandle defaultView,
+                   engine::rhi::RID defaultView,
                    std::vector<engine::rhi::TextureViewDesc>& viewDescs,
-                   std::vector<engine::rhi::TextureHandle>& viewTextures,
+                   std::vector<engine::rhi::RID>& viewTextures,
                    std::uint32_t& createdViews,
-                   engine::rhi::TextureHandle texture)
+                   engine::rhi::RID texture)
         : desc_(std::move(desc)), defaultView_(defaultView), viewDescs_(viewDescs),
           viewTextures_(viewTextures), createdViews_(createdViews), texture_(texture) {
         views_.emplace(engine::rhi::TextureViewDesc{.type = desc_.dimension,
@@ -39,8 +39,8 @@ public:
     std::uint32_t depth() const override { return desc_.depth; }
     std::uint32_t arrayLayers() const override { return desc_.arrayLayers; }
     std::uint32_t mipCount() const override { return desc_.mipCount; }
-    engine::rhi::TextureViewHandle defaultView() const override { return defaultView_; }
-    engine::rhi::TextureViewHandle createView(const engine::rhi::TextureViewDesc& desc) override {
+    engine::rhi::RID defaultView() const override { return defaultView_; }
+    engine::rhi::RID createView(const engine::rhi::TextureViewDesc& desc) override {
         engine::rhi::TextureViewDesc normalized = desc;
         if (normalized.format == engine::rhi::PixelFormat::Undefined)
             normalized.format = desc_.format;
@@ -48,44 +48,44 @@ public:
             return found->second;
         viewDescs_.push_back(normalized);
         viewTextures_.push_back(texture_);
-        const engine::rhi::TextureViewHandle handle{++createdViews_, 1};
+        const engine::rhi::RID handle{++createdViews_, 1};
         views_.emplace(normalized, handle);
         return handle;
     }
 
 private:
     engine::rhi::TextureDesc desc_;
-    engine::rhi::TextureViewHandle defaultView_;
+    engine::rhi::RID defaultView_;
     std::vector<engine::rhi::TextureViewDesc>& viewDescs_;
-    std::vector<engine::rhi::TextureHandle>& viewTextures_;
+    std::vector<engine::rhi::RID>& viewTextures_;
     std::uint32_t& createdViews_;
-    engine::rhi::TextureHandle texture_;
+    engine::rhi::RID texture_;
     std::unordered_map<engine::rhi::TextureViewDesc,
-                       engine::rhi::TextureViewHandle,
+                       engine::rhi::RID,
                        engine::rhi::TextureViewDescHash>
         views_;
 };
 
 class FakeDevice final : public engine::rhi::IDevice {
 public:
-    engine::rhi::BufferHandle createBuffer(const engine::rhi::BufferDesc&) override { return {}; }
-    void destroyBuffer(engine::rhi::BufferHandle) override {}
+    engine::rhi::RID createBuffer(const engine::rhi::BufferDesc&) override { return {}; }
+    void destroyBuffer(engine::rhi::RID) override {}
     void
-    uploadBuffer(engine::rhi::BufferHandle, std::span<const std::byte>, std::uint64_t) override {}
+    uploadBuffer(engine::rhi::RID, std::span<const std::byte>, std::uint64_t) override {}
 
-    engine::rhi::TextureHandle createTexture(const engine::rhi::TextureDesc& desc) override {
+    engine::rhi::RID createTexture(const engine::rhi::TextureDesc& desc) override {
         textureDescs.push_back(desc);
-        const engine::rhi::TextureHandle texture{++createdTextures, 1};
-        const engine::rhi::TextureViewHandle defaultView{++createdViews, 1};
+        const engine::rhi::RID texture{++createdTextures, 1};
+        const engine::rhi::RID defaultView{++createdViews, 1};
         textures.push_back(std::make_unique<FakeRhiTexture>(
             desc, defaultView, viewDescs, viewTextures, createdViews, texture));
         return texture;
     }
-    void destroyTexture(engine::rhi::TextureHandle handle) override {
+    void destroyTexture(engine::rhi::RID handle) override {
         if (handle)
             ++destroyedTextures;
     }
-    void uploadTexture(engine::rhi::TextureHandle,
+    void uploadTexture(engine::rhi::RID,
                        std::span<const engine::rhi::TextureUploadRegion> regions) override {
         ++textureUploads;
         uploadedMipCounts.push_back(static_cast<std::uint32_t>(regions.size()));
@@ -93,41 +93,41 @@ public:
         for (const engine::rhi::TextureUploadRegion& region : regions)
             uploadedByteCounts.back() += region.data.size_bytes();
     }
-    engine::rhi::TextureViewHandle
-    createTextureView(engine::rhi::TextureHandle texture,
+    engine::rhi::RID
+    createTextureView(engine::rhi::RID texture,
                       const engine::rhi::TextureViewDesc& desc) override {
         viewDescs.push_back(desc);
         viewTextures.push_back(texture);
         return {++createdViews, 1};
     }
-    engine::rhi::TextureViewHandle
-    defaultTextureView(engine::rhi::TextureHandle texture) const override {
+    engine::rhi::RID
+    defaultTextureView(engine::rhi::RID texture) const override {
         const auto* resource = resolveTextureResource(texture);
-        return resource ? resource->defaultView() : engine::rhi::TextureViewHandle{};
+        return resource ? resource->defaultView() : engine::rhi::RID{};
     }
-    void destroyTextureView(engine::rhi::TextureViewHandle) override {}
-    engine::rhi::SamplerHandle createSampler(const engine::rhi::SamplerDesc& desc) override {
+    void destroyTextureView(engine::rhi::RID) override {}
+    engine::rhi::RID createSampler(const engine::rhi::SamplerDesc& desc) override {
         samplerDescs.push_back(desc);
         return {static_cast<std::uint32_t>(samplerDescs.size()), 1};
     }
-    void destroySampler(engine::rhi::SamplerHandle) override {}
+    void destroySampler(engine::rhi::RID) override {}
 
-    engine::rhi::ShaderHandle createShader(const engine::rhi::ShaderDesc&) override { return {}; }
-    void destroyShader(engine::rhi::ShaderHandle) override {}
-    engine::rhi::GraphicsPipelineHandle
+    engine::rhi::RID createShader(const engine::rhi::ShaderDesc&) override { return {}; }
+    void destroyShader(engine::rhi::RID) override {}
+    engine::rhi::RID
     createGraphicsPipeline(const engine::rhi::GraphicsPipelineDesc&) override {
         return {};
     }
-    void destroyGraphicsPipeline(engine::rhi::GraphicsPipelineHandle) override {}
-    engine::rhi::BindGroupLayoutHandle
+    void destroyGraphicsPipeline(engine::rhi::RID) override {}
+    engine::rhi::RID
     createBindGroupLayout(const engine::rhi::BindGroupLayoutDesc&) override {
         return {};
     }
-    void destroyBindGroupLayout(engine::rhi::BindGroupLayoutHandle) override {}
-    engine::rhi::BindGroupHandle createBindGroup(const engine::rhi::BindGroupDesc&) override {
+    void destroyBindGroupLayout(engine::rhi::RID) override {}
+    engine::rhi::RID createBindGroup(const engine::rhi::BindGroupDesc&) override {
         return {};
     }
-    void destroyBindGroup(engine::rhi::BindGroupHandle) override {}
+    void destroyBindGroup(engine::rhi::RID) override {}
     std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override { return nullptr; }
     void submitCommand(engine::rhi::ICommandBuffer&, const engine::rhi::SubmitSync&) override {}
     VkDevice device() const override { return VK_NULL_HANDLE; }
@@ -135,27 +135,27 @@ public:
     VkPhysicalDevice physicalDevice() const override { return VK_NULL_HANDLE; }
     VkQueue graphicsQueue() const override { return VK_NULL_HANDLE; }
     std::uint32_t graphicsQueueFamily() const override { return 0; }
-    VkBuffer resolveBuffer(engine::rhi::BufferHandle) const override { return VK_NULL_HANDLE; }
-    engine::rhi::IRHITexture* resolveTextureResource(engine::rhi::TextureHandle handle) override {
-        return handle.index > 0 && handle.index <= textures.size()
-                   ? textures[handle.index - 1].get()
+    VkBuffer resolveBuffer(engine::rhi::RID) const override { return VK_NULL_HANDLE; }
+    engine::rhi::IRHITexture* resolveTextureResource(engine::rhi::RID handle) override {
+        return handle.index() > 0 && handle.index() <= textures.size()
+                   ? textures[handle.index() - 1].get()
                    : nullptr;
     }
     const engine::rhi::IRHITexture*
-    resolveTextureResource(engine::rhi::TextureHandle handle) const override {
-        return handle.index > 0 && handle.index <= textures.size()
-                   ? textures[handle.index - 1].get()
+    resolveTextureResource(engine::rhi::RID handle) const override {
+        return handle.index() > 0 && handle.index() <= textures.size()
+                   ? textures[handle.index() - 1].get()
                    : nullptr;
     }
-    VkImage resolveTexture(engine::rhi::TextureHandle) const override { return VK_NULL_HANDLE; }
-    VkImageView resolveTextureView(engine::rhi::TextureViewHandle) const override {
+    VkImage resolveTexture(engine::rhi::RID) const override { return VK_NULL_HANDLE; }
+    VkImageView resolveTextureView(engine::rhi::RID) const override {
         return VK_NULL_HANDLE;
     }
     engine::rhi::ResolvedPipeline
-    resolvePipeline(engine::rhi::GraphicsPipelineHandle) const override {
+    resolvePipeline(engine::rhi::RID) const override {
         return {};
     }
-    VkDescriptorSet resolveBindGroup(engine::rhi::BindGroupHandle) const override {
+    VkDescriptorSet resolveBindGroup(engine::rhi::RID) const override {
         return VK_NULL_HANDLE;
     }
     void waitIdle() override { ++waits; }
@@ -163,7 +163,7 @@ public:
     std::vector<engine::rhi::TextureDesc> textureDescs;
     std::vector<std::unique_ptr<FakeRhiTexture>> textures;
     std::vector<engine::rhi::TextureViewDesc> viewDescs;
-    std::vector<engine::rhi::TextureHandle> viewTextures;
+    std::vector<engine::rhi::RID> viewTextures;
     std::vector<engine::rhi::SamplerDesc> samplerDescs;
     std::vector<std::uint32_t> uploadedMipCounts;
     std::vector<std::size_t> uploadedByteCounts;
@@ -188,10 +188,10 @@ protected:
 
 TEST_F(TextureTest, BuiltinsOwnRhiTextureAndDefaultView) {
     using namespace engine;
-    const TextureHandle white = TEXTURE_MANAGER.defaultWhite();
-    const TextureHandle black = TEXTURE_MANAGER.defaultBlack();
-    const TextureHandle normal = TEXTURE_MANAGER.defaultNormal();
-    const TextureHandle error = TEXTURE_MANAGER.errorTexture();
+    const RID white = TEXTURE_MANAGER.defaultWhite();
+    const RID black = TEXTURE_MANAGER.defaultBlack();
+    const RID normal = TEXTURE_MANAGER.defaultNormal();
+    const RID error = TEXTURE_MANAGER.errorTexture();
 
     const Texture* whiteTexture = TEXTURE_MANAGER.find(white);
     const Texture* normalTexture = TEXTURE_MANAGER.find(normal);
@@ -214,7 +214,7 @@ TEST_F(TextureTest, BuiltinsOwnRhiTextureAndDefaultView) {
 
 TEST_F(TextureTest, ViewAndSamplerAreLightweightIndependentBindings) {
     using namespace engine;
-    const TextureHandle white = TEXTURE_MANAGER.defaultWhite();
+    const RID white = TEXTURE_MANAGER.defaultWhite();
     const Texture* texture = TEXTURE_MANAGER.find(white);
     ASSERT_TRUE(texture);
 
@@ -252,7 +252,7 @@ TEST_F(TextureTest, ViewAndSamplerAreLightweightIndependentBindings) {
 
 TEST_F(TextureTest, MaterialBindsTextureViewAndSamplerInsteadOfTexture) {
     using namespace engine;
-    const TextureHandle textureHandle = TEXTURE_MANAGER.defaultWhite();
+    const RID textureHandle = TEXTURE_MANAGER.defaultWhite();
     const Texture* texture = TEXTURE_MANAGER.find(textureHandle);
     ASSERT_TRUE(texture);
     const Sampler sampler = Sampler::resolve(device, texture->defaultSamplerDesc());
@@ -282,8 +282,8 @@ TEST_F(TextureTest, MaterialBindsTextureViewAndSamplerInsteadOfTexture) {
 
 TEST_F(TextureTest, CloneCreatesIndependentRhiTexture) {
     using namespace engine;
-    const TextureHandle source = TEXTURE_MANAGER.defaultWhite();
-    const TextureHandle clone = TEXTURE_MANAGER.clone(source);
+    const RID source = TEXTURE_MANAGER.defaultWhite();
+    const RID clone = TEXTURE_MANAGER.clone(source);
     ASSERT_TRUE(clone);
     ASSERT_NE(source, clone);
     const Texture* sourceTexture = TEXTURE_MANAGER.find(source);

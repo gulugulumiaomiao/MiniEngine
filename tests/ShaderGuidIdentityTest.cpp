@@ -26,13 +26,13 @@ protected:
 TEST_F(ShaderGuidIdentityTest, LoadByGuidReturnsSameHandle) {
     using namespace engine;
     const VirtualPath path{"assets://shaders/builtin_color.shader.json"};
-    const ShaderHandle byPath = SHADER_MANAGER.load(path);
+    const RID byPath = SHADER_MANAGER.load(path);
     ASSERT_TRUE(byPath);
 
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const ShaderHandle byId = SHADER_MANAGER.load(*assetId);
+    const RID byId = SHADER_MANAGER.load(*assetId);
     EXPECT_EQ(byId, byPath);
     EXPECT_EQ(SHADER_MANAGER.find(*assetId), SHADER_MANAGER.find(byPath));
 }
@@ -40,10 +40,10 @@ TEST_F(ShaderGuidIdentityTest, LoadByGuidReturnsSameHandle) {
 TEST_F(ShaderGuidIdentityTest, CloneReturnsDifferentHandleAndIsNotAssetBacked) {
     using namespace engine;
     const VirtualPath path{"assets://shaders/builtin_color.shader.json"};
-    const ShaderHandle original = SHADER_MANAGER.load(path);
+    const RID original = SHADER_MANAGER.load(path);
     ASSERT_TRUE(original);
 
-    const ShaderHandle cloned = SHADER_MANAGER.clone(original);
+    const RID cloned = SHADER_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
     EXPECT_NE(cloned, original);
 
@@ -60,13 +60,13 @@ TEST_F(ShaderGuidIdentityTest, CloneReturnsDifferentHandleAndIsNotAssetBacked) {
 TEST_F(ShaderGuidIdentityTest, CloneDoesNotAppearInAssetIndex) {
     using namespace engine;
     const VirtualPath path{"assets://shaders/builtin_color.shader.json"};
-    const ShaderHandle original = SHADER_MANAGER.load(path);
+    const RID original = SHADER_MANAGER.load(path);
     ASSERT_TRUE(original);
 
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const ShaderHandle cloned = SHADER_MANAGER.clone(original);
+    const RID cloned = SHADER_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
 
     EXPECT_EQ(SHADER_MANAGER.find(*assetId), SHADER_MANAGER.find(original));
@@ -79,9 +79,9 @@ TEST_F(ShaderGuidIdentityTest, RefreshAssetUpdatesOriginalButNotClone) {
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const ShaderHandle original = SHADER_MANAGER.load(path);
+    const RID original = SHADER_MANAGER.load(path);
     ASSERT_TRUE(original);
-    const ShaderHandle cloned = SHADER_MANAGER.clone(original);
+    const RID cloned = SHADER_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
 
     Shader* originalData = SHADER_MANAGER.find(original);

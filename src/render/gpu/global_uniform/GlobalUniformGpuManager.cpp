@@ -42,7 +42,7 @@ void GlobalUniformGpuManager::beginFrame(std::uint32_t frameIndex) {
     updateFrame(frameIndex);
 }
 
-rhi::BindGroupHandle GlobalUniformGpuManager::resolve(std::uint32_t frameIndex) const {
+rhi::RID GlobalUniformGpuManager::resolve(std::uint32_t frameIndex) const {
     if (frameIndex >= frames_.size())
         return {};
     return frames_[frameIndex].bindGroup;
@@ -54,7 +54,7 @@ void GlobalUniformGpuManager::updateFrame(std::uint32_t frameIndex) {
     const std::uint64_t byteSize = std::max<std::uint64_t>(16, globals.uniformBytes().size());
 
     const auto resolveTextureBinding = [this](std::string_view reference) {
-        const TextureHandle handle = TEXTURE_MANAGER.resolveReference(reference);
+        const RID handle = TEXTURE_MANAGER.resolveReference(reference);
         const Texture* texture = TEXTURE_MANAGER.find(handle);
         if (!texture)
             return TextureBinding{};

@@ -14,8 +14,8 @@ using MeshGpuCacheKey = SourceVersionKey;
 class MeshGpuCache final
     : public GpuCacheBase<MeshGpuCacheKey, MeshGpuResource, SourceVersionKeyHash> {
 public:
-    [[nodiscard]] static std::uint64_t sourceKey(MeshHandle handle) { return handleKey(handle); }
-    [[nodiscard]] static MeshGpuCacheKey key(MeshHandle handle, std::uint64_t version) {
+    [[nodiscard]] static std::uint64_t sourceKey(RID handle) { return handleKey(handle); }
+    [[nodiscard]] static MeshGpuCacheKey key(RID handle, std::uint64_t version) {
         return {handleKey(handle), version};
     }
 };

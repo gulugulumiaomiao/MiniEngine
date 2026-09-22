@@ -13,9 +13,9 @@ engine::DrawItem makeItem(int renderQueue,
                           std::uint32_t firstInstance = 0) {
     engine::DrawItem item;
     item.renderQueue = renderQueue;
-    item.pipeline = engine::rhi::GraphicsPipelineHandle{pipelineIndex, 1};
-    item.material = engine::MaterialHandle{materialIndex, 1};
-    item.mesh = engine::MeshHandle{meshIndex, 1};
+    item.pipeline = engine::rhi::RID{pipelineIndex, 1};
+    item.material = engine::RID{materialIndex, 1};
+    item.mesh = engine::RID{meshIndex, 1};
     item.arguments.firstInstance = firstInstance;
     return item;
 }
@@ -91,13 +91,13 @@ int main() {
         DrawSorter sorter;
         sorter.sort(items, SortingCriteria::Pipeline | SortingCriteria::Material | SortingCriteria::Mesh, scene);
 
-        assert(items[0].pipeline.index == 1);
-        assert(items[0].material.index == 2);
-        assert(items[0].mesh.index == 1);
-        assert(items[1].pipeline.index == 1);
-        assert(items[1].material.index == 2);
-        assert(items[1].mesh.index == 3);
-        assert(items[2].pipeline.index == 3);
+        assert(items[0].pipeline.index() == 1);
+        assert(items[0].material.index() == 2);
+        assert(items[0].mesh.index() == 1);
+        assert(items[1].pipeline.index() == 1);
+        assert(items[1].material.index() == 2);
+        assert(items[1].mesh.index() == 3);
+        assert(items[2].pipeline.index() == 3);
     }
 
     // DrawSorter BackToFront

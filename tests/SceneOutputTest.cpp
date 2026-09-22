@@ -25,8 +25,8 @@ public:
         height_ = h;
     }
     rhi::ICommandBuffer& commandBuffer() override { return commands; }
-    rhi::TextureHandle currentTexture() const override { return {99, 1}; }
-    rhi::TextureViewHandle currentTextureView() const override { return {99, 1}; }
+    rhi::RID currentTexture() const override { return {99, 1}; }
+    rhi::RID currentTextureView() const override { return {99, 1}; }
     rhi::ResourceState currentTextureState() const override {
         return rhi::ResourceState::Undefined;
     }
@@ -89,7 +89,7 @@ TEST_F(SceneOutputTest, DefaultRuntimeKeepsSwapchainExtentAndPresentFallback) {
     EXPECT_FLOAT_EQ(renderer->sceneAspectRatio(), 800.0F / 600.0F);
     renderer->renderFrame(scene);
     ASSERT_EQ(swapchain->commands.renderings.size(), 1U);
-    EXPECT_EQ(swapchain->commands.renderings[0].colorAttachments[0].view.index, 99U);
+    EXPECT_EQ(swapchain->commands.renderings[0].colorAttachments[0].view.index(), 99U);
     EXPECT_EQ(swapchain->commands.barriers.back().after, rhi::ResourceState::Present);
     EXPECT_EQ(renderer->currentForwardTarget().colorAttachmentCount(), 0U);
 }
@@ -112,7 +112,7 @@ TEST_F(SceneOutputTest, EmptySceneClearsSampledImageAndFinishesInShaderRead) {
     EXPECT_FALSE(pipeline->backbufferWritten);
     bool shaderRead = false;
     for (const auto& barrier : swapchain->commands.barriers)
-        shaderRead |= barrier.texture.index == 3 && barrier.after == rhi::ResourceState::ShaderRead;
+        shaderRead |= barrier.texture.index() == 3 && barrier.after == rhi::ResourceState::ShaderRead;
     EXPECT_TRUE(shaderRead);
 }
 

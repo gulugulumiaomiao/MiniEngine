@@ -109,7 +109,7 @@ struct Harness {
     MaterialInspector inspector;
     std::filesystem::path root;
     bool valid{};
-    MaterialHandle current{};
+    RID current{};
 
     Harness() {
         ImGui::CreateContext();
@@ -215,7 +215,7 @@ struct Harness {
 bool editsUpdateInstanceAndWriteBack() {
     Harness ui;
     CHECK(ui.valid);
-    const MaterialHandle handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
+    const RID handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
     MaterialComponent component;
     component.setMaterial(0, handle);
@@ -250,7 +250,7 @@ bool editsUpdateInstanceAndWriteBack() {
 bool writeBackIsIdempotentThroughReimport() {
     Harness ui;
     CHECK(ui.valid);
-    const MaterialHandle handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
+    const RID handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
     ui.current = handle;
     ui.settle();
@@ -276,7 +276,7 @@ bool writeBackIsIdempotentThroughReimport() {
 bool shaderSwitchPreservesCompatibleValues() {
     Harness ui;
     CHECK(ui.valid);
-    const MaterialHandle handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
+    const RID handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
     ui.current = handle;
     ui.settle();
@@ -306,7 +306,7 @@ bool shaderSwitchPreservesCompatibleValues() {
 bool keywordAndRenderQueueOverride() {
     Harness ui;
     CHECK(ui.valid);
-    const MaterialHandle handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
+    const RID handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
     ui.current = handle;
     ui.settle();
@@ -344,9 +344,9 @@ bool keywordAndRenderQueueOverride() {
 bool detachedMaterialEditsWithoutWriteBack() {
     Harness ui;
     CHECK(ui.valid);
-    const MaterialHandle source = MATERIAL_MANAGER.load(kWarmMaterialPath);
+    const RID source = MATERIAL_MANAGER.load(kWarmMaterialPath);
     CHECK(static_cast<bool>(source));
-    const MaterialHandle cloned = MATERIAL_MANAGER.clone(source);
+    const RID cloned = MATERIAL_MANAGER.clone(source);
     CHECK(static_cast<bool>(cloned));
     ui.current = cloned;
     ui.settle();
@@ -371,8 +371,8 @@ bool detachedMaterialEditsWithoutWriteBack() {
 bool targetSwitchFlushesPendingSave() {
     Harness ui;
     CHECK(ui.valid);
-    const MaterialHandle warm = MATERIAL_MANAGER.load(kWarmMaterialPath);
-    const MaterialHandle cool = MATERIAL_MANAGER.load(kCoolMaterialPath);
+    const RID warm = MATERIAL_MANAGER.load(kWarmMaterialPath);
+    const RID cool = MATERIAL_MANAGER.load(kCoolMaterialPath);
     CHECK(static_cast<bool>(warm));
     CHECK(static_cast<bool>(cool));
 

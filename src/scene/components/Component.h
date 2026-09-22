@@ -16,7 +16,7 @@ public:
     Component(Component&&) = delete;
     Component& operator=(Component&&) = delete;
 
-    [[nodiscard]] NodeHandle owner() const;
+    [[nodiscard]] RID owner() const;
     [[nodiscard]] Node* node() { return node_; }
     [[nodiscard]] const Node* node() const { return node_; }
     [[nodiscard]] Scene* scene();

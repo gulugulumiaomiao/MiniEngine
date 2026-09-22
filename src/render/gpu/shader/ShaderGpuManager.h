@@ -24,12 +24,12 @@ public:
     ~ShaderGpuManager();
 
     [[nodiscard]] bool initialize(rhi::IDevice& device);
-    [[nodiscard]] ShaderProgramHandle getOrCreateProgram(const Shader& shader,
+    [[nodiscard]] RID getOrCreateProgram(const Shader& shader,
                                                          const ShaderPass& pass,
                                                          const ShaderVariantKey& variant);
-    [[nodiscard]] const ShaderProgram& resolveProgram(ShaderProgramHandle handle) const;
-    [[nodiscard]] const CompiledShader& resolveCompiled(CompiledShaderHandle handle) const;
-    [[nodiscard]] rhi::ShaderHandle resolve(CompiledShaderHandle handle);
+    [[nodiscard]] const ShaderProgram& resolveProgram(RID handle) const;
+    [[nodiscard]] const CompiledShader& resolveCompiled(RID handle) const;
+    [[nodiscard]] rhi::RID resolve(RID handle);
     [[nodiscard]] std::vector<CompiledShaderId> invalidateChanged(std::uint64_t retireSerial);
     void invalidate(std::span<const CompiledShaderId> shaders, std::uint64_t retireSerial);
     void collect(std::uint64_t completedSerial);

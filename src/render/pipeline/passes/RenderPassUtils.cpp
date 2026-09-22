@@ -82,8 +82,8 @@ void applyRenderState(rhi::ICommandBuffer& commandBuffer, const RenderStateDesc&
 
 void drawFilteredItems(std::uint32_t frameIndex,
                        std::span<const DrawItem> items,
-                       rhi::BindGroupHandle sceneBindGroup,
-                       rhi::BindGroupHandle globalBindGroup,
+                       rhi::RID sceneBindGroup,
+                       rhi::RID globalBindGroup,
                        rhi::ICommandBuffer& commandBuffer) {
     DrawBatcher batcher;
     BatchedDrawList batched = batcher.build(items);
@@ -100,9 +100,9 @@ void drawFilteredItems(std::uint32_t frameIndex,
                                                     batched.instanceRows.size()));
     FRAME_GPU_MANAGER.uploadInstanceRegion(frameIndex, baseSlot, batched.instanceRows);
 
-    rhi::GraphicsPipelineHandle boundPipeline;
-    rhi::BindGroupHandle boundMaterial;
-    rhi::BindGroupHandle boundGlobal;
+    rhi::RID boundPipeline;
+    rhi::RID boundMaterial;
+    rhi::RID boundGlobal;
     const ShaderPass* boundShaderPass = nullptr;
     for (const DrawBatch& batch : batched.batches) {
         if (batch.pipeline != boundPipeline) {

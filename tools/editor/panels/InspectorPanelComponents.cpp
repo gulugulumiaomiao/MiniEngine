@@ -89,12 +89,12 @@ template void InspectorPanel::endComponent<MaterialComponent>(Node&);
 template void InspectorPanel::endComponent<CameraComponent>(Node&);
 template void InspectorPanel::endComponent<LightComponent>(Node&);
 
-void InspectorPanel::drawMultiHeader(const SelectionSet<NodeHandle>& selection) {
+void InspectorPanel::drawMultiHeader(const SelectionSet<RID>& selection) {
     ImGui::Text("%u nodes selected", static_cast<unsigned>(selection.size()));
     ImGui::Separator();
 }
 
-void InspectorPanel::drawMultiActive(const SelectionSet<NodeHandle>& selection) {
+void InspectorPanel::drawMultiActive(const SelectionSet<RID>& selection) {
     const std::vector<Node*> nodes = collectNodes(selection);
     if (nodes.empty())
         return;
@@ -110,7 +110,7 @@ void InspectorPanel::drawMultiActive(const SelectionSet<NodeHandle>& selection) 
     ImGui::Separator();
 }
 
-void InspectorPanel::drawMultiTransform(const SelectionSet<NodeHandle>& selection) {
+void InspectorPanel::drawMultiTransform(const SelectionSet<RID>& selection) {
     if (!ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
         return;
     ImGui::PushID("Transform");
@@ -182,7 +182,7 @@ void InspectorPanel::drawMesh(Node& node) {
         const VirtualPath currentPath = current != nullptr ? current->assetPath() : VirtualPath{};
         VirtualPath chosen;
         if (assetCombo("Mesh Asset", meshes, currentPath, chosen)) {
-            const MeshHandle loaded = MESH_MANAGER.load(chosen);
+            const RID loaded = MESH_MANAGER.load(chosen);
             if (loaded) {
                 mesh->setAssetMesh(loaded);
                 document_.markDirty();
@@ -322,7 +322,7 @@ void InspectorPanel::drawMaterial(Node& node) {
         return;
 
     const std::vector<VirtualPath> materials = collectAssets(AssetType::Material);
-    const std::vector<MaterialHandle> slots = material->materials();
+    const std::vector<RID> slots = material->materials();
     for (std::size_t slot = 0; slot < slots.size(); ++slot) {
         ImGui::PushID(static_cast<int>(slot));
         const Material* current = MATERIAL_MANAGER.find(slots[slot]);
@@ -330,7 +330,7 @@ void InspectorPanel::drawMaterial(Node& node) {
         const std::string label = "Slot " + std::to_string(slot);
         VirtualPath chosen;
         if (assetCombo(label.c_str(), materials, currentPath, chosen)) {
-            const MaterialHandle loaded = MATERIAL_MANAGER.load(chosen);
+            const RID loaded = MATERIAL_MANAGER.load(chosen);
             if (loaded) {
                 material->setMaterial(static_cast<std::uint32_t>(slot), loaded);
                 document_.markDirty();

@@ -27,8 +27,8 @@ public:
     void resize(std::uint32_t width, std::uint32_t height) override;
 
     [[nodiscard]] ICommandBuffer& commandBuffer() override;
-    [[nodiscard]] TextureHandle currentTexture() const override;
-    [[nodiscard]] TextureViewHandle currentTextureView() const override;
+    [[nodiscard]] RID currentTexture() const override;
+    [[nodiscard]] RID currentTextureView() const override;
     [[nodiscard]] ResourceState currentTextureState() const override;
     [[nodiscard]] PixelFormat format() const override;
     [[nodiscard]] std::uint32_t width() const override { return extent_.width; }
@@ -66,8 +66,8 @@ private:
     VkExtent2D extent_{};
     std::vector<VkImage> images_;
     std::vector<VkImageView> imageViews_;
-    std::vector<TextureHandle> textureHandles_;
-    std::vector<TextureViewHandle> textureViewHandles_;
+    std::vector<RID> textureHandles_;
+    std::vector<RID> textureViewHandles_;
     std::vector<bool> imageInitialized_;
     std::vector<VkSemaphore> renderFinished_;
     std::array<Frame, kFramesInFlight> frames_{};

@@ -20,8 +20,8 @@ public:
     ~MeshGpuManager();
 
     [[nodiscard]] bool initialize(rhi::IDevice& device);
-    [[nodiscard]] MeshDrawInfo resolve(MeshHandle handle);
-    void invalidate(MeshHandle handle);
+    [[nodiscard]] MeshDrawInfo resolve(RID handle);
+    void invalidate(RID handle);
     void shutdown();
     [[nodiscard]] bool initialized() const { return device_ != nullptr; }
 

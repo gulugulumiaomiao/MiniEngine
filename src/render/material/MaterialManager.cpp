@@ -15,12 +15,12 @@ const VirtualPath kErrorMaterialPath{"assets://materials/error.material.json"};
 
 } // namespace
 
-MaterialHandle MaterialManager::load(const AssetId& assetId) {
+RID MaterialManager::load(const AssetId& assetId) {
     if (!assetId.valid()) {
         Log::error("MaterialManager", "Invalid Material AssetId");
         return errorMaterial();
     }
-    if (const MaterialHandle existing = findHandle(assetId); existing) {
+    if (const RID existing = findHandle(assetId); existing) {
         return existing;
     }
     const std::optional<VirtualPath> path = ASSET_DATABASE.findPath(assetId);
@@ -33,7 +33,7 @@ MaterialHandle MaterialManager::load(const AssetId& assetId) {
     return loadFromPath(*path, assetId);
 }
 
-MaterialHandle MaterialManager::load(const VirtualPath& materialPath) {
+RID MaterialManager::load(const VirtualPath& materialPath) {
     if (!materialPath.valid()) {
         Log::error("MaterialManager",
                    "Invalid Material path: %s",
@@ -47,42 +47,42 @@ MaterialHandle MaterialManager::load(const VirtualPath& materialPath) {
                    materialPath.string().c_str());
         return errorMaterial();
     }
-    if (const MaterialHandle existing = findHandle(*assetId); existing) {
+    if (const RID existing = findHandle(*assetId); existing) {
         return existing;
     }
     return loadFromPath(materialPath, *assetId);
 }
 
-MaterialHandle MaterialManager::loadFromPath(const VirtualPath& materialPath,
+RID MaterialManager::loadFromPath(const VirtualPath& materialPath,
                                              const AssetId& assetId) {
     Log::info("Material", "Loading material: %s", materialPath.string().c_str());
     const std::shared_ptr<MaterialAsset> asset =
         ASSET_MANAGER.loadAsset<MaterialAsset>(materialPath);
     if (!asset) {
-        return materialPath == kErrorMaterialPath ? MaterialHandle{} : errorMaterial();
+        return materialPath == kErrorMaterialPath ? RID{} : errorMaterial();
     }
-    const ShaderHandle shader = SHADER_MANAGER.load(asset->shader);
+    const RID shader = SHADER_MANAGER.load(asset->shader);
     if (!shader) {
-        return materialPath == kErrorMaterialPath ? MaterialHandle{} : errorMaterial();
+        return materialPath == kErrorMaterialPath ? RID{} : errorMaterial();
     }
     Material material = asset->instantiate(shader);
     material.assetId_ = assetId;
     return insert(std::move(material));
 }
 
-MaterialHandle MaterialManager::errorMaterial() {
+RID MaterialManager::errorMaterial() {
     const std::optional<AssetId> errorId = ASSET_DATABASE.findGuid(kErrorMaterialPath);
     if (!errorId) {
         Log::error("MaterialManager",
                    "Error Material has no AssetId; database may be uninitialized");
         return {};
     }
-    if (const MaterialHandle existing = findHandle(*errorId); existing)
+    if (const RID existing = findHandle(*errorId); existing)
         return existing;
     return load(kErrorMaterialPath);
 }
 
-MaterialHandle MaterialManager::clone(MaterialHandle source) {
+RID MaterialManager::clone(RID source) {
     Material* material = find(source);
     if (!material) {
         Log::error("MaterialManager", "Cannot clone an invalid Material");
@@ -111,7 +111,7 @@ void MaterialManager::refreshAsset(const AssetId& assetId) {
                    path->string().c_str());
         return;
     }
-    const ShaderHandle shader = SHADER_MANAGER.load(asset->shader);
+    const RID shader = SHADER_MANAGER.load(asset->shader);
     if (!shader) {
         Log::error("MaterialManager",
                    "Failed to reload shader for material: %s",
@@ -144,19 +144,19 @@ void MaterialManager::refreshAsset(const VirtualPath& materialPath) {
 
 bool MaterialManager::validate(const Material& material) const {
     if (!SHADER_MANAGER.find(material.shaderHandle())) {
-        Log::error("MaterialManager", "Material has an invalid ShaderHandle");
+        Log::error("MaterialManager", "Material has an invalid RID");
         return false;
     }
     return true;
 }
 
-void MaterialManager::setShader(MaterialHandle handle, const VirtualPath& shaderPath) {
+void MaterialManager::setShader(RID handle, const VirtualPath& shaderPath) {
     Material* material = find(handle);
     if (!material) {
         Log::error("MaterialManager", "Cannot set Shader on an invalid Material");
         return;
     }
-    const ShaderHandle shader = SHADER_MANAGER.load(shaderPath);
+    const RID shader = SHADER_MANAGER.load(shaderPath);
     if (!shader) {
         Log::error("MaterialManager", "Shader failed to load: %s", shaderPath.string().c_str());
         return;

@@ -109,11 +109,11 @@ constexpr bool hasFlag(ColorWriteMask value, ColorWriteMask flag) {
 // primitive topology and fill mode) are set at command buffer record time through
 // the RHI command buffer and do not contribute to the pipeline layout or cache key.
 struct GraphicsPipelineDesc {
-    ShaderHandle vertexShader;
+    RID vertexShader;
     std::string vertexEntry{"main"};
-    ShaderHandle fragmentShader;
+    RID fragmentShader;
     std::string fragmentEntry{"main"};
-    std::vector<BindGroupLayoutHandle> bindGroupLayouts;
+    std::vector<RID> bindGroupLayouts;
     std::vector<VertexStreamDesc> vertexStreams;
     std::vector<PixelFormat> colorFormats;
     PixelFormat depthFormat{PixelFormat::Undefined};

@@ -65,7 +65,7 @@ const VirtualPath kWarmMaterialPath{"assets://materials/warm.material.json"};
 struct Harness {
     SceneDocument document;
     InspectorPanel panel{document};
-    SelectionSet<NodeHandle> selection;
+    SelectionSet<RID> selection;
 
     Harness() {
         ImGui::CreateContext();
@@ -267,7 +267,7 @@ bool inspectAssetShowsMaterialEditor() {
     AssetScope assets;
     CHECK(assets.valid);
     Harness ui;
-    const MaterialHandle handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
+    const RID handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
     CHECK(MATERIAL_MANAGER.find(handle)->getFloat("Metallic") == 0.0F);
 
@@ -293,7 +293,7 @@ bool lastInteractionWins() {
     Harness ui;
     auto& scene = ui.document.scene();
     const auto node = scene.createNode("A");
-    const MaterialHandle handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
+    const RID handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
     auto canEditMetallic = [&]() {
         bool edited = false;
@@ -339,7 +339,7 @@ bool componentSlotEmbedsEditor() {
     Harness ui;
     auto& scene = ui.document.scene();
     const auto node = scene.createNode("A");
-    const MaterialHandle handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
+    const RID handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
     MaterialComponent* component = scene.findNode(node)->addComponent<MaterialComponent>();
     component->setMaterial(0, handle);

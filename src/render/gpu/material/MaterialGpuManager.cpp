@@ -17,7 +17,7 @@ MaterialGpuManager::MaterialGpuManager() = default;
 MaterialGpuManager::~MaterialGpuManager() = default;
 
 bool MaterialGpuManager::initialize(rhi::IDevice& device,
-                                    rhi::BindGroupLayoutHandle materialLayout,
+                                    rhi::RID materialLayout,
                                     std::uint32_t frameCount) {
     if (initialized()) {
         Log::error("MaterialGpuManager", "Manager is already initialized");
@@ -32,7 +32,7 @@ bool MaterialGpuManager::initialize(rhi::IDevice& device,
     return true;
 }
 
-std::uint64_t MaterialGpuManager::cacheKey(MaterialHandle handle) {
+std::uint64_t MaterialGpuManager::cacheKey(RID handle) {
     return handleKey(handle);
 }
 
@@ -51,12 +51,12 @@ namespace {
 
 } // namespace
 
-rhi::BindGroupHandle MaterialGpuManager::resolve(MaterialHandle handle) {
+rhi::RID MaterialGpuManager::resolve(RID handle) {
     const Material* material = MATERIAL_MANAGER.find(handle);
     if (!initialized() || !material)
         return {};
 
-    // Texture hot reload keeps the CPU TextureHandle stable while replacing its RHI view.
+    // Texture hot reload keeps the CPU RID stable while replacing its RHI view.
     // Resolve the bindings before the cache fast path so a changed view invalidates the bind group.
     if (!collectTextureBindings(*material))
         return {};
@@ -76,16 +76,16 @@ rhi::BindGroupHandle MaterialGpuManager::resolve(MaterialHandle handle) {
             sameTextureBindings(resource.textureBindings, textureScratch_) &&
             resource.boundSize >= material->uniformBytes().size()) {
             return factory_->updateUniforms(*material, resource) ? resource.bindGroup
-                                                                 : rhi::BindGroupHandle{};
+                                                                 : rhi::RID{};
         }
 
         // Full rebuild: textures or buffer geometry changed, or the slot was evicted.
         return factory_->create({*material, textureScratch_}, resource) ? resource.bindGroup
-                                                                        : rhi::BindGroupHandle{};
+                                                                        : rhi::RID{};
     }
 
     return factory_->create({*material, textureScratch_}, *slot.resource) ? slot.resource->bindGroup
-                                                                          : rhi::BindGroupHandle{};
+                                                                          : rhi::RID{};
 }
 
 bool MaterialGpuManager::collectTextureBindings(const Material& material) {
@@ -100,7 +100,7 @@ bool MaterialGpuManager::collectTextureBindings(const Material& material) {
         const auto found = material.textures.find(property.name);
         const std::string_view reference =
             found == material.textures.end() ? std::string_view{} : found->second;
-        const TextureHandle textureHandle = TEXTURE_MANAGER.resolveReference(reference);
+        const RID textureHandle = TEXTURE_MANAGER.resolveReference(reference);
         const Texture* texture = TEXTURE_MANAGER.find(textureHandle);
         if (!texture) {
             Log::error(

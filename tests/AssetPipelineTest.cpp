@@ -41,9 +41,9 @@ static_assert(
     std::is_base_of_v<engine::Singleton<engine::MaterialManager>, engine::MaterialManager>);
 static_assert(std::is_base_of_v<engine::Singleton<engine::MeshManager>, engine::MeshManager>);
 using ShaderRegistry =
-    engine::KeyedHandleRegistry<engine::Shader, engine::ShaderHandle, engine::AssetId>;
+    engine::KeyedHandleRegistry<engine::Shader, engine::RID, engine::AssetId>;
 using MaterialRegistry = engine::KeyedHandleRegistry<engine::Material,
-                                                     engine::MaterialHandle,
+                                                     engine::RID,
                                                      engine::AssetId>;
 static_assert(std::is_base_of_v<ShaderRegistry, engine::ShaderManager>);
 static_assert(std::is_base_of_v<MaterialRegistry, engine::MaterialManager>);
@@ -190,7 +190,7 @@ int main() {
         !ASSET_IMPORT_PIPELINE.importAsset(meshPath)) {
         return 25;
     }
-    const MeshHandle meshHandle = MESH_MANAGER.load(meshPath);
+    const RID meshHandle = MESH_MANAGER.load(meshPath);
     const auto meshAsset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
     Mesh* runtimeMesh = MESH_MANAGER.find(meshHandle);
     if (!meshHandle || !meshAsset || !runtimeMesh || runtimeMesh->assetPath() != meshPath ||
@@ -280,9 +280,9 @@ int main() {
         return 4;
     }
 
-    const ShaderHandle firstHandleA = SHADER_MANAGER.load(firstPath);
-    const ShaderHandle firstHandleB = SHADER_MANAGER.load(firstPath);
-    const MaterialHandle materialHandle = MATERIAL_MANAGER.load(materialPath);
+    const RID firstHandleA = SHADER_MANAGER.load(firstPath);
+    const RID firstHandleB = SHADER_MANAGER.load(firstPath);
+    const RID materialHandle = MATERIAL_MANAGER.load(materialPath);
     if (!firstHandleA || firstHandleA != firstHandleB || !materialHandle)
         return 5;
     Material& material = *MATERIAL_MANAGER.find(materialHandle);
@@ -292,7 +292,7 @@ int main() {
     }
 
     MATERIAL_MANAGER.setShader(materialHandle, VirtualPath{"assets://shaders/second.shader.json"});
-    const ShaderHandle secondHandle = material.shaderHandle();
+    const RID secondHandle = material.shaderHandle();
     if (!secondHandle || secondHandle == firstHandleA ||
         material.shader().name() != "Tests/Second" ||
         material.getVec4("BaseColor") != math::Vec4{0.25F, 0.5F, 0.75F, 1.0F} ||
@@ -374,9 +374,9 @@ int main() {
     }
 
     (void)SHADER_MANAGER.destroy(firstHandleA);
-    const ShaderHandle reused = SHADER_MANAGER.insertUnkeyed(shaderAssetA->instantiate());
-    if (!reused || reused.index != firstHandleA.index ||
-        reused.generation == firstHandleA.generation ||
+    const RID reused = SHADER_MANAGER.insertUnkeyed(shaderAssetA->instantiate());
+    if (!reused || reused.index() != firstHandleA.index() ||
+        reused.generation() == firstHandleA.generation() ||
         SHADER_MANAGER.find(firstHandleA) != nullptr) {
         return 17;
     }

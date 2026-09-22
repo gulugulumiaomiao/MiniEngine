@@ -154,7 +154,7 @@ Texture::Texture(VirtualPath assetPath,
                  TextureDesc desc,
                  std::vector<TextureMipData> mipData,
                  std::uint64_t version,
-                 rhi::TextureHandle texture,
+                 rhi::RID texture,
                  TextureView defaultView,
                  rhi::IRHITexture& rhiTexture)
     : assetPath_(std::move(assetPath)), assetId_(assetId), desc_(std::move(desc)),

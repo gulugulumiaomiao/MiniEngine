@@ -4,8 +4,8 @@
 
 namespace engine {
 
-NodeHandle Component::owner() const {
-    return node_ ? node_->handle() : NodeHandle{};
+RID Component::owner() const {
+    return node_ ? node_->handle() : RID{};
 }
 
 Scene* Component::scene() {

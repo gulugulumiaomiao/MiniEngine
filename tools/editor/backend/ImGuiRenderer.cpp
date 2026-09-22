@@ -153,12 +153,11 @@ constexpr std::uint32_t kGeometrySlack = 4096;
 // group handle. Encoding it directly means ImGui::Image works as soon as a caller
 // registers a bind group, without a side table. Live handles always carry a non-zero
 // generation, so a zeroed ImDrawCmd::TextureId can never collide with a real handle.
-[[nodiscard]] ImTextureID toTextureId(rhi::BindGroupHandle group) {
-    return (static_cast<ImTextureID>(group.generation) << 32U) |
-           static_cast<ImTextureID>(group.index);
+[[nodiscard]] ImTextureID toTextureId(rhi::RID group) {
+    return static_cast<ImTextureID>(group.value());
 }
 
-[[nodiscard]] rhi::BindGroupHandle toBindGroup(ImTextureID id) {
+[[nodiscard]] rhi::RID toBindGroup(ImTextureID id) {
     return {static_cast<std::uint32_t>(id & 0xFFFFFFFFU), static_cast<std::uint32_t>(id >> 32U)};
 }
 
@@ -419,7 +418,7 @@ bool ImGuiRenderer::reserveGeometry(Geometry& geometry,
 }
 
 void ImGuiRenderer::releaseGeometry(Geometry& geometry) {
-    for (rhi::BufferHandle buffer : geometry.vertexBuffers) {
+    for (rhi::RID buffer : geometry.vertexBuffers) {
         if (buffer)
             device_->destroyBuffer(buffer);
     }
@@ -428,7 +427,7 @@ void ImGuiRenderer::releaseGeometry(Geometry& geometry) {
     geometry = {};
 }
 
-bool ImGuiRenderer::setSceneTexture(std::uint32_t frameIndex, rhi::TextureViewHandle view) {
+bool ImGuiRenderer::setSceneTexture(std::uint32_t frameIndex, rhi::RID view) {
     if (!device_ || frameIndex >= sceneTextures_.size())
         return false;
     SceneTexture& texture = sceneTextures_[frameIndex];
@@ -571,7 +570,7 @@ void ImGuiRenderer::render(rhi::ICommandBuffer& commandBuffer,
                 .width = static_cast<std::uint32_t>(maxX - minX),
                 .height = static_cast<std::uint32_t>(maxY - minY),
             });
-            const rhi::BindGroupHandle group = command.GetTexID() == kSceneTextureId
+            const rhi::RID group = command.GetTexID() == kSceneTextureId
                                                    ? sceneTextures_[frameIndex].group
                                                    : toBindGroup(command.GetTexID());
             if (!group)

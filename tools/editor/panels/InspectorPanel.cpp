@@ -16,7 +16,7 @@
 
 namespace engine::editor {
 
-void InspectorPanel::draw(const SelectionSet<NodeHandle>& selection) {
+void InspectorPanel::draw(const SelectionSet<RID>& selection) {
     if (!ImGui::Begin("Inspector", nullptr, ImGuiWindowFlags_NoCollapse)) {
         ImGui::End();
         return;
@@ -75,9 +75,9 @@ void InspectorPanel::draw(const SelectionSet<NodeHandle>& selection) {
     ImGui::End();
 }
 
-std::vector<Node*> InspectorPanel::collectNodes(const SelectionSet<NodeHandle>& selection) const {
+std::vector<Node*> InspectorPanel::collectNodes(const SelectionSet<RID>& selection) const {
     std::vector<Node*> nodes;
-    for (const NodeHandle handle : selection.items())
+    for (const RID handle : selection.items())
         if (Node* node = document_.scene().findNode(handle))
             nodes.push_back(node);
     return nodes;
@@ -113,7 +113,7 @@ void InspectorPanel::drawAssetInspector() {
 
     switch (inferAssetType(path)) {
     case AssetType::Material: {
-        const MaterialHandle handle = MATERIAL_MANAGER.load(path);
+        const RID handle = MATERIAL_MANAGER.load(path);
         const Material* material = MATERIAL_MANAGER.find(handle);
         if (material == nullptr || !(material->assetPath() == path)) {
             // load() falls back to the Error Material, which must never be
