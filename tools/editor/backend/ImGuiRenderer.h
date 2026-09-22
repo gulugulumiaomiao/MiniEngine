@@ -37,13 +37,13 @@ public:
     // Builds the font atlas texture, the UI pipeline and the per-frame geometry
     // buffers. colorFormat must match the attachment the overlay renders into; an sRGB
     // format also selects the fragment shader variant that decodes ImGui's colors.
-    [[nodiscard]] bool initialize(rhi::IDevice& device, rhi::TextureFormat colorFormat);
+    [[nodiscard]] bool initialize(rhi::IDevice& device, rhi::PixelFormat colorFormat);
     // Destroys every GPU resource; the caller must have made the device idle first.
     void shutdown();
 
     // Rebuilds the pipeline when a swapchain recreation changed the color format.
     // Requires an idle device, which Renderer guarantees around swapchain resizes.
-    void onColorFormatChanged(rhi::TextureFormat colorFormat);
+    void onColorFormatChanged(rhi::PixelFormat colorFormat);
 
     // generation zero cannot collide with encoded live RHI handles.
     static constexpr ImTextureID kSceneTextureId = 1;
@@ -71,13 +71,12 @@ private:
     [[nodiscard]] bool createPipeline();
     void destroyPipeline();
     // Grows a frame's buffers when the UI needs more geometry than they hold.
-    [[nodiscard]] bool reserveGeometry(Geometry& geometry,
-                                       std::uint32_t vertexCount,
-                                       std::uint32_t indexCount);
+    [[nodiscard]] bool
+    reserveGeometry(Geometry& geometry, std::uint32_t vertexCount, std::uint32_t indexCount);
     void releaseGeometry(Geometry& geometry);
 
     rhi::IDevice* device_{};
-    rhi::TextureFormat colorFormat_{rhi::TextureFormat::Undefined};
+    rhi::PixelFormat colorFormat_{rhi::PixelFormat::Undefined};
     rhi::ShaderHandle vertexShader_;
     rhi::ShaderHandle fragmentShader_;
     rhi::BindGroupLayoutHandle textureLayout_;

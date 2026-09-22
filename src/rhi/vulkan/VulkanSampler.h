@@ -6,18 +6,18 @@
 
 namespace engine::rhi::vulkan {
 
-class VulkanSampler final : public ISampler {
+class VulkanSampler final : public IRHISampler {
 public:
     VulkanSampler(VkDevice device, const SamplerDesc& desc, float maxAnisotropyLimit);
     ~VulkanSampler() override;
 
     VulkanSampler(const VulkanSampler&) = delete;
     VulkanSampler& operator=(const VulkanSampler&) = delete;
-    VulkanSampler(VulkanSampler&&) = delete;
+    VulkanSampler(VulkanSampler&& other) noexcept;
     VulkanSampler& operator=(VulkanSampler&&) = delete;
 
     [[nodiscard]] VkSampler handle() const { return sampler_; }
-    [[nodiscard]] SamplerFilter filter() const override { return desc_.minFilter; }
+    [[nodiscard]] const SamplerDesc& desc() const override { return desc_; }
 
 private:
     VkDevice device_{VK_NULL_HANDLE};

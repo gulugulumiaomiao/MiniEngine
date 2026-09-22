@@ -12,7 +12,6 @@
 #include "render/gpu/mesh/MeshGpuManager.h"
 #include "render/gpu/pipeline/GraphicsPipelineManager.h"
 #include "render/gpu/shader/ShaderGpuManager.h"
-#include "render/gpu/texture/TextureGpuManager.h"
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
@@ -245,9 +244,9 @@ bool Engine::initializeGpuManagers(const rhi::IContextFactory& contextFactory,
                                       []() { return std::make_unique<MiniForwardPipeline>(); });
     renderer_->setPipeline(pipelineRegistry.create(config_.render.pipeline));
 
-    if (!FRAME_GPU_MANAGER.initialize(renderer_->device()) ||
+    if (!TEXTURE_MANAGER.initialize(renderer_->device()) ||
+        !FRAME_GPU_MANAGER.initialize(renderer_->device()) ||
         !MESH_GPU_MANAGER.initialize(renderer_->device()) ||
-        !TEXTURE_GPU_MANAGER.initialize(renderer_->device()) ||
         !MATERIAL_GPU_MANAGER.initialize(renderer_->device(),
                                          FRAME_GPU_MANAGER.materialLayout(),
                                          FrameGpuManager::kFramesInFlight) ||
@@ -273,13 +272,12 @@ void Engine::teardownProjectSubsystems() {
     GRAPHICS_PIPELINE_MANAGER.shutdown();
     GLOBAL_UNIFORM_GPU_MANAGER.shutdown();
     SHADER_GPU_MANAGER.shutdown();
-    TEXTURE_GPU_MANAGER.shutdown();
+    TEXTURE_MANAGER.shutdown();
     MESH_GPU_MANAGER.shutdown();
     FRAME_GPU_MANAGER.shutdown();
     renderer_.reset();
     MESH_MANAGER.clear();
     MATERIAL_MANAGER.clear();
-    TEXTURE_MANAGER.clear();
     SHADER_MANAGER.clear();
     ASSET_MANAGER.shutdown();
     activeScenePath_ = {};
@@ -431,8 +429,8 @@ bool Engine::openProject(const std::filesystem::path& projectRoot) {
     // project, so the user's edits to the demo materials, shaders and scenes survive.
     std::string syncError;
     if (!editor::syncEngineContractIntoProject(normalized, syncError)) {
-        Log::error("Engine", "Cannot copy the built-in content into the project: %s",
-                   syncError.c_str());
+        Log::error(
+            "Engine", "Cannot copy the built-in content into the project: %s", syncError.c_str());
         closeProject();
         return false;
     }

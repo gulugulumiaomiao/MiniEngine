@@ -36,15 +36,14 @@ bool RenderTarget::validate(const RenderTargetDesc& desc) const {
     return true;
 }
 
-bool RenderTarget::createAttachment(rhi::TextureFormat format,
-                                    rhi::TextureAspect aspect,
+bool RenderTarget::createAttachment(rhi::PixelFormat format,
                                     rhi::TextureUsage usage,
                                     std::string debugName,
                                     Attachment& destination) {
     Attachment created;
     created.format = format;
     created.texture = device_.createTexture({
-        .dimension = rhi::TextureDimension::Texture2D,
+        .dimension = rhi::TextureType::Texture2D,
         .format = format,
         .width = desc_.width,
         .height = desc_.height,
@@ -57,13 +56,7 @@ bool RenderTarget::createAttachment(rhi::TextureFormat format,
         Log::error("RenderTarget", "The RHI did not create a render-target texture");
         return false;
     }
-    created.view = device_.createTextureView({
-        .texture = created.texture,
-        .format = format,
-        .aspect = aspect,
-        .baseMipLevel = 0,
-        .mipCount = 1,
-    });
+    created.view = device_.defaultTextureView(created.texture);
     if (!created.view) {
         device_.destroyTexture(created.texture);
         Log::error("RenderTarget", "The RHI did not create a render-target texture view");
@@ -90,7 +83,6 @@ bool RenderTarget::create(RenderTargetDesc desc) {
         Attachment attachment;
         const std::string suffix = ".Color" + std::to_string(index);
         if (!createAttachment(color.format,
-                              rhi::TextureAspect::Color,
                               color.additionalUsage | rhi::TextureUsage::ColorAttachment,
                               desc.debugName + suffix,
                               attachment)) {
@@ -104,7 +96,6 @@ bool RenderTarget::create(RenderTargetDesc desc) {
     if (desc.depthAttachment) {
         Attachment attachment;
         if (!createAttachment(desc.depthAttachment->format,
-                              rhi::TextureAspect::Depth,
                               desc.depthAttachment->additionalUsage |
                                   rhi::TextureUsage::DepthStencilAttachment,
                               desc.debugName + ".Depth",
@@ -137,12 +128,9 @@ bool RenderTarget::resize(std::uint32_t width, std::uint32_t height) {
 }
 
 void RenderTarget::releaseAttachment(Attachment& attachment) {
-    if (attachment.view) {
-        device_.destroyTextureView(attachment.view);
-    }
-    if (attachment.texture) {
+    // The default view is owned by the RHI Texture and is released with it.
+    if (attachment.texture)
         device_.destroyTexture(attachment.texture);
-    }
     attachment = {};
 }
 
@@ -197,7 +185,7 @@ rhi::TextureViewHandle RenderTarget::colorView(std::size_t index) const {
     return requireColor(index).view;
 }
 
-rhi::TextureFormat RenderTarget::colorFormat(std::size_t index) const {
+rhi::PixelFormat RenderTarget::colorFormat(std::size_t index) const {
     return requireColor(index).format;
 }
 
@@ -209,7 +197,7 @@ rhi::TextureViewHandle RenderTarget::depthView() const {
     return requireDepth().view;
 }
 
-rhi::TextureFormat RenderTarget::depthFormat() const {
+rhi::PixelFormat RenderTarget::depthFormat() const {
     return requireDepth().format;
 }
 
@@ -244,9 +232,8 @@ void RenderTarget::import(RenderGraph& graph,
     }
 }
 
-RgTextureHandle RenderTarget::importColor(RenderGraph& graph,
-                                          std::size_t index,
-                                          rhi::ResourceState finalState) {
+RgTextureHandle
+RenderTarget::importColor(RenderGraph& graph, std::size_t index, rhi::ResourceState finalState) {
     Attachment& color = requireColor(index);
     return graph.importTexture({
         .texture = color.texture,

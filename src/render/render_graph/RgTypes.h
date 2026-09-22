@@ -23,11 +23,12 @@ struct RgTextureHandle {
 
 // Description of a transient texture created by the RenderGraph.
 struct RgTextureDesc {
-    rhi::TextureDimension dimension{rhi::TextureDimension::Texture2D};
-    rhi::TextureFormat format{rhi::TextureFormat::Undefined};
+    rhi::TextureType dimension{rhi::TextureType::Texture2D};
+    rhi::PixelFormat format{rhi::PixelFormat::Undefined};
     std::uint32_t width{};
     std::uint32_t height{};
     std::uint32_t depth{1};
+    std::uint32_t arrayLayers{1};
     std::uint32_t mipCount{1};
     rhi::TextureUsage usage{rhi::TextureUsage::None};
     rhi::TextureAspect aspect{rhi::TextureAspect::Color};

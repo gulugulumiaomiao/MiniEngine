@@ -13,12 +13,8 @@ RgTexturePool::RgTexturePool(rhi::IDevice& device, std::uint32_t framesInFlight)
 RgTexturePool::~RgTexturePool() {
     for (Bucket& bucket : buckets_) {
         for (const std::unique_ptr<PooledTexture>& entry : bucket.entries) {
-            if (entry->view) {
-                device_.destroyTextureView(entry->view);
-            }
-            if (entry->texture) {
+            if (entry->texture)
                 device_.destroyTexture(entry->texture);
-            }
         }
     }
 }
@@ -36,7 +32,7 @@ void RgTexturePool::resetBucket(std::uint32_t frameIndex) {
 }
 
 RgTexturePool::PooledTexture* RgTexturePool::acquire(const RgTextureDesc& desc) {
-    if (desc.format == rhi::TextureFormat::Undefined || desc.width == 0 || desc.height == 0 ||
+    if (desc.format == rhi::PixelFormat::Undefined || desc.width == 0 || desc.height == 0 ||
         desc.mipCount == 0) {
         Log::fatal("RgTexturePool", "Invalid transient texture description");
     }
@@ -73,9 +69,8 @@ std::size_t RgTexturePool::totalEntryCount() const {
 std::size_t RgTexturePool::inUseCount() const {
     std::size_t count = 0;
     for (const Bucket& bucket : buckets_) {
-        count += std::ranges::count_if(bucket.entries, [](const std::unique_ptr<PooledTexture>& e) {
-            return e->inUse;
-        });
+        count += std::ranges::count_if(
+            bucket.entries, [](const std::unique_ptr<PooledTexture>& e) { return e->inUse; });
     }
     return count;
 }
@@ -90,11 +85,13 @@ const RgTexturePool::Bucket& RgTexturePool::currentBucket() const {
 
 bool RgTexturePool::matches(const PooledTexture& entry, const RgTextureDesc& desc) {
     return entry.format == desc.format && entry.width == desc.width &&
-           entry.height == desc.height && entry.mipCount == desc.mipCount &&
+           entry.height == desc.height && entry.depth == desc.depth &&
+           entry.arrayLayers == desc.arrayLayers && entry.mipCount == desc.mipCount &&
            entry.usage == desc.usage;
 }
 
-std::unique_ptr<RgTexturePool::PooledTexture> RgTexturePool::createEntry(const RgTextureDesc& desc) {
+std::unique_ptr<RgTexturePool::PooledTexture>
+RgTexturePool::createEntry(const RgTextureDesc& desc) {
     auto entry = std::make_unique<PooledTexture>();
 
     rhi::TextureDesc textureDesc;
@@ -103,6 +100,7 @@ std::unique_ptr<RgTexturePool::PooledTexture> RgTexturePool::createEntry(const R
     textureDesc.width = desc.width;
     textureDesc.height = desc.height;
     textureDesc.depth = desc.depth;
+    textureDesc.arrayLayers = desc.arrayLayers;
     textureDesc.mipCount = desc.mipCount;
     textureDesc.usage = desc.usage;
     textureDesc.debugName = desc.debugName;
@@ -112,12 +110,7 @@ std::unique_ptr<RgTexturePool::PooledTexture> RgTexturePool::createEntry(const R
         Log::fatal("RgTexturePool", "Failed to create pooled texture");
     }
 
-    const rhi::TextureViewDesc viewDesc{.texture = entry->texture,
-                                        .format = desc.format,
-                                        .aspect = desc.aspect,
-                                        .baseMipLevel = 0,
-                                        .mipCount = desc.mipCount};
-    entry->view = device_.createTextureView(viewDesc);
+    entry->view = device_.defaultTextureView(entry->texture);
     if (!entry->view) {
         device_.destroyTexture(entry->texture);
         Log::fatal("RgTexturePool", "Failed to create pooled texture view");
@@ -126,6 +119,8 @@ std::unique_ptr<RgTexturePool::PooledTexture> RgTexturePool::createEntry(const R
     entry->format = desc.format;
     entry->width = desc.width;
     entry->height = desc.height;
+    entry->depth = desc.depth;
+    entry->arrayLayers = desc.arrayLayers;
     entry->mipCount = desc.mipCount;
     entry->usage = desc.usage;
     return entry;

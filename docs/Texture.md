@@ -1,97 +1,103 @@
 # Texture 系统
 
-Texture 系统覆盖源文件导入、CPU 资产与运行时实例、GPU 延迟上传、材质绑定和 Vulkan 采样。第一版只支持 `Texture2D`，所有模块通过 RHI 句柄交互，资产层和 Render 层不依赖 Vulkan 类型。
+Texture 系统把资产数据、运行时 GPU 资源、视图和采样状态拆成独立层级。当前 Vulkan 创建和上传路径只接受单层 `Texture2D`；`Texture2DArray`、`Texture3D`、`TextureCube`、`TextureCubeArray` 已进入 API 数据模型，但会在统一校验点明确拒绝。
 
-## 1. 支持范围
+## 1. 分层模型
 
-- 源文件：PNG、JPG/JPEG、KTX1、KTX2。
-- PNG/JPG：使用跨平台的 `stb_image` 从内存解码为 RGBA8，并在导入时生成完整 mip 链。
-- KTX1：支持未压缩的 RGBA8 UNORM / SRGB，保留文件中的 mip 链。
-- KTX2：支持 `VK_FORMAT_R8G8B8A8_UNORM` 和 `VK_FORMAT_R8G8B8A8_SRGB`，要求无 supercompression，保留 level index 中的 mip 链。
-- 运行时格式：`Rgba8Unorm` 和 `Rgba8Srgb`。
+| 层级 | 类型 | 职责 |
+| --- | --- | --- |
+| 资产层 | `TextureAsset` | 序列化 `TextureDesc`、完整 mip 数据和默认 sampler 建议 |
+| Render 层 | `Texture` | GPU-backed 运行时资源；保存稳定资产身份、RHI handle、`IRHITexture*` 和默认 `TextureView` |
+| Render 层 | `TextureView` | 可复制、非拥有包装；保存 texture/view handle 和 view desc |
+| Render 层 | `Sampler` | 可复制、非拥有包装；保存 device-cached sampler handle 和 desc |
+| RHI 层 | `IRHITexture` / `VulkanTexture` | 管理 VkImage、VMA allocation、默认 view 和唯一的 view desc 缓存 |
+| RHI 层 | `IRHITextureView` / `VulkanTextureView` | 管理 VkImageView，引用所属 RHI Texture |
+| RHI 层 | `IRHISampler` / `VulkanSampler` | 管理 VkSampler；由 Device 按 SamplerDesc 去重 |
 
-当前不支持 BC/ASTC/ETC 压缩、数组纹理、Cubemap、3D Texture、运行时 mip 生成和可配置 Sampler。这些能力可以在不改变材质引用方式的前提下扩展 `TextureDesc`、Importer 和 RHI。
+核心约束：`Texture` 不能直接绑定 shader，规范绑定单位始终是 `TextureView + Sampler`。
 
-## 2. 数据分层
+## 2. 数据与加载流程
 
 ```text
 源图片 + .meta
   -> TextureAssetImporter
   -> AssetArtifact / AssetDatabase
   -> AssetManager::loadAsset<TextureAsset>()
-  -> TextureAsset::instantiate()
-  -> TextureManager -> TextureHandle
-  -> TextureGpuManager -> TextureGpuCache / TextureGpuFactory
-  -> RHI Texture / TextureView / Sampler
-  -> MaterialBindingCache / MaterialGpuFactory -> set 1 descriptor
-  -> Vulkan draw
+  -> TextureManager 创建 RHI Texture 并上传所有 mip
+  -> RHI Texture 自动创建全范围默认 view
+  -> engine::Texture { TextureHandle, IRHITexture*, default TextureView }
+  -> Material/Global binding { TextureView, Sampler }
+  -> BindGroupEntry { TextureViewHandle, SamplerHandle }
+  -> Vulkan descriptor { VkImageView, VkSampler }
 ```
 
-`TextureAsset` 是可序列化的 CPU 资产，保存 `TextureDesc` 和每一级 `TextureMipData`。`Texture` 是运行时实例，额外保存资产路径、`version` 和 `dirty`。`TextureManager` 继承 `KeyedHandleRegistry`，负责路径去重、Handle generation、替换和销毁；`TextureGpuCache` 只保存键到 RHI 资源的映射，不拥有资产，也不执行 GPU 上传。
+`TextureManager` 必须在 Device 创建后初始化。`load()` 按 AssetId 去重；未命中时反序列化 `TextureAsset`，立即创建并上传 GPU 资源。white/black/normal/error 内建纹理走同一条创建路径。
 
-## 3. 导入与序列化
+`Texture` 构造函数不接收 Device，也不保存 Device。它保存 `IRHITexture*`，因此 `Texture::getView(desc)` 直接委托 `IRHITexture::createView(desc)`。GPU 销毁由 `TextureManager` 统一通过 Device 执行；Engine 保证 TextureManager 早于 Device 关闭。
 
-图片旁的 `.meta` 必须声明 `"type": "Texture"`。`AssetImportPipeline` 根据扩展名和 meta 选择 `TextureAssetImporter`，Importer 完成以下步骤：
+## 3. TextureView 与缓存
 
-1. 通过 `FileSystem` 读取源文件字节，不直接访问平台图片 API。
-2. PNG/JPG 交给 `stb_image`；KTX 根据文件标识进入对应解析器。
-3. 将结果规范化为 `TextureDesc + vector<TextureMipData>` 并调用 `validateTexture()`。
-4. 用 `BinaryWriter` 序列化 `TextureAsset`，再包装为 `AssetArtifact` 写入 Library。
-5. 在 `AssetDatabase` 中登记源 hash、Importer 版本、Artifact 路径和导入状态。
+`TextureViewDesc` 的缓存键完整包含：
 
-Material Importer 会解析 Shader 的 `Texture2D` 属性，将非空的相对引用规范化为 `assets://` 路径，并把纹理加入统一资产依赖列表。纹理源文件变化后，现有 `FileDependencyGraph` 会使依赖材质进入重新导入流程；没有单独的纹理依赖图。
-
-## 4. 运行时加载与默认纹理
-
-`TextureManager::load(path)` 先复用已有路径 Handle；未命中时通过 `AssetManager` 读取 Artifact、反序列化 `TextureAsset`，再实例化为 `Texture`。此时仍然只有 CPU 像素，没有创建 GPU Image。
-
-默认纹理由 `TextureManager` 延迟创建并长期持有，Renderer 不自行构造像素：
-
-- `defaultWhite()`：1x1 SRGB 白色；空材质纹理引用使用它。
-- `defaultBlack()`：1x1 SRGB 黑色。
-- `defaultNormal()`：1x1 Linear `(128, 128, 255, 255)` 法线。
-- `errorTexture()`：2x2 SRGB 黑色/品红棋盘；路径无效或加载失败时使用它。
-
-这些资源的像素由 `createBuiltin()` 直接构造，不读任何文件，但同样走正常的 `TextureHandle`、Cache 和 Uploader 流程上传。它们的路径形如 `engine://textures/white`、`engine://textures/error`，但 `engine://` **从不被挂载**——这只是 `KeyedHandleRegistry` 的 key 命名空间，用来把程序化纹理与 `assets://` 下的真实资产区分开（引擎内建内容的**文件**则位于项目的 `assets://`，见 editor/Editor.md）。`TextureManager::clear()` 会同时清除内建 Handle 状态和所有运行时实例。
-
-## 5. GPU 上传
-
-Renderer 第一次解析到材质纹理时调用 `TextureGpuManager::resolve(handle)`：
-
-1. 以 Handle 的 index 和 generation 组成缓存 key，并比较 `Texture::version()`。
-2. 未命中时由 `TextureGpuFactory` 创建 `Sampled | TransferDestination` 的 RHI Texture。
-3. Uploader 把全部 mip 作为 `TextureUploadRegion` 交给 `IDevice::uploadTexture()`。
-4. Factory 创建覆盖完整 mip 链的 TextureView，TextureGpuManager 将它与共享 Sampler 组成 `TextureBinding`。
-5. 缓存成功后调用 `Texture::markClean()`；版本命中时直接返回现有绑定。
-
-Vulkan 实现创建 `VkImage` 和 device-local 内存，通过 staging buffer 执行 buffer-to-image copy，并为每一级 mip 做 layout transition，最终进入 shader-read-only layout。TextureView 映射为 `VkImageView`，Sampler 映射为 `VkSampler`。当前所有纹理共享一个 linear/repeat Sampler。
-
-运行时替换纹理时，`TextureManager::replace()` 保持 Handle 不变并递增 version。下一次 `resolve()` 会等待设备空闲，按 TextureView 后于 descriptor、先于 Texture 的安全顺序重建缓存资源。显式销毁时先调用 `TextureGpuManager::invalidate()`，再销毁 TextureManager Handle。
-
-## 6. Shader 与 Material 绑定
-
-Shader JSON 中以 `Texture2D` 声明属性：
-
-```json
-{
-  "name": "BaseMap",
-  "type": "Texture2D",
-  "default": ""
-}
+```text
+(type, format, baseMip, mipCount, baseLayer, layerCount, swizzle)
 ```
 
-`ShaderGenerator` 为 Texture2D 生成 `layout(set = 1, binding = N) uniform sampler2D`，binding 从 1 开始；set 1 binding 0 固定为材质 uniform buffer。Renderer 的材质 BindGroupLayout 预留 16 个采样纹理槽，Shader 生成阶段也会拒绝超过 `kMaxMaterialTextures` 的声明。
+`PixelFormat::Undefined` 在进入缓存前会规范化为源纹理格式。`VulkanTexture` 自己维护 `TextureViewDesc -> TextureViewHandle`，这是唯一的描述缓存。`VulkanDevice` 只用全局 `HandlePool<VulkanTextureView>` 分配和解析 handle，不维护第二份 desc 缓存。
 
-`MaterialGpuManager` 按 Shader 属性顺序取得材质纹理字符串，并通过 `TextureGpuManager` 执行路径规范化、`TextureManager::load()`、错误纹理回退和 Texture Cache 查询；未命中时调用 `TextureGpuFactory`。最后由 `MaterialGpuFactory` 把 TextureView 与 Sampler 写入 `SampledTexture` descriptor。材质只保存稳定的虚拟路径，不保存 Texture 或 Vulkan 对象。
+流程：
 
-示例 `BlinnPhong` Shader 使用 `BaseMap` 采样并与 `BaseColor` 相乘；`blinn_gold.material.json` 引用了 `assets://textures/checker.png`，其他未指定贴图的材质会自动绑定 Manager 创建的白纹理。
-
-## 7. 生命周期顺序
-
-启动后资源按需创建；关闭时 Engine 先关闭 `MaterialGpuManager` 并销毁材质 bind group，再关闭 `TextureGpuManager`，从 TextureGpuCache 提取并释放 TextureView、Texture 和共享 Sampler，最后清理 `TextureManager`。这个顺序保证 descriptor 不会引用已销毁的图片资源。
-
-测试覆盖 PNG/JPG 导入、Texture Artifact 往返、默认纹理内容、GPU cache 命中、version 驱动重建、显式失效和 RHI 资源销毁。运行：
-
-```powershell
-ctest --test-dir build/clang-debug -R "TextureTest|AssetImporterTest" --output-on-failure
+```text
+Texture::getView(desc)
+  -> IRHITexture::createView(desc)
+  -> VulkanTexture 请求 VulkanDevice 分配/解析 view
+  -> 命中 VulkanTexture 缓存：返回现有 handle
+  -> 未命中：vkCreateImageView，写入全局 handle pool 和纹理本地缓存
 ```
+
+`IDevice::createTexture()` 会自动创建覆盖完整 mip/layer 范围的默认 view。RenderTarget、RenderGraph transient texture、ImGui 字体纹理和 shadow placeholder 都直接使用 `defaultTextureView()`；只有指定 mip、layer、format 或 swizzle 时才显式创建 view。
+
+销毁 Texture 时，Device 先释放它缓存的全部 view，再销毁 VkImage/VMA allocation。`TextureView` 非拥有，生命周期不能超过父 Texture。
+
+## 4. Sampler
+
+Sampler 与 Texture/TextureView 完全独立。`Sampler::resolve(device, desc)` 调用 Device；`VulkanDevice` 使用 `KeyedHandleRegistry<VulkanSampler,...>` 按钳制后的 `SamplerDesc` 去重。
+
+`TextureDesc.sampler` 仍作为资产默认建议存在，但 Texture 不拥有 sampler。不同材质可以让同一个 TextureView 配合不同 Sampler。Render 层 wrapper 析构不销毁共享 sampler；sampler cache 随 Device 统一释放。
+
+## 5. Material 与 descriptor 绑定
+
+Material 支持两类数据：
+
+- 资产序列化仍保存纹理 VirtualPath，避免把运行时 GPU handle 写入资产；
+- 运行时 override 保存 `TextureBinding { TextureView view; Sampler sampler; }`。
+
+主接口接收 `TextureView + Sampler`；接受 `Texture + Sampler` 的便捷重载只转发到 `texture.defaultView()`。`MaterialGpuManager` 每次 resolve 都重新解析 binding 签名，因此纹理热重载替换 default view 后会重建 bind group。
+
+`MaterialGpuFactory` 只把高层 binding 转换为：
+
+```cpp
+rhi::TextureBinding{view.rhiHandle(), sampler.rhiHandle()}
+```
+
+Vulkan descriptor 最终只接收 VkImageView 和 VkSampler；禁止直接把 TextureHandle 作为 sampled texture 绑定。
+
+## 6. 热重载与 clone
+
+`TextureManager::replace()` 先完整创建并上传新 RHI texture/default view，成功后等待设备空闲，在原 CPU TextureHandle 位置替换运行时对象，再销毁旧 RHI texture。Material binding 签名检测到 view handle 变化后重建 descriptor。
+
+`clone()` 使用保存的 CPU mip 快照创建独立 RHI texture；clone 不继承 AssetId，不进入资产主索引。
+
+## 7. 类型范围与后续扩展
+
+CPU/RHI 描述已经包含 `depth`、`arrayLayers` 和五种 TextureType。当前实现只允许：
+
+```text
+Texture2D, depth=1, arrayLayers=1
+```
+
+后续实现数组、3D 和 Cube 时，需要同步扩展 importer、上传 region、barrier layer range、VkImage type/flags 和 VkImageView type；上层 Material 的 `TextureView + Sampler` 绑定模型无需改变。
+
+## 8. 验证
+
+Google Test 覆盖 GPU-backed builtin texture、默认 view、view 转发与缓存、独立 sampler、Material TextureBinding、clone、GUID 身份和未实现维度拒绝。完整验证必须同时执行 Debug/Release 构建与 CTest，并分别实跑引擎检查资源缺失、shader、材质和 Vulkan validation 日志。

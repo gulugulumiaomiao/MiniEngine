@@ -21,12 +21,12 @@ void check(VkResult result, const char* operation) {
     }
 }
 
-TextureFormat toRhi(VkFormat format) {
+PixelFormat toRhi(VkFormat format) {
     switch (format) {
-    case VK_FORMAT_R8G8B8A8_UNORM: return TextureFormat::Rgba8Unorm;
-    case VK_FORMAT_R8G8B8A8_SRGB: return TextureFormat::Rgba8Srgb;
-    case VK_FORMAT_B8G8R8A8_UNORM: return TextureFormat::Bgra8Unorm;
-    case VK_FORMAT_B8G8R8A8_SRGB: return TextureFormat::Bgra8Srgb;
+    case VK_FORMAT_R8G8B8A8_UNORM: return PixelFormat::Rgba8Unorm;
+    case VK_FORMAT_R8G8B8A8_SRGB: return PixelFormat::Rgba8Srgb;
+    case VK_FORMAT_B8G8R8A8_UNORM: return PixelFormat::Bgra8Unorm;
+    case VK_FORMAT_B8G8R8A8_SRGB: return PixelFormat::Bgra8Srgb;
     default: Log::fatal("VulkanSwapchain", "Unsupported swapchain format");
     }
 }
@@ -125,9 +125,17 @@ void VulkanSwapchain::create() {
     vkGetSwapchainImagesKHR(device(), swapchain_, &imageCount, images_.data());
     textureHandles_.clear();
     textureHandles_.reserve(images_.size());
-    for (VkImage image : images_) {
-        textureHandles_.push_back(device_.registerExternalTexture(image));
-    }
+    const TextureDesc externalDesc{.dimension = TextureType::Texture2D,
+                                   .format = toRhi(surfaceFormat.format),
+                                   .width = extent_.width,
+                                   .height = extent_.height,
+                                   .depth = 1,
+                                   .arrayLayers = 1,
+                                   .mipCount = 1,
+                                   .usage = TextureUsage::ColorAttachment};
+    for (VkImage image : images_)
+        textureHandles_.push_back(
+            device_.registerExternalTexture(image, externalDesc, surfaceFormat.format));
     format_ = surfaceFormat.format;
     imageInitialized_.assign(imageCount, false);
     imageViews_.resize(imageCount);
@@ -145,7 +153,14 @@ void VulkanSwapchain::create() {
         viewInfo.subresourceRange.layerCount = 1;
         check(vkCreateImageView(device(), &viewInfo, nullptr, &imageViews_[i]),
               "vkCreateImageView");
-        textureViewHandles_.push_back(device_.registerExternalTextureView(imageViews_[i]));
+        const TextureViewDesc viewDesc{.type = TextureType::Texture2D,
+                                       .format = toRhi(format_),
+                                       .baseMip = 0,
+                                       .mipCount = 1,
+                                       .baseLayer = 0,
+                                       .layerCount = 1};
+        textureViewHandles_.push_back(
+            device_.registerExternalTextureView(textureHandles_[i], imageViews_[i], viewDesc));
         check(vkCreateSemaphore(device(), &semaphoreInfo, nullptr, &renderFinished_[i]),
               "vkCreateSemaphore(renderFinished)");
     }
@@ -289,7 +304,7 @@ TextureViewHandle VulkanSwapchain::currentTextureView() const {
 ResourceState VulkanSwapchain::currentTextureState() const {
     return imageInitialized_[imageIndex_] ? ResourceState::Present : ResourceState::Undefined;
 }
-TextureFormat VulkanSwapchain::format() const {
+PixelFormat VulkanSwapchain::format() const {
     return toRhi(format_);
 }
 VkDevice VulkanSwapchain::device() const {

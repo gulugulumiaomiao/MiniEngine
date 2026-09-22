@@ -1,9 +1,14 @@
 #pragma once
 
 #include "core/base/HandlePool.h"
+#include "core/base/KeyedHandleRegistry.h"
 #include "rhi/RhiFactory.h"
 #include "rhi/api/Device.h"
+#include "rhi/api/Sampler.h"
 #include "rhi/vulkan/VulkanCommandBuffer.h"
+#include "rhi/vulkan/VulkanSampler.h"
+#include "rhi/vulkan/VulkanTexture.h"
+#include "rhi/vulkan/VulkanTextureView.h"
 
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
@@ -20,12 +25,10 @@ class VulkanBuffer;
 class VulkanShaderModule;
 class VulkanDescriptorAllocator;
 class VulkanDescriptorSetLayout;
-class VulkanImage;
-class VulkanSampler;
 
 struct PipelineLayoutKeyHash final {
-    [[nodiscard]] std::size_t operator()(const std::vector<BindGroupLayoutHandle>& key) const
-        noexcept {
+    [[nodiscard]] std::size_t
+    operator()(const std::vector<BindGroupLayoutHandle>& key) const noexcept {
         std::size_t seed = key.size();
         for (const BindGroupLayoutHandle& handle : key) {
             seed ^= static_cast<std::size_t>(handle.index) << 32U | handle.generation;
@@ -56,7 +59,9 @@ public:
     void destroyTexture(TextureHandle handle) override;
     void uploadTexture(TextureHandle destination,
                        std::span<const TextureUploadRegion> regions) override;
-    [[nodiscard]] TextureViewHandle createTextureView(const TextureViewDesc& desc) override;
+    [[nodiscard]] TextureViewHandle createTextureView(TextureHandle texture,
+                                                      const TextureViewDesc& desc) override;
+    [[nodiscard]] TextureViewHandle defaultTextureView(TextureHandle texture) const override;
     void destroyTextureView(TextureViewHandle handle) override;
     [[nodiscard]] SamplerHandle createSampler(const SamplerDesc& desc) override;
     void destroySampler(SamplerHandle handle) override;
@@ -81,9 +86,7 @@ public:
 
     [[nodiscard]] VkInstance instance() const override { return instance_; }
     [[nodiscard]] VkSurfaceKHR surface() const { return surface_; }
-    [[nodiscard]] VkPhysicalDevice physicalDevice() const override {
-        return physicalDevice_;
-    }
+    [[nodiscard]] VkPhysicalDevice physicalDevice() const override { return physicalDevice_; }
     [[nodiscard]] VkDevice device() const override { return device_; }
     [[nodiscard]] VkQueue graphicsQueue() const override { return graphicsQueue_; }
     [[nodiscard]] VkQueue presentQueue() const { return presentQueue_; }
@@ -95,10 +98,12 @@ public:
     [[nodiscard]] std::uint32_t presentQueueFamily() const { return presentQueueFamily_; }
 
     [[nodiscard]] VkBuffer resolveBuffer(BufferHandle handle) const override;
+    [[nodiscard]] IRHITexture* resolveTextureResource(TextureHandle handle) override;
+    [[nodiscard]] const IRHITexture* resolveTextureResource(TextureHandle handle) const override;
     [[nodiscard]] VkImage resolveTexture(TextureHandle handle) const override;
     // RHI formats are only tracked for device-owned textures; external images
     // (e.g. swapchain) have no format in the handle table.
-    [[nodiscard]] TextureFormat textureFormat(TextureHandle handle) const;
+    [[nodiscard]] PixelFormat textureFormat(TextureHandle handle) const;
     [[nodiscard]] VkImageView resolveTextureView(TextureViewHandle handle) const override;
     [[nodiscard]] VkSampler resolveSampler(SamplerHandle handle) const;
     [[nodiscard]] VkShaderModule resolveShader(ShaderHandle handle) const;
@@ -106,9 +111,12 @@ public:
     [[nodiscard]] ResolvedPipeline resolvePipeline(GraphicsPipelineHandle handle) const override;
     [[nodiscard]] VkDescriptorSet resolveBindGroup(BindGroupHandle handle) const override;
 
-    [[nodiscard]] TextureHandle registerExternalTexture(VkImage image);
+    [[nodiscard]] TextureHandle
+    registerExternalTexture(VkImage image, const TextureDesc& desc, VkFormat nativeFormat);
     void unregisterExternalTexture(TextureHandle handle);
-    [[nodiscard]] TextureViewHandle registerExternalTextureView(VkImageView view);
+    [[nodiscard]] TextureViewHandle registerExternalTextureView(TextureHandle texture,
+                                                                VkImageView view,
+                                                                const TextureViewDesc& desc);
     void unregisterExternalTextureView(TextureViewHandle handle);
 
     // Command buffer staging support. update* commands run while a command buffer is
@@ -121,6 +129,11 @@ public:
     void collectStagingBuffers();
 
 private:
+    friend class VulkanTexture;
+
+    [[nodiscard]] TextureViewHandle acquireTextureView(VulkanTexture& texture,
+                                                       const TextureViewDesc& desc);
+
     struct QueueFamilies {
         std::uint32_t graphics{};
         std::uint32_t present{};
@@ -150,21 +163,13 @@ private:
         VkDescriptorSet resource{VK_NULL_HANDLE};
     };
 
-    struct TextureResource {
-        std::unique_ptr<VulkanImage> owned;
-        VkImage external{VK_NULL_HANDLE};
-        bool uploaded{};
-
-        [[nodiscard]] VkImage handle() const;
-    };
-
-    struct TextureViewResource {
-        VkImageView resource{VK_NULL_HANDLE};
-        bool owned{};
-    };
-
-    struct SamplerResource {
-        std::unique_ptr<VulkanSampler> resource;
+    // Samplers are pure value objects, so the registry dedups them by SamplerDesc: identical
+    // descriptors share one handle, which keeps VkSampler creation in one place.
+    class SamplerRegistry final
+        : public KeyedHandleRegistry<VulkanSampler, SamplerHandle, SamplerDesc, SamplerDescHash> {
+        [[nodiscard]] SamplerDesc keyOf(const VulkanSampler& resource) const override {
+            return resource.desc();
+        }
     };
 
     [[nodiscard]] BufferResource& requireBufferResource(BufferHandle handle);
@@ -212,9 +217,9 @@ private:
     HandlePool<PipelineResource, GraphicsPipelineHandle> pipelines_;
     HandlePool<BindGroupLayoutResource, BindGroupLayoutHandle> bindGroupLayouts_;
     HandlePool<BindGroupResource, BindGroupHandle> bindGroups_;
-    HandlePool<TextureResource, TextureHandle> textures_;
-    HandlePool<TextureViewResource, TextureViewHandle> textureViews_;
-    HandlePool<SamplerResource, SamplerHandle> samplers_;
+    HandlePool<VulkanTexture, TextureHandle> textures_;
+    HandlePool<VulkanTextureView, TextureViewHandle> textureViews_;
+    SamplerRegistry samplers_;
     std::unique_ptr<VulkanDescriptorAllocator> descriptorAllocator_;
     VkPipelineCache pipelineCache_{VK_NULL_HANDLE};
     std::unordered_map<PipelineLayoutKey, VkPipelineLayout, PipelineLayoutKeyHash> pipelineLayouts_;

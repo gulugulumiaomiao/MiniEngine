@@ -18,6 +18,12 @@ public:
 
     engine::rhi::TextureHandle createTexture(const engine::rhi::TextureDesc& desc) override {
         textures.push_back(desc);
+        views.push_back({.type = desc.dimension,
+                         .format = desc.format,
+                         .baseMip = 0,
+                         .mipCount = desc.mipCount,
+                         .baseLayer = 0,
+                         .layerCount = desc.arrayLayers});
         return {static_cast<std::uint32_t>(textures.size()), 1};
     }
     void destroyTexture(engine::rhi::TextureHandle handle) override {
@@ -27,9 +33,15 @@ public:
     void uploadTexture(engine::rhi::TextureHandle,
                        std::span<const engine::rhi::TextureUploadRegion>) override {}
     engine::rhi::TextureViewHandle
-    createTextureView(const engine::rhi::TextureViewDesc& desc) override {
+    createTextureView(engine::rhi::TextureHandle,
+                      const engine::rhi::TextureViewDesc& desc) override {
         views.push_back(desc);
         return {static_cast<std::uint32_t>(views.size()), 1};
+    }
+    engine::rhi::TextureViewHandle defaultTextureView(engine::rhi::TextureHandle) const override {
+        return views.empty()
+                   ? engine::rhi::TextureViewHandle{}
+                   : engine::rhi::TextureViewHandle{static_cast<std::uint32_t>(views.size()), 1};
     }
     void destroyTextureView(engine::rhi::TextureViewHandle handle) override {
         if (handle)
@@ -55,9 +67,7 @@ public:
         return {};
     }
     void destroyBindGroup(engine::rhi::BindGroupHandle) override {}
-    std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override {
-        return nullptr;
-    }
+    std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override { return nullptr; }
     void submitCommand(engine::rhi::ICommandBuffer&, const engine::rhi::SubmitSync&) override {}
     VkDevice device() const override { return VK_NULL_HANDLE; }
     VkInstance instance() const override { return VK_NULL_HANDLE; }
@@ -65,6 +75,13 @@ public:
     VkQueue graphicsQueue() const override { return VK_NULL_HANDLE; }
     std::uint32_t graphicsQueueFamily() const override { return 0; }
     VkBuffer resolveBuffer(engine::rhi::BufferHandle) const override { return VK_NULL_HANDLE; }
+    engine::rhi::IRHITexture* resolveTextureResource(engine::rhi::TextureHandle) override {
+        return nullptr;
+    }
+    const engine::rhi::IRHITexture*
+    resolveTextureResource(engine::rhi::TextureHandle) const override {
+        return nullptr;
+    }
     VkImage resolveTexture(engine::rhi::TextureHandle) const override { return VK_NULL_HANDLE; }
     VkImageView resolveTextureView(engine::rhi::TextureViewHandle) const override {
         return VK_NULL_HANDLE;
@@ -85,7 +102,7 @@ public:
 };
 
 engine::RgTextureDesc makeDesc(std::uint32_t width, std::uint32_t height) {
-    return {.format = engine::rhi::TextureFormat::Rgba8Unorm,
+    return {.format = engine::rhi::PixelFormat::Rgba8Unorm,
             .width = width,
             .height = height,
             .usage = engine::rhi::TextureUsage::ColorAttachment,

@@ -35,7 +35,7 @@ enum class MemoryUsage {
     Readback,
 };
 
-enum class TextureDimension { Texture2D };
+enum class TextureType { Texture2D, Texture2DArray, Texture3D, TextureCube, TextureCubeArray };
 
 enum class TextureUsage : std::uint32_t {
     None = 0,
@@ -56,11 +56,12 @@ constexpr bool hasFlag(TextureUsage value, TextureUsage flag) {
 }
 
 struct TextureDesc {
-    TextureDimension dimension{TextureDimension::Texture2D};
-    TextureFormat format{TextureFormat::Undefined};
+    TextureType dimension{TextureType::Texture2D};
+    PixelFormat format{PixelFormat::Undefined};
     std::uint32_t width{};
     std::uint32_t height{};
     std::uint32_t depth{1};
+    std::uint32_t arrayLayers{1};
     std::uint32_t mipCount{1};
     TextureUsage usage{TextureUsage::None};
     std::string debugName;
@@ -72,14 +73,6 @@ struct TextureUploadRegion {
     std::uint32_t width{};
     std::uint32_t height{};
     std::span<const std::byte> data;
-};
-
-struct TextureViewDesc {
-    TextureHandle texture;
-    TextureFormat format{TextureFormat::Undefined};
-    TextureAspect aspect{TextureAspect::Color};
-    std::uint32_t baseMipLevel{};
-    std::uint32_t mipCount{1};
 };
 
 struct BufferDesc {

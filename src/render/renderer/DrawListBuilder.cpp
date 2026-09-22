@@ -38,11 +38,11 @@ ShaderPassType passTypeForPhase(RenderPhase phase) {
 DrawListBuilder::DrawListBuilder(std::string_view renderPipeline)
     : renderPipeline_(renderPipeline) {}
 
-DrawListBuilder::ResolvedMaterialPass DrawListBuilder::resolveMaterialPass(
-    const RenderContext& context,
-    MaterialHandle materialHandle,
-    const Mesh& meshInstance,
-    RenderPhase phase) const {
+DrawListBuilder::ResolvedMaterialPass
+DrawListBuilder::resolveMaterialPass(const RenderContext& context,
+                                     MaterialHandle materialHandle,
+                                     const Mesh& meshInstance,
+                                     RenderPhase phase) const {
     const Material* material = MATERIAL_MANAGER.find(materialHandle);
     if (!material)
         return {};
@@ -56,11 +56,11 @@ DrawListBuilder::ResolvedMaterialPass DrawListBuilder::resolveMaterialPass(
     // ShadowCaster pipelines render depth-only into the off-screen shadow map: they are
     // resolved against an empty color attachment list and the shadow map depth format.
     const bool shadowCaster = phase == RenderPhase::ShadowCaster;
-    const rhi::TextureFormat colorFormat =
-        shadowCaster ? rhi::TextureFormat::Undefined : context.sceneColorFormat();
-    const rhi::TextureFormat depthFormat = shadowCaster
-                                               ? rhi::TextureFormat::Depth32Float
-                                               : context.currentForwardTarget().depthFormat();
+    const rhi::PixelFormat colorFormat =
+        shadowCaster ? rhi::PixelFormat::Undefined : context.sceneColorFormat();
+    const rhi::PixelFormat depthFormat = shadowCaster
+                                             ? rhi::PixelFormat::Depth32Float
+                                             : context.currentForwardTarget().depthFormat();
     return {
         materialHandle,
         shaderPass,

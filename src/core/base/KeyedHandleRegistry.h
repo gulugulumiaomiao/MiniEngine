@@ -50,9 +50,7 @@ public:
         return const_cast<Resource*>(std::as_const(*this).find(key));
     }
 
-    [[nodiscard]] const Resource* find(const Key& key) const {
-        return pool_.find(findHandle(key));
-    }
+    [[nodiscard]] const Resource* find(const Key& key) const { return pool_.find(findHandle(key)); }
 
     [[nodiscard]] HandleType findHandle(const Key& key) const {
         const auto indexed = keyIndex_.find(key);

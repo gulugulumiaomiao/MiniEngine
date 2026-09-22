@@ -30,7 +30,7 @@ public:
     [[nodiscard]] TextureHandle currentTexture() const override;
     [[nodiscard]] TextureViewHandle currentTextureView() const override;
     [[nodiscard]] ResourceState currentTextureState() const override;
-    [[nodiscard]] TextureFormat format() const override;
+    [[nodiscard]] PixelFormat format() const override;
     [[nodiscard]] std::uint32_t width() const override { return extent_.width; }
     [[nodiscard]] std::uint32_t height() const override { return extent_.height; }
     [[nodiscard]] std::uint32_t frameIndex() const override { return currentFrame_; }

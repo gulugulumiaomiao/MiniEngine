@@ -9,11 +9,14 @@ class Material {
     ShaderHandle shaderHandle_;
     UniformBlockLayout uniformLayout;
     std::vector<std::byte> uniformData;
+    // Asset/reference representation (serialized): property -> VirtualPath string.
     std::unordered_map<std::string, std::string> textures;
+    // Runtime override (not serialized): property -> TextureView + Sampler.
+    std::unordered_map<std::string, TextureBinding> textureBindings_;
 };
 ```
 
-`Material::shader()` 通过 `SHADER_MANAGER` 解析 Handle。数值属性以 `UniformBlockLayout + uniformData` 作为唯一运行时数据源，Texture2D 保存规范化的虚拟路径。成功修改属性会设置 dirty 并增加 version，GPU 上传完成后调用 `markClean()`。
+`Material::shader()` 通过 `SHADER_MANAGER` 解析 Handle。数值属性以 `UniformBlockLayout + uniformData` 作为唯一运行时数据源。Texture2D 的资产表示保存规范化虚拟路径；运行时可以覆盖为 `TextureBinding { TextureView, Sampler }`，但不会把 GPU handle 写回资产。成功修改属性会设置 dirty 并增加 version。
 
 ## 加载流程
 
@@ -42,6 +45,19 @@ MaterialManager 继承 KeyedHandleRegistry，由其统一管理 HandlePool、路
 7. 设置 dirty 并增加 version。
 
 Shader 热重载使用相同 Handle 并增加 Shader revision。MaterialManager 会刷新所有引用该 Handle 的材质，因此布局变化不要求游戏对象更新 MaterialHandle。
+
+## TextureView + Sampler 绑定
+
+Shader 采样槽的规范输入是 `TextureView + Sampler`，不是 Texture。Material 提供：
+
+```cpp
+setTexture(name, const TextureView& view, const Sampler& sampler); // 主接口
+setTexture(name, const Texture& texture, const Sampler& sampler); // 转发到 defaultView
+```
+
+同一个 TextureView 可以搭配不同 Sampler；Texture 和 TextureView 都不拥有 sampler。指定 mip、layer、format 或 swizzle 时传自定义 TextureView，普通路径使用 Texture 的默认 view。
+
+`MaterialGpuManager` 每次 resolve 都收集最终 binding：优先使用运行时 override，否则由 VirtualPath 加载 GPU-backed Texture，并采用资产的默认 sampler 建议。绑定签名变化（包括 texture 热重载后 default view handle 变化）会重建 BindGroup。`MaterialGpuFactory` 只向 RHI 提交 `TextureViewHandle + SamplerHandle`，TextureHandle 从不直接写入 sampled descriptor。
 
 ## Renderer 与 GPU 资源
 

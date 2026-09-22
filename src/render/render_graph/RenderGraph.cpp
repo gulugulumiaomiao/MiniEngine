@@ -31,7 +31,7 @@ RgTextureHandle RenderGraph::importTexture(ImportedTexture texture) {
 }
 
 RgTextureHandle RenderGraph::createTexture(RgTextureDesc desc) {
-    if (desc.format == rhi::TextureFormat::Undefined || desc.width == 0 || desc.height == 0 ||
+    if (desc.format == rhi::PixelFormat::Undefined || desc.width == 0 || desc.height == 0 ||
         desc.mipCount == 0) {
         Log::fatal("RenderGraph", "Invalid transient texture description");
     }

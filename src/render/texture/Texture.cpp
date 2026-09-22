@@ -11,7 +11,7 @@ namespace engine {
 namespace {
 
 constexpr std::uint32_t kTextureMagic = 0x52584554U;
-constexpr std::uint16_t kTextureVersion = 2;
+constexpr std::uint16_t kTextureVersion = 3;
 
 bool rgbaByteSize(std::uint32_t width, std::uint32_t height, std::size_t& result) {
     constexpr std::size_t channels = 4;
@@ -86,13 +86,17 @@ bool TextureDesc::transfer(Transfer& archive) {
     return archive.beginObject({}) && archive.transfer("type", type) &&
            archive.transfer("format", format) && archive.transfer("color_space", colorSpace) &&
            archive.transfer("width", width) && archive.transfer("height", height) &&
+           archive.transfer("depth", depth) && archive.transfer("array_layers", arrayLayers) &&
            archive.transfer("mip_count", mipCount) && archive.transfer("sampler", sampler) &&
            archive.endObject();
 }
 
 bool validateTexture(const TextureDesc& desc, std::span<const TextureMipData> mipData) {
+    // The complete type model is serialized now, but this rollout intentionally creates only
+    // single-layer 2D textures until upload and barrier paths support every dimension.
     if (desc.type != TextureType::Texture2D || desc.width == 0 || desc.height == 0 ||
-        desc.mipCount == 0 || desc.mipCount != mipData.size() ||
+        desc.depth != 1 || desc.arrayLayers != 1 || desc.mipCount == 0 ||
+        desc.mipCount != mipData.size() ||
         (desc.format != TextureFormat::Rgba8Unorm && desc.format != TextureFormat::Rgba8Srgb) ||
         (desc.colorSpace != TextureColorSpace::Linear &&
          desc.colorSpace != TextureColorSpace::Srgb) ||
@@ -126,34 +130,43 @@ bool validateTexture(const TextureDesc& desc, std::span<const TextureMipData> mi
     return true;
 }
 
-Texture Texture::clone() const {
-    Texture copy;
-    copy.assetPath_ = assetPath_;
-    copy.desc_ = desc_;
-    copy.mipData_ = mipData_;
-    copy.version_ = version_;
-    copy.dirty_ = true;
-    // assetId_ stays empty: a clone is detached from its source asset.
-    return copy;
+rhi::TextureType toRhi(TextureType type) {
+    switch (type) {
+    case TextureType::Texture2D: return rhi::TextureType::Texture2D;
+    case TextureType::Texture2DArray: return rhi::TextureType::Texture2DArray;
+    case TextureType::Texture3D: return rhi::TextureType::Texture3D;
+    case TextureType::TextureCube: return rhi::TextureType::TextureCube;
+    case TextureType::TextureCubeArray: return rhi::TextureType::TextureCubeArray;
+    }
+    Log::fatal("Texture", "Unsupported Texture type");
 }
 
-void Texture::rebuildFromAsset(const TextureAsset& asset) {
-    if (!validateTexture(asset.desc, asset.mipData))
-        return;
-    desc_ = asset.desc;
-    mipData_ = asset.mipData;
-    ++version_;
-    dirty_ = true;
+rhi::PixelFormat toRhi(TextureFormat format) {
+    switch (format) {
+    case TextureFormat::Rgba8Unorm: return rhi::PixelFormat::Rgba8Unorm;
+    case TextureFormat::Rgba8Srgb: return rhi::PixelFormat::Rgba8Srgb;
+    }
+    Log::fatal("Texture", "Unsupported Texture format");
 }
 
-Texture TextureAsset::instantiate() const {
-    Texture result;
-    if (!validateTexture(desc, mipData))
-        return result;
-    result.assetPath_ = assetPath();
-    result.desc_ = desc;
-    result.mipData_ = mipData;
-    return result;
+Texture::Texture(VirtualPath assetPath,
+                 AssetId assetId,
+                 TextureDesc desc,
+                 std::vector<TextureMipData> mipData,
+                 std::uint64_t version,
+                 rhi::TextureHandle texture,
+                 TextureView defaultView,
+                 rhi::IRHITexture& rhiTexture)
+    : assetPath_(std::move(assetPath)), assetId_(assetId), desc_(std::move(desc)),
+      mipData_(std::move(mipData)), version_(version), texture_(texture),
+      defaultView_(std::move(defaultView)), rhiTexture_(&rhiTexture) {}
+
+TextureView Texture::getView(rhi::TextureViewDesc desc) const {
+    if (!rhiTexture_ || !texture_)
+        return {};
+    if (desc.format == rhi::PixelFormat::Undefined)
+        desc.format = toRhi(desc_.format);
+    return {texture_, rhiTexture_->createView(desc), desc};
 }
 
 bool TextureAsset::transfer(Transfer& archive) {

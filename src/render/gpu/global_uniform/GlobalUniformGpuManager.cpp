@@ -2,7 +2,7 @@
 
 #include "core/logging/Log.h"
 #include "render/global_uniform/GlobalUniformManager.h"
-#include "render/gpu/texture/TextureGpuManager.h"
+#include "render/texture/TextureManager.h"
 #include "rhi/api/Device.h"
 
 #include <algorithm>
@@ -51,13 +51,40 @@ rhi::BindGroupHandle GlobalUniformGpuManager::resolve(std::uint32_t frameIndex) 
 void GlobalUniformGpuManager::updateFrame(std::uint32_t frameIndex) {
     FrameResources& frame = frames_[frameIndex];
     const GlobalUniformManager& globals = GLOBAL_UNIFORM_MANAGER;
-    const std::uint64_t byteSize =
-        std::max<std::uint64_t>(16, globals.uniformBytes().size());
+    const std::uint64_t byteSize = std::max<std::uint64_t>(16, globals.uniformBytes().size());
+
+    const auto resolveTextureBinding = [this](std::string_view reference) {
+        const TextureHandle handle = TEXTURE_MANAGER.resolveReference(reference);
+        const Texture* texture = TEXTURE_MANAGER.find(handle);
+        if (!texture)
+            return TextureBinding{};
+        return TextureBinding{texture->defaultView(),
+                              Sampler::resolve(*device_, texture->defaultSamplerDesc())};
+    };
+    std::vector<TextureBinding> resolvedTextures;
+    resolvedTextures.reserve(kMaxGlobalTextures);
+    for (const ShaderPropertyDesc& property : globals.textureProperties()) {
+        if (resolvedTextures.size() >= kMaxGlobalTextures)
+            break;
+        const std::string* reference = globals.findTexture(property.name);
+        TextureBinding texture = resolveTextureBinding(reference ? *reference : "");
+        if (!texture) {
+            Log::error("GlobalUniformGpuManager",
+                       "Global texture is unavailable: %s",
+                       property.name.c_str());
+            texture = resolveTextureBinding("");
+        }
+        resolvedTextures.push_back(texture);
+    }
+    const TextureBinding defaultTexture = resolveTextureBinding("");
+    while (resolvedTextures.size() < kMaxGlobalTextures)
+        resolvedTextures.push_back(defaultTexture);
 
     const bool layoutChanged = lastLayoutVersion_ != globals.version();
+    const bool textureBindingsChanged = frame.textureBindings != resolvedTextures;
     const bool bufferTooSmall = frame.uniformSize < byteSize;
-    const bool needsRebuild =
-        layoutChanged || bufferTooSmall || !frame.uniformBuffer || !frame.bindGroup;
+    const bool needsRebuild = layoutChanged || textureBindingsChanged || bufferTooSmall ||
+                              !frame.uniformBuffer || !frame.bindGroup;
 
     if (needsRebuild) {
         if (frame.bindGroup) {
@@ -97,39 +124,19 @@ void GlobalUniformGpuManager::updateFrame(std::uint32_t frameIndex) {
         });
 
         std::uint32_t binding = 1;
-        for (const ShaderPropertyDesc& property : globals.textureProperties()) {
-            if (binding > kMaxGlobalTextures)
-                break;
-            const std::string* reference = globals.findTexture(property.name);
-            auto texture = TEXTURE_GPU_MANAGER.resolveReference(reference ? *reference : "");
-            if (!texture) {
-                Log::error("GlobalUniformGpuManager",
-                           "Global texture is unavailable: %s",
-                           property.name.c_str());
-                texture = TEXTURE_GPU_MANAGER.resolveReference("");
-            }
+        for (const TextureBinding& texture : resolvedTextures) {
+            const rhi::TextureBinding resolved = texture.toRhi();
             bindings.push_back({
                 .binding = binding++,
                 .type = rhi::BindingType::SampledTexture,
-                .textureView = texture->view,
-                .sampler = texture->sampler,
+                .textureView = resolved.view,
+                .sampler = resolved.sampler,
             });
         }
 
-        // Fill unused texture slots with the default white texture so the bind group
-        // layout is fully satisfied even when fewer globals are registered.
-        const auto defaultTexture = TEXTURE_GPU_MANAGER.resolveReference("");
-        for (; binding <= kMaxGlobalTextures; ++binding) {
-            bindings.push_back({
-                .binding = binding,
-                .type = rhi::BindingType::SampledTexture,
-                .textureView = defaultTexture->view,
-                .sampler = defaultTexture->sampler,
-            });
-        }
-
-        frame.bindGroup = device_->createBindGroup(
-            {layout_, bindings, "Global uniform bind group"});
+        frame.bindGroup =
+            device_->createBindGroup({layout_, bindings, "Global uniform bind group"});
+        frame.textureBindings = std::move(resolvedTextures);
         lastLayoutVersion_ = globals.version();
     }
 }

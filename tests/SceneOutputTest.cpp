@@ -12,14 +12,25 @@
 namespace {
 class FakeSwapchain final : public rhi::ISwapchain {
 public:
-    rhi::FrameStatus beginFrame() override { ++begins; return status; }
-    rhi::FrameStatus endFrame() override { slot = (slot + 1) % 2; return rhi::FrameStatus::Ready; }
-    void resize(std::uint32_t w, std::uint32_t h) override { width_ = w; height_ = h; }
+    rhi::FrameStatus beginFrame() override {
+        ++begins;
+        return status;
+    }
+    rhi::FrameStatus endFrame() override {
+        slot = (slot + 1) % 2;
+        return rhi::FrameStatus::Ready;
+    }
+    void resize(std::uint32_t w, std::uint32_t h) override {
+        width_ = w;
+        height_ = h;
+    }
     rhi::ICommandBuffer& commandBuffer() override { return commands; }
     rhi::TextureHandle currentTexture() const override { return {99, 1}; }
     rhi::TextureViewHandle currentTextureView() const override { return {99, 1}; }
-    rhi::ResourceState currentTextureState() const override { return rhi::ResourceState::Undefined; }
-    rhi::TextureFormat format() const override { return rhi::TextureFormat::Bgra8Srgb; }
+    rhi::ResourceState currentTextureState() const override {
+        return rhi::ResourceState::Undefined;
+    }
+    rhi::PixelFormat format() const override { return rhi::PixelFormat::Bgra8Srgb; }
     std::uint32_t width() const override { return width_; }
     std::uint32_t height() const override { return height_; }
     std::uint32_t frameIndex() const override { return slot; }
@@ -56,8 +67,8 @@ protected:
         device = deviceOwner.get();
         auto swapchainOwner = std::make_unique<FakeSwapchain>();
         swapchain = swapchainOwner.get();
-        renderer = std::make_unique<Renderer>(*window,
-            rhi::Context{std::move(deviceOwner), std::move(swapchainOwner)});
+        renderer = std::make_unique<Renderer>(
+            *window, rhi::Context{std::move(deviceOwner), std::move(swapchainOwner)});
         auto pipelineOwner = std::make_unique<ForwardOnlyPipeline>();
         pipeline = pipelineOwner.get();
         renderer->setPipeline(std::move(pipelineOwner));
@@ -69,7 +80,7 @@ protected:
     ForwardOnlyPipeline* pipeline{};
     RenderScene scene;
 };
-}
+} // namespace
 
 TEST_F(SceneOutputTest, DefaultRuntimeKeepsSwapchainExtentAndPresentFallback) {
     EXPECT_FALSE(renderer->offscreenScene());
@@ -90,7 +101,7 @@ TEST_F(SceneOutputTest, EmptySceneClearsSampledImageAndFinishesInShaderRead) {
     ASSERT_EQ(device->textures.size(), 4U); // two original depth images plus color/depth for slot 0
     EXPECT_EQ(device->textures[2].width, 320U);
     EXPECT_EQ(device->textures[2].height, 180U);
-    EXPECT_EQ(device->textures[2].format, rhi::TextureFormat::Bgra8Srgb);
+    EXPECT_EQ(device->textures[2].format, rhi::PixelFormat::Bgra8Srgb);
     EXPECT_TRUE(rhi::hasFlag(device->textures[2].usage, rhi::TextureUsage::Sampled));
     EXPECT_TRUE(rhi::hasFlag(device->textures[2].usage, rhi::TextureUsage::ColorAttachment));
     ASSERT_EQ(swapchain->commands.renderings.size(), 2U); // scene and present fallback

@@ -32,7 +32,7 @@ public:
     [[nodiscard]] bool offscreenScene() const;
     [[nodiscard]] std::uint32_t sceneWidth() const;
     [[nodiscard]] std::uint32_t sceneHeight() const;
-    [[nodiscard]] rhi::TextureFormat sceneColorFormat() const;
+    [[nodiscard]] rhi::PixelFormat sceneColorFormat() const;
 
     // True once a pass actually rendered into the swapchain backbuffer this frame.
     // The overlay uses this instead of guessing from scene contents: a scene can have

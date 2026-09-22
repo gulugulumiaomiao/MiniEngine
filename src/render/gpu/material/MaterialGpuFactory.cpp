@@ -40,12 +40,13 @@ bool MaterialGpuFactory::create(const MaterialGpuCreateInfo& request,
         .size = byteSize,
     });
     std::uint32_t binding = 1;
-    for (const rhi::TextureBinding& texture : request.textures) {
+    for (const TextureBinding& texture : request.textures) {
+        const rhi::TextureBinding resolved = texture.toRhi();
         bindings.push_back({
             .binding = binding++,
             .type = rhi::BindingType::SampledTexture,
-            .textureView = texture.view,
-            .sampler = texture.sampler,
+            .textureView = resolved.view,
+            .sampler = resolved.sampler,
         });
     }
     destination.bindGroup = device_.createBindGroup({layout_, bindings, "Material bind group"});

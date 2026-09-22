@@ -32,7 +32,7 @@ public:
     [[nodiscard]] virtual TextureHandle currentTexture() const = 0;
     [[nodiscard]] virtual TextureViewHandle currentTextureView() const = 0;
     [[nodiscard]] virtual ResourceState currentTextureState() const = 0;
-    [[nodiscard]] virtual TextureFormat format() const = 0;
+    [[nodiscard]] virtual PixelFormat format() const = 0;
     [[nodiscard]] virtual std::uint32_t width() const = 0;
     [[nodiscard]] virtual std::uint32_t height() const = 0;
     [[nodiscard]] virtual std::uint32_t frameIndex() const = 0;

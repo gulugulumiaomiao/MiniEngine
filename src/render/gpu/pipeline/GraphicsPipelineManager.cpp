@@ -47,8 +47,8 @@ bool GraphicsPipelineManager::initialize(rhi::IDevice& device,
 
 GraphicsPipelineCacheKey GraphicsPipelineManager::makeCacheKey(const ShaderProgram& program,
                                                                std::uint64_t vertexLayoutHash,
-                                                               rhi::TextureFormat colorFormat,
-                                                               rhi::TextureFormat depthFormat) {
+                                                               rhi::PixelFormat colorFormat,
+                                                               rhi::PixelFormat depthFormat) {
     ShaderHash key = program.id;
     hashAppend(key, program.layout.id);
     hashAppend(key, colorFormat);
@@ -63,8 +63,8 @@ GraphicsPipelineCacheKey GraphicsPipelineManager::makeCacheKey(const ShaderProgr
 
 rhi::GraphicsPipelineDesc
 GraphicsPipelineManager::makeDescription(const VertexLayout& vertexLayout,
-                                         rhi::TextureFormat colorFormat,
-                                         rhi::TextureFormat depthFormat,
+                                         rhi::PixelFormat colorFormat,
+                                         rhi::PixelFormat depthFormat,
                                          rhi::ShaderHandle vertexShader,
                                          std::string vertexEntry,
                                          rhi::ShaderHandle fragmentShader,
@@ -77,7 +77,7 @@ GraphicsPipelineManager::makeDescription(const VertexLayout& vertexLayout,
     desc.bindGroupLayouts = {sceneLayout_, materialLayout_, globalLayout_};
     // Depth-only passes (ShadowCaster) pass Undefined as the color format and render without
     // any color attachment; toVulkan(Undefined) is not a valid attachment format.
-    if (colorFormat != rhi::TextureFormat::Undefined) {
+    if (colorFormat != rhi::PixelFormat::Undefined) {
         desc.colorFormats = {colorFormat};
     }
     desc.depthFormat = depthFormat;
@@ -99,8 +99,8 @@ rhi::GraphicsPipelineHandle GraphicsPipelineManager::resolve(const Shader& shade
                                                              const ShaderPass& pass,
                                                              const ShaderVariantKey& variant,
                                                              const Mesh& mesh,
-                                                             rhi::TextureFormat colorFormat,
-                                                             rhi::TextureFormat depthFormat) {
+                                                             rhi::PixelFormat colorFormat,
+                                                             rhi::PixelFormat depthFormat) {
     if (!initialized())
         return {};
     const ShaderProgramHandle programHandle =

@@ -3,6 +3,7 @@
 #include "asset/base/AssetId.h"
 #include "render/base/RenderHandle.h"
 #include "render/shader/Shader.h"
+#include "render/texture/TextureView.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -19,6 +20,7 @@ namespace engine {
 class AssetManager;
 class Material;
 class MaterialManager;
+class Texture;
 
 class MaterialAsset final : public Asset {
 public:
@@ -51,9 +53,7 @@ public:
     [[nodiscard]] ShaderHandle shaderHandle() const { return shaderHandle_; }
     // 写回专用：只暴露 override（nullopt = 沿用 shader 默认），生效值 renderQueue
     // 字段是派生状态，写回时不得显式化。
-    [[nodiscard]] std::optional<int> renderQueueOverride() const {
-        return renderQueueOverride_;
-    }
+    [[nodiscard]] std::optional<int> renderQueueOverride() const { return renderQueueOverride_; }
     void setShader(ShaderHandle shader);
 
     // Editor write path: an override re-derives the effective renderQueue, and
@@ -78,6 +78,7 @@ public:
     [[nodiscard]] math::Vec4 getVec4(std::string_view name) const;
     [[nodiscard]] bool getBool(std::string_view name) const;
     [[nodiscard]] const std::string& getTexture(std::string_view name) const;
+    [[nodiscard]] const TextureBinding* getTextureBinding(std::string_view name) const;
 
     void setFloat(std::string_view name, float value);
     void setVec2(std::string_view name, const math::Vec2& value);
@@ -85,6 +86,8 @@ public:
     void setVec4(std::string_view name, const math::Vec4& value);
     void setBool(std::string_view name, bool value);
     void setTexture(std::string_view name, std::string value);
+    void setTexture(std::string_view name, const TextureView& view, const Sampler& sampler);
+    void setTexture(std::string_view name, const Texture& texture, const Sampler& sampler);
 
     [[nodiscard]] std::span<const std::byte> uniformBytes() const { return uniformData; }
     [[nodiscard]] bool dirty() const { return dirty_; }
@@ -110,6 +113,7 @@ private:
     ShaderHandle shaderHandle_;
     std::uint64_t shaderRevision_{};
     std::optional<int> renderQueueOverride_;
+    std::unordered_map<std::string, TextureBinding> textureBindings_;
     bool suppressChanges_{};
     bool dirty_{true};
     std::uint64_t version_{1};

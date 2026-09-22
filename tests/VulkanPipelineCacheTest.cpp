@@ -184,8 +184,8 @@ engine::rhi::GraphicsPipelineDesc basePipelineDesc(const Fixture& fixture) {
     desc.vertexShader = fixture.vertex;
     desc.fragmentShader = fixture.fragment;
     desc.bindGroupLayouts = {fixture.layout};
-    desc.colorFormats = {engine::rhi::TextureFormat::Rgba8Unorm};
-    desc.depthFormat = engine::rhi::TextureFormat::Depth32Float;
+    desc.colorFormats = {engine::rhi::PixelFormat::Rgba8Unorm};
+    desc.depthFormat = engine::rhi::PixelFormat::Depth32Float;
     return desc;
 }
 

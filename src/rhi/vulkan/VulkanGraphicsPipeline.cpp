@@ -20,27 +20,26 @@ VkFormat toVulkan(VertexFormat format) {
     Log::fatal("VulkanGraphicsPipeline", "Unsupported vertex format");
 }
 
-VkFormat toVulkan(TextureFormat format) {
+VkFormat toVulkan(PixelFormat format) {
     switch (format) {
-    case TextureFormat::Rgba8Unorm: return VK_FORMAT_R8G8B8A8_UNORM;
-    case TextureFormat::Rgba8Srgb: return VK_FORMAT_R8G8B8A8_SRGB;
-    case TextureFormat::Bgra8Unorm: return VK_FORMAT_B8G8R8A8_UNORM;
-    case TextureFormat::Bgra8Srgb: return VK_FORMAT_B8G8R8A8_SRGB;
-    case TextureFormat::Depth32Float: return VK_FORMAT_D32_SFLOAT;
-    case TextureFormat::Undefined: break;
+    case PixelFormat::Rgba8Unorm: return VK_FORMAT_R8G8B8A8_UNORM;
+    case PixelFormat::Rgba8Srgb: return VK_FORMAT_R8G8B8A8_SRGB;
+    case PixelFormat::Bgra8Unorm: return VK_FORMAT_B8G8R8A8_UNORM;
+    case PixelFormat::Bgra8Srgb: return VK_FORMAT_B8G8R8A8_SRGB;
+    case PixelFormat::Depth32Float: return VK_FORMAT_D32_SFLOAT;
+    case PixelFormat::Undefined: break;
     }
     Log::fatal("VulkanGraphicsPipeline", "Unsupported attachment format");
 }
 
 } // namespace
 
-VulkanGraphicsPipeline::VulkanGraphicsPipeline(
-    VkDevice device,
-    const GraphicsPipelineDesc& desc,
-    VkShaderModule vertexShader,
-    VkShaderModule fragmentShader,
-    VkPipelineLayout layout,
-    VkPipelineCache cache)
+VulkanGraphicsPipeline::VulkanGraphicsPipeline(VkDevice device,
+                                               const GraphicsPipelineDesc& desc,
+                                               VkShaderModule vertexShader,
+                                               VkShaderModule fragmentShader,
+                                               VkPipelineLayout layout,
+                                               VkPipelineCache cache)
     : device_(device), layout_(layout) {
     std::array<VkPipelineShaderStageCreateInfo, 2> stages{};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -62,8 +61,7 @@ VulkanGraphicsPipeline::VulkanGraphicsPipeline(
                                   stream.inputRate == VertexInputRate::Vertex
                                       ? VK_VERTEX_INPUT_RATE_VERTEX
                                       : VK_VERTEX_INPUT_RATE_INSTANCE});
-        vertexAttributes.push_back(
-            {stream.location, stream.binding, toVulkan(stream.format), 0});
+        vertexAttributes.push_back({stream.location, stream.binding, toVulkan(stream.format), 0});
     }
     VkPipelineVertexInputStateCreateInfo vertexInput{
         VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
@@ -123,13 +121,13 @@ VulkanGraphicsPipeline::VulkanGraphicsPipeline(
 
     std::vector<VkFormat> colorFormats;
     colorFormats.reserve(desc.colorFormats.size());
-    for (TextureFormat format : desc.colorFormats) {
+    for (PixelFormat format : desc.colorFormats) {
         colorFormats.push_back(toVulkan(format));
     }
     VkPipelineRenderingCreateInfo renderingInfo{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
     renderingInfo.colorAttachmentCount = static_cast<std::uint32_t>(colorFormats.size());
     renderingInfo.pColorAttachmentFormats = colorFormats.data();
-    if (desc.depthFormat != TextureFormat::Undefined) {
+    if (desc.depthFormat != PixelFormat::Undefined) {
         renderingInfo.depthAttachmentFormat = toVulkan(desc.depthFormat);
     }
 

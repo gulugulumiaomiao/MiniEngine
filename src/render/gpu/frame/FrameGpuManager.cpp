@@ -13,8 +13,7 @@ namespace {
 
 constexpr std::uint64_t kObjectBufferSize =
     sizeof(ObjectDrawData) * FrameGpuManager::kMaxRenderObjects;
-constexpr std::uint64_t kInstanceTableSize =
-    sizeof(std::uint32_t) * FrameGpuManager::kMaxInstances;
+constexpr std::uint64_t kInstanceTableSize = sizeof(std::uint32_t) * FrameGpuManager::kMaxInstances;
 
 } // namespace
 
@@ -52,7 +51,7 @@ bool FrameGpuManager::initialize(rhi::IDevice& device) {
         .addressV = rhi::SamplerAddressMode::ClampToEdge,
     });
     placeholderTexture_ = device_->createTexture({
-        .format = rhi::TextureFormat::Depth32Float,
+        .format = rhi::PixelFormat::Depth32Float,
         .width = 1,
         .height = 1,
         .depth = 1,
@@ -60,13 +59,7 @@ bool FrameGpuManager::initialize(rhi::IDevice& device) {
         .usage = rhi::TextureUsage::Sampled | rhi::TextureUsage::DepthStencilAttachment,
         .debugName = "Shadow map placeholder",
     });
-    placeholderView_ = device_->createTextureView({
-        .texture = placeholderTexture_,
-        .format = rhi::TextureFormat::Depth32Float,
-        .aspect = rhi::TextureAspect::Depth,
-        .baseMipLevel = 0,
-        .mipCount = 1,
-    });
+    placeholderView_ = device_->defaultTextureView(placeholderTexture_);
     if (!shadowSampler_ || !placeholderTexture_ || !placeholderView_) {
         Log::fatal("FrameGpuManager", "Cannot create shadow sampling resources");
     }
@@ -153,8 +146,7 @@ void FrameGpuManager::bindShadowMap(std::uint32_t frameIndex, rhi::TextureViewHa
                             .textureView = view,
                             .sampler = shadowSampler_},
     };
-    frame.sceneBindGroup =
-        device_->createBindGroup({sceneLayout_, bindings, "Scene bind group"});
+    frame.sceneBindGroup = device_->createBindGroup({sceneLayout_, bindings, "Scene bind group"});
 }
 
 rhi::BindGroupHandle FrameGpuManager::sceneBindGroup(std::uint32_t frameIndex) const {
@@ -211,12 +203,8 @@ void FrameGpuManager::shutdown() {
             device_->destroyBuffer(frame.instanceTable);
         frame = {};
     }
-    if (placeholderView_)
-        device_->destroyTextureView(placeholderView_);
     if (placeholderTexture_)
         device_->destroyTexture(placeholderTexture_);
-    if (shadowSampler_)
-        device_->destroySampler(shadowSampler_);
     if (sceneLayout_)
         device_->destroyBindGroupLayout(sceneLayout_);
     if (materialLayout_)

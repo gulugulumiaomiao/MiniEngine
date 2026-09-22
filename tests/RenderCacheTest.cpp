@@ -3,7 +3,6 @@
 #include "render/gpu/mesh/MeshGpuCache.h"
 #include "render/gpu/pipeline/GraphicsPipelineCache.h"
 #include "render/gpu/shader/ShaderModuleCache.h"
-#include "render/gpu/texture/TextureGpuCache.h"
 
 #include <type_traits>
 
@@ -16,9 +15,6 @@ static_assert(std::is_abstract_v<engine::IGpuResourceFactory<Request, Resource>>
 static_assert(std::is_abstract_v<engine::IGpuCache<int, Resource>>);
 static_assert(std::is_base_of_v<engine::IGpuCache<engine::MeshGpuCacheKey, engine::MeshGpuResource>,
                                 engine::MeshGpuCache>);
-static_assert(
-    std::is_base_of_v<engine::IGpuCache<engine::TextureGpuCacheKey, engine::TextureGpuResource>,
-                      engine::TextureGpuCache>);
 
 } // namespace
 
@@ -26,7 +22,6 @@ int main() {
     using namespace engine;
 
     MeshGpuCache meshes;
-    TextureGpuCache textures;
     ShaderModuleCache shaders;
     GraphicsPipelineCache pipelines;
     MaterialBindingCache materials;
@@ -75,7 +70,7 @@ int main() {
         return 11;
     materials.reset();
 
-    if (textures.size() != 0 || shaders.size() != 0 || pipelines.size() != 0)
+    if (shaders.size() != 0 || pipelines.size() != 0)
         return 12;
     return 0;
 }

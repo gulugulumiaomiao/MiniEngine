@@ -32,8 +32,8 @@ public:
                                                       const ShaderPass& pass,
                                                       const ShaderVariantKey& variant,
                                                       const Mesh& mesh,
-                                                      rhi::TextureFormat colorFormat,
-                                                      rhi::TextureFormat depthFormat);
+                                                      rhi::PixelFormat colorFormat,
+                                                      rhi::PixelFormat depthFormat);
     void refreshShaders(std::uint64_t frameSerial, std::uint64_t retireSerial);
     void collect(std::uint64_t completedSerial);
     void clear();
@@ -51,11 +51,11 @@ private:
 
     [[nodiscard]] static GraphicsPipelineCacheKey makeCacheKey(const ShaderProgram& program,
                                                                std::uint64_t vertexLayoutHash,
-                                                               rhi::TextureFormat colorFormat,
-                                                               rhi::TextureFormat depthFormat);
+                                                               rhi::PixelFormat colorFormat,
+                                                               rhi::PixelFormat depthFormat);
     [[nodiscard]] rhi::GraphicsPipelineDesc makeDescription(const VertexLayout& vertexLayout,
-                                                            rhi::TextureFormat colorFormat,
-                                                            rhi::TextureFormat depthFormat,
+                                                            rhi::PixelFormat colorFormat,
+                                                            rhi::PixelFormat depthFormat,
                                                             rhi::ShaderHandle vertexShader,
                                                             std::string vertexEntry,
                                                             rhi::ShaderHandle fragmentShader,

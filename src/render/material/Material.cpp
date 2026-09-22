@@ -4,6 +4,7 @@
 #include "core/logging/Log.h"
 #include "core/serialization/Transfer.h"
 #include "render/shader/ShaderManager.h"
+#include "render/texture/Texture.h"
 
 #include <algorithm>
 #include <cassert>
@@ -283,6 +284,11 @@ void Material::rebuildForShader(ShaderHandle newShaderHandle, bool preserveValue
         if (old != oldValues.end() && compatiblePropertyTypes(old->second.first, property.type)) {
             replacement.setPropertyValue(property.name, old->second.second);
         }
+        if (preserveValues && property.type == ShaderPropertyType::Texture2D) {
+            const auto binding = textureBindings_.find(property.name);
+            if (binding != textureBindings_.end())
+                replacement.textureBindings_.insert(*binding);
+        }
     }
     for (const std::string& keyword : keywords) {
         if (newShader.declaresKeyword(keyword)) {
@@ -378,6 +384,11 @@ const std::string& Material::getTexture(std::string_view name) const {
     return texture->second;
 }
 
+const TextureBinding* Material::getTextureBinding(std::string_view name) const {
+    const auto binding = textureBindings_.find(std::string{name});
+    return binding == textureBindings_.end() ? nullptr : &binding->second;
+}
+
 void Material::setFloat(std::string_view name, float value) {
     const UniformMemberLayout* member = findMember(uniformLayout, name);
     if (!member ||
@@ -431,7 +442,24 @@ void Material::setTexture(std::string_view name, std::string value) {
         return;
     }
     texture->second = std::move(value);
+    textureBindings_.erase(std::string{name});
     markChanged();
+}
+
+void Material::setTexture(std::string_view name, const TextureView& view, const Sampler& sampler) {
+    if (!textures.contains(std::string{name}) || !view || !sampler) {
+        Log::warn("Material",
+                  "Cannot bind an invalid TextureView or Sampler: %.*s",
+                  static_cast<int>(name.size()),
+                  name.data());
+        return;
+    }
+    textureBindings_.insert_or_assign(std::string{name}, TextureBinding{view, sampler});
+    markChanged();
+}
+
+void Material::setTexture(std::string_view name, const Texture& texture, const Sampler& sampler) {
+    setTexture(name, texture.defaultView(), sampler);
 }
 
 void Material::setPropertyValue(std::string_view name, const ShaderValue& value) {
@@ -503,6 +531,7 @@ Material Material::clone() const {
     copy.shaderHandle_ = shaderHandle_;
     copy.shaderRevision_ = shaderRevision_;
     copy.renderQueueOverride_ = renderQueueOverride_;
+    copy.textureBindings_ = textureBindings_;
     copy.suppressChanges_ = false;
     copy.dirty_ = true;
     copy.version_ = version_;

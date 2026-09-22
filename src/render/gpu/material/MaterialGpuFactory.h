@@ -11,7 +11,7 @@ class Material;
 
 struct MaterialGpuCreateInfo {
     const Material& material;
-    std::span<const rhi::TextureBinding> textures;
+    std::span<const TextureBinding> textures;
 };
 
 class MaterialGpuFactory final

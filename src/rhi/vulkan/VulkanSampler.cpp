@@ -2,6 +2,7 @@
 #include "core/logging/Log.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace engine::rhi::vulkan {
 namespace {
@@ -33,16 +34,20 @@ VulkanSampler::VulkanSampler(VkDevice device, const SamplerDesc& desc, float max
     createInfo.addressModeV = toVulkan(desc.addressV);
     createInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     createInfo.anisotropyEnable = desc.maxAnisotropy > 1.0F ? VK_TRUE : VK_FALSE;
-    createInfo.maxAnisotropy =
-        std::max(1.0F, std::min(desc.maxAnisotropy, maxAnisotropyLimit));
+    createInfo.maxAnisotropy = std::max(1.0F, std::min(desc.maxAnisotropy, maxAnisotropyLimit));
     createInfo.maxLod = VK_LOD_CLAMP_NONE;
     if (vkCreateSampler(device_, &createInfo, nullptr, &sampler_) != VK_SUCCESS) {
         Log::fatal("VulkanSampler", "vkCreateSampler failed");
     }
 }
 
+VulkanSampler::VulkanSampler(VulkanSampler&& other) noexcept
+    : device_(std::exchange(other.device_, VK_NULL_HANDLE)),
+      sampler_(std::exchange(other.sampler_, VK_NULL_HANDLE)), desc_(other.desc_) {}
+
 VulkanSampler::~VulkanSampler() {
-    vkDestroySampler(device_, sampler_, nullptr);
+    if (sampler_ != VK_NULL_HANDLE)
+        vkDestroySampler(device_, sampler_, nullptr);
 }
 
 } // namespace engine::rhi::vulkan

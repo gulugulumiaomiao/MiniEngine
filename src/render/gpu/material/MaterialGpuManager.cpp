@@ -3,8 +3,8 @@
 #include "core/logging/Log.h"
 #include "render/gpu/common/GpuResourceKey.h"
 #include "render/gpu/material/MaterialGpuFactory.h"
-#include "render/gpu/texture/TextureGpuManager.h"
 #include "render/material/MaterialManager.h"
+#include "render/texture/TextureManager.h"
 #include "render/shader/Shader.h"
 
 #include <span>
@@ -27,6 +27,7 @@ bool MaterialGpuManager::initialize(rhi::IDevice& device,
         Log::error("MaterialGpuManager", "Cannot initialize Material binding cache");
         return false;
     }
+    device_ = &device;
     factory_ = std::make_unique<MaterialGpuFactory>(device, materialLayout);
     return true;
 }
@@ -37,8 +38,8 @@ std::uint64_t MaterialGpuManager::cacheKey(MaterialHandle handle) {
 
 namespace {
 
-[[nodiscard]] bool sameTextureBindings(const std::vector<rhi::TextureBinding>& lhs,
-                                       std::span<const rhi::TextureBinding> rhs) {
+[[nodiscard]] bool sameTextureBindings(const std::vector<TextureBinding>& lhs,
+                                       std::span<const TextureBinding> rhs) {
     if (lhs.size() != rhs.size())
         return false;
     for (std::size_t i = 0; i < lhs.size(); ++i) {
@@ -55,17 +56,19 @@ rhi::BindGroupHandle MaterialGpuManager::resolve(MaterialHandle handle) {
     if (!initialized() || !material)
         return {};
 
+    // Texture hot reload keeps the CPU TextureHandle stable while replacing its RHI view.
+    // Resolve the bindings before the cache fast path so a changed view invalidates the bind group.
+    if (!collectTextureBindings(*material))
+        return {};
+
     MaterialBindingCacheSlot slot = cache_.acquire(cacheKey(handle));
     if (slot.cacheHit) {
         MaterialGpuResource& resource = *slot.resource;
-        // Fast path: the resident resource is up to date, no GPU work at all.
+        // Fast path: both material data and the resolved TextureView+Sampler signature are stable.
         if (!resource.pendingRelease && resource.bindGroup &&
-            resource.uniformVersion == material->version()) {
+            resource.uniformVersion == material->version() &&
+            sameTextureBindings(resource.textureBindings, textureScratch_)) {
             return resource.bindGroup;
-        }
-
-        if (!collectTextureBindings(*material)) {
-            return {};
         }
 
         // Dirty path: only the uniform payload changed, keep the bind group.
@@ -81,9 +84,6 @@ rhi::BindGroupHandle MaterialGpuManager::resolve(MaterialHandle handle) {
                                                                         : rhi::BindGroupHandle{};
     }
 
-    if (!collectTextureBindings(*material)) {
-        return {};
-    }
     return factory_->create({*material, textureScratch_}, *slot.resource) ? slot.resource->bindGroup
                                                                           : rhi::BindGroupHandle{};
 }
@@ -93,16 +93,24 @@ bool MaterialGpuManager::collectTextureBindings(const Material& material) {
     for (const ShaderPropertyDesc& property : material.shader().properties()) {
         if (property.type != ShaderPropertyType::Texture2D)
             continue;
+        if (const TextureBinding* binding = material.getTextureBinding(property.name)) {
+            textureScratch_.push_back(*binding);
+            continue;
+        }
         const auto found = material.textures.find(property.name);
         const std::string_view reference =
             found == material.textures.end() ? std::string_view{} : found->second;
-        const auto texture = TEXTURE_GPU_MANAGER.resolveReference(reference);
+        const TextureHandle textureHandle = TEXTURE_MANAGER.resolveReference(reference);
+        const Texture* texture = TEXTURE_MANAGER.find(textureHandle);
         if (!texture) {
             Log::error(
                 "MaterialGpuManager", "Material Texture is unavailable: %s", property.name.c_str());
             return false;
         }
-        textureScratch_.push_back(*texture);
+        const Sampler sampler = Sampler::resolve(*device_, texture->defaultSamplerDesc());
+        if (!sampler)
+            return false;
+        textureScratch_.push_back({texture->defaultView(), sampler});
     }
     return true;
 }
@@ -119,6 +127,7 @@ void MaterialGpuManager::shutdown() {
         factory_->release(resource);
     cache_.reset();
     factory_.reset();
+    device_ = nullptr;
 }
 
 } // namespace engine

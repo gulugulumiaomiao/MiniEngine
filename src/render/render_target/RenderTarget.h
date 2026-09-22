@@ -16,7 +16,7 @@ class IDevice;
 }
 
 struct RenderTargetColorAttachmentDesc {
-    rhi::TextureFormat format{rhi::TextureFormat::Rgba8Unorm};
+    rhi::PixelFormat format{rhi::PixelFormat::Rgba8Unorm};
     rhi::TextureUsage additionalUsage{rhi::TextureUsage::None};
     rhi::LoadOp loadOp{rhi::LoadOp::Clear};
     rhi::StoreOp storeOp{rhi::StoreOp::Store};
@@ -24,7 +24,7 @@ struct RenderTargetColorAttachmentDesc {
 };
 
 struct RenderTargetDepthAttachmentDesc {
-    rhi::TextureFormat format{rhi::TextureFormat::Depth32Float};
+    rhi::PixelFormat format{rhi::PixelFormat::Depth32Float};
     rhi::TextureUsage additionalUsage{rhi::TextureUsage::None};
     rhi::LoadOp loadOp{rhi::LoadOp::Clear};
     rhi::StoreOp storeOp{rhi::StoreOp::Store};
@@ -65,35 +65,34 @@ public:
 
     [[nodiscard]] rhi::TextureHandle colorTexture(std::size_t index) const;
     [[nodiscard]] rhi::TextureViewHandle colorView(std::size_t index) const;
-    [[nodiscard]] rhi::TextureFormat colorFormat(std::size_t index) const;
+    [[nodiscard]] rhi::PixelFormat colorFormat(std::size_t index) const;
     [[nodiscard]] rhi::TextureHandle depthTexture() const;
     [[nodiscard]] rhi::TextureViewHandle depthView() const;
-    [[nodiscard]] rhi::TextureFormat depthFormat() const;
+    [[nodiscard]] rhi::PixelFormat depthFormat() const;
 
     [[nodiscard]] rhi::RenderingInfo renderingInfo() const;
 
     void import(RenderGraph& graph,
                 rhi::ResourceState colorFinalState = rhi::ResourceState::ColorAttachment,
                 rhi::ResourceState depthFinalState = rhi::ResourceState::DepthAttachment);
-    [[nodiscard]] RgTextureHandle importColor(
-        RenderGraph& graph,
-        std::size_t index,
-        rhi::ResourceState finalState = rhi::ResourceState::ColorAttachment);
-    [[nodiscard]] RgTextureHandle importDepth(
-        RenderGraph& graph,
-        rhi::ResourceState finalState = rhi::ResourceState::DepthAttachment);
+    [[nodiscard]] RgTextureHandle
+    importColor(RenderGraph& graph,
+                std::size_t index,
+                rhi::ResourceState finalState = rhi::ResourceState::ColorAttachment);
+    [[nodiscard]] RgTextureHandle
+    importDepth(RenderGraph& graph,
+                rhi::ResourceState finalState = rhi::ResourceState::DepthAttachment);
 
 private:
     struct Attachment {
         rhi::TextureHandle texture;
         rhi::TextureViewHandle view;
-        rhi::TextureFormat format{rhi::TextureFormat::Undefined};
+        rhi::PixelFormat format{rhi::PixelFormat::Undefined};
         rhi::ResourceState state{rhi::ResourceState::Undefined};
     };
 
     [[nodiscard]] bool validate(const RenderTargetDesc& desc) const;
-    [[nodiscard]] bool createAttachment(rhi::TextureFormat format,
-                                        rhi::TextureAspect aspect,
+    [[nodiscard]] bool createAttachment(rhi::PixelFormat format,
                                         rhi::TextureUsage usage,
                                         std::string debugName,
                                         Attachment& destination);

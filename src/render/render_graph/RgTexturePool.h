@@ -23,9 +23,11 @@ public:
     struct PooledTexture {
         rhi::TextureHandle texture;
         rhi::TextureViewHandle view;
-        rhi::TextureFormat format{rhi::TextureFormat::Undefined};
+        rhi::PixelFormat format{rhi::PixelFormat::Undefined};
         std::uint32_t width{};
         std::uint32_t height{};
+        std::uint32_t depth{1};
+        std::uint32_t arrayLayers{1};
         std::uint32_t mipCount{1};
         rhi::TextureUsage usage{rhi::TextureUsage::None};
         bool inUse{false};

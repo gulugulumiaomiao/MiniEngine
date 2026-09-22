@@ -55,7 +55,12 @@ public:
     void destroyTexture(engine::rhi::TextureHandle) override {}
     void uploadTexture(engine::rhi::TextureHandle,
                        std::span<const engine::rhi::TextureUploadRegion>) override {}
-    engine::rhi::TextureViewHandle createTextureView(const engine::rhi::TextureViewDesc&) override {
+    engine::rhi::TextureViewHandle createTextureView(engine::rhi::TextureHandle,
+                                                     const engine::rhi::TextureViewDesc&) override {
+        return {};
+    }
+    engine::rhi::TextureViewHandle
+    defaultTextureView(engine::rhi::TextureHandle) const override {
         return {};
     }
     void destroyTextureView(engine::rhi::TextureViewHandle) override {}
@@ -80,9 +85,7 @@ public:
         return {};
     }
     void destroyBindGroup(engine::rhi::BindGroupHandle) override {}
-    std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override {
-        return nullptr;
-    }
+    std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override { return nullptr; }
     void submitCommand(engine::rhi::ICommandBuffer&, const engine::rhi::SubmitSync&) override {}
     VkDevice device() const override { return VK_NULL_HANDLE; }
     VkInstance instance() const override { return VK_NULL_HANDLE; }
@@ -90,6 +93,14 @@ public:
     VkQueue graphicsQueue() const override { return VK_NULL_HANDLE; }
     std::uint32_t graphicsQueueFamily() const override { return 0; }
     VkBuffer resolveBuffer(engine::rhi::BufferHandle) const override { return VK_NULL_HANDLE; }
+    engine::rhi::IRHITexture*
+    resolveTextureResource(engine::rhi::TextureHandle) override {
+        return nullptr;
+    }
+    const engine::rhi::IRHITexture*
+    resolveTextureResource(engine::rhi::TextureHandle) const override {
+        return nullptr;
+    }
     VkImage resolveTexture(engine::rhi::TextureHandle) const override { return VK_NULL_HANDLE; }
     VkImageView resolveTextureView(engine::rhi::TextureViewHandle) const override {
         return VK_NULL_HANDLE;
@@ -298,8 +309,7 @@ int main() {
     const auto mirrored = MeshBuilder::build(mirroredRecipe);
     if (!mirrored)
         return 15;
-    const math::Vec4 mirroredTangent =
-        readAt<math::Vec4>(mirrored->data.vertexStreams[2].bytes, 0);
+    const math::Vec4 mirroredTangent = readAt<math::Vec4>(mirrored->data.vertexStreams[2].bytes, 0);
     if (!math::nearlyEqual(mirroredTangent.w, -1.0F))
         return 15;
 

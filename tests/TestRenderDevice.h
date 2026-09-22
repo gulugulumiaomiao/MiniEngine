@@ -5,11 +5,32 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <unordered_map>
 #include <vector>
 namespace {
 using namespace engine;
 // Hands out live handles (generation 1) and records every description so the test can
 // assert what the renderer asked the RHI for.
+class MockRhiTexture final : public rhi::IRHITexture {
+public:
+    MockRhiTexture(rhi::TextureDesc desc, rhi::TextureViewHandle defaultView)
+        : desc_(std::move(desc)), defaultView_(defaultView) {}
+
+    rhi::TextureType type() const override { return desc_.dimension; }
+    rhi::PixelFormat format() const override { return desc_.format; }
+    std::uint32_t width() const override { return desc_.width; }
+    std::uint32_t height() const override { return desc_.height; }
+    std::uint32_t depth() const override { return desc_.depth; }
+    std::uint32_t arrayLayers() const override { return desc_.arrayLayers; }
+    std::uint32_t mipCount() const override { return desc_.mipCount; }
+    rhi::TextureViewHandle defaultView() const override { return defaultView_; }
+    rhi::TextureViewHandle createView(const rhi::TextureViewDesc&) override { return defaultView_; }
+
+private:
+    rhi::TextureDesc desc_;
+    rhi::TextureViewHandle defaultView_;
+};
+
 class MockEncoder final : public rhi::ICommandBuffer {
 public:
     void begin() override { currentState = rhi::CommandState::Recording; }
@@ -39,7 +60,8 @@ public:
     void bindVertexBuffer(std::uint32_t, rhi::BufferHandle buffer, std::uint64_t) override {
         boundVertexBuffers.push_back(buffer);
     }
-    void bindIndexBuffer(rhi::BufferHandle buffer, std::uint64_t, rhi::IndexFormat format) override {
+    void
+    bindIndexBuffer(rhi::BufferHandle buffer, std::uint64_t, rhi::IndexFormat format) override {
         boundIndexBuffers.push_back(buffer);
         indexFormats.push_back(format);
     }
@@ -108,14 +130,27 @@ public:
 
     rhi::TextureHandle createTexture(const rhi::TextureDesc& desc) override {
         textures.push_back(desc);
-        return {static_cast<std::uint32_t>(textures.size()), 1};
+        const rhi::TextureHandle handle{static_cast<std::uint32_t>(textures.size()), 1};
+        const rhi::TextureViewHandle defaultView{++views, 1};
+        textureResources.push_back(std::make_unique<MockRhiTexture>(desc, defaultView));
+        defaultTextureViews.emplace(handle.index, defaultView);
+        return handle;
     }
-    void destroyTexture(rhi::TextureHandle) override { ++destroyedTextures; }
+    void destroyTexture(rhi::TextureHandle handle) override {
+        ++destroyedTextures;
+        if (defaultTextureViews.erase(handle.index) > 0)
+            ++destroyedViews;
+    }
     void uploadTexture(rhi::TextureHandle, std::span<const rhi::TextureUploadRegion>) override {
         ++textureUploads;
     }
-    rhi::TextureViewHandle createTextureView(const rhi::TextureViewDesc&) override {
+    rhi::TextureViewHandle createTextureView(rhi::TextureHandle,
+                                             const rhi::TextureViewDesc&) override {
         return {++views, 1};
+    }
+    rhi::TextureViewHandle defaultTextureView(rhi::TextureHandle texture) const override {
+        const auto found = defaultTextureViews.find(texture.index);
+        return found == defaultTextureViews.end() ? rhi::TextureViewHandle{} : found->second;
     }
     void destroyTextureView(rhi::TextureViewHandle) override { ++destroyedViews; }
     rhi::SamplerHandle createSampler(const rhi::SamplerDesc& desc) override {
@@ -129,12 +164,14 @@ public:
         return {static_cast<std::uint32_t>(shaders.size()), 1};
     }
     void destroyShader(rhi::ShaderHandle) override { ++destroyedShaders; }
-    rhi::GraphicsPipelineHandle createGraphicsPipeline(const rhi::GraphicsPipelineDesc& desc) override {
+    rhi::GraphicsPipelineHandle
+    createGraphicsPipeline(const rhi::GraphicsPipelineDesc& desc) override {
         pipelines.push_back(desc);
         return {static_cast<std::uint32_t>(pipelines.size()), 1};
     }
     void destroyGraphicsPipeline(rhi::GraphicsPipelineHandle) override { ++destroyedPipelines; }
-    rhi::BindGroupLayoutHandle createBindGroupLayout(const rhi::BindGroupLayoutDesc& desc) override {
+    rhi::BindGroupLayoutHandle
+    createBindGroupLayout(const rhi::BindGroupLayoutDesc& desc) override {
         layoutEntries.assign(desc.entries.begin(), desc.entries.end());
         return {++layouts, 1};
     }
@@ -157,6 +194,16 @@ public:
     VkQueue graphicsQueue() const override { return VK_NULL_HANDLE; }
     std::uint32_t graphicsQueueFamily() const override { return 0; }
     VkBuffer resolveBuffer(rhi::BufferHandle) const override { return VK_NULL_HANDLE; }
+    rhi::IRHITexture* resolveTextureResource(rhi::TextureHandle handle) override {
+        return handle.index > 0 && handle.index <= textureResources.size()
+                   ? textureResources[handle.index - 1].get()
+                   : nullptr;
+    }
+    const rhi::IRHITexture* resolveTextureResource(rhi::TextureHandle handle) const override {
+        return handle.index > 0 && handle.index <= textureResources.size()
+                   ? textureResources[handle.index - 1].get()
+                   : nullptr;
+    }
     VkImage resolveTexture(rhi::TextureHandle) const override { return VK_NULL_HANDLE; }
     VkImageView resolveTextureView(rhi::TextureViewHandle) const override { return VK_NULL_HANDLE; }
     rhi::ResolvedPipeline resolvePipeline(rhi::GraphicsPipelineHandle) const override { return {}; }
@@ -165,6 +212,8 @@ public:
 
     std::vector<rhi::BufferDesc> buffers;
     std::vector<rhi::TextureDesc> textures;
+    std::vector<std::unique_ptr<MockRhiTexture>> textureResources;
+    std::unordered_map<std::uint32_t, rhi::TextureViewHandle> defaultTextureViews;
     std::vector<rhi::SamplerDesc> samplers;
     std::vector<rhi::ShaderStage> shaders;
     std::vector<std::vector<std::byte>> shaderBytecode;
@@ -188,7 +237,4 @@ public:
     int destroyedBindGroups{};
 };
 
-
-
-
-}
+} // namespace

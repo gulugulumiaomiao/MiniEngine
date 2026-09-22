@@ -14,12 +14,17 @@ class MockDevice final : public engine::rhi::IDevice {
 public:
     engine::rhi::BufferHandle createBuffer(const engine::rhi::BufferDesc&) override { return {}; }
     void destroyBuffer(engine::rhi::BufferHandle) override {}
-    void uploadBuffer(engine::rhi::BufferHandle,
-                      std::span<const std::byte>,
-                      std::uint64_t) override {}
+    void
+    uploadBuffer(engine::rhi::BufferHandle, std::span<const std::byte>, std::uint64_t) override {}
 
     engine::rhi::TextureHandle createTexture(const engine::rhi::TextureDesc& desc) override {
         textures.push_back(desc);
+        views.push_back({.type = desc.dimension,
+                         .format = desc.format,
+                         .baseMip = 0,
+                         .mipCount = desc.mipCount,
+                         .baseLayer = 0,
+                         .layerCount = desc.arrayLayers});
         return {static_cast<std::uint32_t>(textures.size()), 1};
     }
     void destroyTexture(engine::rhi::TextureHandle handle) override {
@@ -29,9 +34,15 @@ public:
     void uploadTexture(engine::rhi::TextureHandle,
                        std::span<const engine::rhi::TextureUploadRegion>) override {}
     engine::rhi::TextureViewHandle
-    createTextureView(const engine::rhi::TextureViewDesc& desc) override {
+    createTextureView(engine::rhi::TextureHandle,
+                      const engine::rhi::TextureViewDesc& desc) override {
         views.push_back(desc);
         return {static_cast<std::uint32_t>(views.size()), 1};
+    }
+    engine::rhi::TextureViewHandle defaultTextureView(engine::rhi::TextureHandle) const override {
+        return views.empty()
+                   ? engine::rhi::TextureViewHandle{}
+                   : engine::rhi::TextureViewHandle{static_cast<std::uint32_t>(views.size()), 1};
     }
     void destroyTextureView(engine::rhi::TextureViewHandle handle) override {
         if (handle)
@@ -57,9 +68,7 @@ public:
         return {};
     }
     void destroyBindGroup(engine::rhi::BindGroupHandle) override {}
-    std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override {
-        return nullptr;
-    }
+    std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override { return nullptr; }
     void submitCommand(engine::rhi::ICommandBuffer&, const engine::rhi::SubmitSync&) override {}
     VkDevice device() const override { return VK_NULL_HANDLE; }
     VkInstance instance() const override { return VK_NULL_HANDLE; }
@@ -67,11 +76,19 @@ public:
     VkQueue graphicsQueue() const override { return VK_NULL_HANDLE; }
     std::uint32_t graphicsQueueFamily() const override { return 0; }
     VkBuffer resolveBuffer(engine::rhi::BufferHandle) const override { return VK_NULL_HANDLE; }
+    engine::rhi::IRHITexture* resolveTextureResource(engine::rhi::TextureHandle) override {
+        return nullptr;
+    }
+    const engine::rhi::IRHITexture*
+    resolveTextureResource(engine::rhi::TextureHandle) const override {
+        return nullptr;
+    }
     VkImage resolveTexture(engine::rhi::TextureHandle) const override { return VK_NULL_HANDLE; }
     VkImageView resolveTextureView(engine::rhi::TextureViewHandle) const override {
         return VK_NULL_HANDLE;
     }
-    engine::rhi::ResolvedPipeline resolvePipeline(engine::rhi::GraphicsPipelineHandle) const override {
+    engine::rhi::ResolvedPipeline
+    resolvePipeline(engine::rhi::GraphicsPipelineHandle) const override {
         return {};
     }
     VkDescriptorSet resolveBindGroup(engine::rhi::BindGroupHandle) const override {
@@ -181,7 +198,7 @@ int main() {
     pool.beginFrame(1);
     RenderGraph transientGraph;
     const RgTextureHandle transient = transientGraph.createTexture({
-        .format = rhi::TextureFormat::Rgba8Unorm,
+        .format = rhi::PixelFormat::Rgba8Unorm,
         .width = 1280,
         .height = 720,
         .usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled,
@@ -192,12 +209,11 @@ int main() {
     transientRendering.renderArea = {0, 0, 1280, 720};
     transientRendering.colorAttachments.push_back(
         {transient, rhi::LoadOp::Clear, rhi::StoreOp::Store, {}});
-    transientGraph.addGraphicsPass("Write",
-                                   std::move(transientRendering),
-                                   {{transient,
-                                     rhi::TextureAspect::Color,
-                                     rhi::ResourceState::ColorAttachment}},
-                                   [](rhi::ICommandBuffer&) {});
+    transientGraph.addGraphicsPass(
+        "Write",
+        std::move(transientRendering),
+        {{transient, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment}},
+        [](rhi::ICommandBuffer&) {});
 
     transientGraph.compile(pool);
     MockGraphicsEncoder transientEncoder;
@@ -214,7 +230,7 @@ int main() {
     pool.beginFrame(0);
     RenderGraph shadowGraph;
     const RgTextureHandle shadowMap = shadowGraph.createTexture({
-        .format = rhi::TextureFormat::Depth32Float,
+        .format = rhi::PixelFormat::Depth32Float,
         .width = 1024,
         .height = 1024,
         .usage = rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::Sampled,
@@ -225,26 +241,32 @@ int main() {
     shadowRendering.renderArea = {0, 0, 1024, 1024};
     shadowRendering.depthAttachments.push_back(
         {shadowMap, rhi::LoadOp::Clear, rhi::StoreOp::Store, 1.0F});
-    shadowGraph.addGraphicsPass("ShadowCaster",
-                                std::move(shadowRendering),
-                                {{shadowMap,
-                                  rhi::TextureAspect::Depth,
-                                  rhi::ResourceState::DepthAttachment}},
-                                [](rhi::ICommandBuffer&) {});
-    shadowGraph.addGraphicsPass("Forward",
-                                RgRenderingInfo{},
-                                {{shadowMap,
-                                  rhi::TextureAspect::Depth,
-                                  rhi::ResourceState::ShaderRead}},
-                                [](rhi::ICommandBuffer&) {});
+    shadowGraph.addGraphicsPass(
+        "ShadowCaster",
+        std::move(shadowRendering),
+        {{shadowMap, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment}},
+        [](rhi::ICommandBuffer&) {});
+    shadowGraph.addGraphicsPass(
+        "Forward",
+        RgRenderingInfo{},
+        {{shadowMap, rhi::TextureAspect::Depth, rhi::ResourceState::ShaderRead}},
+        [](rhi::ICommandBuffer&) {});
     shadowGraph.compile(pool);
     MockGraphicsEncoder shadowEncoder;
     shadowGraph.execute(shadowEncoder);
     shadowGraph.reset();
 
     const std::vector<std::string> expectedShadowEvents{
-        "label:ShadowCaster", "barriers:1", "beginRendering", "endRendering", "endLabel",
-        "label:Forward",      "barriers:1", "beginRendering", "endRendering", "endLabel",
+        "label:ShadowCaster",
+        "barriers:1",
+        "beginRendering",
+        "endRendering",
+        "endLabel",
+        "label:Forward",
+        "barriers:1",
+        "beginRendering",
+        "endRendering",
+        "endLabel",
         "barriers:0",
     };
     const bool usageValid =
@@ -255,8 +277,7 @@ int main() {
         shadowEncoder.recordedBarriers[0].before != rhi::ResourceState::Undefined ||
         shadowEncoder.recordedBarriers[0].after != rhi::ResourceState::DepthAttachment ||
         shadowEncoder.recordedBarriers[1].before != rhi::ResourceState::DepthAttachment ||
-        shadowEncoder.recordedBarriers[1].after != rhi::ResourceState::ShaderRead ||
-        !usageValid) {
+        shadowEncoder.recordedBarriers[1].after != rhi::ResourceState::ShaderRead || !usageValid) {
         return 3;
     }
     return 0;

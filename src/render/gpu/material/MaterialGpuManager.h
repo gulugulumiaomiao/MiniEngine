@@ -42,11 +42,12 @@ private:
     // every one of them is available.
     [[nodiscard]] bool collectTextureBindings(const Material& material);
 
+    rhi::IDevice* device_{};
     MaterialBindingCache cache_;
     std::unique_ptr<MaterialGpuFactory> factory_;
     // Reused across resolve() calls so rebuilding a material's texture signature does not
     // allocate every time.
-    std::vector<rhi::TextureBinding> textureScratch_;
+    std::vector<TextureBinding> textureScratch_;
 };
 
 } // namespace engine

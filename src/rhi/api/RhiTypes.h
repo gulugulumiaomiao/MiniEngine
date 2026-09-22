@@ -32,6 +32,18 @@ enum class IndexFormat { UInt16, UInt32 };
 enum class LoadOp { Load, Clear, DontCare };
 enum class StoreOp { Store, DontCare };
 enum class TextureAspect { Color, Depth };
+
+enum class SwizzleComponent { Identity, Zero, One, R, G, B, A };
+
+struct TextureSwizzle {
+    SwizzleComponent r{SwizzleComponent::Identity};
+    SwizzleComponent g{SwizzleComponent::Identity};
+    SwizzleComponent b{SwizzleComponent::Identity};
+    SwizzleComponent a{SwizzleComponent::Identity};
+
+    [[nodiscard]] bool operator==(const TextureSwizzle&) const = default;
+};
+
 enum class ResourceState {
     Undefined,
     CopySource,

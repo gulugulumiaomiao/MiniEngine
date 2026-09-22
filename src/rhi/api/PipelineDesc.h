@@ -8,7 +8,7 @@
 
 namespace engine::rhi {
 
-enum class TextureFormat {
+enum class PixelFormat {
     Undefined,
     Rgba8Unorm,
     Rgba8Srgb,
@@ -17,13 +17,13 @@ enum class TextureFormat {
     Depth32Float,
 };
 
-[[nodiscard]] constexpr bool isColorFormat(TextureFormat format) {
-    return format == TextureFormat::Rgba8Unorm || format == TextureFormat::Rgba8Srgb ||
-           format == TextureFormat::Bgra8Unorm || format == TextureFormat::Bgra8Srgb;
+[[nodiscard]] constexpr bool isColorFormat(PixelFormat format) {
+    return format == PixelFormat::Rgba8Unorm || format == PixelFormat::Rgba8Srgb ||
+           format == PixelFormat::Bgra8Unorm || format == PixelFormat::Bgra8Srgb;
 }
 
-[[nodiscard]] constexpr bool isDepthFormat(TextureFormat format) {
-    return format == TextureFormat::Depth32Float;
+[[nodiscard]] constexpr bool isDepthFormat(PixelFormat format) {
+    return format == PixelFormat::Depth32Float;
 }
 
 enum class VertexFormat {
@@ -115,8 +115,8 @@ struct GraphicsPipelineDesc {
     std::string fragmentEntry{"main"};
     std::vector<BindGroupLayoutHandle> bindGroupLayouts;
     std::vector<VertexStreamDesc> vertexStreams;
-    std::vector<TextureFormat> colorFormats;
-    TextureFormat depthFormat{TextureFormat::Undefined};
+    std::vector<PixelFormat> colorFormats;
+    PixelFormat depthFormat{PixelFormat::Undefined};
 };
 
 } // namespace engine::rhi

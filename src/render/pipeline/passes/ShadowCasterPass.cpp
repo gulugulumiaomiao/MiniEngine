@@ -45,8 +45,8 @@ void ShadowCasterPass::execute(RenderContext& context,
         }
     }
     const RgTextureHandle shadowMap = graph.createTexture({
-        .dimension = rhi::TextureDimension::Texture2D,
-        .format = rhi::TextureFormat::Depth32Float,
+        .dimension = rhi::TextureType::Texture2D,
+        .format = rhi::PixelFormat::Depth32Float,
         .width = shadowMapSize_,
         .height = shadowMapSize_,
         .depth = 1,
@@ -66,29 +66,27 @@ void ShadowCasterPass::execute(RenderContext& context,
 
     std::vector<RgResourceUsage> resources;
     resources.reserve(1);
-    resources.push_back({shadowMap, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment});
+    resources.push_back(
+        {shadowMap, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment});
 
-    graph.addGraphicsPass("ShadowCaster",
-                          std::move(rendering),
-                          std::move(resources),
-                          [items = std::move(items), size = shadowMapSize_,
-                           frameIndex = context.frameIndex(),
-                           globalBindGroup = GLOBAL_UNIFORM_GPU_MANAGER.resolve(
-                               context.frameIndex())](
-                              rhi::ICommandBuffer& commandBuffer) mutable {
-                              commandBuffer.setViewport({0.0F,
-                                                         0.0F,
-                                                         static_cast<float>(size),
-                                                         static_cast<float>(size),
-                                                         0.0F,
-                                                         1.0F});
-                              commandBuffer.setScissor({0, 0, size, size});
-                              drawFilteredItems(frameIndex,
-                                                items,
-                                                FRAME_GPU_MANAGER.sceneBindGroup(frameIndex),
-                                                globalBindGroup,
-                                                commandBuffer);
-                          });
+    graph.addGraphicsPass(
+        "ShadowCaster",
+        std::move(rendering),
+        std::move(resources),
+        [items = std::move(items),
+         size = shadowMapSize_,
+         frameIndex = context.frameIndex(),
+         globalBindGroup = GLOBAL_UNIFORM_GPU_MANAGER.resolve(context.frameIndex())](
+            rhi::ICommandBuffer& commandBuffer) mutable {
+            commandBuffer.setViewport(
+                {0.0F, 0.0F, static_cast<float>(size), static_cast<float>(size), 0.0F, 1.0F});
+            commandBuffer.setScissor({0, 0, size, size});
+            drawFilteredItems(frameIndex,
+                              items,
+                              FRAME_GPU_MANAGER.sceneBindGroup(frameIndex),
+                              globalBindGroup,
+                              commandBuffer);
+        });
 }
 
 } // namespace engine

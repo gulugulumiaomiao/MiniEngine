@@ -3,26 +3,42 @@
 #include "asset/database/AssetDatabase.h"
 #include "asset/manager/AssetManager.h"
 #include "core/logging/Log.h"
+#include "rhi/api/Device.h"
 
-#include <limits>
 #include <array>
+#include <limits>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace engine {
+
+bool TextureManager::initialize(rhi::IDevice& device) {
+    if (initialized()) {
+        Log::error("TextureManager", "Manager is already initialized");
+        return false;
+    }
+    device_ = &device;
+    return true;
+}
+
+void TextureManager::shutdown() {
+    if (!initialized())
+        return;
+    clear();
+    device_ = nullptr;
+}
 
 TextureHandle TextureManager::load(const AssetId& assetId) {
     if (!assetId.valid()) {
         Log::error("TextureManager", "Invalid Texture AssetId");
         return errorTexture();
     }
-    if (const TextureHandle existing = findHandle(assetId); existing) {
+    if (const TextureHandle existing = findHandle(assetId); existing)
         return existing;
-    }
     const std::optional<VirtualPath> path = ASSET_DATABASE.findPath(assetId);
     if (!path) {
-        Log::error("TextureManager",
-                   "Unknown Texture AssetId: %s",
-                   assetId.toString().c_str());
+        Log::error("TextureManager", "Unknown Texture AssetId: %s", assetId.toString().c_str());
         return errorTexture();
     }
     return loadFromPath(*path, assetId);
@@ -30,43 +46,111 @@ TextureHandle TextureManager::load(const AssetId& assetId) {
 
 TextureHandle TextureManager::load(const VirtualPath& texturePath) {
     if (!texturePath.valid()) {
-        Log::error("TextureManager",
-                   "Invalid Texture path: %s",
-                   texturePath.string().c_str());
+        Log::error("TextureManager", "Invalid Texture path: %s", texturePath.string().c_str());
         return errorTexture();
     }
     const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(texturePath);
     if (!assetId) {
-        Log::error("TextureManager",
-                   "Texture path has no AssetId: %s",
-                   texturePath.string().c_str());
+        Log::error(
+            "TextureManager", "Texture path has no AssetId: %s", texturePath.string().c_str());
         return errorTexture();
     }
-    if (const TextureHandle existing = findHandle(*assetId); existing) {
+    if (const TextureHandle existing = findHandle(*assetId); existing)
         return existing;
-    }
     return loadFromPath(texturePath, *assetId);
 }
 
-TextureHandle TextureManager::loadFromPath(const VirtualPath& texturePath,
-                                           const AssetId& assetId) {
+TextureHandle TextureManager::resolveReference(std::string_view reference) {
+    if (reference.empty())
+        return defaultWhite();
+    VirtualPath path{reference};
+    if (!path.valid())
+        path = VirtualPath{"assets://" + std::string{reference}};
+    TextureHandle handle;
+    if (path.valid() && path.scheme() == "assets")
+        handle = load(path);
+    if (!handle) {
+        Log::warn("TextureManager",
+                  "Using the error Texture for unresolved reference: %.*s",
+                  static_cast<int>(reference.size()),
+                  reference.data());
+        handle = errorTexture();
+    }
+    return handle;
+}
+
+TextureHandle TextureManager::loadFromPath(const VirtualPath& texturePath, const AssetId& assetId) {
     Log::info("Texture", "Loading texture: %s", texturePath.string().c_str());
     const std::shared_ptr<TextureAsset> asset = ASSET_MANAGER.loadAsset<TextureAsset>(texturePath);
-    if (!asset) {
+    if (!asset)
         return errorTexture();
+    std::optional<Texture> texture =
+        createTexture(texturePath, assetId, asset->desc, asset->mipData);
+    return texture ? insert(std::move(*texture)) : errorTexture();
+}
+
+std::optional<Texture> TextureManager::createTexture(VirtualPath path,
+                                                     AssetId assetId,
+                                                     TextureDesc desc,
+                                                     std::vector<TextureMipData> mipData,
+                                                     std::uint64_t version) {
+    if (!initialized() || !path.valid() || !validateTexture(desc, mipData)) {
+        Log::error("TextureManager", "Cannot create an invalid or unsupported Texture");
+        return std::nullopt;
     }
-    Texture texture = asset->instantiate();
-    texture.assetId_ = assetId;
-    return insert(std::move(texture));
+    const rhi::TextureDesc rhiDesc{.dimension = toRhi(desc.type),
+                                   .format = toRhi(desc.format),
+                                   .width = desc.width,
+                                   .height = desc.height,
+                                   .depth = desc.depth,
+                                   .arrayLayers = desc.arrayLayers,
+                                   .mipCount = desc.mipCount,
+                                   .usage = rhi::TextureUsage::Sampled |
+                                            rhi::TextureUsage::TransferDestination,
+                                   .debugName = path.string()};
+    const rhi::TextureHandle texture = device_->createTexture(rhiDesc);
+    std::vector<rhi::TextureUploadRegion> uploads;
+    uploads.reserve(mipData.size());
+    std::uint32_t mipLevel{};
+    for (const TextureMipData& mip : mipData)
+        uploads.push_back({mipLevel++, 0, mip.width, mip.height, mip.bytes});
+    device_->uploadTexture(texture, uploads);
+
+    const rhi::TextureViewDesc viewDesc{.type = toRhi(desc.type),
+                                        .format = toRhi(desc.format),
+                                        .baseMip = 0,
+                                        .mipCount = desc.mipCount,
+                                        .baseLayer = 0,
+                                        .layerCount = desc.arrayLayers};
+    rhi::IRHITexture* rhiTexture = device_->resolveTextureResource(texture);
+    if (!rhiTexture) {
+        device_->destroyTexture(texture);
+        return std::nullopt;
+    }
+    const TextureView defaultView{texture, rhiTexture->defaultView(), viewDesc};
+    return Texture{std::move(path),
+                   assetId,
+                   std::move(desc),
+                   std::move(mipData),
+                   version,
+                   texture,
+                   defaultView,
+                   *rhiTexture};
 }
 
 TextureHandle TextureManager::clone(TextureHandle source) {
-    Texture* texture = find(source);
+    const Texture* texture = find(source);
     if (!texture) {
         Log::error("TextureManager", "Cannot clone an invalid Texture");
         return {};
     }
-    return insertUnkeyed(texture->clone());
+    std::optional<Texture> copy =
+        createTexture(texture->assetPath(),
+                      {},
+                      texture->desc(),
+                      {texture->mipData().begin(), texture->mipData().end()},
+                      texture->version());
+    return copy ? insertUnkeyed(std::move(*copy)) : TextureHandle{};
 }
 
 void TextureManager::refreshAsset(const AssetId& assetId) {
@@ -76,36 +160,21 @@ void TextureManager::refreshAsset(const AssetId& assetId) {
     }
     const std::optional<VirtualPath> path = ASSET_DATABASE.findPath(assetId);
     if (!path) {
-        Log::error("TextureManager",
-                   "Unknown Texture AssetId: %s",
-                   assetId.toString().c_str());
+        Log::error("TextureManager", "Unknown Texture AssetId: %s", assetId.toString().c_str());
         return;
     }
-    const std::shared_ptr<TextureAsset> asset = ASSET_MANAGER.loadAsset<TextureAsset>(*path);
-    if (!asset) {
-        Log::error(
-            "TextureManager", "Failed to reload texture asset: %s", path->string().c_str());
-        return;
-    }
-    forEach([&assetId, &asset](Texture& texture) {
-        if (texture.assetId() == assetId) {
-            texture.rebuildFromAsset(*asset);
-        }
-    });
+    (void)replace(*path);
 }
 
 void TextureManager::refreshAsset(const VirtualPath& texturePath) {
     if (!texturePath.valid()) {
-        Log::error("TextureManager",
-                   "Invalid Texture path: %s",
-                   texturePath.string().c_str());
+        Log::error("TextureManager", "Invalid Texture path: %s", texturePath.string().c_str());
         return;
     }
     const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(texturePath);
     if (!assetId) {
-        Log::error("TextureManager",
-                   "Texture path has no AssetId: %s",
-                   texturePath.string().c_str());
+        Log::error(
+            "TextureManager", "Texture path has no AssetId: %s", texturePath.string().c_str());
         return;
     }
     refreshAsset(*assetId);
@@ -116,17 +185,17 @@ TextureHandle TextureManager::createBuiltin(const VirtualPath& path,
                                             std::uint32_t height,
                                             std::span<const std::byte> pixels,
                                             TextureColorSpace colorSpace) {
-    Texture texture;
-    texture.assetPath_ = path;
-    texture.desc_ = {TextureType::Texture2D,
+    TextureDesc desc{TextureType::Texture2D,
                      colorSpace == TextureColorSpace::Srgb ? TextureFormat::Rgba8Srgb
                                                            : TextureFormat::Rgba8Unorm,
                      colorSpace,
                      width,
                      height,
                      1};
-    texture.mipData_.push_back({width, height, {pixels.begin(), pixels.end()}});
-    return insertUnkeyed(std::move(texture));
+    std::vector<TextureMipData> mipData;
+    mipData.push_back({width, height, {pixels.begin(), pixels.end()}});
+    std::optional<Texture> texture = createTexture(path, {}, std::move(desc), std::move(mipData));
+    return texture ? insertUnkeyed(std::move(*texture)) : TextureHandle{};
 }
 
 TextureHandle TextureManager::defaultWhite() {
@@ -183,47 +252,31 @@ TextureHandle TextureManager::errorTexture() {
     return errorTexture_;
 }
 
-bool TextureManager::replace(TextureHandle handle, Texture texture) {
-    Texture* current = find(handle);
-    if (!current || current->assetPath() != texture.assetPath() || !validate(texture)) {
-        Log::error("TextureManager", "Cannot replace an invalid Texture");
-        return false;
-    }
-    if (current->version_ == std::numeric_limits<std::uint64_t>::max()) {
-        Log::error("TextureManager", "Texture version overflow");
-        return false;
-    }
-    const AssetId assetId = current->assetId_;
-    texture.version_ = current->version_ + 1;
-    texture.dirty_ = true;
-    *current = std::move(texture);
-    current->assetId_ = assetId;
-    return true;
-}
-
 bool TextureManager::replace(const VirtualPath& texturePath) {
     const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(texturePath);
-    if (!assetId) {
+    if (!assetId)
         return true;
-    }
     const TextureHandle handle = findHandle(*assetId);
-    if (!handle) {
+    if (!handle)
         return true;
-    }
     const std::shared_ptr<TextureAsset> asset = ASSET_MANAGER.loadAsset<TextureAsset>(texturePath);
-    if (!asset) {
-        return false;
-    }
     Texture* current = find(handle);
-    if (!current) {
+    if (!asset || !current || current->version() == std::numeric_limits<std::uint64_t>::max())
         return false;
-    }
-    current->rebuildFromAsset(*asset);
+    std::optional<Texture> replacement =
+        createTexture(texturePath, *assetId, asset->desc, asset->mipData, current->version() + 1);
+    if (!replacement)
+        return false;
+    device_->waitIdle();
+    const rhi::TextureHandle retired = current->rhiHandle();
+    *current = std::move(*replacement);
+    device_->destroyTexture(retired);
     return true;
 }
 
 bool TextureManager::validate(const Texture& texture) const {
-    return texture.assetPath().valid() && validateTexture(texture.desc(), texture.mipData());
+    return texture.assetPath().valid() && texture.rhiHandle() &&
+           validateTexture(texture.desc(), texture.mipData());
 }
 
 void TextureManager::clear() {
@@ -231,6 +284,13 @@ void TextureManager::clear() {
     defaultBlack_ = {};
     defaultNormal_ = {};
     errorTexture_ = {};
+    if (device_) {
+        device_->waitIdle();
+        forEach([this](const Texture& texture) {
+            if (texture.rhiHandle())
+                device_->destroyTexture(texture.rhiHandle());
+        });
+    }
     KeyedHandleRegistry::clear();
 }
 

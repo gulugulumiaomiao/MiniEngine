@@ -49,7 +49,7 @@ protected:
 };
 TEST_F(ImGuiRendererTest, GeometryFontsAndColorFormats) {
     constexpr ImVec2 kDisplaySize{800.0F, 600.0F};
-    constexpr auto kColorFormat = rhi::TextureFormat::Bgra8Srgb;
+    constexpr auto kColorFormat = rhi::PixelFormat::Bgra8Srgb;
 
     MockDevice device;
 
@@ -61,7 +61,7 @@ TEST_F(ImGuiRendererTest, GeometryFontsAndColorFormats) {
         // The font atlas must be a sampled, upload-capable RGBA8 texture bound through a
         // single fragment-visible combined image sampler.
         if (device.textures.size() != 1 || device.textureUploads != 1 ||
-            device.textures[0].format != rhi::TextureFormat::Rgba8Unorm ||
+            device.textures[0].format != rhi::PixelFormat::Rgba8Unorm ||
             !rhi::hasFlag(device.textures[0].usage, rhi::TextureUsage::Sampled) ||
             !rhi::hasFlag(device.textures[0].usage, rhi::TextureUsage::TransferDestination)) {
             FAIL() << "font atlas texture is not set up for sampling";
@@ -85,8 +85,8 @@ TEST_F(ImGuiRendererTest, GeometryFontsAndColorFormats) {
         // bytes, and the pipeline must describe ImGui's vertex layout and blending.
         if (device.shaders.size() != 2 || device.shaders[0] != rhi::ShaderStage::Vertex ||
             device.shaders[1] != rhi::ShaderStage::Fragment ||
-            device.shaderBytecode[0].size() % 4 != 0 ||
-            device.shaderBytecode[1].size() % 4 != 0 || device.shaderBytecode[0].empty()) {
+            device.shaderBytecode[0].size() % 4 != 0 || device.shaderBytecode[1].size() % 4 != 0 ||
+            device.shaderBytecode[0].empty()) {
             FAIL() << "UI shader modules are wrong";
         }
         if (device.pipelines.size() != 1)
@@ -159,10 +159,10 @@ TEST_F(ImGuiRendererTest, GeometryFontsAndColorFormats) {
             for (const ImDrawCmd& command : list->CmdBuffer) {
                 if (command.UserCallback || command.ElemCount == 0 || command.GetTexID() == 0)
                     continue;
-                expected.push_back({.indexCount = command.ElemCount,
-                                    .firstIndex = command.IdxOffset + indexBase,
-                                    .vertexOffset = static_cast<std::int32_t>(command.VtxOffset +
-                                                                              vertexBase)});
+                expected.push_back(
+                    {.indexCount = command.ElemCount,
+                     .firstIndex = command.IdxOffset + indexBase,
+                     .vertexOffset = static_cast<std::int32_t>(command.VtxOffset + vertexBase)});
             }
             vertexBase += static_cast<std::uint32_t>(list->VtxBuffer.Size);
             indexBase += static_cast<std::uint32_t>(list->IdxBuffer.Size);
@@ -209,7 +209,7 @@ TEST_F(ImGuiRendererTest, GeometryFontsAndColorFormats) {
 
         renderer.shutdown();
         if (device.destroyedTextures != 1 || device.destroyedViews != 1 ||
-            device.destroyedSamplers != 1 || device.destroyedBindGroups != 1 ||
+            device.destroyedSamplers != 0 || device.destroyedBindGroups != 1 ||
             device.destroyedLayouts != 1 || device.destroyedPipelines != 1 ||
             device.destroyedShaders != 2 ||
             device.destroyedBuffers != static_cast<int>(device.buffers.size())) {
@@ -222,7 +222,7 @@ TEST_F(ImGuiRendererTest, GeometryFontsAndColorFormats) {
     MockDevice unormDevice;
     {
         editor::ImGuiRenderer renderer;
-        if (!renderer.initialize(unormDevice, rhi::TextureFormat::Bgra8Unorm))
+        if (!renderer.initialize(unormDevice, rhi::PixelFormat::Bgra8Unorm))
             FAIL() << "initialize failed for a non-sRGB attachment";
         if (unormDevice.shaderBytecode.size() != 2 ||
             unormDevice.shaderBytecode[0] != device.shaderBytecode[0]) {
@@ -232,13 +232,12 @@ TEST_F(ImGuiRendererTest, GeometryFontsAndColorFormats) {
             FAIL() << "an sRGB attachment must use a color decoding fragment shader";
         renderer.shutdown();
     }
-
 }
 
 TEST_F(ImGuiRendererTest, SceneBindingsAreCachedPerAcquiredFrameAndReleased) {
     MockDevice device;
     editor::ImGuiRenderer renderer;
-    ASSERT_TRUE(renderer.initialize(device, rhi::TextureFormat::Bgra8Srgb));
+    ASSERT_TRUE(renderer.initialize(device, rhi::PixelFormat::Bgra8Srgb));
     ASSERT_TRUE(renderer.setSceneTexture(0, {40, 1}));
     ASSERT_TRUE(renderer.setSceneTexture(1, {41, 1}));
     EXPECT_EQ(device.bindGroups, 3U); // font plus two scene slots
@@ -257,14 +256,14 @@ TEST_F(ImGuiRendererTest, SceneBindingsAreCachedPerAcquiredFrameAndReleased) {
 TEST_F(ImGuiRendererTest, LogicalSceneImageUsesTheAcquiredSlotAndSkipsMissingBindings) {
     MockDevice device;
     editor::ImGuiRenderer renderer;
-    ASSERT_TRUE(renderer.initialize(device, rhi::TextureFormat::Bgra8Srgb));
+    ASSERT_TRUE(renderer.initialize(device, rhi::PixelFormat::Bgra8Srgb));
     ASSERT_TRUE(renderer.setSceneTexture(0, {40, 1}));
     ASSERT_TRUE(renderer.setSceneTexture(1, {41, 1}));
     const auto imageFrame = []() -> const ImDrawData& {
         ImGui::GetIO().DisplaySize = {800, 600};
         ImGui::NewFrame();
-        ImGui::GetBackgroundDrawList()->AddImage(editor::ImGuiRenderer::kSceneTextureId,
-                                                {0, 0}, {400, 300});
+        ImGui::GetBackgroundDrawList()->AddImage(
+            editor::ImGuiRenderer::kSceneTextureId, {0, 0}, {400, 300});
         ImGui::Render();
         return *ImGui::GetDrawData();
     };

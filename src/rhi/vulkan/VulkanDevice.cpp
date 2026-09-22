@@ -6,7 +6,8 @@
 #include "rhi/vulkan/VulkanBuffer.h"
 #include "rhi/vulkan/VulkanDescriptorAllocator.h"
 #include "rhi/vulkan/VulkanGraphicsPipeline.h"
-#include "rhi/vulkan/VulkanImage.h"
+#include "rhi/vulkan/VulkanTexture.h"
+#include "rhi/vulkan/VulkanTextureView.h"
 #include "rhi/vulkan/VulkanSampler.h"
 #include "rhi/vulkan/VulkanShaderModule.h"
 
@@ -90,14 +91,14 @@ VkDescriptorType toVulkan(BindingType type) {
     Log::fatal("VulkanDevice", "Unsupported RHI binding type");
 }
 
-VkFormat toVulkan(TextureFormat format) {
+VkFormat toVulkan(PixelFormat format) {
     switch (format) {
-    case TextureFormat::Rgba8Unorm: return VK_FORMAT_R8G8B8A8_UNORM;
-    case TextureFormat::Rgba8Srgb: return VK_FORMAT_R8G8B8A8_SRGB;
-    case TextureFormat::Bgra8Unorm: return VK_FORMAT_B8G8R8A8_UNORM;
-    case TextureFormat::Bgra8Srgb: return VK_FORMAT_B8G8R8A8_SRGB;
-    case TextureFormat::Depth32Float: return VK_FORMAT_D32_SFLOAT;
-    case TextureFormat::Undefined: break;
+    case PixelFormat::Rgba8Unorm: return VK_FORMAT_R8G8B8A8_UNORM;
+    case PixelFormat::Rgba8Srgb: return VK_FORMAT_R8G8B8A8_SRGB;
+    case PixelFormat::Bgra8Unorm: return VK_FORMAT_B8G8R8A8_UNORM;
+    case PixelFormat::Bgra8Srgb: return VK_FORMAT_B8G8R8A8_SRGB;
+    case PixelFormat::Depth32Float: return VK_FORMAT_D32_SFLOAT;
+    case PixelFormat::Undefined: break;
     }
     Log::fatal("VulkanDevice", "Unsupported Texture format");
 }
@@ -417,10 +418,8 @@ void VulkanDevice::uploadBuffer(BufferHandle destination,
         return;
     }
 
-    const BufferDesc stagingDesc{data.size_bytes(),
-                                 BufferUsage::TransferSource,
-                                 MemoryUsage::Upload,
-                                 "upload staging"};
+    const BufferDesc stagingDesc{
+        data.size_bytes(), BufferUsage::TransferSource, MemoryUsage::Upload, "upload staging"};
     const BufferHandle staging = createBuffer(stagingDesc);
     requireBuffer(staging).upload(data);
 
@@ -435,38 +434,44 @@ void VulkanDevice::uploadBuffer(BufferHandle destination,
     // command is freed after waitIdle, so its VkCommandBuffer is no longer in use.
 }
 
-VkImage VulkanDevice::TextureResource::handle() const {
-    return owned ? owned->handle() : external;
-}
-
 TextureHandle VulkanDevice::createTexture(const TextureDesc& desc) {
-    if (desc.dimension != TextureDimension::Texture2D || desc.format == TextureFormat::Undefined ||
-        desc.width == 0 || desc.height == 0 || desc.depth != 1 || desc.mipCount == 0 ||
-        desc.usage == TextureUsage::None) {
-        Log::fatal("VulkanDevice", "Invalid Texture description");
+    if (desc.dimension != TextureType::Texture2D || desc.format == PixelFormat::Undefined ||
+        desc.width == 0 || desc.height == 0 || desc.depth != 1 || desc.arrayLayers != 1 ||
+        desc.mipCount == 0 || desc.usage == TextureUsage::None) {
+        Log::fatal("VulkanDevice", "Invalid or unsupported Texture description");
     }
     if ((isColorFormat(desc.format) && hasFlag(desc.usage, TextureUsage::DepthStencilAttachment)) ||
         (isDepthFormat(desc.format) && hasFlag(desc.usage, TextureUsage::ColorAttachment))) {
         Log::fatal("VulkanDevice", "Texture format and attachment usage do not match");
     }
-    auto image = std::make_unique<VulkanImage>(allocator_,
-                                               VkExtent3D{desc.width, desc.height, desc.depth},
-                                               toVulkan(desc.format),
-                                               toVulkan(desc.usage),
-                                               desc.mipCount);
-    return textures_.insert(TextureResource{std::move(image), VK_NULL_HANDLE, false});
+    const TextureHandle handle =
+        textures_.emplace(*this, allocator_, desc, toVulkan(desc.format), toVulkan(desc.usage));
+    VulkanTexture* texture = textures_.find(handle);
+    const TextureViewDesc defaultDesc{.type = desc.dimension,
+                                      .format = desc.format,
+                                      .baseMip = 0,
+                                      .mipCount = desc.mipCount,
+                                      .baseLayer = 0,
+                                      .layerCount = desc.arrayLayers};
+    texture->setDefaultView(createTextureView(handle, defaultDesc));
+    return handle;
 }
 
 void VulkanDevice::destroyTexture(TextureHandle handle) {
+    VulkanTexture* texture = textures_.find(handle);
+    if (!texture)
+        return;
+    for (TextureViewHandle view : texture->viewHandles())
+        (void)textureViews_.release(view);
     (void)textures_.release(handle);
 }
 
 void VulkanDevice::uploadTexture(TextureHandle destination,
                                  std::span<const TextureUploadRegion> regions) {
-    TextureResource* resource = textures_.find(destination);
-    if (!resource || !resource->owned || resource->uploaded || regions.empty())
+    VulkanTexture* resource = textures_.find(destination);
+    if (!resource || resource->uploaded() || regions.empty())
         Log::fatal("VulkanDevice", "Invalid Texture upload");
-    const VulkanImage& image = *resource->owned;
+    const VulkanTexture& image = *resource;
     if (regions.size() != image.mipCount())
         Log::fatal("VulkanDevice", "Texture upload must provide the complete mip chain");
     std::uint64_t totalSize{};
@@ -488,10 +493,8 @@ void VulkanDevice::uploadTexture(TextureHandle destination,
         suppliedMips[region.mipLevel] = true;
         totalSize += region.data.size_bytes();
     }
-    const BufferDesc stagingDesc{totalSize,
-                                 BufferUsage::TransferSource,
-                                 MemoryUsage::Upload,
-                                 "texture upload staging"};
+    const BufferDesc stagingDesc{
+        totalSize, BufferUsage::TransferSource, MemoryUsage::Upload, "texture upload staging"};
     const BufferHandle staging = createBuffer(stagingDesc);
     std::uint64_t stagingOffset{};
     std::vector<BufferImageCopy> copies;
@@ -538,42 +541,51 @@ void VulkanDevice::uploadTexture(TextureHandle destination,
     waitIdle();
 
     destroyBuffer(staging);
-    resource->uploaded = true;
+    resource->markUploaded();
 }
 
-TextureViewHandle VulkanDevice::createTextureView(const TextureViewDesc& desc) {
-    const TextureResource* texture = textures_.find(desc.texture);
-    if (!texture || desc.format == TextureFormat::Undefined || desc.mipCount == 0)
-        Log::fatal("VulkanDevice", "Invalid TextureView description");
-    if (texture->owned && (desc.format != texture->owned->format() ||
-                           desc.baseMipLevel >= texture->owned->mipCount() ||
-                           desc.mipCount > texture->owned->mipCount() - desc.baseMipLevel)) {
+TextureViewHandle VulkanDevice::createTextureView(TextureHandle textureHandle,
+                                                  const TextureViewDesc& desc) {
+    VulkanTexture* texture = textures_.find(textureHandle);
+    if (!texture)
+        Log::fatal("VulkanDevice", "Invalid RHI Texture handle");
+    return texture->createView(desc);
+}
+
+TextureViewHandle VulkanDevice::acquireTextureView(VulkanTexture& texture,
+                                                   const TextureViewDesc& desc) {
+    if (desc.type != TextureType::Texture2D || desc.mipCount == 0 || desc.layerCount != 1 ||
+        desc.baseLayer != 0) {
+        Log::fatal("VulkanDevice", "Invalid or unsupported TextureView description");
+    }
+    TextureViewDesc normalized = desc;
+    if (normalized.format == PixelFormat::Undefined)
+        normalized.format = texture.format();
+    if (normalized.format != texture.format() || normalized.baseMip >= texture.mipCount() ||
+        normalized.mipCount > texture.mipCount() - normalized.baseMip) {
         Log::fatal("VulkanDevice", "TextureView does not match its Texture");
     }
-    if ((desc.aspect == TextureAspect::Color && !isColorFormat(desc.format)) ||
-        (desc.aspect == TextureAspect::Depth && !isDepthFormat(desc.format))) {
-        Log::fatal("VulkanDevice", "TextureView format and aspect do not match");
-    }
-    VkImageViewCreateInfo info{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-    info.image = texture->handle();
-    info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    info.format = toVulkan(desc.format);
-    info.subresourceRange.aspectMask =
-        desc.aspect == TextureAspect::Color ? VK_IMAGE_ASPECT_COLOR_BIT : VK_IMAGE_ASPECT_DEPTH_BIT;
-    info.subresourceRange.baseMipLevel = desc.baseMipLevel;
-    info.subresourceRange.levelCount = desc.mipCount;
-    info.subresourceRange.layerCount = 1;
-    VkImageView view = VK_NULL_HANDLE;
-    check(vkCreateImageView(device_, &info, nullptr, &view), "vkCreateImageView(texture)");
-    return textureViews_.insert(TextureViewResource{view, true});
+    if (const TextureViewHandle existing = texture.findView(normalized))
+        return existing;
+    const TextureViewHandle view =
+        textureViews_.insert(VulkanTextureView{device_, texture, normalized});
+    texture.cacheView(normalized, view);
+    return view;
+}
+
+TextureViewHandle VulkanDevice::defaultTextureView(TextureHandle texture) const {
+    const VulkanTexture* resource = textures_.find(texture);
+    if (!resource || !resource->defaultView())
+        Log::fatal("VulkanDevice", "Texture has no default view");
+    return resource->defaultView();
 }
 
 void VulkanDevice::destroyTextureView(TextureViewHandle handle) {
-    TextureViewResource* resource = textureViews_.find(handle);
-    if (!resource)
+    VulkanTextureView* view = textureViews_.find(handle);
+    if (!view)
         return;
-    if (resource->owned)
-        vkDestroyImageView(device_, resource->resource, nullptr);
+    if (IRHITexture* texture = view->texture())
+        static_cast<VulkanTexture*>(texture)->removeView(handle);
     (void)textureViews_.release(handle);
 }
 
@@ -582,12 +594,14 @@ SamplerHandle VulkanDevice::createSampler(const SamplerDesc& desc) {
     clamped.maxAnisotropy = std::min(clamped.maxAnisotropy, maxSamplerAnisotropy_);
     if (clamped.maxAnisotropy < 1.0F)
         clamped.maxAnisotropy = 1.0F;
-    return samplers_.insert(SamplerResource{
-        std::make_unique<VulkanSampler>(device_, clamped, maxSamplerAnisotropy_)});
+    // Identical descriptors share one VkSampler; only create on a cache miss.
+    if (const SamplerHandle existing = samplers_.findHandle(clamped))
+        return existing;
+    return samplers_.insert(VulkanSampler{device_, clamped, maxSamplerAnisotropy_});
 }
 
 void VulkanDevice::destroySampler(SamplerHandle handle) {
-    (void)samplers_.release(handle);
+    (void)samplers_.destroy(handle);
 }
 
 ShaderHandle VulkanDevice::createShader(const ShaderDesc& desc) {
@@ -604,10 +618,10 @@ void VulkanDevice::destroyShader(ShaderHandle handle) {
 
 GraphicsPipelineHandle VulkanDevice::createGraphicsPipeline(const GraphicsPipelineDesc& desc) {
     if (!desc.vertexShader || !desc.fragmentShader ||
-        (desc.colorFormats.empty() && desc.depthFormat == TextureFormat::Undefined) ||
+        (desc.colorFormats.empty() && desc.depthFormat == PixelFormat::Undefined) ||
         std::ranges::any_of(desc.colorFormats,
-                            [](TextureFormat format) { return !isColorFormat(format); }) ||
-        (desc.depthFormat != TextureFormat::Undefined && !isDepthFormat(desc.depthFormat))) {
+                            [](PixelFormat format) { return !isColorFormat(format); }) ||
+        (desc.depthFormat != PixelFormat::Undefined && !isDepthFormat(desc.depthFormat))) {
         Log::fatal("VulkanDevice", "Invalid graphics pipeline description");
     }
     const PipelineLayoutKey key(desc.bindGroupLayouts.begin(), desc.bindGroupLayouts.end());
@@ -724,8 +738,7 @@ void VulkanDevice::submitCommand(ICommandBuffer& command, const SubmitSync& sync
     // Ignored by Vulkan when waitSemaphoreCount is zero.
     submitInfo.pWaitDstStageMask = &waitStage;
     submitInfo.signalSemaphoreCount = signalSemaphore != VK_NULL_HANDLE ? 1U : 0U;
-    submitInfo.pSignalSemaphores =
-        signalSemaphore != VK_NULL_HANDLE ? &signalSemaphore : nullptr;
+    submitInfo.pSignalSemaphores = signalSemaphore != VK_NULL_HANDLE ? &signalSemaphore : nullptr;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &nativeCommandBuffer;
     check(vkQueueSubmit(graphicsQueue_, 1, &submitInfo, sync.signalFence), "vkQueueSubmit");
@@ -741,10 +754,8 @@ BufferHandle VulkanDevice::acquireStagingBuffer(std::uint64_t size) {
     if (size == 0) {
         Log::fatal("VulkanDevice", "Staging buffer size must be positive");
     }
-    const BufferDesc desc{size,
-                          BufferUsage::TransferSource,
-                          MemoryUsage::Upload,
-                          "command buffer staging"};
+    const BufferDesc desc{
+        size, BufferUsage::TransferSource, MemoryUsage::Upload, "command buffer staging"};
     const BufferHandle handle = createBuffer(desc);
     pendingStagingBuffers_.push_back(StagingBuffer{handle, VK_NULL_HANDLE});
     return handle;
@@ -800,36 +811,42 @@ VkBuffer VulkanDevice::resolveBuffer(BufferHandle handle) const {
     return requireBuffer(handle).handle();
 }
 
+IRHITexture* VulkanDevice::resolveTextureResource(TextureHandle handle) {
+    return textures_.find(handle);
+}
+
+const IRHITexture* VulkanDevice::resolveTextureResource(TextureHandle handle) const {
+    return textures_.find(handle);
+}
+
 VkImage VulkanDevice::resolveTexture(TextureHandle handle) const {
-    const TextureResource* resource = textures_.find(handle);
-    if (!resource) {
+    const VulkanTexture* resource = textures_.find(handle);
+    if (!resource)
         Log::fatal("VulkanDevice", "Invalid or stale RHI texture handle");
+    return resource->handle();
+}
+
+PixelFormat VulkanDevice::textureFormat(TextureHandle handle) const {
+    const VulkanTexture* resource = textures_.find(handle);
+    if (!resource)
+        Log::fatal("VulkanDevice", "RHI texture handle has no tracked format");
+    return resource->format();
+}
+
+VkImageView VulkanDevice::resolveTextureView(TextureViewHandle handle) const {
+    const VulkanTextureView* resource = textureViews_.find(handle);
+    if (!resource) {
+        Log::fatal("VulkanDevice", "Invalid or stale RHI texture view handle");
     }
     return resource->handle();
 }
 
-TextureFormat VulkanDevice::textureFormat(TextureHandle handle) const {
-    const TextureResource* resource = textures_.find(handle);
-    if (!resource || !resource->owned) {
-        Log::fatal("VulkanDevice", "RHI texture handle has no tracked format");
-    }
-    return resource->owned->format();
-}
-
-VkImageView VulkanDevice::resolveTextureView(TextureViewHandle handle) const {
-    const TextureViewResource* resource = textureViews_.find(handle);
-    if (!resource) {
-        Log::fatal("VulkanDevice", "Invalid or stale RHI texture view handle");
-    }
-    return resource->resource;
-}
-
 VkSampler VulkanDevice::resolveSampler(SamplerHandle handle) const {
-    const SamplerResource* resource = samplers_.find(handle);
-    if (!resource || !resource->resource) {
+    const VulkanSampler* resource = samplers_.find(handle);
+    if (!resource) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI sampler handle");
     }
-    return resource->resource->handle();
+    return resource->handle();
 }
 
 VkShaderModule VulkanDevice::resolveShader(ShaderHandle handle) const {
@@ -864,26 +881,34 @@ VkDescriptorSet VulkanDevice::resolveBindGroup(BindGroupHandle handle) const {
     return resource->resource;
 }
 
-TextureHandle VulkanDevice::registerExternalTexture(VkImage image) {
-    if (image == VK_NULL_HANDLE) {
-        Log::fatal("VulkanDevice", "Cannot register a null Vulkan image");
-    }
-    return textures_.insert(TextureResource{nullptr, image, true});
+TextureHandle VulkanDevice::registerExternalTexture(VkImage image,
+                                                    const TextureDesc& desc,
+                                                    VkFormat nativeFormat) {
+    return textures_.emplace(*this, image, desc, nativeFormat);
 }
 
 void VulkanDevice::unregisterExternalTexture(TextureHandle handle) {
-    (void)textures_.release(handle);
+    destroyTexture(handle);
 }
 
-TextureViewHandle VulkanDevice::registerExternalTextureView(VkImageView view) {
-    if (view == VK_NULL_HANDLE) {
-        Log::fatal("VulkanDevice", "Cannot register a null Vulkan image view");
-    }
-    return textureViews_.insert(TextureViewResource{view, false});
+TextureViewHandle VulkanDevice::registerExternalTextureView(TextureHandle textureHandle,
+                                                            VkImageView view,
+                                                            const TextureViewDesc& desc) {
+    VulkanTexture* texture = textures_.find(textureHandle);
+    if (!texture)
+        Log::fatal("VulkanDevice", "Cannot register a view for an invalid external texture");
+    TextureViewDesc normalized = desc;
+    if (normalized.format == PixelFormat::Undefined)
+        normalized.format = texture->format();
+    const TextureViewHandle handle =
+        textureViews_.insert(VulkanTextureView{device_, *texture, view, normalized});
+    texture->cacheView(normalized, handle);
+    texture->setDefaultView(handle);
+    return handle;
 }
 
 void VulkanDevice::unregisterExternalTextureView(TextureViewHandle handle) {
-    (void)textureViews_.release(handle);
+    destroyTextureView(handle);
 }
 
 void VulkanDevice::createPipelineCache() {
@@ -912,8 +937,7 @@ void VulkanDevice::createPipelineCache() {
         info.initialDataSize = 0;
         info.pInitialData = nullptr;
     }
-    check(vkCreatePipelineCache(device_, &info, nullptr, &pipelineCache_),
-          "vkCreatePipelineCache");
+    check(vkCreatePipelineCache(device_, &info, nullptr, &pipelineCache_), "vkCreatePipelineCache");
 }
 
 void VulkanDevice::savePipelineCache() {
@@ -984,10 +1008,6 @@ void VulkanDevice::clear() {
     bindGroupLayouts_.clear();
     shaders_.clear();
     samplers_.clear();
-    textureViews_.forEach([this](const TextureViewResource& resource) {
-        if (resource.owned)
-            vkDestroyImageView(device_, resource.resource, nullptr);
-    });
     textureViews_.clear();
     textures_.clear();
     buffers_.clear();

@@ -4,6 +4,7 @@
 #include "asset/manager/AssetManager.h"
 #include "core/filesystem/FileWatcher.h"
 #include "TestAssetEnvironment.h"
+#include "TestRenderDevice.h"
 
 #include <gtest/gtest.h>
 
@@ -15,12 +16,15 @@ class TextureGuidIdentityTest : public ::testing::Test {
 protected:
     void SetUp() override {
         ASSERT_TRUE(engine::test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR));
+        ASSERT_TRUE(TEXTURE_MANAGER.initialize(device));
     }
 
     void TearDown() override {
-        TEXTURE_MANAGER.clear();
+        TEXTURE_MANAGER.shutdown();
         engine::test::shutdownAssetEnvironment();
     }
+
+    MockDevice device;
 };
 
 TEST_F(TextureGuidIdentityTest, LoadByGuidReturnsSameHandle) {

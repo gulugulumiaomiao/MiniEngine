@@ -4,6 +4,7 @@
 #include "rhi/api/ResourceDesc.h"
 #include "rhi/api/RhiTypes.h"
 #include "rhi/api/Sampler.h"
+#include "rhi/api/TextureView.h"
 
 #include <vulkan/vulkan.h>
 
@@ -36,7 +37,9 @@ public:
     virtual void destroyTexture(TextureHandle handle) = 0;
     virtual void uploadTexture(TextureHandle destination,
                                std::span<const TextureUploadRegion> regions) = 0;
-    [[nodiscard]] virtual TextureViewHandle createTextureView(const TextureViewDesc& desc) = 0;
+    [[nodiscard]] virtual TextureViewHandle createTextureView(TextureHandle texture,
+                                                              const TextureViewDesc& desc) = 0;
+    [[nodiscard]] virtual TextureViewHandle defaultTextureView(TextureHandle texture) const = 0;
     virtual void destroyTextureView(TextureViewHandle handle) = 0;
     [[nodiscard]] virtual SamplerHandle createSampler(const SamplerDesc& desc) = 0;
     virtual void destroySampler(SamplerHandle handle) = 0;
@@ -66,6 +69,8 @@ public:
     [[nodiscard]] virtual VkQueue graphicsQueue() const = 0;
     [[nodiscard]] virtual std::uint32_t graphicsQueueFamily() const = 0;
     [[nodiscard]] virtual VkBuffer resolveBuffer(BufferHandle handle) const = 0;
+    [[nodiscard]] virtual IRHITexture* resolveTextureResource(TextureHandle handle) = 0;
+    [[nodiscard]] virtual const IRHITexture* resolveTextureResource(TextureHandle handle) const = 0;
     [[nodiscard]] virtual VkImage resolveTexture(TextureHandle handle) const = 0;
     [[nodiscard]] virtual VkImageView resolveTextureView(TextureViewHandle handle) const = 0;
     [[nodiscard]] virtual ResolvedPipeline resolvePipeline(GraphicsPipelineHandle handle) const = 0;

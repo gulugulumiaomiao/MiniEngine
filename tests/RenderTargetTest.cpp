@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -19,22 +20,45 @@ public:
 
     engine::rhi::TextureHandle createTexture(const engine::rhi::TextureDesc& desc) override {
         textures.push_back(desc);
-        return {static_cast<std::uint32_t>(textures.size() - 1), 1};
+        const engine::rhi::TextureHandle texture{static_cast<std::uint32_t>(textures.size() - 1),
+                                                 1};
+        if (failNextView) {
+            failNextView = false;
+        } else {
+            views.push_back({.type = desc.dimension,
+                             .format = desc.format,
+                             .baseMip = 0,
+                             .mipCount = desc.mipCount,
+                             .baseLayer = 0,
+                             .layerCount = desc.arrayLayers});
+            defaultViews.emplace(
+                texture.index,
+                engine::rhi::TextureViewHandle{static_cast<std::uint32_t>(views.size() - 1), 1});
+        }
+        return texture;
     }
     void destroyTexture(engine::rhi::TextureHandle handle) override {
-        if (handle)
-            destroyedTextures.push_back(handle);
+        if (!handle)
+            return;
+        destroyedTextures.push_back(handle);
+        const auto view = defaultViews.find(handle.index);
+        if (view != defaultViews.end()) {
+            destroyedViews.push_back(view->second);
+            defaultViews.erase(view);
+        }
     }
     void uploadTexture(engine::rhi::TextureHandle,
                        std::span<const engine::rhi::TextureUploadRegion>) override {}
     engine::rhi::TextureViewHandle
-    createTextureView(const engine::rhi::TextureViewDesc& desc) override {
-        if (failNextView) {
-            failNextView = false;
-            return {};
-        }
+    createTextureView(engine::rhi::TextureHandle,
+                      const engine::rhi::TextureViewDesc& desc) override {
         views.push_back(desc);
         return {static_cast<std::uint32_t>(views.size() - 1), 1};
+    }
+    engine::rhi::TextureViewHandle
+    defaultTextureView(engine::rhi::TextureHandle texture) const override {
+        const auto found = defaultViews.find(texture.index);
+        return found == defaultViews.end() ? engine::rhi::TextureViewHandle{} : found->second;
     }
     void destroyTextureView(engine::rhi::TextureViewHandle handle) override {
         if (handle)
@@ -60,9 +84,7 @@ public:
         return {};
     }
     void destroyBindGroup(engine::rhi::BindGroupHandle) override {}
-    std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override {
-        return nullptr;
-    }
+    std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override { return nullptr; }
     void submitCommand(engine::rhi::ICommandBuffer&, const engine::rhi::SubmitSync&) override {}
     VkDevice device() const override { return VK_NULL_HANDLE; }
     VkInstance instance() const override { return VK_NULL_HANDLE; }
@@ -70,6 +92,13 @@ public:
     VkQueue graphicsQueue() const override { return VK_NULL_HANDLE; }
     std::uint32_t graphicsQueueFamily() const override { return 0; }
     VkBuffer resolveBuffer(engine::rhi::BufferHandle) const override { return VK_NULL_HANDLE; }
+    engine::rhi::IRHITexture* resolveTextureResource(engine::rhi::TextureHandle) override {
+        return nullptr;
+    }
+    const engine::rhi::IRHITexture*
+    resolveTextureResource(engine::rhi::TextureHandle) const override {
+        return nullptr;
+    }
     VkImage resolveTexture(engine::rhi::TextureHandle) const override { return VK_NULL_HANDLE; }
     VkImageView resolveTextureView(engine::rhi::TextureViewHandle) const override {
         return VK_NULL_HANDLE;
@@ -85,6 +114,7 @@ public:
 
     std::vector<engine::rhi::TextureDesc> textures;
     std::vector<engine::rhi::TextureViewDesc> views;
+    std::unordered_map<std::uint32_t, engine::rhi::TextureViewHandle> defaultViews;
     std::vector<engine::rhi::TextureHandle> destroyedTextures;
     std::vector<engine::rhi::TextureViewHandle> destroyedViews;
     bool failNextView{};
@@ -145,24 +175,24 @@ int main() {
     desc.height = 360;
     desc.debugName = "Lighting";
     desc.colorAttachments = {
-        {.format = rhi::TextureFormat::Rgba8Unorm,
+        {.format = rhi::PixelFormat::Rgba8Unorm,
          .additionalUsage = rhi::TextureUsage::Sampled,
          .clearColor = {0.1F, 0.2F, 0.3F, 1.0F}},
-        {.format = rhi::TextureFormat::Rgba8Srgb,
+        {.format = rhi::PixelFormat::Rgba8Srgb,
          .additionalUsage = rhi::TextureUsage::TransferSource,
          .loadOp = rhi::LoadOp::DontCare,
          .storeOp = rhi::StoreOp::Store},
     };
     desc.depthAttachment = RenderTargetDepthAttachmentDesc{
-        .format = rhi::TextureFormat::Depth32Float,
+        .format = rhi::PixelFormat::Depth32Float,
         .additionalUsage = rhi::TextureUsage::Sampled,
         .loadOp = rhi::LoadOp::Clear,
         .storeOp = rhi::StoreOp::DontCare,
         .clearDepth = 0.75F,
     };
     if (!target.create(desc) || !target.valid() || target.colorAttachmentCount() != 2 ||
-        !target.hasDepthAttachment() || target.depthFormat() != rhi::TextureFormat::Depth32Float ||
-        target.colorFormat(1) != rhi::TextureFormat::Rgba8Srgb || device.textures.size() != 3 ||
+        !target.hasDepthAttachment() || target.depthFormat() != rhi::PixelFormat::Depth32Float ||
+        target.colorFormat(1) != rhi::PixelFormat::Rgba8Srgb || device.textures.size() != 3 ||
         device.views.size() != 3) {
         return 1;
     }
@@ -170,8 +200,8 @@ int main() {
         !rhi::hasFlag(device.textures[0].usage, rhi::TextureUsage::Sampled) ||
         !rhi::hasFlag(device.textures[1].usage, rhi::TextureUsage::TransferSource) ||
         !rhi::hasFlag(device.textures[2].usage, rhi::TextureUsage::DepthStencilAttachment) ||
-        device.views[0].aspect != rhi::TextureAspect::Color ||
-        device.views[2].aspect != rhi::TextureAspect::Depth ||
+        device.views[0].format != rhi::PixelFormat::Rgba8Unorm ||
+        device.views[2].format != rhi::PixelFormat::Depth32Float ||
         device.textures[0].debugName != "Lighting.Color0" ||
         device.textures[2].debugName != "Lighting.Depth") {
         return 2;
@@ -190,20 +220,26 @@ int main() {
     }
 
     RenderGraph firstGraph;
-    const RgTextureHandle color0 = target.importColor(firstGraph, 0, rhi::ResourceState::ShaderRead);
-    const RgTextureHandle color1 = target.importColor(firstGraph, 1, rhi::ResourceState::ShaderRead);
+    const RgTextureHandle color0 =
+        target.importColor(firstGraph, 0, rhi::ResourceState::ShaderRead);
+    const RgTextureHandle color1 =
+        target.importColor(firstGraph, 1, rhi::ResourceState::ShaderRead);
     const RgTextureHandle depth = target.importDepth(firstGraph, rhi::ResourceState::ShaderRead);
     RgRenderingInfo firstRendering;
     firstRendering.renderArea = {0, 0, 640, 360};
-    firstRendering.colorAttachments.push_back({color0, rhi::LoadOp::Clear, rhi::StoreOp::Store, {0.1F, 0.2F, 0.3F, 1.0F}});
-    firstRendering.colorAttachments.push_back({color1, rhi::LoadOp::DontCare, rhi::StoreOp::Store, {}});
-    firstRendering.depthAttachments.push_back({depth, rhi::LoadOp::Clear, rhi::StoreOp::DontCare, 0.75F});
-    firstGraph.addGraphicsPass("Lighting",
-                               std::move(firstRendering),
-                               {{color0, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment},
-                                {color1, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment},
-                                {depth, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment}},
-                               [](rhi::ICommandBuffer&) {});
+    firstRendering.colorAttachments.push_back(
+        {color0, rhi::LoadOp::Clear, rhi::StoreOp::Store, {0.1F, 0.2F, 0.3F, 1.0F}});
+    firstRendering.colorAttachments.push_back(
+        {color1, rhi::LoadOp::DontCare, rhi::StoreOp::Store, {}});
+    firstRendering.depthAttachments.push_back(
+        {depth, rhi::LoadOp::Clear, rhi::StoreOp::DontCare, 0.75F});
+    firstGraph.addGraphicsPass(
+        "Lighting",
+        std::move(firstRendering),
+        {{color0, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment},
+         {color1, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment},
+         {depth, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment}},
+        [](rhi::ICommandBuffer&) {});
     firstGraph.compile(pool);
     FakeEncoder firstEncoder;
     firstGraph.execute(firstEncoder);
@@ -224,14 +260,17 @@ int main() {
     RgRenderingInfo secondRendering;
     secondRendering.renderArea = {0, 0, 640, 360};
     secondRendering.colorAttachments.push_back({c0b, rhi::LoadOp::Clear, rhi::StoreOp::Store, {}});
-    secondRendering.colorAttachments.push_back({c1b, rhi::LoadOp::DontCare, rhi::StoreOp::Store, {}});
-    secondRendering.depthAttachments.push_back({db, rhi::LoadOp::Clear, rhi::StoreOp::DontCare, 1.0F});
-    secondGraph.addGraphicsPass("Lighting",
-                                std::move(secondRendering),
-                                {{c0b, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment},
-                                 {c1b, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment},
-                                 {db, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment}},
-                                [](rhi::ICommandBuffer&) {});
+    secondRendering.colorAttachments.push_back(
+        {c1b, rhi::LoadOp::DontCare, rhi::StoreOp::Store, {}});
+    secondRendering.depthAttachments.push_back(
+        {db, rhi::LoadOp::Clear, rhi::StoreOp::DontCare, 1.0F});
+    secondGraph.addGraphicsPass(
+        "Lighting",
+        std::move(secondRendering),
+        {{c0b, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment},
+         {c1b, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment},
+         {db, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment}},
+        [](rhi::ICommandBuffer&) {});
     secondGraph.compile(pool);
     FakeEncoder secondEncoder;
     secondGraph.execute(secondEncoder);

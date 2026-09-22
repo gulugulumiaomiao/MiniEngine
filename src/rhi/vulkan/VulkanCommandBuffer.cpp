@@ -74,8 +74,7 @@ VkCullModeFlags toVulkan(CullMode mode) {
 }
 
 VkFrontFace toVulkan(FrontFace face) {
-    return face == FrontFace::Clockwise ? VK_FRONT_FACE_CLOCKWISE
-                                        : VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    return face == FrontFace::Clockwise ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE;
 }
 
 VkCompareOp toVulkan(CompareOp compare) {
@@ -121,16 +120,14 @@ void toVulkanBlend(BlendMode mode, VkColorBlendEquationEXT& equation, VkBool32& 
         mode == BlendMode::Additive ? VK_BLEND_FACTOR_ONE : VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 }
 
-std::uint32_t bytesPerPixel(TextureFormat format) {
+std::uint32_t bytesPerPixel(PixelFormat format) {
     switch (format) {
-    case TextureFormat::Rgba8Unorm:
-    case TextureFormat::Rgba8Srgb:
-    case TextureFormat::Bgra8Unorm:
-    case TextureFormat::Bgra8Srgb:
-    case TextureFormat::Depth32Float:
-        return 4U;
-    case TextureFormat::Undefined:
-        break;
+    case PixelFormat::Rgba8Unorm:
+    case PixelFormat::Rgba8Srgb:
+    case PixelFormat::Bgra8Unorm:
+    case PixelFormat::Bgra8Srgb:
+    case PixelFormat::Depth32Float: return 4U;
+    case PixelFormat::Undefined: break;
     }
     Log::fatal("VulkanCommandBuffer", "Unsupported RHI texture format");
 }
@@ -178,7 +175,8 @@ VulkanCommandBuffer::~VulkanCommandBuffer() {
 
 void VulkanCommandBuffer::begin() {
     if (state_ == CommandState::Recording) {
-        Log::fatal("VulkanCommandBuffer", "begin() requires an Initial or Executable command buffer");
+        Log::fatal("VulkanCommandBuffer",
+                   "begin() requires an Initial or Executable command buffer");
     }
     // Re-beginning an Executable buffer resets it for another pass (frame buffers
     // are pooled and reused). The buffer must not be pending execution; callers
