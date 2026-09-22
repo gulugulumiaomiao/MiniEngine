@@ -57,7 +57,7 @@ std::uint64_t DrawSorter::computeKey(const DrawItem& item,
     }
 
     if (hasFlag(criteria, SortingCriteria::Material)) {
-        key |= static_cast<std::uint64_t>(item.material.index()) << 12;
+        key |= static_cast<std::uint64_t>(item.materialKey.index()) << 12;
     }
 
     if (hasFlag(criteria, SortingCriteria::Mesh)) {

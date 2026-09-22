@@ -25,7 +25,7 @@ public:
 
 private:
     struct ResolvedMaterialPass {
-        RID material;
+        Ref<Material> material;
         const ShaderPass* pass{};
         rhi::RID pipeline;
 
@@ -33,7 +33,7 @@ private:
     };
 
     [[nodiscard]] ResolvedMaterialPass resolveMaterialPass(const RenderContext& context,
-                                                           RID materialHandle,
+                                                           const Ref<Material>& material,
                                                            const Mesh& meshInstance,
                                                            RenderPhase phase) const;
 

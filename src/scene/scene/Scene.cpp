@@ -172,25 +172,25 @@ NodeMoveResult Scene::moveNode(RID handle,
 #endif
 
 Scene::Scene(std::string name) : name_(std::move(name)) {
-    Node rootNode{*this, "Root"};
-    root_ = nodes_.insert(std::move(rootNode));
-    nodes_.find(root_)->initialize(root_);
+    Ref<Node> rootNode{new Node{*this, "Root"}};
+    root_ = nodes_.insert(rootNode);
+    rootNode->initialize(root_);
 }
 
 Scene::~Scene() {
     clear();
-    if (Node* rootNode = nodes_.find(root_))
+    if (Node* rootNode = findNode(root_))
         rootNode->detachComponents();
     (void)nodes_.release(root_);
 }
 
 RID Scene::createNode(std::string name) {
-    Node node{*this, std::move(name)};
-    const RID handle = nodes_.insert(std::move(node));
-    Node* created = nodes_.find(handle);
+    Ref<Node> node{new Node{*this, std::move(name)}};
+    const RID handle = nodes_.insert(node);
+    Node* created = node.get();
     created->initialize(handle);
     created->parent_ = root_;
-    nodes_.find(root_)->children_.push_back(handle);
+    findNode(root_)->children_.push_back(handle);
     return handle;
 }
 
@@ -199,7 +199,7 @@ bool Scene::destroyNode(RID handle) {
         Log::warn("Scene", "Scene root cannot be destroyed");
         return false;
     }
-    Node* node = nodes_.find(handle);
+    Node* node = findNode(handle);
     if (!node)
         return false;
 
@@ -208,7 +208,7 @@ bool Scene::destroyNode(RID handle) {
         (void)destroyNode(child);
     }
 
-    if (Node* parent = nodes_.find(node->parent_)) {
+    if (Node* parent = findNode(node->parent_)) {
         std::erase(parent->children_, handle);
     }
     node->detachComponents();
@@ -216,7 +216,7 @@ bool Scene::destroyNode(RID handle) {
 }
 
 void Scene::clear() {
-    Node* rootNode = nodes_.find(root_);
+    Node* rootNode = findNode(root_);
     if (!rootNode)
         return;
     const std::vector<RID> children = rootNode->children_;
@@ -225,7 +225,7 @@ void Scene::clear() {
 }
 
 void Scene::update(float deltaTime) {
-    Node* rootNode = nodes_.find(root_);
+    Node* rootNode = findNode(root_);
     if (!rootNode)
         return;
     rootNode->updateComponentsSubtree(deltaTime);
@@ -233,7 +233,7 @@ void Scene::update(float deltaTime) {
 }
 
 void Scene::updateTransforms() {
-    if (Node* rootNode = nodes_.find(root_)) {
+    if (Node* rootNode = findNode(root_)) {
         rootNode->updateTransformSubtree(math::Mat44{1.0F}, false);
     }
 }
@@ -241,7 +241,7 @@ void Scene::updateTransforms() {
 void Scene::buildRenderScene(RenderScene& output, float aspectRatio) {
     output.clear();
     updateTransforms();
-    if (Node* rootNode = nodes_.find(root_)) {
+    if (Node* rootNode = findNode(root_)) {
         extractRenderNode(*rootNode, output, aspectRatio > math::kEpsilon ? aspectRatio : 1.0F);
     }
 }
@@ -293,7 +293,8 @@ void Scene::extractRenderNode(Node& node, RenderScene& output, float aspectRatio
         // the local bounding sphere by the longest transform axis keeps it conservative under
         // non-uniform scale.
         float boundsRadius = 0.0F;
-        if (const Mesh* meshInstance = MESH_MANAGER.find(mesh->mesh())) {
+        const Mesh* meshInstance = mesh->mesh().get();
+        if (meshInstance) {
             float maxAxisScale = 0.0F;
             for (std::uint32_t column = 0; column < 3; ++column) {
                 maxAxisScale = std::max(maxAxisScale, math::length(math::Vec3(world[column])));
@@ -312,7 +313,7 @@ void Scene::extractRenderNode(Node& node, RenderScene& output, float aspectRatio
     }
 
     for (RID child : node.children_) {
-        if (Node* childNode = nodes_.find(child)) {
+        if (Node* childNode = findNode(child)) {
             extractRenderNode(*childNode, output, aspectRatio);
         }
     }

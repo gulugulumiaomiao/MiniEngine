@@ -1,4 +1,5 @@
 #include "asset/importer/ShaderAssetImporter.h"
+#include "asset/types/ShaderAsset.h"
 
 #include "asset/format/ShaderAssetFormat.h"
 #include "asset/importer/AssetImportHelpers.h"

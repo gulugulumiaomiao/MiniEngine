@@ -2,6 +2,8 @@
 
 #include "asset/base/AssetId.h"
 #include "asset/base/AssetMeta.h"
+#include "asset/types/MaterialAsset.h"
+#include "asset/types/ShaderAsset.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/exporter/AssetPackage.h"
 #include "core/filesystem/FileWatcher.h"

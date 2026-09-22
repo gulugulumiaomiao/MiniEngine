@@ -1,4 +1,6 @@
 ﻿#include "asset/manager/AssetManager.h"
+#include "asset/types/MaterialAsset.h"
+#include "asset/types/ShaderAsset.h"
 
 #include "asset/base/AssetMeta.h"
 #include "asset/base/GenericAsset.h"
@@ -66,17 +68,17 @@ bool AssetManager::initialize(AssetManagerMode mode) {
         invalidate(notification.path);
         if (notification.type == AssetType::Shader && !notification.removed) {
             const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(notification.path);
-            if (assetId && SHADER_MANAGER.find(*assetId) &&
-                SHADER_MANAGER.replace(notification.path)) {
-                MATERIAL_MANAGER.refreshShader(*assetId);
+            if (assetId && SHADER_RESOURCE_MANAGER.find(*assetId) &&
+                SHADER_RESOURCE_MANAGER.replace(notification.path)) {
+                MATERIAL_RESOURCE_MANAGER.refreshShader(*assetId);
             }
         } else if (notification.type == AssetType::Mesh && !notification.removed &&
-                   MESH_MANAGER.find(notification.path)) {
-            (void)MESH_MANAGER.replace(notification.path);
+                   MESH_RESOURCE_MANAGER.find(notification.path)) {
+            (void)MESH_RESOURCE_MANAGER.replace(notification.path);
         } else if (notification.type == AssetType::Texture && !notification.removed) {
             const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(notification.path);
-            if (assetId && TEXTURE_MANAGER.find(*assetId)) {
-                (void)TEXTURE_MANAGER.replace(notification.path);
+            if (assetId && TEXTURE_RESOURCE_MANAGER.find(*assetId)) {
+                (void)TEXTURE_RESOURCE_MANAGER.replace(notification.path);
             }
         }
         if (changeListener_) {

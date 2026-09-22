@@ -1,4 +1,6 @@
-﻿#include "core/serialization/BinaryTransfer.h"
+﻿#include "asset/types/MaterialAsset.h"
+#include "asset/types/ShaderAsset.h"
+#include "core/serialization/BinaryTransfer.h"
 #include "core/serialization/JsonTransfer.h"
 #include "core/serialization/Transferable.h"
 #include "render/mesh/Mesh.h"

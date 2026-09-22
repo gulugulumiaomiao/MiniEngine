@@ -1,3 +1,4 @@
+#include "render/gpu/texture/TextureStorage.h"
 #include "render/material/Material.h"
 #include "render/texture/TextureManager.h"
 #include "rhi/api/Device.h"
@@ -177,46 +178,52 @@ public:
 class TextureTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        TEXTURE_MANAGER.shutdown();
-        ASSERT_TRUE(TEXTURE_MANAGER.initialize(device));
+        TEXTURE_RESOURCE_MANAGER.clear();
+        TEXTURE_STORAGE.shutdown();
+        ASSERT_TRUE(TEXTURE_STORAGE.initialize(device));
     }
 
-    void TearDown() override { TEXTURE_MANAGER.shutdown(); }
+    void TearDown() override {
+        TEXTURE_RESOURCE_MANAGER.clear();
+        TEXTURE_STORAGE.shutdown();
+    }
 
     FakeDevice device;
 };
 
 TEST_F(TextureTest, BuiltinsOwnRhiTextureAndDefaultView) {
     using namespace engine;
-    const RID white = TEXTURE_MANAGER.defaultWhite();
-    const RID black = TEXTURE_MANAGER.defaultBlack();
-    const RID normal = TEXTURE_MANAGER.defaultNormal();
-    const RID error = TEXTURE_MANAGER.errorTexture();
+    const Ref<Texture> white = TEXTURE_RESOURCE_MANAGER.defaultWhite();
+    const Ref<Texture> black = TEXTURE_RESOURCE_MANAGER.defaultBlack();
+    const Ref<Texture> normal = TEXTURE_RESOURCE_MANAGER.defaultNormal();
+    const Ref<Texture> error = TEXTURE_RESOURCE_MANAGER.errorTexture();
 
-    const Texture* whiteTexture = TEXTURE_MANAGER.find(white);
-    const Texture* normalTexture = TEXTURE_MANAGER.find(normal);
-    const Texture* errorTexture = TEXTURE_MANAGER.find(error);
-    ASSERT_TRUE(whiteTexture);
-    ASSERT_TRUE(normalTexture);
-    ASSERT_TRUE(errorTexture);
+    ASSERT_TRUE(white);
+    ASSERT_TRUE(normal);
+    ASSERT_TRUE(error);
     EXPECT_NE(white, black);
     EXPECT_NE(black, normal);
     EXPECT_NE(normal, error);
-    EXPECT_EQ(whiteTexture->desc().format, TextureFormat::Rgba8Srgb);
-    EXPECT_EQ(normalTexture->desc().format, TextureFormat::Rgba8Unorm);
-    EXPECT_EQ(errorTexture->desc().width, 2U);
-    EXPECT_EQ(errorTexture->mipData()[0].bytes.size(), 16U);
-    EXPECT_TRUE(whiteTexture->rhiHandle());
-    EXPECT_TRUE(whiteTexture->defaultView());
+    EXPECT_EQ(white->desc().format, TextureFormat::Rgba8Srgb);
+    EXPECT_EQ(normal->desc().format, TextureFormat::Rgba8Unorm);
+    EXPECT_EQ(error->desc().width, 2U);
+    EXPECT_EQ(error->mipData()[0].bytes.size(), 16U);
+    ASSERT_NE(TEXTURE_STORAGE.resolve(*white), nullptr);
+    ASSERT_NE(TEXTURE_STORAGE.resolve(*black), nullptr);
+    ASSERT_NE(TEXTURE_STORAGE.resolve(*normal), nullptr);
+    ASSERT_NE(TEXTURE_STORAGE.resolve(*error), nullptr);
+    const TextureStorageEntry* whiteGpu = TEXTURE_STORAGE.resolve(*white);
+    ASSERT_NE(whiteGpu, nullptr);
+    EXPECT_TRUE(whiteGpu->texture);
+    EXPECT_TRUE(whiteGpu->defaultView);
     EXPECT_EQ(device.createdTextures, 4U);
     EXPECT_EQ(device.textureUploads, 4U);
 }
 
 TEST_F(TextureTest, ViewAndSamplerAreLightweightIndependentBindings) {
     using namespace engine;
-    const RID white = TEXTURE_MANAGER.defaultWhite();
-    const Texture* texture = TEXTURE_MANAGER.find(white);
-    ASSERT_TRUE(texture);
+    const Ref<Texture> white = TEXTURE_RESOURCE_MANAGER.defaultWhite();
+    ASSERT_TRUE(white);
 
     const rhi::TextureViewDesc viewDesc{.type = rhi::TextureType::Texture2D,
                                         .format = rhi::PixelFormat::Rgba8Srgb,
@@ -228,10 +235,13 @@ TEST_F(TextureTest, ViewAndSamplerAreLightweightIndependentBindings) {
                                                     .g = rhi::SwizzleComponent::G,
                                                     .b = rhi::SwizzleComponent::R,
                                                     .a = rhi::SwizzleComponent::A}};
-    const TextureView view = texture->getView(viewDesc);
-    const TextureView cachedView = texture->getView(viewDesc);
-    const Sampler linear = Sampler::resolve(device, texture->defaultSamplerDesc());
-    rhi::SamplerDesc pointDesc = texture->defaultSamplerDesc();
+    const TextureStorageEntry* stored = TEXTURE_STORAGE.resolve(*white);
+    ASSERT_NE(stored, nullptr);
+    const rhi::RID textureHandle = stored->texture;
+    const Sampler linear = stored->defaultSampler;
+    const TextureView view = TEXTURE_STORAGE.getView(*white, viewDesc);
+    const TextureView cachedView = TEXTURE_STORAGE.getView(*white, viewDesc);
+    rhi::SamplerDesc pointDesc = linear.desc();
     pointDesc.minFilter = rhi::SamplerFilter::Nearest;
     pointDesc.magFilter = rhi::SamplerFilter::Nearest;
     const Sampler point = Sampler::resolve(device, pointDesc);
@@ -239,7 +249,7 @@ TEST_F(TextureTest, ViewAndSamplerAreLightweightIndependentBindings) {
     ASSERT_TRUE(view);
     ASSERT_TRUE(linear);
     ASSERT_TRUE(point);
-    EXPECT_EQ(view.textureHandle(), texture->rhiHandle());
+    EXPECT_EQ(view.textureHandle(), textureHandle);
     EXPECT_EQ(view.rhiHandle(), cachedView.rhiHandle());
     EXPECT_NE(linear.rhiHandle(), point.rhiHandle());
     const TextureBinding linearBinding{view, linear};
@@ -250,48 +260,49 @@ TEST_F(TextureTest, ViewAndSamplerAreLightweightIndependentBindings) {
     EXPECT_EQ(device.viewDescs[0], viewDesc);
 }
 
-TEST_F(TextureTest, MaterialBindsTextureViewAndSamplerInsteadOfTexture) {
+TEST_F(TextureTest, MaterialRetainsTextureByRef) {
     using namespace engine;
-    const RID textureHandle = TEXTURE_MANAGER.defaultWhite();
-    const Texture* texture = TEXTURE_MANAGER.find(textureHandle);
+    Ref<Texture> texture = TEXTURE_RESOURCE_MANAGER.defaultWhite();
     ASSERT_TRUE(texture);
-    const Sampler sampler = Sampler::resolve(device, texture->defaultSamplerDesc());
-    ASSERT_TRUE(sampler);
+    const std::uint32_t before = texture.useCount();
 
     Material material;
     material.textures.emplace("mainTexture", "");
-    material.setTexture("mainTexture", *texture, sampler);
-    const TextureBinding* binding = material.getTextureBinding("mainTexture");
-    ASSERT_NE(binding, nullptr);
-    EXPECT_EQ(binding->view, texture->defaultView());
-    EXPECT_EQ(binding->sampler, sampler);
-    EXPECT_EQ(binding->toRhi().view, texture->defaultView().rhiHandle());
+    material.setTexture("mainTexture", texture);
 
-    const rhi::TextureViewDesc customDesc{.type = rhi::TextureType::Texture2D,
-                                          .format = rhi::PixelFormat::Rgba8Srgb,
-                                          .baseMip = 0,
-                                          .mipCount = 1,
-                                          .baseLayer = 0,
-                                          .layerCount = 1};
-    const TextureView customView = texture->getView(customDesc);
-    material.setTexture("mainTexture", customView, sampler);
-    binding = material.getTextureBinding("mainTexture");
-    ASSERT_NE(binding, nullptr);
-    EXPECT_EQ(binding->view, customView);
+    EXPECT_EQ(material.resolveTexture("mainTexture"), texture);
+    EXPECT_EQ(texture.useCount(), before + 1);
+    EXPECT_TRUE(TEXTURE_STORAGE.resolveBinding(*texture));
 }
 
 TEST_F(TextureTest, CloneCreatesIndependentRhiTexture) {
     using namespace engine;
-    const RID source = TEXTURE_MANAGER.defaultWhite();
-    const RID clone = TEXTURE_MANAGER.clone(source);
+    const Ref<Texture> source = TEXTURE_RESOURCE_MANAGER.defaultWhite();
+    const Ref<Texture> clone = TEXTURE_RESOURCE_MANAGER.clone(source);
     ASSERT_TRUE(clone);
     ASSERT_NE(source, clone);
-    const Texture* sourceTexture = TEXTURE_MANAGER.find(source);
-    const Texture* cloneTexture = TEXTURE_MANAGER.find(clone);
-    ASSERT_TRUE(sourceTexture);
-    ASSERT_TRUE(cloneTexture);
-    EXPECT_NE(sourceTexture->rhiHandle(), cloneTexture->rhiHandle());
-    EXPECT_FALSE(cloneTexture->isAssetBacked());
+    const TextureStorageEntry* sourceStorage = TEXTURE_STORAGE.resolve(*source);
+    ASSERT_NE(sourceStorage, nullptr);
+    const rhi::RID sourceHandle = sourceStorage->texture;
+    const TextureStorageEntry* cloneStorage = TEXTURE_STORAGE.resolve(*clone);
+    ASSERT_NE(cloneStorage, nullptr);
+    EXPECT_NE(sourceHandle, cloneStorage->texture);
+    EXPECT_FALSE(clone->isAssetBacked());
+}
+
+TEST_F(TextureTest, LastRefReleasesStorageAndWeakCacheEntry) {
+    using namespace engine;
+    const Ref<Texture> source = TEXTURE_RESOURCE_MANAGER.defaultWhite();
+    Ref<Texture> clone = TEXTURE_RESOURCE_MANAGER.clone(source);
+    ASSERT_TRUE(clone);
+    const RID resourceId = clone->resourceId();
+    ASSERT_NE(TEXTURE_STORAGE.resolve(*clone), nullptr);
+    const std::uint32_t destroyedBefore = device.destroyedTextures;
+
+    clone.reset();
+
+    EXPECT_FALSE(TEXTURE_RESOURCE_MANAGER.find(resourceId));
+    EXPECT_EQ(device.destroyedTextures, destroyedBefore + 1);
 }
 
 TEST(TextureValidationTest, RejectsUnimplementedTextureDimensions) {

@@ -113,15 +113,14 @@ void InspectorPanel::drawAssetInspector() {
 
     switch (inferAssetType(path)) {
     case AssetType::Material: {
-        const RID handle = MATERIAL_MANAGER.load(path);
-        const Material* material = MATERIAL_MANAGER.find(handle);
-        if (material == nullptr || !(material->assetPath() == path)) {
+        const Ref<Material> material = MATERIAL_RESOURCE_MANAGER.load(path);
+        if (!material || !(material->assetPath() == path)) {
             // load() falls back to the Error Material, which must never be
             // offered for editing under another asset's name.
             ImGui::TextUnformatted("Failed to load material");
             return;
         }
-        materialInspector_.draw(handle);
+        materialInspector_.draw(material);
         return;
     }
     case AssetType::Shader: ImGui::TextUnformatted("Type: Shader"); break;

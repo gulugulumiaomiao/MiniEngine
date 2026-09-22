@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/filesystem/VirtualPath.h"
-#include "render/base/RenderHandle.h"
+#include "render/material/Material.h"
 
 #include <string>
 
@@ -13,7 +13,7 @@ namespace editor {
 
 // Unity-style editor for one runtime Material instance. Edits go straight
 // through the Material setters, so every MaterialComponent holding the handle
-// sees the change the same frame (MATERIAL_MANAGER keeps one instance per
+// sees the change the same frame (MATERIAL_RESOURCE_MANAGER keeps one instance per
 // asset, shared by all users). Asset-backed edits are debounced back into the
 // .material.json source followed by a synchronous reimport, which refreshes
 // the in-place instance with exactly the written values and makes the later
@@ -25,7 +25,7 @@ class MaterialInspector final {
 public:
     // Draws the editor for the material the handle points at. Safe to call
     // every frame with any handle, including invalid ones.
-    void draw(RID material);
+    void draw(const Ref<Material>& material);
 
     // Writes any pending debounced edit to disk immediately (target switch,
     // editor shutdown, project close).
@@ -33,7 +33,7 @@ public:
 
 private:
     void drawIdentity(Material& data);
-    void drawShaderCombo(RID handle, Material& data);
+    void drawShaderCombo(const Ref<Material>& material, Material& data);
     void drawRenderQueue(Material& data);
     void drawProperties(Material& data);
     void drawKeywords(Material& data);

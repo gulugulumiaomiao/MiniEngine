@@ -80,6 +80,8 @@ target_compile_options(AssetImporterTest PRIVATE -Wno-missing-field-initializers
 mini_add_gtest(LogTest)
 
 mini_add_test(HandlePoolTest)
+# Ref/RefCounted: 侵入式原子引用计数模板，纯核心逻辑（gtest per Testing.md）。
+mini_add_gtest(RefTest)
 mini_add_test(FrustumTest)
 mini_add_test(TransferTest)
 mini_add_test(MeshTest)

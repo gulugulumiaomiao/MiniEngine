@@ -1,4 +1,5 @@
 #include "asset/exporter/AssetExportPipeline.h"
+#include "asset/types/MaterialAsset.h"
 
 #include "asset/exporter/GenericAssetExporter.h"
 #include "asset/exporter/MaterialAssetExporter.h"

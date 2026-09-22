@@ -1,4 +1,5 @@
 ﻿#include "asset/manager/AssetManager.h"
+#include "asset/types/ShaderAsset.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderCompilePipeline.h"
 #include "render/shader/ShaderGenerator.h"

@@ -40,6 +40,18 @@ if(renderer_header MATCHES "(createMesh|createProceduralMesh|loadMesh|loadMateri
     message(FATAL_ERROR "Renderer exposes CPU/GPU asset management APIs")
 endif()
 
+foreach(layer1_header IN ITEMS
+    "${render_dir}/texture/Texture.h"
+    "${render_dir}/mesh/Mesh.h"
+    "${render_dir}/material/Material.h"
+    "${render_dir}/shader/Shader.h"
+)
+    file(READ "${layer1_header}" layer1_contents)
+    if(layer1_contents MATCHES "#[ \t]*include[ \t]*[<\"]rhi/")
+        message(FATAL_ERROR "Layer-1 resource header directly depends on RHI: ${layer1_header}")
+    endif()
+endforeach()
+
 file(GLOB_RECURSE render_sources
     "${render_dir}/*.h"
     "${render_dir}/*.cpp"

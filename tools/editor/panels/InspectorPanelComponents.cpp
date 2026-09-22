@@ -178,11 +178,11 @@ void InspectorPanel::drawMesh(Node& node) {
 
     if (mesh->sourceType() == MeshComponentSourceType::Asset) {
         const std::vector<VirtualPath> meshes = collectAssets(AssetType::Mesh);
-        const Mesh* current = MESH_MANAGER.find(mesh->mesh());
+        const Mesh* current = mesh->mesh().get();
         const VirtualPath currentPath = current != nullptr ? current->assetPath() : VirtualPath{};
         VirtualPath chosen;
         if (assetCombo("Mesh Asset", meshes, currentPath, chosen)) {
-            const RID loaded = MESH_MANAGER.load(chosen);
+            const Ref<Mesh> loaded = MESH_RESOURCE_MANAGER.load(chosen);
             if (loaded) {
                 mesh->setAssetMesh(loaded);
                 document_.markDirty();
@@ -322,15 +322,15 @@ void InspectorPanel::drawMaterial(Node& node) {
         return;
 
     const std::vector<VirtualPath> materials = collectAssets(AssetType::Material);
-    const std::vector<RID> slots = material->materials();
+    const std::vector<Ref<Material>> slots = material->materials();
     for (std::size_t slot = 0; slot < slots.size(); ++slot) {
         ImGui::PushID(static_cast<int>(slot));
-        const Material* current = MATERIAL_MANAGER.find(slots[slot]);
+        const Material* current = slots[slot].get();
         const VirtualPath currentPath = current != nullptr ? current->assetPath() : VirtualPath{};
         const std::string label = "Slot " + std::to_string(slot);
         VirtualPath chosen;
         if (assetCombo(label.c_str(), materials, currentPath, chosen)) {
-            const RID loaded = MATERIAL_MANAGER.load(chosen);
+            const Ref<Material> loaded = MATERIAL_RESOURCE_MANAGER.load(chosen);
             if (loaded) {
                 material->setMaterial(static_cast<std::uint32_t>(slot), loaded);
                 document_.markDirty();

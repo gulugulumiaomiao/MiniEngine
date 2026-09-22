@@ -15,7 +15,7 @@ bool SceneNodeAsset::transfer(Transfer& archive) {
 
 void Node::initialize(RID handle) {
     handle_ = handle;
-    auto transform = std::make_unique<TransformComponent>();
+    Ref<TransformComponent> transform = makeRef<TransformComponent>();
     transform_ = transform.get();
     components_.push_back(std::move(transform));
     transform_->attach(*this, activeInHierarchy_);
@@ -93,7 +93,7 @@ void Node::detachComponents() {
 
 void Node::refreshActiveSubtree(bool parentActive) {
     activeInHierarchy_ = activeSelf_ && parentActive;
-    for (const std::unique_ptr<Component>& component : components_) {
+    for (const Ref<Component>& component : components_) {
         component->setOwnerActive(activeInHierarchy_);
     }
     for (RID child : children_) {
@@ -104,7 +104,7 @@ void Node::refreshActiveSubtree(bool parentActive) {
 }
 
 void Node::updateComponentsSubtree(float deltaTime) {
-    for (const std::unique_ptr<Component>& component : components_) {
+    for (const Ref<Component>& component : components_) {
         component->update(deltaTime);
     }
     for (RID child : children_) {

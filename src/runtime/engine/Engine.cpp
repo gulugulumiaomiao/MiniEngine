@@ -8,10 +8,11 @@
 #include "render/gpu/global_uniform/GlobalUniformGpuManager.h"
 #include "render/pipeline/MiniForwardPipeline.h"
 #include "render/pipeline/RenderPipeline.h"
-#include "render/gpu/material/MaterialGpuManager.h"
-#include "render/gpu/mesh/MeshGpuManager.h"
-#include "render/gpu/pipeline/GraphicsPipelineManager.h"
-#include "render/gpu/shader/ShaderGpuManager.h"
+#include "render/gpu/material/MaterialStorage.h"
+#include "render/gpu/mesh/MeshStorage.h"
+#include "render/gpu/pipeline/GraphicsPipelineStorage.h"
+#include "render/gpu/shader/ShaderStorage.h"
+#include "render/gpu/texture/TextureStorage.h"
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
@@ -244,16 +245,16 @@ bool Engine::initializeGpuManagers(const rhi::IContextFactory& contextFactory,
                                       []() { return std::make_unique<MiniForwardPipeline>(); });
     renderer_->setPipeline(pipelineRegistry.create(config_.render.pipeline));
 
-    if (!TEXTURE_MANAGER.initialize(renderer_->device()) ||
+    if (!TEXTURE_STORAGE.initialize(renderer_->device()) ||
         !FRAME_GPU_MANAGER.initialize(renderer_->device()) ||
-        !MESH_GPU_MANAGER.initialize(renderer_->device()) ||
-        !MATERIAL_GPU_MANAGER.initialize(renderer_->device(),
+        !MESH_STORAGE.initialize(renderer_->device()) ||
+        !MATERIAL_STORAGE.initialize(renderer_->device(),
                                          FRAME_GPU_MANAGER.materialLayout(),
                                          FrameGpuManager::kFramesInFlight) ||
         !GLOBAL_UNIFORM_GPU_MANAGER.initialize(renderer_->device(),
                                                FrameGpuManager::kFramesInFlight) ||
-        !SHADER_GPU_MANAGER.initialize(renderer_->device()) ||
-        !GRAPHICS_PIPELINE_MANAGER.initialize(renderer_->device(),
+        !SHADER_STORAGE.initialize(renderer_->device()) ||
+        !GRAPHICS_PIPELINE_STORAGE.initialize(renderer_->device(),
                                               FRAME_GPU_MANAGER.sceneLayout(),
                                               FRAME_GPU_MANAGER.materialLayout(),
                                               GLOBAL_UNIFORM_GPU_MANAGER.bindGroupLayout())) {
@@ -268,17 +269,17 @@ void Engine::teardownProjectSubsystems() {
     renderScene_.clear();
     if (renderer_)
         renderer_->waitIdle();
-    MATERIAL_GPU_MANAGER.shutdown();
-    GRAPHICS_PIPELINE_MANAGER.shutdown();
+    MATERIAL_STORAGE.shutdown();
+    GRAPHICS_PIPELINE_STORAGE.shutdown();
     GLOBAL_UNIFORM_GPU_MANAGER.shutdown();
-    SHADER_GPU_MANAGER.shutdown();
-    TEXTURE_MANAGER.shutdown();
-    MESH_GPU_MANAGER.shutdown();
+    SHADER_STORAGE.shutdown();
+    TEXTURE_STORAGE.shutdown();
+    MESH_STORAGE.shutdown();
     FRAME_GPU_MANAGER.shutdown();
     renderer_.reset();
-    MESH_MANAGER.clear();
-    MATERIAL_MANAGER.clear();
-    SHADER_MANAGER.clear();
+    MESH_RESOURCE_MANAGER.clear();
+    MATERIAL_RESOURCE_MANAGER.clear();
+    SHADER_RESOURCE_MANAGER.clear();
     ASSET_MANAGER.shutdown();
     activeScenePath_ = {};
     sceneReloadPending_ = false;
@@ -333,7 +334,7 @@ void Engine::shutdown() {
 #endif
     releaseProject();
     window_.reset();
-    scene_ = std::make_unique<Scene>("Main Scene");
+    scene_ = makeRef<Scene>("Main Scene");
     activeScenePath_ = {};
     sceneReloadPending_ = false;
     running_ = false;
@@ -354,10 +355,10 @@ bool Engine::loadScene(const VirtualPath& scenePath) {
         return false;
 
     const SceneInstantiationContext context{
-        .loadMesh = [](const VirtualPath& path) { return MESH_MANAGER.load(path); },
-        .loadMaterial = [](const VirtualPath& path) { return MATERIAL_MANAGER.load(path); },
+        .loadMesh = [](const VirtualPath& path) { return MESH_RESOURCE_MANAGER.load(path); },
+        .loadMaterial = [](const VirtualPath& path) { return MATERIAL_RESOURCE_MANAGER.load(path); },
     };
-    std::unique_ptr<Scene> loaded = asset->instantiate(context);
+    Ref<Scene> loaded = asset->instantiate(context);
     if (!loaded) {
         Log::error("Engine", "Cannot instantiate scene: %s", scenePath.string().c_str());
         return false;
@@ -378,7 +379,7 @@ bool Engine::reloadScene() {
 }
 
 void Engine::resetScene(std::string name) {
-    scene_ = std::make_unique<Scene>(std::move(name));
+    scene_ = makeRef<Scene>(std::move(name));
     activeScenePath_ = {};
     renderScene_.clear();
     sceneReloadPending_ = false;

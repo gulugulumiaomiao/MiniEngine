@@ -1,3 +1,4 @@
+#include "render/gpu/texture/TextureStorage.h"
 #include "render/texture/Texture.h"
 #include "render/texture/TextureManager.h"
 #include "asset/database/AssetDatabase.h"
@@ -16,65 +17,62 @@ class TextureGuidIdentityTest : public ::testing::Test {
 protected:
     void SetUp() override {
         ASSERT_TRUE(engine::test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR));
-        ASSERT_TRUE(TEXTURE_MANAGER.initialize(device));
+        TEXTURE_RESOURCE_MANAGER.clear();
+        ASSERT_TRUE(TEXTURE_STORAGE.initialize(device));
     }
 
     void TearDown() override {
-        TEXTURE_MANAGER.shutdown();
+        TEXTURE_RESOURCE_MANAGER.clear();
+        TEXTURE_STORAGE.shutdown();
         engine::test::shutdownAssetEnvironment();
     }
 
     MockDevice device;
 };
 
-TEST_F(TextureGuidIdentityTest, LoadByGuidReturnsSameHandle) {
+TEST_F(TextureGuidIdentityTest, LoadByGuidReturnsSameObject) {
     using namespace engine;
     const VirtualPath path{"assets://textures/checker.png"};
-    const RID byPath = TEXTURE_MANAGER.load(path);
+    const Ref<Texture> byPath = TEXTURE_RESOURCE_MANAGER.load(path);
     ASSERT_TRUE(byPath);
 
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const RID byId = TEXTURE_MANAGER.load(*assetId);
+    const Ref<Texture> byId = TEXTURE_RESOURCE_MANAGER.load(*assetId);
     EXPECT_EQ(byId, byPath);
-    EXPECT_EQ(TEXTURE_MANAGER.find(*assetId), TEXTURE_MANAGER.find(byPath));
+    EXPECT_EQ(TEXTURE_RESOURCE_MANAGER.find(*assetId), byPath);
 }
 
-TEST_F(TextureGuidIdentityTest, CloneReturnsDifferentHandleAndIsNotAssetBacked) {
+TEST_F(TextureGuidIdentityTest, CloneReturnsDifferentObjectAndIsNotAssetBacked) {
     using namespace engine;
     const VirtualPath path{"assets://textures/checker.png"};
-    const RID original = TEXTURE_MANAGER.load(path);
+    const Ref<Texture> original = TEXTURE_RESOURCE_MANAGER.load(path);
     ASSERT_TRUE(original);
 
-    const RID cloned = TEXTURE_MANAGER.clone(original);
+    const Ref<Texture> cloned = TEXTURE_RESOURCE_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
     EXPECT_NE(cloned, original);
 
-    const Texture* originalData = TEXTURE_MANAGER.find(original);
-    const Texture* clonedData = TEXTURE_MANAGER.find(cloned);
-    ASSERT_NE(originalData, nullptr);
-    ASSERT_NE(clonedData, nullptr);
-
-    EXPECT_TRUE(originalData->isAssetBacked());
-    EXPECT_FALSE(clonedData->isAssetBacked());
-    EXPECT_EQ(clonedData->assetPath(), originalData->assetPath());
+    EXPECT_TRUE(original->isAssetBacked());
+    EXPECT_FALSE(cloned->isAssetBacked());
+    EXPECT_EQ(cloned->assetPath(), original->assetPath());
 }
 
 TEST_F(TextureGuidIdentityTest, CloneDoesNotAppearInAssetIndex) {
     using namespace engine;
     const VirtualPath path{"assets://textures/checker.png"};
-    const RID original = TEXTURE_MANAGER.load(path);
+    const Ref<Texture> original = TEXTURE_RESOURCE_MANAGER.load(path);
     ASSERT_TRUE(original);
 
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const RID cloned = TEXTURE_MANAGER.clone(original);
+    const Ref<Texture> cloned = TEXTURE_RESOURCE_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
 
-    EXPECT_EQ(TEXTURE_MANAGER.find(*assetId), TEXTURE_MANAGER.find(original));
-    EXPECT_NE(TEXTURE_MANAGER.find(*assetId), TEXTURE_MANAGER.find(cloned));
+    EXPECT_EQ(TEXTURE_RESOURCE_MANAGER.find(*assetId), original);
+    EXPECT_NE(TEXTURE_RESOURCE_MANAGER.find(*assetId), cloned);
 }
 
 TEST_F(TextureGuidIdentityTest, RefreshAssetUpdatesOriginalButNotClone) {
@@ -83,23 +81,18 @@ TEST_F(TextureGuidIdentityTest, RefreshAssetUpdatesOriginalButNotClone) {
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const RID original = TEXTURE_MANAGER.load(path);
+    const Ref<Texture> original = TEXTURE_RESOURCE_MANAGER.load(path);
     ASSERT_TRUE(original);
-    const RID cloned = TEXTURE_MANAGER.clone(original);
+    const Ref<Texture> cloned = TEXTURE_RESOURCE_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
 
-    Texture* originalData = TEXTURE_MANAGER.find(original);
-    Texture* clonedData = TEXTURE_MANAGER.find(cloned);
-    ASSERT_NE(originalData, nullptr);
-    ASSERT_NE(clonedData, nullptr);
+    const std::uint64_t originalVersion = original->version();
+    const std::uint64_t clonedVersion = cloned->version();
 
-    const std::uint64_t originalVersion = originalData->version();
-    const std::uint64_t clonedVersion = clonedData->version();
+    TEXTURE_RESOURCE_MANAGER.refreshAsset(*assetId);
 
-    TEXTURE_MANAGER.refreshAsset(*assetId);
-
-    EXPECT_GT(originalData->version(), originalVersion);
-    EXPECT_EQ(clonedData->version(), clonedVersion);
+    EXPECT_GT(original->version(), originalVersion);
+    EXPECT_EQ(cloned->version(), clonedVersion);
 }
 
 } // namespace

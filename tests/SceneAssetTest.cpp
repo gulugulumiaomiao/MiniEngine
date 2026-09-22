@@ -225,32 +225,44 @@ int main() {
 
     std::vector<VirtualPath> loadedMeshes;
     std::vector<VirtualPath> loadedMaterials;
-    MESH_MANAGER.clear();
+    MESH_RESOURCE_MANAGER.clear();
+    const Ref<Mesh> loadedMesh = makeRef<Mesh>();
+    const Ref<Material> loadedMaterial = makeRef<Material>();
     const SceneInstantiationContext context{
         .loadMesh =
-            [&loadedMeshes](const VirtualPath& path) {
+            [&loadedMeshes, loadedMesh](const VirtualPath& path) {
                 loadedMeshes.push_back(path);
-                return RID{7, 1};
+                return loadedMesh;
             },
         .loadMaterial =
-            [&loadedMaterials](const VirtualPath& path) {
+            [&loadedMaterials, loadedMaterial](const VirtualPath& path) {
                 loadedMaterials.push_back(path);
-                return RID{9, 1};
+                return loadedMaterial;
             },
     };
-    std::unique_ptr<Scene> runtime = decoded.instantiate(context);
-    if (!runtime || runtime->name() != "Example Scene" || runtime->nodeCount() != 5 ||
-        loadedMeshes.size() != 1 || loadedMaterials.size() != 1 || MESH_MANAGER.size() != 1 ||
-        loadedMeshes.front() != VirtualPath{"assets://meshes/cube.mesh.json"} ||
-        loadedMaterials.front() != VirtualPath{"assets://materials/default.material.json"}) {
-        return 12;
-    }
+    Ref<Scene> runtime = decoded.instantiate(context);
+    if (!runtime)
+        return 120;
+    if (runtime->name() != "Example Scene")
+        return 121;
+    if (runtime->nodeCount() != 5)
+        return 122;
+    if (loadedMeshes.size() != 1)
+        return 123;
+    if (loadedMaterials.size() != 1)
+        return 124;
+    if (MESH_RESOURCE_MANAGER.size() != 1)
+        return 125;
+    if (loadedMeshes.front() != VirtualPath{"assets://meshes/cube.mesh.json"})
+        return 126;
+    if (loadedMaterials.front() != VirtualPath{"assets://materials/default.material.json"})
+        return 127;
     const Node* runtimeWorld = runtime->findNode(runtime->root().children().front());
     if (!runtimeWorld || runtimeWorld->name() != "World" ||
         runtimeWorld->transform().localPosition() != math::Vec3{1.0F, 2.0F, 3.0F} ||
         !runtimeWorld->getComponent<MeshComponent>() ||
-        runtimeWorld->getComponent<MeshComponent>()->mesh() != RID{7, 1} ||
-        runtimeWorld->getComponent<MaterialComponent>()->material(0) != RID{9, 1} ||
+        runtimeWorld->getComponent<MeshComponent>()->mesh() != loadedMesh ||
+        runtimeWorld->getComponent<MaterialComponent>()->material(0) != loadedMaterial ||
         runtimeWorld->children().size() != 1) {
         return 13;
     }
@@ -271,9 +283,9 @@ int main() {
         return 17;
     }
     const RID runtimePrimitiveHandle =
-        runtimePrimitive->getComponent<MeshComponent>()->mesh();
+        runtimePrimitive->getComponent<MeshComponent>()->mesh()->resourceId();
     runtime.reset();
-    if (MESH_MANAGER.find(runtimePrimitiveHandle) || MESH_MANAGER.size() != 0)
+    if (MESH_RESOURCE_MANAGER.find(runtimePrimitiveHandle) || MESH_RESOURCE_MANAGER.size() != 0)
         return 18;
 
     const AssetArtifact artifact{1, AssetId{1, 2}, AssetType::Scene, scenePath, binary};

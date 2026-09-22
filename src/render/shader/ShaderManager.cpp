@@ -1,166 +1,202 @@
 #include "render/shader/ShaderManager.h"
 
+#include "asset/types/ShaderAsset.h"
+
 #include "asset/database/AssetDatabase.h"
 #include "asset/manager/AssetManager.h"
 #include "core/logging/Log.h"
 
-#include <limits>
 #include <utility>
+#include <vector>
 
 namespace engine {
 namespace {
 
-// The engine's fallback Shader is part of the built-in contract layer, refreshed into
-// every project's assets/ on open (syncEngineContractIntoProject), so it resolves through
-// the project's assets:// mount like any user asset.
 const VirtualPath kBuiltinColorShaderPath{"assets://shaders/builtin_color.shader.json"};
 
 } // namespace
 
-RID ShaderManager::load(const AssetId& assetId) {
+Ref<Shader> ShaderResourceManager::load(const AssetId& assetId) {
     if (!assetId.valid()) {
-        Log::error("ShaderManager", "Invalid Shader AssetId");
+        Log::error("ShaderResourceManager", "Invalid Shader AssetId");
         return {};
     }
-    if (const RID existing = findHandle(assetId); existing) {
+    if (Ref<Shader> existing = find(assetId))
         return existing;
-    }
     const std::optional<VirtualPath> path = ASSET_DATABASE.findPath(assetId);
     if (!path) {
-        Log::error(
-            "ShaderManager", "Unknown Shader AssetId: %s", assetId.toString().c_str());
+        Log::error("ShaderResourceManager",
+                   "Unknown Shader AssetId: %s",
+                   assetId.toString().c_str());
         return {};
     }
     return loadFromPath(*path, assetId);
 }
 
-RID ShaderManager::load(const VirtualPath& shaderPath) {
+Ref<Shader> ShaderResourceManager::load(const VirtualPath& shaderPath) {
     if (!shaderPath.valid()) {
-        Log::error("ShaderManager", "Invalid Shader path: %s", shaderPath.string().c_str());
+        Log::error("ShaderResourceManager", "Invalid Shader path: %s", shaderPath.string().c_str());
         return {};
     }
     const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(shaderPath);
     if (!assetId) {
-        Log::error(
-            "ShaderManager", "Shader path has no AssetId: %s", shaderPath.string().c_str());
+        Log::error("ShaderResourceManager",
+                   "Shader path has no AssetId: %s",
+                   shaderPath.string().c_str());
         return {};
     }
-    if (const RID existing = findHandle(*assetId); existing) {
+    if (Ref<Shader> existing = find(*assetId))
         return existing;
-    }
     return loadFromPath(shaderPath, *assetId);
 }
 
-RID ShaderManager::loadFromPath(const VirtualPath& shaderPath, const AssetId& assetId) {
+Ref<Shader> ShaderResourceManager::loadFromPath(const VirtualPath& shaderPath,
+                                                const AssetId& assetId) {
     const std::shared_ptr<ShaderAsset> asset = ASSET_MANAGER.loadAsset<ShaderAsset>(shaderPath);
-    if (!asset) {
+    if (!asset)
+        return {};
+    Ref<Shader> shader = asset->instantiate();
+    if (!shader)
+        return {};
+    shader->assetId_ = assetId;
+    return insert(shader);
+}
+
+Ref<Shader> ShaderResourceManager::builtinColor() {
+    if (!builtinColor_)
+        builtinColor_ = load(kBuiltinColorShaderPath);
+    return builtinColor_;
+}
+
+Ref<Shader> ShaderResourceManager::clone(const Ref<Shader>& source) {
+    if (!source) {
+        Log::error("ShaderResourceManager", "Cannot clone an invalid Shader");
         return {};
     }
-    Shader shader = asset->instantiate();
-    shader.assetId_ = assetId;
-    return insert(std::move(shader));
+    return insertUnkeyed(source->clone());
 }
 
-RID ShaderManager::builtinColor() {
-    return load(kBuiltinColorShaderPath);
-}
-
-RID ShaderManager::clone(RID source) {
-    Shader* shader = find(source);
-    if (!shader) {
-        Log::error("ShaderManager", "Cannot clone an invalid Shader");
-        return {};
-    }
-    return insertUnkeyed(shader->clone());
-}
-
-void ShaderManager::refreshAsset(const AssetId& assetId) {
+void ShaderResourceManager::refreshAsset(const AssetId& assetId) {
     if (!assetId.valid()) {
-        Log::error("ShaderManager", "Cannot refresh an invalid AssetId");
+        Log::error("ShaderResourceManager", "Cannot refresh an invalid AssetId");
         return;
     }
     const std::optional<VirtualPath> path = ASSET_DATABASE.findPath(assetId);
     if (!path) {
-        Log::error(
-            "ShaderManager", "Unknown Shader AssetId: %s", assetId.toString().c_str());
+        Log::error("ShaderResourceManager",
+                   "Unknown Shader AssetId: %s",
+                   assetId.toString().c_str());
         return;
     }
     const std::shared_ptr<ShaderAsset> asset = ASSET_MANAGER.loadAsset<ShaderAsset>(*path);
-    if (!asset) {
-        Log::error(
-            "ShaderManager", "Failed to reload shader asset: %s", path->string().c_str());
+    Ref<Shader> shader = find(assetId);
+    if (!asset || !shader) {
+        Log::error("ShaderResourceManager",
+                   "Failed to reload shader asset: %s",
+                   path->string().c_str());
         return;
     }
-    forEach([&assetId, &asset](Shader& shader) {
-        if (shader.assetId() == assetId) {
-            shader.rebuildFromAsset(*asset);
-        }
-    });
+    shader->rebuildFromAsset(*asset);
 }
 
-void ShaderManager::refreshAsset(const VirtualPath& shaderPath) {
+void ShaderResourceManager::refreshAsset(const VirtualPath& shaderPath) {
     if (!shaderPath.valid()) {
-        Log::error("ShaderManager", "Invalid Shader path: %s", shaderPath.string().c_str());
+        Log::error("ShaderResourceManager", "Invalid Shader path: %s", shaderPath.string().c_str());
         return;
     }
     const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(shaderPath);
     if (!assetId) {
-        Log::error(
-            "ShaderManager", "Shader path has no AssetId: %s", shaderPath.string().c_str());
+        Log::error("ShaderResourceManager",
+                   "Shader path has no AssetId: %s",
+                   shaderPath.string().c_str());
         return;
     }
     refreshAsset(*assetId);
 }
 
-RID ShaderManager::findHandle(const VirtualPath& shaderPath) const {
-    const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(shaderPath);
-    if (!assetId) {
+Ref<Shader> ShaderResourceManager::insert(const Ref<Shader>& shader) {
+    if (!shader)
         return {};
+    if (shader->assetId_.valid()) {
+        if (Ref<Shader> existing = find(shader->assetId_))
+            return existing;
     }
-    return KeyedHandleRegistry::findHandle(*assetId);
+    return insertUnkeyed(shader);
 }
 
-bool ShaderManager::replace(RID handle, Shader shader) {
-    Shader* current = find(handle);
-    if (!current) {
-        Log::error("ShaderManager", "Cannot replace an invalid RID");
-        return false;
-    }
-    if (current->assetPath() != shader.assetPath()) {
-        Log::error("ShaderManager",
-                   "Replacement Shader path differs: %s",
-                   shader.assetPath().string().c_str());
-        return false;
-    }
-    if (current->revision_ == std::numeric_limits<std::uint64_t>::max()) {
-        Log::fatal("ShaderManager", "Shader revision overflow");
-    }
-    const AssetId assetId = current->assetId_;
-    shader.revision_ = current->revision_ + 1;
-    *current = std::move(shader);
-    current->assetId_ = assetId;
-    return true;
+Ref<Shader> ShaderResourceManager::insertUnkeyed(const Ref<Shader>& shader) {
+    if (!shader || shader->resourceId_)
+        return {};
+    const RID handle = resources_.insert(shader.get());
+    shader->resourceId_ = handle;
+    if (shader->assetId_.valid())
+        assetIndex_.insert_or_assign(shader->assetId_, handle);
+    return shader;
 }
 
-bool ShaderManager::replace(const VirtualPath& shaderPath) {
+Shader* ShaderResourceManager::findRaw(RID handle) const {
+    Shader* const* stored = resources_.find(handle);
+    return stored ? *stored : nullptr;
+}
+
+Ref<Shader> ShaderResourceManager::find(RID handle) const {
+    return Ref<Shader>{findRaw(handle)};
+}
+
+Ref<Shader> ShaderResourceManager::find(const AssetId& assetId) const {
+    const auto found = assetIndex_.find(assetId);
+    return found == assetIndex_.end() ? Ref<Shader>{} : find(found->second);
+}
+
+Ref<Shader> ShaderResourceManager::find(const VirtualPath& shaderPath) const {
     const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(shaderPath);
-    if (!assetId) {
+    return assetId ? find(*assetId) : Ref<Shader>{};
+}
+
+bool ShaderResourceManager::replace(const VirtualPath& shaderPath) {
+    const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(shaderPath);
+    if (!assetId)
         return true;
-    }
-    const RID handle = findHandle(*assetId);
-    if (!handle) {
+    Ref<Shader> shader = find(*assetId);
+    if (!shader)
         return true;
-    }
     const std::shared_ptr<ShaderAsset> asset = ASSET_MANAGER.loadAsset<ShaderAsset>(shaderPath);
-    if (!asset) {
+    if (!asset)
         return false;
-    }
-    Shader* current = find(handle);
-    if (!current) {
-        return false;
-    }
-    current->rebuildFromAsset(*asset);
+    shader->rebuildFromAsset(*asset);
     return true;
+}
+
+void ShaderResourceManager::unregister(Shader* shader) {
+    if (!shader || !shader->resourceId_)
+        return;
+    const RID handle = shader->resourceId_;
+    if (shader->assetId_.valid()) {
+        const auto found = assetIndex_.find(shader->assetId_);
+        if (found != assetIndex_.end() && found->second == handle)
+            assetIndex_.erase(found);
+    }
+    if (destroyObserver_)
+        destroyObserver_(handle);
+    shader->resourceId_ = {};
+    (void)resources_.release(handle);
+}
+
+void ShaderResourceManager::clear() {
+    builtinColor_.reset();
+    std::vector<std::pair<RID, Shader*>> remaining;
+    remaining.reserve(resources_.size());
+    resources_.forEachHandle(
+        [&remaining](RID handle, Shader* shader) { remaining.emplace_back(handle, shader); });
+    for (const auto& [handle, shader] : remaining) {
+        if (!findRaw(handle))
+            continue;
+        if (destroyObserver_)
+            destroyObserver_(handle);
+        shader->resourceId_ = {};
+        (void)resources_.release(handle);
+    }
+    assetIndex_.clear();
 }
 
 } // namespace engine

@@ -2,7 +2,7 @@
 
 #include "core/serialization/Transferable.h"
 #include "core/filesystem/VirtualPath.h"
-#include "render/base/RenderHandle.h"
+#include "render/material/Material.h"
 #include "scene/components/Component.h"
 
 #include <cstdint>
@@ -22,26 +22,24 @@ struct MaterialComponentAsset final : public Transferable {
 
 class MaterialComponent final : public Component {
 public:
-    void setMaterial(std::uint32_t slot, RID material) {
+    void setMaterial(std::uint32_t slot, Ref<Material> material) {
         if (materials_.size() <= slot)
             materials_.resize(slot + 1);
         materials_[slot] = material;
     }
 
-    [[nodiscard]] RID material(std::uint32_t slot) const {
-        if (slot < materials_.size() && materials_[slot]) {
+    [[nodiscard]] Ref<Material> material(std::uint32_t slot) const {
+        if (slot < materials_.size() && materials_[slot])
             return materials_[slot];
-        }
-        return !materials_.empty() ? materials_.front() : RID{};
+        return !materials_.empty() ? materials_.front() : Ref<Material>{};
     }
 
-    [[nodiscard]] const std::vector<RID>& materials() const { return materials_; }
+    [[nodiscard]] const std::vector<Ref<Material>>& materials() const { return materials_; }
 
     void clearMaterials() { materials_.clear(); }
 
 private:
-    // Handles are non-owning. MaterialManager controls material lifetime.
-    std::vector<RID> materials_;
+    std::vector<Ref<Material>> materials_;
 };
 
 } // namespace engine

@@ -28,29 +28,29 @@ protected:
 TEST_F(MaterialGuidIdentityTest, LoadByGuidReturnsSameHandle) {
     using namespace engine;
     const VirtualPath path{"assets://materials/warm_vertex_color.material.json"};
-    const RID byPath = MATERIAL_MANAGER.load(path);
+    const Ref<Material> byPath = MATERIAL_MANAGER.load(path);
     ASSERT_TRUE(byPath);
 
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const RID byId = MATERIAL_MANAGER.load(*assetId);
+    const Ref<Material> byId = MATERIAL_MANAGER.load(*assetId);
     EXPECT_EQ(byId, byPath);
-    EXPECT_EQ(MATERIAL_MANAGER.find(*assetId), MATERIAL_MANAGER.find(byPath));
+    EXPECT_EQ(MATERIAL_MANAGER.find(*assetId), byPath);
 }
 
 TEST_F(MaterialGuidIdentityTest, CloneReturnsDifferentHandleAndIsNotAssetBacked) {
     using namespace engine;
     const VirtualPath path{"assets://materials/warm_vertex_color.material.json"};
-    const RID original = MATERIAL_MANAGER.load(path);
+    const Ref<Material> original = MATERIAL_MANAGER.load(path);
     ASSERT_TRUE(original);
 
-    const RID cloned = MATERIAL_MANAGER.clone(original);
+    const Ref<Material> cloned = MATERIAL_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
     EXPECT_NE(cloned, original);
 
-    const Material* originalData = MATERIAL_MANAGER.find(original);
-    const Material* clonedData = MATERIAL_MANAGER.find(cloned);
+    const Material* originalData = original.get();
+    const Material* clonedData = cloned.get();
     ASSERT_NE(originalData, nullptr);
     ASSERT_NE(clonedData, nullptr);
 
@@ -62,14 +62,14 @@ TEST_F(MaterialGuidIdentityTest, CloneReturnsDifferentHandleAndIsNotAssetBacked)
 TEST_F(MaterialGuidIdentityTest, CloneDoesNotShareRuntimeState) {
     using namespace engine;
     const VirtualPath path{"assets://materials/warm_vertex_color.material.json"};
-    const RID original = MATERIAL_MANAGER.load(path);
+    const Ref<Material> original = MATERIAL_MANAGER.load(path);
     ASSERT_TRUE(original);
 
-    const RID cloned = MATERIAL_MANAGER.clone(original);
+    const Ref<Material> cloned = MATERIAL_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
 
-    Material* originalData = MATERIAL_MANAGER.find(original);
-    Material* clonedData = MATERIAL_MANAGER.find(cloned);
+    Material* originalData = original.get();
+    Material* clonedData = cloned.get();
     ASSERT_NE(originalData, nullptr);
     ASSERT_NE(clonedData, nullptr);
 
@@ -86,13 +86,13 @@ TEST_F(MaterialGuidIdentityTest, RefreshAssetUpdatesOriginalButNotClone) {
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const RID original = MATERIAL_MANAGER.load(path);
+    const Ref<Material> original = MATERIAL_MANAGER.load(path);
     ASSERT_TRUE(original);
-    const RID cloned = MATERIAL_MANAGER.clone(original);
+    const Ref<Material> cloned = MATERIAL_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
 
-    Material* originalData = MATERIAL_MANAGER.find(original);
-    Material* clonedData = MATERIAL_MANAGER.find(cloned);
+    Material* originalData = original.get();
+    Material* clonedData = cloned.get();
     ASSERT_NE(originalData, nullptr);
     ASSERT_NE(clonedData, nullptr);
 

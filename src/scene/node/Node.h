@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/base/Ref.h"
 #include "core/logging/Log.h"
 #include "core/serialization/Transferable.h"
 #include "core/math/Math.h"
@@ -57,13 +58,13 @@ struct SceneNodeAsset final : public Transferable {
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-class Node final {
+class Node final : public RefCounted {
 public:
     Node(const Node&) = delete;
     Node& operator=(const Node&) = delete;
-    Node(Node&&) noexcept = default;
-    Node& operator=(Node&&) noexcept = default;
-    ~Node() = default;
+    Node(Node&&) = delete;
+    Node& operator=(Node&&) = delete;
+    ~Node() override = default;
 
     [[nodiscard]] RID handle() const { return handle_; }
     [[nodiscard]] Scene& scene() { return *scene_; }
@@ -89,7 +90,7 @@ public:
             Log::warn("Node", "Node %s already has component", name_.c_str());
             return existing;
         }
-        auto component = std::make_unique<T>(std::forward<Args>(args)...);
+        Ref<T> component = makeRef<T>(std::forward<Args>(args)...);
         T* result = component.get();
         components_.push_back(std::move(component));
         result->attach(*this, activeInHierarchy_);
@@ -97,7 +98,7 @@ public:
     }
 
     template <std::derived_from<Component> T> [[nodiscard]] T* getComponent() {
-        for (const std::unique_ptr<Component>& component : components_) {
+        for (const Ref<Component>& component : components_) {
             if (auto* result = dynamic_cast<T*>(component.get()))
                 return result;
         }
@@ -105,7 +106,7 @@ public:
     }
 
     template <std::derived_from<Component> T> [[nodiscard]] const T* getComponent() const {
-        for (const std::unique_ptr<Component>& component : components_) {
+        for (const Ref<Component>& component : components_) {
             if (const auto* result = dynamic_cast<const T*>(component.get())) {
                 return result;
             }
@@ -119,7 +120,7 @@ public:
             return false;
         }
         const auto found =
-            std::ranges::find_if(components_, [](const std::unique_ptr<Component>& component) {
+            std::ranges::find_if(components_, [](const Ref<Component>& component) {
                 return dynamic_cast<T*>(component.get()) != nullptr;
             });
         if (found == components_.end())
@@ -146,7 +147,7 @@ private:
     std::string name_;
     RID parent_;
     std::vector<RID> children_;
-    std::vector<std::unique_ptr<Component>> components_;
+    std::vector<Ref<Component>> components_;
     TransformComponent* transform_{};
     bool activeSelf_{true};
     bool activeInHierarchy_{true};

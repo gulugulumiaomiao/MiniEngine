@@ -26,29 +26,29 @@ protected:
 TEST_F(ShaderGuidIdentityTest, LoadByGuidReturnsSameHandle) {
     using namespace engine;
     const VirtualPath path{"assets://shaders/builtin_color.shader.json"};
-    const RID byPath = SHADER_MANAGER.load(path);
+    const Ref<Shader> byPath = SHADER_MANAGER.load(path);
     ASSERT_TRUE(byPath);
 
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const RID byId = SHADER_MANAGER.load(*assetId);
+    const Ref<Shader> byId = SHADER_MANAGER.load(*assetId);
     EXPECT_EQ(byId, byPath);
-    EXPECT_EQ(SHADER_MANAGER.find(*assetId), SHADER_MANAGER.find(byPath));
+    EXPECT_EQ(SHADER_MANAGER.find(*assetId), byPath);
 }
 
 TEST_F(ShaderGuidIdentityTest, CloneReturnsDifferentHandleAndIsNotAssetBacked) {
     using namespace engine;
     const VirtualPath path{"assets://shaders/builtin_color.shader.json"};
-    const RID original = SHADER_MANAGER.load(path);
+    const Ref<Shader> original = SHADER_MANAGER.load(path);
     ASSERT_TRUE(original);
 
-    const RID cloned = SHADER_MANAGER.clone(original);
+    const Ref<Shader> cloned = SHADER_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
     EXPECT_NE(cloned, original);
 
-    const Shader* originalData = SHADER_MANAGER.find(original);
-    const Shader* clonedData = SHADER_MANAGER.find(cloned);
+    const Shader* originalData = original.get();
+    const Shader* clonedData = cloned.get();
     ASSERT_NE(originalData, nullptr);
     ASSERT_NE(clonedData, nullptr);
 
@@ -60,17 +60,17 @@ TEST_F(ShaderGuidIdentityTest, CloneReturnsDifferentHandleAndIsNotAssetBacked) {
 TEST_F(ShaderGuidIdentityTest, CloneDoesNotAppearInAssetIndex) {
     using namespace engine;
     const VirtualPath path{"assets://shaders/builtin_color.shader.json"};
-    const RID original = SHADER_MANAGER.load(path);
+    const Ref<Shader> original = SHADER_MANAGER.load(path);
     ASSERT_TRUE(original);
 
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const RID cloned = SHADER_MANAGER.clone(original);
+    const Ref<Shader> cloned = SHADER_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
 
-    EXPECT_EQ(SHADER_MANAGER.find(*assetId), SHADER_MANAGER.find(original));
-    EXPECT_NE(SHADER_MANAGER.find(*assetId), SHADER_MANAGER.find(cloned));
+    EXPECT_EQ(SHADER_MANAGER.find(*assetId), original);
+    EXPECT_NE(SHADER_MANAGER.find(*assetId), cloned);
 }
 
 TEST_F(ShaderGuidIdentityTest, RefreshAssetUpdatesOriginalButNotClone) {
@@ -79,13 +79,13 @@ TEST_F(ShaderGuidIdentityTest, RefreshAssetUpdatesOriginalButNotClone) {
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const RID original = SHADER_MANAGER.load(path);
+    const Ref<Shader> original = SHADER_MANAGER.load(path);
     ASSERT_TRUE(original);
-    const RID cloned = SHADER_MANAGER.clone(original);
+    const Ref<Shader> cloned = SHADER_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
 
-    Shader* originalData = SHADER_MANAGER.find(original);
-    Shader* clonedData = SHADER_MANAGER.find(cloned);
+    Shader* originalData = original.get();
+    Shader* clonedData = cloned.get();
     ASSERT_NE(originalData, nullptr);
     ASSERT_NE(clonedData, nullptr);
 

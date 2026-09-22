@@ -23,54 +23,49 @@ protected:
     }
 };
 
-TEST_F(MeshGuidIdentityTest, LoadByGuidReturnsSameHandle) {
+TEST_F(MeshGuidIdentityTest, LoadByGuidReturnsSameObject) {
     using namespace engine;
     const VirtualPath path{"assets://meshes/procedural_showcase.mesh.json"};
-    const RID byPath = MESH_MANAGER.load(path);
+    const Ref<Mesh> byPath = MESH_RESOURCE_MANAGER.load(path);
     ASSERT_TRUE(byPath);
 
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const RID byId = MESH_MANAGER.load(*assetId);
+    const Ref<Mesh> byId = MESH_RESOURCE_MANAGER.load(*assetId);
     EXPECT_EQ(byId, byPath);
-    EXPECT_EQ(MESH_MANAGER.find(*assetId), MESH_MANAGER.find(byPath));
+    EXPECT_EQ(MESH_RESOURCE_MANAGER.find(*assetId), byPath);
 }
 
-TEST_F(MeshGuidIdentityTest, CloneReturnsDifferentHandleAndIsNotAssetBacked) {
+TEST_F(MeshGuidIdentityTest, CloneReturnsDifferentObjectAndIsNotAssetBacked) {
     using namespace engine;
     const VirtualPath path{"assets://meshes/procedural_showcase.mesh.json"};
-    const RID original = MESH_MANAGER.load(path);
+    const Ref<Mesh> original = MESH_RESOURCE_MANAGER.load(path);
     ASSERT_TRUE(original);
 
-    const RID cloned = MESH_MANAGER.clone(original);
+    const Ref<Mesh> cloned = MESH_RESOURCE_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
     EXPECT_NE(cloned, original);
 
-    const Mesh* originalData = MESH_MANAGER.find(original);
-    const Mesh* clonedData = MESH_MANAGER.find(cloned);
-    ASSERT_NE(originalData, nullptr);
-    ASSERT_NE(clonedData, nullptr);
-
-    EXPECT_TRUE(originalData->isAssetBacked());
-    EXPECT_FALSE(clonedData->isAssetBacked());
-    EXPECT_EQ(clonedData->assetPath(), originalData->assetPath());
+    EXPECT_TRUE(original->isAssetBacked());
+    EXPECT_FALSE(cloned->isAssetBacked());
+    EXPECT_EQ(cloned->assetPath(), original->assetPath());
 }
 
 TEST_F(MeshGuidIdentityTest, CloneDoesNotAppearInAssetIndex) {
     using namespace engine;
     const VirtualPath path{"assets://meshes/procedural_showcase.mesh.json"};
-    const RID original = MESH_MANAGER.load(path);
+    const Ref<Mesh> original = MESH_RESOURCE_MANAGER.load(path);
     ASSERT_TRUE(original);
 
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const RID cloned = MESH_MANAGER.clone(original);
+    const Ref<Mesh> cloned = MESH_RESOURCE_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
 
-    EXPECT_EQ(MESH_MANAGER.find(*assetId), MESH_MANAGER.find(original));
-    EXPECT_NE(MESH_MANAGER.find(*assetId), MESH_MANAGER.find(cloned));
+    EXPECT_EQ(MESH_RESOURCE_MANAGER.find(*assetId), original);
+    EXPECT_NE(MESH_RESOURCE_MANAGER.find(*assetId), cloned);
 }
 
 TEST_F(MeshGuidIdentityTest, RefreshAssetUpdatesOriginalButNotClone) {
@@ -79,23 +74,18 @@ TEST_F(MeshGuidIdentityTest, RefreshAssetUpdatesOriginalButNotClone) {
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const RID original = MESH_MANAGER.load(path);
+    const Ref<Mesh> original = MESH_RESOURCE_MANAGER.load(path);
     ASSERT_TRUE(original);
-    const RID cloned = MESH_MANAGER.clone(original);
+    const Ref<Mesh> cloned = MESH_RESOURCE_MANAGER.clone(original);
     ASSERT_TRUE(cloned);
 
-    Mesh* originalData = MESH_MANAGER.find(original);
-    Mesh* clonedData = MESH_MANAGER.find(cloned);
-    ASSERT_NE(originalData, nullptr);
-    ASSERT_NE(clonedData, nullptr);
+    const std::uint64_t originalVersion = original->version();
+    const std::uint64_t clonedVersion = cloned->version();
 
-    const std::uint64_t originalVersion = originalData->version();
-    const std::uint64_t clonedVersion = clonedData->version();
+    MESH_RESOURCE_MANAGER.refreshAsset(*assetId);
 
-    MESH_MANAGER.refreshAsset(*assetId);
-
-    EXPECT_GT(originalData->version(), originalVersion);
-    EXPECT_EQ(clonedData->version(), clonedVersion);
+    EXPECT_GT(original->version(), originalVersion);
+    EXPECT_EQ(cloned->version(), clonedVersion);
 }
 
 } // namespace

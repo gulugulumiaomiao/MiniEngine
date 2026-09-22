@@ -2,6 +2,8 @@
 
 #include "asset/base/Asset.h"
 #include "asset/base/AssetId.h"
+#include "core/base/Ref.h"
+#include "core/base/RefCounted.h"
 #include "core/math/Math.h"
 #include "core/serialization/Transferable.h"
 #include "render/mesh/MeshPrimitive.h"
@@ -19,7 +21,7 @@
 namespace engine {
 
 class MeshAsset;
-class MeshManager;
+class MeshResourceManager;
 
 enum class VertexSemanticType {
     Position,
@@ -234,10 +236,15 @@ struct MeshData final : public Transferable {
     }
 };
 
-class Mesh final {
+class Mesh final : public RefCounted {
 public:
     Mesh() = default;
     Mesh(MeshDesc desc, MeshData data, std::optional<MeshBuildRecipe> buildRecipe = std::nullopt);
+    ~Mesh() override;
+    Mesh(const Mesh&) = delete;
+    Mesh& operator=(const Mesh&) = delete;
+    Mesh(Mesh&&) = delete;
+    Mesh& operator=(Mesh&&) = delete;
 
     [[nodiscard]] const VirtualPath& assetPath() const { return assetPath_; }
     [[nodiscard]] const MeshDesc& desc() const { return desc_; }
@@ -253,7 +260,8 @@ public:
 
     [[nodiscard]] AssetId assetId() const { return assetId_; }
     [[nodiscard]] bool isAssetBacked() const { return assetId_.valid(); }
-    [[nodiscard]] Mesh clone() const;
+    [[nodiscard]] RID resourceId() const { return resourceId_; }
+    [[nodiscard]] Ref<Mesh> clone() const;
     void rebuildFromAsset(const MeshAsset& asset);
 
     [[nodiscard]] bool updateVertexData(std::uint32_t binding,
@@ -263,7 +271,7 @@ public:
 
 private:
     friend class MeshAsset;
-    friend class MeshManager;
+    friend class MeshResourceManager;
 
     void markChanged();
     void cacheVertexLayoutHash() { vertexLayoutHash_ = desc_.vertexLayout.hash(); }
@@ -276,6 +284,7 @@ private:
     std::uint64_t vertexLayoutHash_{};
     std::uint64_t version_{1};
     bool dirty_{true};
+    RID resourceId_;
 };
 
 class MeshAsset final : public Asset {
@@ -286,7 +295,7 @@ public:
     MeshData meshData;
     std::optional<MeshBuildRecipe> buildRecipe;
 
-    [[nodiscard]] Mesh instantiate() const;
+    [[nodiscard]] Ref<Mesh> instantiate() const;
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 

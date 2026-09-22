@@ -25,10 +25,10 @@ bool MeshComponentAsset::transfer(Transfer& archive) {
            archive.transfer("layer_mask", layerMask) && archive.endObject();
 }
 
-void MeshComponent::setAssetMesh(RID mesh) {
+void MeshComponent::setAssetMesh(Ref<Mesh> mesh) {
     releaseOwnedMesh();
     sourceType_ = MeshComponentSourceType::Asset;
-    mesh_ = mesh;
+    mesh_ = std::move(mesh);
     primitiveRecipe_.reset();
     primitiveDirty_ = false;
 }
@@ -64,9 +64,9 @@ bool MeshComponent::applyPrimitiveChanges() {
         return static_cast<bool>(mesh_);
     primitiveDirty_ = false;
     if (ownsRuntimeMesh_ && mesh_)
-        return MESH_MANAGER.rebuildRuntime(mesh_, *primitiveRecipe_);
+        return MESH_RESOURCE_MANAGER.rebuildRuntime(mesh_, *primitiveRecipe_);
 
-    mesh_ = MESH_MANAGER.createRuntime(*primitiveRecipe_);
+    mesh_ = MESH_RESOURCE_MANAGER.createRuntime(*primitiveRecipe_);
     ownsRuntimeMesh_ = static_cast<bool>(mesh_);
     return ownsRuntimeMesh_;
 }
@@ -103,8 +103,7 @@ template <typename Geometry> void MeshComponent::setSinglePrimitive(const Geomet
 void MeshComponent::releaseOwnedMesh() {
     if (!ownsRuntimeMesh_ || !mesh_)
         return;
-    (void)MESH_MANAGER.destroyRuntime(mesh_);
-    mesh_ = {};
+    mesh_.reset();
     ownsRuntimeMesh_ = false;
 }
 

@@ -1,6 +1,7 @@
 #include "render/gpu/global_uniform/GlobalUniformGpuManager.h"
 
 #include "core/logging/Log.h"
+#include "render/gpu/texture/TextureStorage.h"
 #include "render/global_uniform/GlobalUniformManager.h"
 #include "render/texture/TextureManager.h"
 #include "rhi/api/Device.h"
@@ -53,13 +54,9 @@ void GlobalUniformGpuManager::updateFrame(std::uint32_t frameIndex) {
     const GlobalUniformManager& globals = GLOBAL_UNIFORM_MANAGER;
     const std::uint64_t byteSize = std::max<std::uint64_t>(16, globals.uniformBytes().size());
 
-    const auto resolveTextureBinding = [this](std::string_view reference) {
-        const RID handle = TEXTURE_MANAGER.resolveReference(reference);
-        const Texture* texture = TEXTURE_MANAGER.find(handle);
-        if (!texture)
-            return TextureBinding{};
-        return TextureBinding{texture->defaultView(),
-                              Sampler::resolve(*device_, texture->defaultSamplerDesc())};
+    const auto resolveTextureBinding = [](std::string_view reference) {
+        const Ref<Texture> texture = TEXTURE_RESOURCE_MANAGER.resolveReference(reference);
+        return texture ? TEXTURE_STORAGE.resolveBinding(*texture) : TextureBinding{};
     };
     std::vector<TextureBinding> resolvedTextures;
     resolvedTextures.reserve(kMaxGlobalTextures);

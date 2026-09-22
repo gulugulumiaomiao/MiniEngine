@@ -1,4 +1,5 @@
 #include "asset/exporter/MaterialAssetExporter.h"
+#include "asset/types/MaterialAsset.h"
 
 #include "asset/database/AssetDatabase.h"
 #include "asset/format/MaterialAssetFormat.h"
@@ -29,7 +30,7 @@ AssetExportResult MaterialAssetExporter::write(const Asset& asset,
 std::unique_ptr<MaterialAsset> exportMaterialToAsset(const Material& material,
                                                      const VirtualPath& targetPath,
                                                      std::string& error) {
-    const Shader* shader = SHADER_MANAGER.find(material.shaderHandle());
+    const Shader* shader = material.shaderRef().get();
     if (!shader || !shader->assetPath().valid()) {
         error = "Material '" + material.name + "' has no resolvable Shader";
         return nullptr;

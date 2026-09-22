@@ -5,7 +5,7 @@
 #include "render/pipeline/RenderContext.h"
 #include "render/render_target/RenderTarget.h"
 #include "render/gpu/frame/FrameGpuManager.h"
-#include "render/gpu/pipeline/GraphicsPipelineManager.h"
+#include "render/gpu/pipeline/GraphicsPipelineStorage.h"
 #include "rhi/api/CommandBuffer.h"
 #include "runtime/window/Window.h"
 
@@ -52,14 +52,14 @@ void Renderer::renderFrame(const RenderScene& scene) {
     if (!pipeline_) {
         Log::fatal("Renderer", "No render pipeline is bound");
     }
-    GRAPHICS_PIPELINE_MANAGER.refreshShaders(frameSerial_,
+    GRAPHICS_PIPELINE_STORAGE.refreshShaders(frameSerial_,
                                              frameSerial_ + FrameGpuManager::kFramesInFlight);
     if (swapchain_->beginFrame() == rhi::FrameStatus::OutOfDate) {
         recreateSwapchain();
         return;
     }
     rgTexturePool_->beginFrame(swapchain_->frameIndex());
-    GRAPHICS_PIPELINE_MANAGER.collect(frameSerial_);
+    GRAPHICS_PIPELINE_STORAGE.collect(frameSerial_);
     RenderContext context(*this, scene);
     if (sceneWidth() != 0 && sceneHeight() != 0) {
         prepareForwardTarget();
@@ -108,7 +108,7 @@ void Renderer::recreateSwapchain() {
         return;
     const auto [width, height] = window_.framebufferSize();
     device_->waitIdle();
-    GRAPHICS_PIPELINE_MANAGER.clear();
+    GRAPHICS_PIPELINE_STORAGE.clear();
     swapchain_->resize(width, height);
     for (const std::unique_ptr<RenderTarget>& target : forwardTargets_) {
         if (offscreenScene_)

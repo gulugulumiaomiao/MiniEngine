@@ -1,5 +1,6 @@
 #include "tools/editor/widgets/MaterialInspector.h"
 
+#include "asset/types/MaterialAsset.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/exporter/MaterialAssetExporter.h"
 #include "asset/format/MaterialAssetFormat.h"
@@ -27,8 +28,8 @@ constexpr float kSaveDebounceSeconds = 0.5F;
 
 } // namespace
 
-void MaterialInspector::draw(RID material) {
-    Material* data = MATERIAL_MANAGER.find(material);
+void MaterialInspector::draw(const Ref<Material>& material) {
+    Material* data = material.get();
     if (data == nullptr) {
         ImGui::TextDisabled("Invalid material handle");
         return;
@@ -47,7 +48,7 @@ void MaterialInspector::draw(RID material) {
     // The handle index scopes every control id to this instance, so the
     // component view and the asset view can both embed the widget (and a
     // detached clone never collides with its source asset).
-    ImGui::PushID(static_cast<int>(material.index()));
+    ImGui::PushID(static_cast<int>(material->resourceId().index()));
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (!data->isAssetBacked())
             ImGui::TextDisabled("Runtime-only (detached) - edits do not write back");
@@ -95,7 +96,7 @@ void MaterialInspector::drawIdentity(Material& data) {
     }
 }
 
-void MaterialInspector::drawShaderCombo(RID handle, Material& data) {
+void MaterialInspector::drawShaderCombo(const Ref<Material>& material, Material& data) {
     const VirtualPath current = data.shader().assetPath();
     VirtualPath chosen;
     if (assetCombo("Shader", collectAssets(AssetType::Shader), current, chosen) &&
@@ -103,7 +104,7 @@ void MaterialInspector::drawShaderCombo(RID handle, Material& data) {
         // setShader rebuilds the uniform block and keeps values of
         // compatible properties (rebuildForShader with preserveValues). The
         // chosen != current guard keeps re-picking the current shader a no-op.
-        MATERIAL_MANAGER.setShader(handle, chosen);
+        MATERIAL_RESOURCE_MANAGER.setShader(material, chosen);
         queueSave(data);
     }
 }
@@ -238,8 +239,8 @@ void MaterialInspector::saveNow(const VirtualPath& path) {
         status_ = "Not saved (file removed): " + path.string();
         return;
     }
-    const RID handle = MATERIAL_MANAGER.load(path);
-    const Material* data = MATERIAL_MANAGER.find(handle);
+    const Ref<Material> material = MATERIAL_RESOURCE_MANAGER.load(path);
+    const Material* data = material.get();
     if (data == nullptr || !(data->assetPath() == path)) {
         // load() failed (bad source, unmounted assets://) and fell back to the
         // error material; writing that back would corrupt the asset.

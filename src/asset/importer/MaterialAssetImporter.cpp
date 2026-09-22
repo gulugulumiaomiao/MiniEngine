@@ -1,4 +1,6 @@
 ﻿#include "asset/importer/MaterialAssetImporter.h"
+#include "asset/types/MaterialAsset.h"
+#include "asset/types/ShaderAsset.h"
 
 #include "asset/database/AssetDatabase.h"
 #include "asset/derived_data/AssetArtifact.h"

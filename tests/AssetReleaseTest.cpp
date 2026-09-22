@@ -1,5 +1,7 @@
 ﻿#include "asset/importer/AssetImportPipeline.h"
 #include "core/filesystem/FileWatcher.h"
+#include "asset/types/MaterialAsset.h"
+#include "asset/types/ShaderAsset.h"
 #include "asset/manager/AssetManager.h"
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
@@ -34,8 +36,8 @@ int main() {
         return 3;
     }
 
-    const RID runtime = MATERIAL_MANAGER.load(material->assetPath());
-    if (!runtime || MATERIAL_MANAGER.find(runtime)->shader().name() != "MiniEngine/VertexColor") {
+    const Ref<Material> runtime = MATERIAL_RESOURCE_MANAGER.load(material->assetPath());
+    if (!runtime || runtime->shader().name() != "MiniEngine/VertexColor") {
         return 4;
     }
 
@@ -44,10 +46,10 @@ int main() {
     if (!showcase || showcase->nodes.size() != 7)
         return 6;
     const SceneInstantiationContext context{
-        .loadMesh = [](const VirtualPath& path) { return MESH_MANAGER.load(path); },
-        .loadMaterial = [](const VirtualPath& path) { return MATERIAL_MANAGER.load(path); },
+        .loadMesh = [](const VirtualPath& path) { return MESH_RESOURCE_MANAGER.load(path); },
+        .loadMaterial = [](const VirtualPath& path) { return MATERIAL_RESOURCE_MANAGER.load(path); },
     };
-    std::unique_ptr<Scene> scene = showcase->instantiate(context);
+    Ref<Scene> scene = showcase->instantiate(context);
     if (!scene)
         return 6;
     RenderScene renderScene;
@@ -60,8 +62,8 @@ int main() {
         return 6;
     }
     scene.reset();
-    MESH_MANAGER.clear();
-    MATERIAL_MANAGER.clear();
+    MESH_RESOURCE_MANAGER.clear();
+    MATERIAL_RESOURCE_MANAGER.clear();
     SHADER_MANAGER.clear();
     test::shutdownAssetEnvironment();
 }

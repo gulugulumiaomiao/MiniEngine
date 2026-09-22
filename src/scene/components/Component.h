@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/base/RefCounted.h"
 #include "scene/node/SceneHandles.h"
 
 namespace engine {
@@ -7,9 +8,9 @@ namespace engine {
 class Node;
 class Scene;
 
-class Component {
+class Component : public RefCounted {
 public:
-    virtual ~Component() = default;
+    ~Component() override = default;
 
     Component(const Component&) = delete;
     Component& operator=(const Component&) = delete;

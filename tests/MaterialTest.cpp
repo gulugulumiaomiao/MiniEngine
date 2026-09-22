@@ -1,4 +1,6 @@
-﻿#include "render/material/Material.h"
+﻿#include "asset/types/MaterialAsset.h"
+#include "asset/types/ShaderAsset.h"
+#include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/shader/ShaderManager.h"
 #include "asset/database/AssetDatabase.h"
@@ -23,7 +25,7 @@ int main() {
     if (fixtureError)
         return 21;
     AssetManager& assets = ASSET_MANAGER;
-    MaterialManager& materials = MATERIAL_MANAGER;
+    MaterialResourceManager& materials = MATERIAL_RESOURCE_MANAGER;
     materials.clear();
     if (!test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR))
         return 22;
@@ -39,21 +41,21 @@ int main() {
         cachedMaterialA->shader.string() != "assets://shaders/vertex_color.shader.json") {
         return 17;
     }
-    const RID warm = materials.load(cachedMaterialA->assetPath());
-    const RID coolShared =
+    Ref<Material> warm = materials.load(cachedMaterialA->assetPath());
+    Ref<Material> coolShared =
         materials.load(VirtualPath{"assets://materials/cool_vertex_color.material.json"});
-    Material& warmData = *materials.find(warm);
+    Material& warmData = *warm;
     const auto warmAssetId = ASSET_DATABASE.findGuid(cachedMaterialA->assetPath());
     if (!warmAssetId || materials.load(cachedMaterialA->assetPath()) != warm ||
-        materials.find(*warmAssetId) != &warmData || materials.size() != 2) {
+        materials.find(*warmAssetId) != warm || materials.size() != 2) {
         return 24;
     }
-    const RID errorMaterial = materials.errorMaterial();
-    const Material* errorData = materials.find(errorMaterial);
-    const RID failedMaterial =
+    const Ref<Material> errorMaterial = materials.errorMaterial();
+    const Material* errorData = errorMaterial.get();
+    const Ref<Material> failedMaterial =
         materials.load(VirtualPath{"assets://shaders/builtin_color.shader.json"});
     if (!errorData || failedMaterial != errorMaterial ||
-        errorData->shaderHandle() != SHADER_MANAGER.builtinColor() ||
+        errorData->shaderRef() != SHADER_RESOURCE_MANAGER.builtinColor() ||
         errorData->shader().properties().size() != 1 ||
         errorData->shader().properties().front().name != "Color" ||
         errorData->getVec4("Color") != math::Vec4{1.0F, 0.0F, 1.0F, 1.0F}) {
@@ -63,8 +65,8 @@ int main() {
     if (!runtimeSubShader || !runtimeSubShader->findPass(ShaderPassType::Forward)) {
         return 16;
     }
-    if (warmData.shaderHandle() != materials.find(coolShared)->shaderHandle() ||
-        warmData.shader().assetPath() != materials.find(coolShared)->shader().assetPath()) {
+    if (warmData.shaderRef() != coolShared->shaderRef() ||
+        warmData.shader().assetPath() != coolShared->shader().assetPath()) {
         return 13;
     }
     const math::Vec4 color = warmData.getVec4("BaseColor");
@@ -126,17 +128,19 @@ int main() {
                 .variantKey(warmData.keywords) != keywordOffKey) {
         return 32;
     }
-    materials.destroy(warm);
-    if (materials.find(warm) != nullptr) {
+    const RID warmId = warm->resourceId();
+    const RID coolId = coolShared->resourceId();
+    warm.reset();
+    if (materials.find(warmId))
         return 19;
-    }
-    materials.destroy(coolShared);
-    const RID reused =
+    coolShared.reset();
+    Ref<Material> reused =
         materials.load(VirtualPath{"assets://materials/cool_vertex_color.material.json"});
-    if (reused.index() != coolShared.index() || reused.generation() == coolShared.generation()) {
+    if (reused->resourceId().index() != coolId.index() ||
+        reused->resourceId().generation() == coolId.generation()) {
         return 10;
     }
-    if (materials.find(reused) == nullptr) {
+    if (!reused) {
         return 20;
     }
     materials.clear();
@@ -146,19 +150,19 @@ int main() {
     FILE_WATCHER.stop();
     if (!test::initializeAssetEnvironment(fixtureCopy))
         return 23;
-    MaterialManager& valueMaterials = MATERIAL_MANAGER;
+    MaterialResourceManager& valueMaterials = MATERIAL_RESOURCE_MANAGER;
     // A Material that fails to import resolves to the built-in Error Material. That
     // fallback is always reachable because the Error Material and the built-in Shader
     // ship inside the fixture asset root (assets://), exactly as they ship in every
     // project's assets/ after the built-in content copy.
-    const RID invalid =
+    Ref<Material> invalid =
         valueMaterials.load(VirtualPath{"assets://material_invalid.material.json"});
     if (!invalid || invalid != valueMaterials.errorMaterial()) {
         return 14;
     }
-    const RID values =
+    Ref<Material> values =
         valueMaterials.load(VirtualPath{"assets://material_values.material.json"});
-    Material& valueData = *valueMaterials.find(values);
+    Material& valueData = *values;
     if (valueData.getFloat("FloatValue") != 2.5F || valueData.getFloat("RangeValue") != 0.25F ||
         !valueData.getBool("Enabled") || valueData.getVec2("Uv") != math::Vec2{1.0F, 2.0F} ||
         valueData.getVec3("Direction") != math::Vec3{4.0F, 5.0F, 6.0F} ||
@@ -214,7 +218,7 @@ int main() {
         valueData.version() != versionBeforeShaderSwitch + 1 || !valueData.dirty()) {
         return 9;
     }
-    MATERIAL_MANAGER.clear();
-    SHADER_MANAGER.clear();
+    MATERIAL_RESOURCE_MANAGER.clear();
+    SHADER_RESOURCE_MANAGER.clear();
     test::shutdownAssetEnvironment();
 }

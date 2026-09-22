@@ -1,6 +1,8 @@
 #pragma once
 
 #include "core/base/HandlePool.h"
+#include "core/base/Ref.h"
+#include "core/base/RefCounted.h"
 #include "core/math/Math.h"
 #include "scene/node/Node.h"
 
@@ -16,10 +18,10 @@ class RenderScene;
 enum class NodeMoveResult { Rejected, Unchanged, Changed };
 #endif
 
-class Scene final {
+class Scene final : public RefCounted {
 public:
     explicit Scene(std::string name = "Scene");
-    ~Scene();
+    ~Scene() override;
 
     Scene(const Scene&) = delete;
     Scene& operator=(const Scene&) = delete;
@@ -41,12 +43,18 @@ public:
     moveNode(RID node, RID parent, std::size_t finalIndex, std::string& error);
 #endif
 
-    [[nodiscard]] Node* findNode(RID node) { return nodes_.find(node); }
-    [[nodiscard]] const Node* findNode(RID node) const { return nodes_.find(node); }
+    [[nodiscard]] Node* findNode(RID node) {
+        Ref<Node>* value = nodes_.find(node);
+        return value ? value->get() : nullptr;
+    }
+    [[nodiscard]] const Node* findNode(RID node) const {
+        const Ref<Node>* value = nodes_.find(node);
+        return value ? value->get() : nullptr;
+    }
     [[nodiscard]] std::size_t nodeCount() const { return nodes_.size(); }
     [[nodiscard]] RID rootHandle() const { return root_; }
-    [[nodiscard]] Node& root() { return *nodes_.find(root_); }
-    [[nodiscard]] const Node& root() const { return *nodes_.find(root_); }
+    [[nodiscard]] Node& root() { return *findNode(root_); }
+    [[nodiscard]] const Node& root() const { return *findNode(root_); }
 
     void update(float deltaTime);
     void updateTransforms();
@@ -59,7 +67,7 @@ private:
     void extractRenderNode(Node& node, RenderScene& output, float aspectRatio);
 
     std::string name_;
-    HandlePool<Node, RID> nodes_;
+    HandlePool<Ref<Node>, RID> nodes_;
     RID root_;
 };
 

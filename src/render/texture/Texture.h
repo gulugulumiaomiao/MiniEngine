@@ -2,9 +2,8 @@
 
 #include "asset/base/Asset.h"
 #include "asset/base/AssetId.h"
-#include "render/base/RenderHandle.h"
-#include "render/texture/TextureView.h"
-#include "rhi/api/Sampler.h"
+#include "core/base/RID.h"
+#include "core/base/RefCounted.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -15,7 +14,7 @@
 
 namespace engine {
 
-class TextureManager;
+class TextureResourceManager;
 
 enum class TextureType { Texture2D, Texture2DArray, Texture3D, TextureCube, TextureCubeArray };
 enum class TextureFormat { Rgba8Unorm, Rgba8Srgb };
@@ -41,7 +40,6 @@ struct TextureSamplerSettings : public Transferable {
           maxAnisotropy(maxAnisotropy) {}
 
     [[nodiscard]] bool transfer(Transfer& archive) override;
-    [[nodiscard]] rhi::SamplerDesc toRhi() const;
 };
 
 struct TextureMipData : public Transferable {
@@ -90,13 +88,13 @@ struct TextureDesc : public Transferable {
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-class Texture final {
+class Texture final : public RefCounted {
 public:
-    ~Texture() = default;
+    ~Texture() override;
     Texture(const Texture&) = delete;
     Texture& operator=(const Texture&) = delete;
-    Texture(Texture&&) noexcept = default;
-    Texture& operator=(Texture&&) noexcept = default;
+    Texture(Texture&&) = delete;
+    Texture& operator=(Texture&&) = delete;
 
     [[nodiscard]] const VirtualPath& assetPath() const { return assetPath_; }
     [[nodiscard]] AssetId assetId() const { return assetId_; }
@@ -104,34 +102,25 @@ public:
     [[nodiscard]] const TextureDesc& desc() const { return desc_; }
     [[nodiscard]] std::span<const TextureMipData> mipData() const { return mipData_; }
     [[nodiscard]] std::uint64_t version() const { return version_; }
-    [[nodiscard]] rhi::RID rhiHandle() const { return texture_; }
-    [[nodiscard]] rhi::IRHITexture* rhiTexture() const { return rhiTexture_; }
-    [[nodiscard]] const TextureView& defaultView() const { return defaultView_; }
-    [[nodiscard]] const rhi::SamplerDesc defaultSamplerDesc() const {
-        return desc_.sampler.toRhi();
-    }
-    [[nodiscard]] TextureView getView(rhi::TextureViewDesc desc) const;
+    [[nodiscard]] RID resourceId() const { return resourceId_; }
 
 private:
-    friend class TextureManager;
+    friend class TextureResourceManager;
 
     Texture(VirtualPath assetPath,
             AssetId assetId,
             TextureDesc desc,
             std::vector<TextureMipData> mipData,
-            std::uint64_t version,
-            rhi::RID texture,
-            TextureView defaultView,
-            rhi::IRHITexture& rhiTexture);
+            std::uint64_t version);
+
+    void rebuild(TextureDesc desc, std::vector<TextureMipData> mipData);
 
     VirtualPath assetPath_;
     AssetId assetId_;
     TextureDesc desc_;
     std::vector<TextureMipData> mipData_;
     std::uint64_t version_{1};
-    rhi::RID texture_;
-    TextureView defaultView_;
-    rhi::IRHITexture* rhiTexture_{};
+    RID resourceId_;
 };
 
 class TextureAsset final : public Asset {
@@ -146,7 +135,5 @@ public:
 
 [[nodiscard]] bool validateTexture(const TextureDesc& desc,
                                    std::span<const TextureMipData> mipData);
-[[nodiscard]] rhi::TextureType toRhi(TextureType type);
-[[nodiscard]] rhi::PixelFormat toRhi(TextureFormat format);
 
 } // namespace engine

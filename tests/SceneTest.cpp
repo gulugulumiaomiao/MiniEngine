@@ -104,11 +104,14 @@ int main() {
 
     MeshComponent* mesh = child->addComponent<MeshComponent>();
     MaterialComponent* material = child->addComponent<MaterialComponent>();
-    mesh->setAssetMesh(RID{7, 2});
-    material->setMaterial(0, RID{3, 1});
-    material->setMaterial(2, RID{8, 4});
-    if (mesh->mesh() != RID{7, 2} || material->material(1) != RID{3, 1} ||
-        material->material(2) != RID{8, 4} ||
+    const Ref<Mesh> testMesh = makeRef<Mesh>();
+    mesh->setAssetMesh(testMesh);
+    const Ref<Material> testMaterialA = makeRef<Material>();
+    const Ref<Material> testMaterialB = makeRef<Material>();
+    material->setMaterial(0, testMaterialA);
+    material->setMaterial(2, testMaterialB);
+    if (mesh->mesh() != testMesh || material->material(1) != testMaterialA ||
+        material->material(2) != testMaterialB ||
         root->removeComponent<TransformComponent>()) {
         return 12;
     }
@@ -131,8 +134,8 @@ int main() {
     scene.buildRenderScene(renderScene, 16.0F / 9.0F);
     if (renderScene.objects().size() != 1 || !renderScene.camera() ||
         renderScene.lights().size() != 1 ||
-        renderScene.objects().front().mesh != RID{7, 2} ||
-        renderScene.objects().front().material(1) != RID{3, 1} ||
+        renderScene.objects().front().mesh != testMesh ||
+        renderScene.objects().front().material(1) != testMaterialA ||
         !near(renderScene.camera()->worldPosition, {0.0F, 0.0F, 5.0F}) ||
         !near(renderScene.lights().front().direction, {0.0F, 0.0F, -1.0F}) ||
         renderScene.lights().front().intensity != 2.0F) {
@@ -164,15 +167,16 @@ int main() {
         return 16;
     }
 
-    MESH_MANAGER.clear();
+    MESH_RESOURCE_MANAGER.clear();
     Scene primitiveScene{"Primitive Scene"};
     const RID primitiveNodeHandle = primitiveScene.createNode("Sphere");
     MeshComponent* primitiveMesh =
         primitiveScene.findNode(primitiveNodeHandle)->addComponent<MeshComponent>();
     primitiveMesh->setPrimitive(UvSphereGeometry{1.0F, 16, 8});
     primitiveScene.update(0.0F);
-    const RID primitiveHandle = primitiveMesh->mesh();
-    const Mesh* firstPrimitive = MESH_MANAGER.find(primitiveHandle);
+    Ref<Mesh> primitiveHandle = primitiveMesh->mesh();
+    const RID primitiveId = primitiveHandle ? primitiveHandle->resourceId() : RID{};
+    const Mesh* firstPrimitive = primitiveHandle.get();
     if (!primitiveHandle || !firstPrimitive ||
         primitiveMesh->sourceType() != MeshComponentSourceType::Primitive ||
         !primitiveMesh->primitiveRecipe()) {
@@ -186,10 +190,15 @@ int main() {
     editedRecipe = primitiveMesh->editPrimitiveRecipe();
     std::get<UvSphereGeometry>(editedRecipe->parts[0].primitive.value).longitudeSegments = 24;
     primitiveScene.update(0.0F);
-    const Mesh* rebuiltPrimitive = MESH_MANAGER.find(primitiveHandle);
+    const Mesh* rebuiltPrimitive = primitiveMesh->mesh().get();
     if (!rebuiltPrimitive || primitiveMesh->mesh() != primitiveHandle ||
         rebuiltPrimitive->version() != firstVersion + 1 ||
-        !primitiveScene.destroyNode(primitiveNodeHandle) || MESH_MANAGER.find(primitiveHandle)) {
+        !primitiveScene.destroyNode(primitiveNodeHandle) ||
+        MESH_RESOURCE_MANAGER.find(primitiveId) != primitiveHandle) {
+        return 21;
+    }
+    primitiveHandle.reset();
+    if (MESH_RESOURCE_MANAGER.find(primitiveId)) {
         return 21;
     }
 }

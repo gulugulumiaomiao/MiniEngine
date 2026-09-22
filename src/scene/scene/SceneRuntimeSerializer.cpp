@@ -40,7 +40,7 @@ bool isIdentityPartTransform(const MeshPrimitivePart& part) {
     result.enabled = component.enabled();
 
     if (component.sourceType() == MeshComponentSourceType::Asset) {
-        const Mesh* mesh = component.mesh() ? MESH_MANAGER.find(component.mesh()) : nullptr;
+        const Mesh* mesh = component.mesh().get();
         if (!mesh || !mesh->assetPath().valid() || mesh->assetPath().scheme() != "assets" ||
             !mesh->assetPath().relativePath().ends_with(".mesh.json")) {
             error = "node '" + std::string{nodeName} +
@@ -71,16 +71,16 @@ bool isIdentityPartTransform(const MeshPrimitivePart& part) {
                                            std::string& error,
                                            std::string_view nodeName) {
     result.enabled = component.enabled();
-    for (RID handle : component.materials()) {
-        const Material* material = handle ? MATERIAL_MANAGER.find(handle) : nullptr;
-        if (!material || !material->assetPath().valid() ||
-            material->assetPath().scheme() != "assets" ||
-            !material->assetPath().relativePath().ends_with(".material.json")) {
+    for (const Ref<Material>& material : component.materials()) {
+        const Material* value = material.get();
+        if (!value || !value->assetPath().valid() ||
+            value->assetPath().scheme() != "assets" ||
+            !value->assetPath().relativePath().ends_with(".material.json")) {
             error = "node '" + std::string{nodeName} +
                     "' has a Material component without a resolvable asset material";
             return false;
         }
-        result.materials.push_back(material->assetPath());
+        result.materials.push_back(value->assetPath());
     }
     return true;
 }

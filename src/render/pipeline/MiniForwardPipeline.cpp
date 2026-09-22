@@ -3,7 +3,7 @@
 #include "core/logging/Log.h"
 #include "render/gpu/frame/FrameGpuManager.h"
 #include "render/gpu/global_uniform/GlobalUniformGpuManager.h"
-#include "render/gpu/material/MaterialGpuManager.h"
+#include "render/gpu/material/MaterialStorage.h"
 #include "render/pipeline/RenderContext.h"
 #include "render/pipeline/passes/DepthOnlyPass.h"
 #include "render/pipeline/passes/ForwardPass.h"
@@ -49,15 +49,15 @@ void MiniForwardPipeline::render(RenderContext& context) {
 }
 
 void MiniForwardPipeline::resolveMaterialBindGroups(DrawList& drawList, std::uint32_t frameIndex) {
-    MATERIAL_GPU_MANAGER.beginFrame(frameIndex);
+    MATERIAL_STORAGE.beginFrame(frameIndex);
     for (DrawItem& item : drawList.items) {
-        item.materialBindGroup = MATERIAL_GPU_MANAGER.resolve(item.material);
+        item.materialBindGroup = item.material ? MATERIAL_STORAGE.resolve(*item.material) : rhi::RID{};
         if (!item.materialBindGroup && item.fallbackPipeline && item.fallbackMaterial) {
             Log::error("MiniForwardPipeline",
                        "Using Error Material after material GPU preparation failed");
             item.pipeline = item.fallbackPipeline;
             item.material = item.fallbackMaterial;
-            item.materialBindGroup = MATERIAL_GPU_MANAGER.resolve(item.fallbackMaterial);
+            item.materialBindGroup = MATERIAL_STORAGE.resolve(*item.fallbackMaterial);
         }
     }
 }

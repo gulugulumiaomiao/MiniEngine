@@ -1,6 +1,8 @@
 #pragma once
 
 #include "asset/base/Asset.h"
+#include "render/material/Material.h"
+#include "render/mesh/Mesh.h"
 #include "render/base/RenderHandle.h"
 #include "scene/node/Node.h"
 
@@ -15,8 +17,8 @@ namespace engine {
 class Scene;
 
 struct SceneInstantiationContext {
-    std::function<RID(const VirtualPath&)> loadMesh;
-    std::function<RID(const VirtualPath&)> loadMaterial;
+    std::function<Ref<Mesh>(const VirtualPath&)> loadMesh;
+    std::function<Ref<Material>(const VirtualPath&)> loadMaterial;
 };
 
 class SceneAsset final : public Asset {
@@ -27,7 +29,7 @@ public:
     std::vector<SceneNodeAsset> nodes;
 
     [[nodiscard]] bool transfer(Transfer& archive) override;
-    [[nodiscard]] std::unique_ptr<Scene>
+    [[nodiscard]] Ref<Scene>
     instantiate(const SceneInstantiationContext& context) const;
 };
 // Source .scene.json parsing and validation live in asset/format/SceneAssetFormat.

@@ -1,5 +1,6 @@
 ﻿#include "TestAssetEnvironment.h"
 
+#include "asset/types/MaterialAsset.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/format/SceneAssetFormat.h"
 #include "core/filesystem/FileWatcher.h"
@@ -29,7 +30,7 @@ namespace {
 
 using namespace engine;
 
-[[nodiscard]] RID registerTriangleMesh() {
+[[nodiscard]] Ref<Mesh> registerTriangleMesh() {
     MESH_MANAGER.clear();
     constexpr std::array positions{
         math::Vec3{-1.0F, -1.0F, 0.0F},
@@ -55,8 +56,9 @@ using namespace engine;
     return MESH_MANAGER.insertUnkeyed(source.instantiate());
 }
 
-[[nodiscard]] std::unique_ptr<Scene> buildExportScene(RID mesh, RID material) {
-    auto scene = std::make_unique<Scene>("Export Roundtrip");
+[[nodiscard]] Ref<Scene> buildExportScene(Ref<Mesh> mesh,
+                                          Ref<Material> material) {
+    Ref<Scene> scene = makeRef<Scene>("Export Roundtrip");
 
     Node* world = scene->findNode(scene->createNode("World"));
     world->transform().setLocalPosition({1.0F, 2.0F, 3.0F});
@@ -105,7 +107,7 @@ int main() {
     if (!test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR))
         return 30;
 
-    const RID meshHandle = registerTriangleMesh();
+    const Ref<Mesh> meshHandle = registerTriangleMesh();
     if (!meshHandle)
         return 31;
 
@@ -113,11 +115,11 @@ int main() {
     MaterialAsset materialAsset;
     materialAsset.setAssetPath(VirtualPath{"assets://materials/test_export.material.json"});
     materialAsset.name = "Export Material";
-    const RID builtinShader = SHADER_MANAGER.builtinColor();
+    const Ref<Shader> builtinShader = SHADER_RESOURCE_MANAGER.builtinColor();
     if (!builtinShader)
         return 32;
-    const RID materialHandle =
-        MATERIAL_MANAGER.insert(materialAsset.instantiate(builtinShader));
+    const Ref<Material> materialHandle =
+        MATERIAL_RESOURCE_MANAGER.insert(materialAsset.instantiate(builtinShader));
     if (!materialHandle)
         return 33;
 
@@ -125,7 +127,7 @@ int main() {
     std::string error;
 
     // --- exportSceneToAsset: structure, ordering, parent links and components ---
-    std::unique_ptr<Scene> scene = buildExportScene(meshHandle, materialHandle);
+    Ref<Scene> scene = buildExportScene(meshHandle, materialHandle);
     std::unique_ptr<SceneAsset> asset = exportSceneToAsset(*scene, targetPath, error);
     if (!asset)
         return 1;
@@ -208,7 +210,7 @@ int main() {
                 return materialHandle;
             },
     };
-    std::unique_ptr<Scene> runtime = reparsed->instantiate(context);
+    Ref<Scene> runtime = reparsed->instantiate(context);
     if (!runtime || runtime->name() != "Export Roundtrip" || runtime->nodeCount() != 5 ||
         requestedMeshes.size() != 1 || requestedMaterials.size() != 1 ||
         requestedMeshes.front() != VirtualPath{"assets://meshes/triangle.mesh.json"} ||
@@ -240,7 +242,7 @@ int main() {
         Scene broken;
         broken.findNode(broken.createNode("Broken"))
             ->addComponent<MeshComponent>()
-            ->setAssetMesh(RID{999, 1});
+            ->setAssetMesh({});
         error.clear();
         if (exportSceneToAsset(broken, targetPath, error) ||
             error.find("Broken") == std::string::npos) {
@@ -268,7 +270,7 @@ int main() {
         Scene broken;
         broken.findNode(broken.createNode("Unshaded"))
             ->addComponent<MaterialComponent>()
-            ->setMaterial(0, RID{999, 1});
+            ->setMaterial(0, {});
         error.clear();
         if (exportSceneToAsset(broken, targetPath, error) ||
             error.find("Unshaded") == std::string::npos) {

@@ -2,6 +2,7 @@
 
 #include "core/logging/Log.h"
 #include "core/serialization/Transfer.h"
+#include "render/texture/TextureManager.h"
 
 #include <algorithm>
 #include <limits>
@@ -39,47 +40,6 @@ bool TextureSamplerSettings::transfer(Transfer& archive) {
            archive.transfer("address_mode_u", addressModeU) &&
            archive.transfer("address_mode_v", addressModeV) &&
            archive.transfer("max_anisotropy", maxAnisotropy) && archive.endObject();
-}
-
-rhi::SamplerDesc TextureSamplerSettings::toRhi() const {
-    rhi::SamplerDesc desc;
-    desc.maxAnisotropy = maxAnisotropy;
-    switch (addressModeU) {
-    case TextureAddressMode::Repeat: desc.addressU = rhi::SamplerAddressMode::Repeat; break;
-    case TextureAddressMode::MirroredRepeat:
-        desc.addressU = rhi::SamplerAddressMode::MirroredRepeat;
-        break;
-    case TextureAddressMode::ClampToEdge:
-        desc.addressU = rhi::SamplerAddressMode::ClampToEdge;
-        break;
-    }
-    switch (addressModeV) {
-    case TextureAddressMode::Repeat: desc.addressV = rhi::SamplerAddressMode::Repeat; break;
-    case TextureAddressMode::MirroredRepeat:
-        desc.addressV = rhi::SamplerAddressMode::MirroredRepeat;
-        break;
-    case TextureAddressMode::ClampToEdge:
-        desc.addressV = rhi::SamplerAddressMode::ClampToEdge;
-        break;
-    }
-    switch (filterMode) {
-    case TextureFilterMode::Point:
-        desc.minFilter = rhi::SamplerFilter::Nearest;
-        desc.magFilter = rhi::SamplerFilter::Nearest;
-        desc.mipmapFilter = rhi::SamplerMipmapFilter::Nearest;
-        break;
-    case TextureFilterMode::Bilinear:
-        desc.minFilter = rhi::SamplerFilter::Linear;
-        desc.magFilter = rhi::SamplerFilter::Linear;
-        desc.mipmapFilter = rhi::SamplerMipmapFilter::Nearest;
-        break;
-    case TextureFilterMode::Trilinear:
-        desc.minFilter = rhi::SamplerFilter::Linear;
-        desc.magFilter = rhi::SamplerFilter::Linear;
-        desc.mipmapFilter = rhi::SamplerMipmapFilter::Linear;
-        break;
-    }
-    return desc;
 }
 
 bool TextureDesc::transfer(Transfer& archive) {
@@ -130,43 +90,24 @@ bool validateTexture(const TextureDesc& desc, std::span<const TextureMipData> mi
     return true;
 }
 
-rhi::TextureType toRhi(TextureType type) {
-    switch (type) {
-    case TextureType::Texture2D: return rhi::TextureType::Texture2D;
-    case TextureType::Texture2DArray: return rhi::TextureType::Texture2DArray;
-    case TextureType::Texture3D: return rhi::TextureType::Texture3D;
-    case TextureType::TextureCube: return rhi::TextureType::TextureCube;
-    case TextureType::TextureCubeArray: return rhi::TextureType::TextureCubeArray;
-    }
-    Log::fatal("Texture", "Unsupported Texture type");
-}
-
-rhi::PixelFormat toRhi(TextureFormat format) {
-    switch (format) {
-    case TextureFormat::Rgba8Unorm: return rhi::PixelFormat::Rgba8Unorm;
-    case TextureFormat::Rgba8Srgb: return rhi::PixelFormat::Rgba8Srgb;
-    }
-    Log::fatal("Texture", "Unsupported Texture format");
-}
-
 Texture::Texture(VirtualPath assetPath,
                  AssetId assetId,
                  TextureDesc desc,
                  std::vector<TextureMipData> mipData,
-                 std::uint64_t version,
-                 rhi::RID texture,
-                 TextureView defaultView,
-                 rhi::IRHITexture& rhiTexture)
+                 std::uint64_t version)
     : assetPath_(std::move(assetPath)), assetId_(assetId), desc_(std::move(desc)),
-      mipData_(std::move(mipData)), version_(version), texture_(texture),
-      defaultView_(std::move(defaultView)), rhiTexture_(&rhiTexture) {}
+      mipData_(std::move(mipData)), version_(version) {}
 
-TextureView Texture::getView(rhi::TextureViewDesc desc) const {
-    if (!rhiTexture_ || !texture_)
-        return {};
-    if (desc.format == rhi::PixelFormat::Undefined)
-        desc.format = toRhi(desc_.format);
-    return {texture_, rhiTexture_->createView(desc), desc};
+Texture::~Texture() {
+    TEXTURE_RESOURCE_MANAGER.unregister(this);
+}
+
+void Texture::rebuild(TextureDesc desc, std::vector<TextureMipData> mipData) {
+    if (version_ == std::numeric_limits<std::uint64_t>::max())
+        Log::fatal("Texture", "Texture version overflow");
+    desc_ = std::move(desc);
+    mipData_ = std::move(mipData);
+    ++version_;
 }
 
 bool TextureAsset::transfer(Transfer& archive) {

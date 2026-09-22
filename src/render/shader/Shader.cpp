@@ -1,8 +1,11 @@
 ﻿#include "render/shader/Shader.h"
 
+#include "asset/types/ShaderAsset.h"
+
 #include "core/logging/Log.h"
 #include "core/serialization/Transfer.h"
 #include "render/global_uniform/GlobalUniformManager.h"
+#include "render/shader/ShaderManager.h"
 
 #include <algorithm>
 #include <cassert>
@@ -273,23 +276,41 @@ Shader::Shader(const ShaderAsset& asset)
     }
 }
 
-Shader Shader::clone() const {
-    Shader copy = *this;
-    copy.assetId_ = AssetId{};
+Shader::~Shader() {
+    SHADER_RESOURCE_MANAGER.unregister(this);
+}
+
+Ref<Shader> Shader::clone() const {
+    Ref<Shader> copy{new Shader()};
+    copy->assetPath_ = assetPath_;
+    copy->name_ = name_;
+    copy->properties_ = properties_;
+    copy->globalProperties_ = globalProperties_;
+    copy->uniformBlockLayout_ = uniformBlockLayout_;
+    copy->globalUniformBlockLayout_ = globalUniformBlockLayout_;
+    copy->subShaders_ = subShaders_;
+    copy->revision_ = revision_;
     return copy;
 }
 
 void Shader::rebuildFromAsset(const ShaderAsset& asset) {
-    if (revision_ == std::numeric_limits<std::uint64_t>::max()) {
+    if (revision_ == std::numeric_limits<std::uint64_t>::max())
         Log::fatal("Shader", "Shader revision overflow");
-    }
-    const std::uint64_t nextRevision = revision_ + 1;
-    *this = asset.instantiate();
-    revision_ = nextRevision;
+    Ref<Shader> replacement = asset.instantiate();
+    if (!replacement)
+        return;
+    assetPath_ = std::move(replacement->assetPath_);
+    name_ = std::move(replacement->name_);
+    properties_ = std::move(replacement->properties_);
+    globalProperties_ = std::move(replacement->globalProperties_);
+    uniformBlockLayout_ = std::move(replacement->uniformBlockLayout_);
+    globalUniformBlockLayout_ = std::move(replacement->globalUniformBlockLayout_);
+    subShaders_ = std::move(replacement->subShaders_);
+    ++revision_;
 }
 
-Shader ShaderAsset::instantiate() const {
-    return Shader{*this};
+Ref<Shader> ShaderAsset::instantiate() const {
+    return Ref<Shader>{new Shader{*this}};
 }
 
 const SubShader* Shader::selectSubShader(std::string_view renderPipeline) const {

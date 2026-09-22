@@ -53,13 +53,13 @@ bool SceneAsset::transfer(Transfer& archive) {
     return true;
 }
 
-std::unique_ptr<Scene> SceneAsset::instantiate(const SceneInstantiationContext& context) const {
+Ref<Scene> SceneAsset::instantiate(const SceneInstantiationContext& context) const {
     if (!format::validateSceneAsset(*this, assetPath())) {
         fail(assetPath(), "Scene cannot be instantiated");
         return {};
     }
 
-    auto scene = std::make_unique<Scene>(name);
+    Ref<Scene> scene = makeRef<Scene>(name);
     std::unordered_map<SceneNodeAssetId, RID> handles;
     handles.reserve(nodes.size());
 
@@ -83,7 +83,7 @@ std::unique_ptr<Scene> SceneAsset::instantiate(const SceneInstantiationContext& 
                         if (value.sourceType == MeshComponentSourceType::Asset) {
                             if (!context.loadMesh)
                                 return false;
-                            const RID mesh = context.loadMesh(value.mesh);
+                            const Ref<Mesh> mesh = context.loadMesh(value.mesh);
                             if (!mesh)
                                 return false;
                             runtime->setAssetMesh(mesh);
@@ -102,7 +102,7 @@ std::unique_ptr<Scene> SceneAsset::instantiate(const SceneInstantiationContext& 
                         if (!value.materials.empty() && !context.loadMaterial)
                             return false;
                         for (std::size_t slot = 0; slot < value.materials.size(); ++slot) {
-                            const RID material =
+                            const Ref<Material> material =
                                 context.loadMaterial(value.materials[slot]);
                             if (!material)
                                 return false;

@@ -1,6 +1,7 @@
 ﻿#include "asset/manager/AssetManager.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/logging/Log.h"
+#include "asset/types/ShaderAsset.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderCompilePipeline.h"
 

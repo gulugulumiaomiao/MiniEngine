@@ -267,20 +267,20 @@ bool inspectAssetShowsMaterialEditor() {
     AssetScope assets;
     CHECK(assets.valid);
     Harness ui;
-    const RID handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
+    const Ref<Material> handle = MATERIAL_RESOURCE_MANAGER.load(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
-    CHECK(MATERIAL_MANAGER.find(handle)->getFloat("Metallic") == 0.0F);
+    CHECK(handle->getFloat("Metallic") == 0.0F);
 
     ui.panel.inspectAsset(kWarmMaterialPath);
     ui.settle();
     bool edited = false;
     for (float y = 0.0F; y < 240.0F && !edited; y += 6.0F) {
         ui.pressClick(ui.content(100.0F, y));
-        if (MATERIAL_MANAGER.find(handle)->getFloat("Metallic") != 0.0F)
+        if (handle->getFloat("Metallic") != 0.0F)
             edited = true;
     }
     CHECK(edited);
-    CHECK(MATERIAL_MANAGER.find(handle)->getFloat("Metallic") == 1.0F);
+    CHECK(handle->getFloat("Metallic") == 1.0F);
     return true;
 }
 
@@ -293,18 +293,18 @@ bool lastInteractionWins() {
     Harness ui;
     auto& scene = ui.document.scene();
     const auto node = scene.createNode("A");
-    const RID handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
+    const Ref<Material> handle = MATERIAL_RESOURCE_MANAGER.load(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
     auto canEditMetallic = [&]() {
         bool edited = false;
         for (float y = 0.0F; y < 240.0F && !edited; y += 6.0F) {
             ui.pressClick(ui.content(100.0F, y));
-            if (MATERIAL_MANAGER.find(handle)->getFloat("Metallic") != 0.0F)
+            if (handle->getFloat("Metallic") != 0.0F)
                 edited = true;
         }
         return edited;
     };
-    auto material = [&]() { return MATERIAL_MANAGER.find(handle); };
+    auto material = [&]() { return handle.get(); };
 
     ui.panel.inspectAsset(kWarmMaterialPath);
     ui.settle();
@@ -339,7 +339,7 @@ bool componentSlotEmbedsEditor() {
     Harness ui;
     auto& scene = ui.document.scene();
     const auto node = scene.createNode("A");
-    const RID handle = MATERIAL_MANAGER.load(kWarmMaterialPath);
+    const Ref<Material> handle = MATERIAL_RESOURCE_MANAGER.load(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
     MaterialComponent* component = scene.findNode(node)->addComponent<MaterialComponent>();
     component->setMaterial(0, handle);
@@ -349,7 +349,7 @@ bool componentSlotEmbedsEditor() {
     bool edited = false;
     for (float y = 0.0F; y < 420.0F && !edited; y += 6.0F) {
         ui.pressClick(ui.content(100.0F, y));
-        if (MATERIAL_MANAGER.find(handle)->getFloat("Metallic") != 0.0F)
+        if (handle->getFloat("Metallic") != 0.0F)
             edited = true;
     }
     CHECK(edited);

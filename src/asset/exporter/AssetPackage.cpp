@@ -1,4 +1,5 @@
 #include "asset/exporter/AssetPackage.h"
+#include "asset/types/ShaderAsset.h"
 
 #include "asset/database/AssetDatabase.h"
 #include "asset/format/ShaderAssetFormat.h"

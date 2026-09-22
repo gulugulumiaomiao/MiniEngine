@@ -3,6 +3,7 @@
 #include "core/math/hash.h"
 #include "core/logging/Log.h"
 #include "core/serialization/Transfer.h"
+#include "render/mesh/MeshManager.h"
 
 #include <algorithm>
 #include <cmath>
@@ -258,6 +259,10 @@ Mesh::Mesh(MeshDesc desc, MeshData data, std::optional<MeshBuildRecipe> buildRec
     cacheVertexLayoutHash();
 }
 
+Mesh::~Mesh() {
+    MESH_RESOURCE_MANAGER.unregister(this);
+}
+
 bool validateMesh(const MeshDesc& desc, const MeshData& data) {
     if (!desc.vertexLayout.validate())
         return false;
@@ -330,15 +335,15 @@ bool validateMesh(const MeshDesc& desc, const MeshData& data) {
     return true;
 }
 
-Mesh Mesh::clone() const {
-    Mesh copy;
-    copy.assetPath_ = assetPath_;
-    copy.desc_ = desc_;
-    copy.data_ = data_;
-    copy.buildRecipe_ = buildRecipe_;
-    copy.vertexLayoutHash_ = vertexLayoutHash_;
-    copy.version_ = version_;
-    copy.dirty_ = true;
+Ref<Mesh> Mesh::clone() const {
+    Ref<Mesh> copy = makeRef<Mesh>();
+    copy->assetPath_ = assetPath_;
+    copy->desc_ = desc_;
+    copy->data_ = data_;
+    copy->buildRecipe_ = buildRecipe_;
+    copy->vertexLayoutHash_ = vertexLayoutHash_;
+    copy->version_ = version_;
+    copy->dirty_ = true;
     // assetId_ stays empty: a clone is detached from its source asset.
     return copy;
 }
@@ -354,15 +359,15 @@ void Mesh::rebuildFromAsset(const MeshAsset& asset) {
     dirty_ = true;
 }
 
-Mesh MeshAsset::instantiate() const {
-    Mesh result;
+Ref<Mesh> MeshAsset::instantiate() const {
     if (!validateMesh(desc, meshData))
-        return result;
-    result.assetPath_ = assetPath();
-    result.desc_ = desc;
-    result.data_ = meshData;
-    result.buildRecipe_ = buildRecipe;
-    result.cacheVertexLayoutHash();
+        return {};
+    Ref<Mesh> result = makeRef<Mesh>();
+    result->assetPath_ = assetPath();
+    result->desc_ = desc;
+    result->data_ = meshData;
+    result->buildRecipe_ = buildRecipe;
+    result->cacheVertexLayoutHash();
     return result;
 }
 

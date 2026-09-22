@@ -1,4 +1,6 @@
 #include "asset/format/MaterialAssetFormat.h"
+#include "asset/types/MaterialAsset.h"
+#include "asset/types/ShaderAsset.h"
 
 #include "asset/base/AssetReference.h"
 #include "asset/format/AssetFormatJson.h"

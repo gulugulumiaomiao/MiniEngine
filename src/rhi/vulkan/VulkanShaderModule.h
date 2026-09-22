@@ -25,12 +25,12 @@ public:
     VulkanShaderModule& operator=(VulkanShaderModule&&) = delete;
 
     [[nodiscard]] VkShaderModule handle() const { return module_; }
-    [[nodiscard]] ShaderStage stage() const override { return stage_; }
+    [[nodiscard]] const ShaderModuleInfo& info() const override { return info_; }
 
 private:
     VkDevice device_{VK_NULL_HANDLE};
     VkShaderModule module_{VK_NULL_HANDLE};
-    ShaderStage stage_{ShaderStage::Vertex};
+    ShaderModuleInfo info_;
 };
 
 } // namespace engine::rhi::vulkan

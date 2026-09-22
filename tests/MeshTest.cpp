@@ -2,8 +2,8 @@
 #include "render/mesh/MeshManager.h"
 #include "core/serialization/BinaryTransfer.h"
 #include "core/serialization/JsonTransfer.h"
-#include "render/gpu/mesh/MeshGpuCache.h"
-#include "render/gpu/mesh/MeshGpuFactory.h"
+#include "render/gpu/mesh/MeshStorageCache.h"
+#include "render/gpu/mesh/MeshStorageFactory.h"
 #include "render/mesh/MeshBuilder.h"
 #include "rhi/api/Device.h"
 
@@ -195,20 +195,20 @@ int main() {
         return 10;
     }
 
-    Mesh runtime = decoded.instantiate();
-    if (runtime.assetPath() != source.assetPath() || runtime.version() != 1 || !runtime.dirty() ||
-        runtime.data().vertexStreams.size() != 2) {
+    Ref<Mesh> runtime = decoded.instantiate();
+    if (!runtime || runtime->assetPath() != source.assetPath() || runtime->version() != 1 ||
+        !runtime->dirty() || runtime->data().vertexStreams.size() != 2) {
         return 4;
     }
-    runtime.markClean();
+    runtime->markClean();
     const math::Vec3 replacement{2.0F, 3.0F, 4.0F};
-    if (!runtime.updateVertexData(0, 1, std::as_bytes(std::span{&replacement, 1})) ||
-        runtime.version() != 2 || !runtime.dirty()) {
+    if (!runtime->updateVertexData(0, 1, std::as_bytes(std::span{&replacement, 1})) ||
+        runtime->version() != 2 || !runtime->dirty()) {
         return 5;
     }
     const std::uint16_t replacementIndex = 1;
-    if (!runtime.updateIndexData(2, std::as_bytes(std::span{&replacementIndex, 1})) ||
-        runtime.version() != 3) {
+    if (!runtime->updateIndexData(2, std::as_bytes(std::span{&replacementIndex, 1})) ||
+        runtime->version() != 3) {
         return 6;
     }
 
@@ -219,14 +219,13 @@ int main() {
     if (decoded.transfer(invalidReader) || decoded.desc.debugName != originalName) {
         return 7;
     }
-    const RID handle = MESH_MANAGER.insertUnkeyed(decoded.instantiate());
-    if (!handle || MESH_MANAGER.find(handle) == nullptr || MESH_MANAGER.size() != 1) {
+    Ref<Mesh> registered = MESH_RESOURCE_MANAGER.insertUnkeyed(decoded.instantiate());
+    if (!registered || MESH_RESOURCE_MANAGER.size() != 1)
         return 8;
-    }
-    if (!MESH_MANAGER.destroy(handle) || MESH_MANAGER.find(handle) != nullptr ||
-        MESH_MANAGER.size() != 0) {
+    const RID registeredId = registered->resourceId();
+    registered.reset();
+    if (MESH_RESOURCE_MANAGER.find(registeredId) || MESH_RESOURCE_MANAGER.size() != 0)
         return 9;
-    }
 
     MeshBuildRecipe planeRecipe;
     planeRecipe.name = "Plane";
@@ -239,27 +238,31 @@ int main() {
         return 11;
     }
 
-    const RID runtimePlane = MESH_MANAGER.createRuntime(planeRecipe);
-    const RID secondRuntimePlane = MESH_MANAGER.createRuntime(planeRecipe);
-    const Mesh* runtimePlaneMesh = MESH_MANAGER.find(runtimePlane);
+    Ref<Mesh> runtimePlane = MESH_RESOURCE_MANAGER.createRuntime(planeRecipe);
+    Ref<Mesh> secondRuntimePlane = MESH_RESOURCE_MANAGER.createRuntime(planeRecipe);
     if (!runtimePlane || !secondRuntimePlane || runtimePlane == secondRuntimePlane ||
-        !runtimePlaneMesh || runtimePlaneMesh->assetPath().valid() || MESH_MANAGER.size() != 2) {
+        runtimePlane->assetPath().valid() || MESH_RESOURCE_MANAGER.size() != 2) {
         return 20;
     }
-    const std::uint64_t runtimeVersion = runtimePlaneMesh->version();
+    const std::uint64_t runtimeVersion = runtimePlane->version();
+    const RID runtimePlaneId = runtimePlane->resourceId();
+    const RID secondRuntimePlaneId = secondRuntimePlane->resourceId();
     std::vector<RID> destroyedRuntimeMeshes;
-    MESH_MANAGER.setDestroyObserver(
+    MESH_RESOURCE_MANAGER.setDestroyObserver(
         [&destroyedRuntimeMeshes](RID handle) { destroyedRuntimeMeshes.push_back(handle); });
     planeRecipe.parts[0].primitive = PlaneGeometry{{4.0F, 4.0F}, 2, 2};
-    if (!MESH_MANAGER.rebuildRuntime(runtimePlane, planeRecipe) ||
-        MESH_MANAGER.find(runtimePlane)->version() != runtimeVersion + 1 ||
-        MESH_MANAGER.find(runtimePlane)->data().indexCount != 24 ||
-        !MESH_MANAGER.destroyRuntime(runtimePlane) || MESH_MANAGER.find(runtimePlane) ||
-        !MESH_MANAGER.destroyRuntime(secondRuntimePlane) || MESH_MANAGER.size() != 0 ||
-        destroyedRuntimeMeshes != std::vector<RID>{runtimePlane, secondRuntimePlane}) {
+    if (!MESH_RESOURCE_MANAGER.rebuildRuntime(runtimePlane, planeRecipe) ||
+        runtimePlane->version() != runtimeVersion + 1 ||
+        runtimePlane->data().indexCount != 24) {
         return 21;
     }
-    MESH_MANAGER.setDestroyObserver({});
+    runtimePlane.reset();
+    secondRuntimePlane.reset();
+    if (MESH_RESOURCE_MANAGER.size() != 0 ||
+        destroyedRuntimeMeshes != std::vector<RID>{runtimePlaneId, secondRuntimePlaneId}) {
+        return 21;
+    }
+    MESH_RESOURCE_MANAGER.setDestroyObserver({});
 
     MeshBuildRecipe primitives;
     primitives.name = "PrimitiveAssembly";
@@ -296,9 +299,9 @@ int main() {
         proceduralDecoded.buildRecipe->parts[1].primitive.type() != MeshPrimitiveType::UvSphere) {
         return 13;
     }
-    Mesh proceduralRuntime = proceduralDecoded.instantiate();
-    if (!proceduralRuntime.buildRecipe() ||
-        proceduralRuntime.buildRecipe()->name != "PrimitiveAssembly")
+    Ref<Mesh> proceduralRuntime = proceduralDecoded.instantiate();
+    if (!proceduralRuntime || !proceduralRuntime->buildRecipe() ||
+        proceduralRuntime->buildRecipe()->name != "PrimitiveAssembly")
         return 14;
 
     MeshBuildRecipe mirroredRecipe;
@@ -340,19 +343,21 @@ int main() {
     // The render-side cache is testable without Vulkan and uploads only when
     // the Mesh version changes.
     FakeDevice fakeDevice;
-    MeshGpuCache gpuCache;
-    MeshGpuFactory gpuFactory{fakeDevice};
-    Mesh gpuMesh = source.instantiate();
-    const RID gpuHandle{7, 1};
-    MeshGpuResource firstResource;
-    if (!gpuFactory.create({gpuMesh}, firstResource))
+    MeshStorageCache gpuCache;
+    MeshStorageFactory gpuFactory{fakeDevice};
+    Ref<Mesh> gpuMesh = source.instantiate();
+    if (!gpuMesh)
         return 19;
-    const MeshGpuCacheKey firstKey = MeshGpuCache::key(gpuHandle, gpuMesh.version());
+    const RID gpuHandle{7, 1};
+    MeshStorageEntry firstResource;
+    if (!gpuFactory.create({*gpuMesh}, firstResource))
+        return 19;
+    const MeshStorageCacheKey firstKey = MeshStorageCache::key(gpuHandle, gpuMesh->version());
     (void)gpuCache.put(firstKey, std::move(firstResource));
-    gpuMesh.markClean();
+    gpuMesh->markClean();
     const MeshDrawInfo firstDraw = gpuCache.find(firstKey)->drawInfo;
     if (firstDraw.vertexBuffers.size() != 2 || !firstDraw.indexBuffer ||
-        fakeDevice.createdBuffers != 3 || fakeDevice.uploads != 3 || gpuMesh.dirty()) {
+        fakeDevice.createdBuffers != 3 || fakeDevice.uploads != 3 || gpuMesh->dirty()) {
         return 19;
     }
     const MeshDrawInfo cachedDraw = gpuCache.find(firstKey)->drawInfo;
@@ -361,14 +366,14 @@ int main() {
         return 19;
     }
     const math::Vec3 gpuReplacement{5.0F, 6.0F, 7.0F};
-    if (!gpuMesh.updateVertexData(0, 0, std::as_bytes(std::span{&gpuReplacement, 1}))) {
+    if (!gpuMesh->updateVertexData(0, 0, std::as_bytes(std::span{&gpuReplacement, 1}))) {
         return 19;
     }
-    MeshGpuResource rebuiltResource;
-    if (!gpuFactory.create({gpuMesh}, rebuiltResource))
+    MeshStorageEntry rebuiltResource;
+    if (!gpuFactory.create({*gpuMesh}, rebuiltResource))
         return 19;
-    auto oldResources = gpuCache.extractIf([sourceKey = MeshGpuCache::sourceKey(gpuHandle)](
-                                               const MeshGpuCacheKey& key, const MeshGpuResource&) {
+    auto oldResources = gpuCache.extractIf([sourceKey = MeshStorageCache::sourceKey(gpuHandle)](
+                                               const MeshStorageCacheKey& key, const MeshStorageEntry&) {
         return key.source == sourceKey;
     });
     fakeDevice.waitIdle();
@@ -376,13 +381,13 @@ int main() {
         (void)unused;
         gpuFactory.release(resource);
     }
-    const MeshGpuCacheKey rebuiltKey = MeshGpuCache::key(gpuHandle, gpuMesh.version());
+    const MeshStorageCacheKey rebuiltKey = MeshStorageCache::key(gpuHandle, gpuMesh->version());
     (void)gpuCache.put(rebuiltKey, std::move(rebuiltResource));
-    gpuMesh.markClean();
+    gpuMesh->markClean();
     const MeshDrawInfo rebuiltDraw = gpuCache.find(rebuiltKey)->drawInfo;
     if (!rebuiltDraw.indexBuffer || rebuiltDraw.indexBuffer == firstDraw.indexBuffer ||
         fakeDevice.createdBuffers != 6 || fakeDevice.destroyedBuffers != 3 ||
-        fakeDevice.uploads != 6 || fakeDevice.waits != 1 || gpuMesh.dirty()) {
+        fakeDevice.uploads != 6 || fakeDevice.waits != 1 || gpuMesh->dirty()) {
         return 19;
     }
     auto removed = gpuCache.extractAll();

@@ -1,10 +1,13 @@
 ﻿#include "render/material/Material.h"
 
+#include "asset/types/MaterialAsset.h"
+
 #include "asset/database/AssetDatabase.h"
 #include "core/logging/Log.h"
 #include "core/serialization/Transfer.h"
+#include "render/material/MaterialManager.h"
 #include "render/shader/ShaderManager.h"
-#include "render/texture/Texture.h"
+#include "render/texture/TextureManager.h"
 
 #include <algorithm>
 #include <cassert>
@@ -174,11 +177,14 @@ const Value* requireValue(const ShaderValue& value, std::string_view name) {
 
 } // namespace
 
+Material::~Material() {
+    MATERIAL_RESOURCE_MANAGER.unregister(this);
+}
+
 const Shader& Material::shader() const {
-    const Shader* shader = SHADER_MANAGER.find(shaderHandle_);
-    if (!shader)
-        Log::fatal("Material", "Invalid or stale RID");
-    return *shader;
+    if (!shader_)
+        Log::fatal("Material", "Shader reference is null");
+    return *shader_;
 }
 
 ShaderValue Material::propertyValue(const ShaderPropertyDesc& property) const {
@@ -199,36 +205,34 @@ ShaderValue Material::propertyValue(const ShaderPropertyDesc& property) const {
 void Material::initialize(AssetId assetId,
                           VirtualPath assetPath,
                           std::string materialName,
-                          RID shader,
+                          Ref<Shader> shader,
                           std::optional<int> renderQueueOverride) {
     assetId_ = assetId;
     assetPath_ = std::move(assetPath);
     name = std::move(materialName);
     renderQueueOverride_ = renderQueueOverride;
-    if (!SHADER_MANAGER.find(shader)) {
-        Log::error("Material", "RID must be valid");
+    if (!shader) {
+        Log::error("Material", "Shader reference must be valid");
         return;
     }
-    rebuildForShader(shader, false);
+    rebuildForShader(std::move(shader), false);
 }
 
-void Material::setShader(RID shader) {
-    const Shader* value = SHADER_MANAGER.find(shader);
-    if (!value) {
-        Log::error("Material", "RID must be valid");
+void Material::setShader(Ref<Shader> shader) {
+    if (!shader) {
+        Log::error("Material", "Shader reference must be valid");
         return;
     }
-    if (shaderHandle_ == shader && shaderRevision_ == value->revision()) {
+    if (shader_ == shader && shaderRevision_ == shader->revision())
         return;
-    }
-    rebuildForShader(shader, true);
+    rebuildForShader(std::move(shader), true);
 }
 
 void Material::setRenderQueue(std::optional<int> queueOverride) {
     if (renderQueueOverride_ == queueOverride)
         return;
-    if (!SHADER_MANAGER.find(shaderHandle_)) {
-        Log::error("Material", "setRenderQueue requires a valid RID");
+    if (!shader_) {
+        Log::error("Material", "setRenderQueue requires a Shader");
         return;
     }
     renderQueueOverride_ = queueOverride;
@@ -239,8 +243,8 @@ void Material::setRenderQueue(std::optional<int> queueOverride) {
 void Material::setKeywordEnabled(const std::string& keyword, bool enabled) {
     const auto found = std::ranges::find(keywords, keyword);
     if (enabled == (found != keywords.end()))
-        return; // Idempotent: the state is unchanged, so no version bump.
-    if (!SHADER_MANAGER.find(shaderHandle_) || !shader().declaresKeyword(keyword)) {
+        return;
+    if (!shader_ || !shader().declaresKeyword(keyword)) {
         Log::warn("Material", "Shader does not declare keyword: %s", keyword.c_str());
         return;
     }
@@ -251,71 +255,61 @@ void Material::setKeywordEnabled(const std::string& keyword, bool enabled) {
     markChanged();
 }
 
-void Material::rebuildForShader(RID newShaderHandle, bool preserveValues) {
-    const Shader* newShaderValue = SHADER_MANAGER.find(newShaderHandle);
-    if (!newShaderValue) {
-        Log::error("Material", "RID must be valid");
+void Material::rebuildForShader(Ref<Shader> newShaderRef, bool preserveValues) {
+    if (!newShaderRef) {
+        Log::error("Material", "Shader reference must be valid");
         return;
     }
-    const Shader& newShader = *newShaderValue;
+    const Shader& newShader = *newShaderRef;
 
     std::unordered_map<std::string, std::pair<ShaderPropertyType, ShaderValue>> oldValues;
-    if (preserveValues && SHADER_MANAGER.find(shaderHandle_)) {
-        for (const ShaderPropertyDesc& property : shader().properties()) {
+    if (preserveValues && shader_) {
+        for (const ShaderPropertyDesc& property : shader().properties())
             oldValues.emplace(property.name, std::pair{property.type, propertyValue(property)});
-        }
     }
+    const auto oldTextureRefs = std::move(textureRefs_);
+    const auto oldKeywords = std::move(keywords);
 
-    Material replacement;
-    replacement.assetId_ = assetId_;
-    replacement.assetPath_ = assetPath_;
-    replacement.name = name;
-    replacement.shaderHandle_ = newShaderHandle;
-    replacement.shaderRevision_ = newShader.revision();
-    replacement.renderQueueOverride_ = renderQueueOverride_;
-    replacement.uniformLayout = newShader.uniformBlockLayout();
-    replacement.uniformData.resize(replacement.uniformLayout.byteSize, std::byte{0});
-    replacement.renderQueue =
-        replacement.renderQueueOverride_.value_or(newShader.defaultSubShader().renderQueue());
-    replacement.suppressChanges_ = true;
+    shader_ = std::move(newShaderRef);
+    shaderRevision_ = newShader.revision();
+    uniformLayout = newShader.uniformBlockLayout();
+    uniformData.assign(uniformLayout.byteSize, std::byte{0});
+    textures.clear();
+    textureRefs_.clear();
+    keywords.clear();
+    renderQueue = renderQueueOverride_.value_or(newShader.defaultSubShader().renderQueue());
+
+    suppressChanges_ = true;
     for (const ShaderPropertyDesc& property : newShader.properties()) {
-        replacement.setPropertyValue(property.name, property.defaultValue);
+        setPropertyValue(property.name, property.defaultValue);
         const auto old = oldValues.find(property.name);
-        if (old != oldValues.end() && compatiblePropertyTypes(old->second.first, property.type)) {
-            replacement.setPropertyValue(property.name, old->second.second);
-        }
+        if (old != oldValues.end() && compatiblePropertyTypes(old->second.first, property.type))
+            setPropertyValue(property.name, old->second.second);
         if (preserveValues && property.type == ShaderPropertyType::Texture2D) {
-            const auto binding = textureBindings_.find(property.name);
-            if (binding != textureBindings_.end())
-                replacement.textureBindings_.insert(*binding);
+            if (const auto texture = oldTextureRefs.find(property.name);
+                texture != oldTextureRefs.end())
+                textureRefs_.insert(*texture);
         }
     }
-    for (const std::string& keyword : keywords) {
-        if (newShader.declaresKeyword(keyword)) {
-            replacement.keywords.push_back(keyword);
-        }
+    for (const std::string& keyword : oldKeywords) {
+        if (newShader.declaresKeyword(keyword))
+            keywords.push_back(keyword);
     }
-    replacement.suppressChanges_ = false;
-    if (preserveValues) {
-        replacement.version_ = version_;
-        replacement.dirty_ = dirty_;
-        replacement.markChanged();
-    } else {
-        replacement.version_ = 1;
-        replacement.dirty_ = true;
+    suppressChanges_ = false;
+    if (preserveValues)
+        markChanged();
+    else {
+        version_ = 1;
+        dirty_ = true;
     }
-    *this = std::move(replacement);
 }
 
-Material MaterialAsset::instantiate(RID shaderHandle) const {
-    Material material;
+Ref<Material> MaterialAsset::instantiate(const Ref<Shader>& shader) const {
+    Ref<Material> material = makeRef<Material>();
     const AssetId assetId = ASSET_DATABASE.findGuid(assetPath()).value_or(AssetId{});
-    material.initialize(assetId, assetPath(), name, shaderHandle, renderQueue);
-    const Shader* shader = SHADER_MANAGER.find(shaderHandle);
+    material->initialize(assetId, assetPath(), name, shader, renderQueue);
     if (!shader)
         return material;
-    // Keyword typos are reported once here at shader level; passes silently ignore keywords
-    // they do not declare (see ShaderKeywordSchema::makeKey).
     for (const std::string& keyword : keywords) {
         if (!shader->declaresKeyword(keyword)) {
             Log::warn("Material",
@@ -324,14 +318,13 @@ Material MaterialAsset::instantiate(RID shaderHandle) const {
                       name.c_str());
         }
     }
-    material.keywords = keywords;
-    material.suppressChanges_ = true;
-    for (const auto& [propertyName, value] : properties) {
-        material.setPropertyValue(propertyName, value);
-    }
-    material.suppressChanges_ = false;
-    material.version_ = 1;
-    material.dirty_ = true;
+    material->keywords = keywords;
+    material->suppressChanges_ = true;
+    for (const auto& [propertyName, value] : properties)
+        material->setPropertyValue(propertyName, value);
+    material->suppressChanges_ = false;
+    material->version_ = 1;
+    material->dirty_ = true;
     return material;
 }
 
@@ -384,9 +377,18 @@ const std::string& Material::getTexture(std::string_view name) const {
     return texture->second;
 }
 
-const TextureBinding* Material::getTextureBinding(std::string_view name) const {
-    const auto binding = textureBindings_.find(std::string{name});
-    return binding == textureBindings_.end() ? nullptr : &binding->second;
+Ref<Texture> Material::resolveTexture(std::string_view name) const {
+    const std::string key{name};
+    const auto existing = textureRefs_.find(key);
+    if (existing != textureRefs_.end())
+        return existing->second;
+    const auto path = textures.find(key);
+    if (path == textures.end())
+        return {};
+    Ref<Texture> texture = TEXTURE_RESOURCE_MANAGER.resolveReference(path->second);
+    if (texture)
+        textureRefs_.insert_or_assign(key, texture);
+    return texture;
 }
 
 void Material::setFloat(std::string_view name, float value) {
@@ -442,24 +444,22 @@ void Material::setTexture(std::string_view name, std::string value) {
         return;
     }
     texture->second = std::move(value);
-    textureBindings_.erase(std::string{name});
+    textureRefs_.erase(std::string{name});
     markChanged();
 }
 
-void Material::setTexture(std::string_view name, const TextureView& view, const Sampler& sampler) {
-    if (!textures.contains(std::string{name}) || !view || !sampler) {
+void Material::setTexture(std::string_view name, Ref<Texture> texture) {
+    if (!textures.contains(std::string{name}) || !texture) {
         Log::warn("Material",
-                  "Cannot bind an invalid TextureView or Sampler: %.*s",
+                  "Cannot bind an invalid Texture: %.*s",
                   static_cast<int>(name.size()),
                   name.data());
         return;
     }
-    textureBindings_.insert_or_assign(std::string{name}, TextureBinding{view, sampler});
+    const std::string key{name};
+    textures[key] = texture->isAssetBacked() ? texture->assetPath().string() : std::string{};
+    textureRefs_.insert_or_assign(key, std::move(texture));
     markChanged();
-}
-
-void Material::setTexture(std::string_view name, const Texture& texture, const Sampler& sampler) {
-    setTexture(name, texture.defaultView(), sampler);
 }
 
 void Material::setPropertyValue(std::string_view name, const ShaderValue& value) {
@@ -502,6 +502,7 @@ void Material::setPropertyValue(std::string_view name, const ShaderValue& value)
         }
     }
     if (const std::string* typed = requireValue<std::string>(value, name)) {
+        textureRefs_.erase(std::string{name});
         textures.insert_or_assign(std::string{name}, *typed);
         markChanged();
     }
@@ -518,30 +519,27 @@ void Material::markChanged() {
     dirty_ = true;
 }
 
-Material Material::clone() const {
-    Material copy;
-    copy.assetId_ = AssetId{}; // Detached from source asset.
-    copy.assetPath_ = assetPath_;
-    copy.name = name;
-    copy.uniformLayout = uniformLayout;
-    copy.uniformData = uniformData;
-    copy.textures = textures;
-    copy.keywords = keywords;
-    copy.renderQueue = renderQueue;
-    copy.shaderHandle_ = shaderHandle_;
-    copy.shaderRevision_ = shaderRevision_;
-    copy.renderQueueOverride_ = renderQueueOverride_;
-    copy.textureBindings_ = textureBindings_;
-    copy.suppressChanges_ = false;
-    copy.dirty_ = true;
-    copy.version_ = version_;
+Ref<Material> Material::clone() const {
+    Ref<Material> copy = makeRef<Material>();
+    copy->assetPath_ = assetPath_;
+    copy->name = name;
+    copy->uniformLayout = uniformLayout;
+    copy->uniformData = uniformData;
+    copy->textures = textures;
+    copy->textureRefs_ = textureRefs_;
+    copy->keywords = keywords;
+    copy->renderQueue = renderQueue;
+    copy->shader_ = shader_;
+    copy->shaderRevision_ = shaderRevision_;
+    copy->renderQueueOverride_ = renderQueueOverride_;
+    copy->dirty_ = true;
+    copy->version_ = version_;
     return copy;
 }
 
-void Material::rebuildFromAsset(const MaterialAsset& asset, RID newShader) {
-    const Shader* newShaderValue = SHADER_MANAGER.find(newShader);
-    if (!newShaderValue) {
-        Log::error("Material", "RID must be valid");
+void Material::rebuildFromAsset(const MaterialAsset& asset, Ref<Shader> newShader) {
+    if (!newShader) {
+        Log::error("Material", "Shader reference must be valid");
         return;
     }
 
@@ -554,9 +552,8 @@ void Material::rebuildFromAsset(const MaterialAsset& asset, RID newShader) {
     renderQueueOverride_ = asset.renderQueue;
 
     // Rebuild layout if the shader changed, preserving compatible overrides.
-    if (shaderHandle_ != newShader || shaderRevision_ != newShaderValue->revision()) {
+    if (shader_ != newShader || shaderRevision_ != newShader->revision())
         rebuildForShader(newShader, true);
-    }
 
     // Apply authoritative asset values.
     suppressChanges_ = true;
@@ -566,7 +563,7 @@ void Material::rebuildFromAsset(const MaterialAsset& asset, RID newShader) {
 
     keywords.clear();
     for (const std::string& keyword : asset.keywords) {
-        if (newShaderValue->declaresKeyword(keyword)) {
+        if (newShader->declaresKeyword(keyword)) {
             keywords.push_back(keyword);
         } else {
             Log::warn("Material",
@@ -577,7 +574,7 @@ void Material::rebuildFromAsset(const MaterialAsset& asset, RID newShader) {
     }
     suppressChanges_ = false;
 
-    renderQueue = renderQueueOverride_.value_or(newShaderValue->defaultSubShader().renderQueue());
+    renderQueue = renderQueueOverride_.value_or(newShader->defaultSubShader().renderQueue());
     markChanged();
 }
 

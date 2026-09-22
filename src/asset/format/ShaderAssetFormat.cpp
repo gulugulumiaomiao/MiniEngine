@@ -1,4 +1,5 @@
 #include "asset/format/ShaderAssetFormat.h"
+#include "asset/types/ShaderAsset.h"
 
 #include "asset/format/AssetFormatJson.h"
 #include "core/logging/Log.h"

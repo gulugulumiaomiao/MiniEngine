@@ -1,5 +1,6 @@
 #pragma once
 
+#include "render/material/Material.h"
 #include "rhi/api/RhiTypes.h"
 #include "render/base/RenderHandle.h"
 
@@ -42,10 +43,11 @@ struct DrawItem {
     RenderPhase renderPhase{RenderPhase::Forward};
     RID mesh;
     rhi::RID pipeline;
-    RID material;
+    Ref<Material> material;
+    RID materialKey;
     rhi::RID materialBindGroup;
     rhi::RID fallbackPipeline;
-    RID fallbackMaterial;
+    Ref<Material> fallbackMaterial;
     struct VertexBuffer {
         std::uint32_t binding{};
         rhi::RID buffer;

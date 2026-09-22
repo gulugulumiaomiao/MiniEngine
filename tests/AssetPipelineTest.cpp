@@ -2,6 +2,8 @@
 #include "asset/importer/AssetImportPipeline.h"
 #include "asset/base/AssetMeta.h"
 #include "core/filesystem/FileWatcher.h"
+#include "asset/types/MaterialAsset.h"
+#include "asset/types/ShaderAsset.h"
 #include "core/filesystem/FileSystem.h"
 #include "asset/manager/AssetManager.h"
 #include "render/material/Material.h"
@@ -36,18 +38,10 @@ static_assert(
     std::is_base_of_v<engine::Singleton<engine::AssetImportPipeline>, engine::AssetImportPipeline>);
 static_assert(std::is_base_of_v<engine::Singleton<engine::FileWatcher>, engine::FileWatcher>);
 static_assert(std::is_base_of_v<engine::Singleton<engine::AssetManager>, engine::AssetManager>);
-static_assert(std::is_base_of_v<engine::Singleton<engine::ShaderManager>, engine::ShaderManager>);
+static_assert(std::is_base_of_v<engine::Singleton<engine::ShaderResourceManager>, engine::ShaderResourceManager>);
 static_assert(
-    std::is_base_of_v<engine::Singleton<engine::MaterialManager>, engine::MaterialManager>);
-static_assert(std::is_base_of_v<engine::Singleton<engine::MeshManager>, engine::MeshManager>);
-using ShaderRegistry =
-    engine::KeyedHandleRegistry<engine::Shader, engine::RID, engine::AssetId>;
-using MaterialRegistry = engine::KeyedHandleRegistry<engine::Material,
-                                                     engine::RID,
-                                                     engine::AssetId>;
-static_assert(std::is_base_of_v<ShaderRegistry, engine::ShaderManager>);
-static_assert(std::is_base_of_v<MaterialRegistry, engine::MaterialManager>);
-static_assert(std::is_abstract_v<ShaderRegistry>);
+    std::is_base_of_v<engine::Singleton<engine::MaterialResourceManager>, engine::MaterialResourceManager>);
+static_assert(std::is_base_of_v<engine::Singleton<engine::MeshResourceManager>, engine::MeshResourceManager>);
 
 struct TestWorkspace {
     std::filesystem::path root =
@@ -190,9 +184,9 @@ int main() {
         !ASSET_IMPORT_PIPELINE.importAsset(meshPath)) {
         return 25;
     }
-    const RID meshHandle = MESH_MANAGER.load(meshPath);
+    const Ref<Mesh> meshHandle = MESH_MANAGER.load(meshPath);
     const auto meshAsset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
-    Mesh* runtimeMesh = MESH_MANAGER.find(meshHandle);
+    Mesh* runtimeMesh = meshHandle.get();
     if (!meshHandle || !meshAsset || !runtimeMesh || runtimeMesh->assetPath() != meshPath ||
         runtimeMesh->data().indexCount != 3) {
         return 26;
@@ -202,7 +196,7 @@ int main() {
         !ASSET_IMPORT_PIPELINE.reimportAsset(meshPath)) {
         return 27;
     }
-    runtimeMesh = MESH_MANAGER.find(meshHandle);
+    runtimeMesh = meshHandle.get();
     if (!runtimeMesh || runtimeMesh->version() != meshVersion + 1 || !runtimeMesh->dirty()) {
         return 28;
     }
@@ -245,7 +239,7 @@ int main() {
         .loadMesh = [](const VirtualPath& path) { return MESH_MANAGER.load(path); },
         .loadMaterial = [](const VirtualPath& path) { return MATERIAL_MANAGER.load(path); },
     };
-    const std::unique_ptr<Scene> runtimeScene = sceneAsset->instantiate(sceneContext);
+    const Ref<Scene> runtimeScene = sceneAsset->instantiate(sceneContext);
     if (!runtimeScene || runtimeScene->nodeCount() != 2)
         return 31;
 
@@ -280,19 +274,19 @@ int main() {
         return 4;
     }
 
-    const RID firstHandleA = SHADER_MANAGER.load(firstPath);
-    const RID firstHandleB = SHADER_MANAGER.load(firstPath);
-    const RID materialHandle = MATERIAL_MANAGER.load(materialPath);
+    Ref<Shader> firstHandleA = SHADER_MANAGER.load(firstPath);
+    Ref<Shader> firstHandleB = SHADER_MANAGER.load(firstPath);
+    Ref<Material> materialHandle = MATERIAL_MANAGER.load(materialPath);
     if (!firstHandleA || firstHandleA != firstHandleB || !materialHandle)
         return 5;
-    Material& material = *MATERIAL_MANAGER.find(materialHandle);
-    if (material.shaderHandle() != firstHandleA || material.renderQueue != 2450 ||
+    Material& material = *materialHandle;
+    if (material.shaderRef() != firstHandleA || material.renderQueue != 2450 ||
         material.getVec4("BaseColor") != math::Vec4{0.25F, 0.5F, 0.75F, 1.0F}) {
         return 6;
     }
 
     MATERIAL_MANAGER.setShader(materialHandle, VirtualPath{"assets://shaders/second.shader.json"});
-    const RID secondHandle = material.shaderHandle();
+    const Ref<Shader> secondHandle = material.shaderRef();
     if (!secondHandle || secondHandle == firstHandleA ||
         material.shader().name() != "Tests/Second" ||
         material.getVec4("BaseColor") != math::Vec4{0.25F, 0.5F, 0.75F, 1.0F} ||
@@ -302,20 +296,20 @@ int main() {
 
     if (!FILE_WATCHER.start(VirtualPath{"assets://"}, 100ms, false))
         return 8;
-    const std::uint64_t oldRevision = SHADER_MANAGER.find(firstHandleA)->revision();
+    const std::uint64_t oldRevision = firstHandleA->revision();
     if (!FILE_SYSTEM.writeText(firstPath, shaderSource("Tests/First Reloaded"))) {
         return 9;
     }
     FILE_WATCHER.scanNow();
     waitForEvents();
     ASSET_IMPORT_PIPELINE.processFileEvents();
-    if (SHADER_MANAGER.findHandle(firstPath) != firstHandleA ||
-        SHADER_MANAGER.find(firstHandleA)->revision() != oldRevision + 1 ||
-        SHADER_MANAGER.find(firstHandleA)->name() != "Tests/First Reloaded") {
+    if (SHADER_MANAGER.find(firstPath) != firstHandleA ||
+        firstHandleA->revision() != oldRevision + 1 ||
+        firstHandleA->name() != "Tests/First Reloaded") {
         return 10;
     }
 
-    const std::uint64_t validRevision = SHADER_MANAGER.find(firstHandleA)->revision();
+    const std::uint64_t validRevision = firstHandleA->revision();
     if (!FILE_SYSTEM.writeText(firstPath, "{ invalid json"))
         return 11;
     FILE_WATCHER.scanNow();
@@ -323,8 +317,8 @@ int main() {
     ASSET_IMPORT_PIPELINE.processFileEvents();
     const auto failedRecord = ASSET_DATABASE.findByPath(firstPath);
     if (!failedRecord || failedRecord->status != AssetImportStatus::Failed ||
-        SHADER_MANAGER.find(firstHandleA)->revision() != validRevision ||
-        SHADER_MANAGER.find(firstHandleA)->name() != "Tests/First Reloaded") {
+        firstHandleA->revision() != validRevision ||
+        firstHandleA->name() != "Tests/First Reloaded") {
         return 12;
     }
 
@@ -373,11 +367,13 @@ int main() {
         return 24;
     }
 
-    (void)SHADER_MANAGER.destroy(firstHandleA);
-    const RID reused = SHADER_MANAGER.insertUnkeyed(shaderAssetA->instantiate());
-    if (!reused || reused.index() != firstHandleA.index() ||
-        reused.generation() == firstHandleA.generation() ||
-        SHADER_MANAGER.find(firstHandleA) != nullptr) {
+    const RID firstId = firstHandleA->resourceId();
+    firstHandleA.reset();
+    firstHandleB.reset();
+    const Ref<Shader> reused = SHADER_MANAGER.insertUnkeyed(shaderAssetA->instantiate());
+    if (!reused || reused->resourceId().index() != firstId.index() ||
+        reused->resourceId().generation() == firstId.generation() ||
+        SHADER_MANAGER.find(firstId)) {
         return 17;
     }
 }

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "core/math/Math.h"
+#include "render/material/Material.h"
+#include "render/mesh/Mesh.h"
 #include "render/base/RenderHandle.h"
 #include "render/scene/Lighting.h"
 
@@ -12,18 +14,18 @@
 namespace engine {
 
 struct RenderObject {
-    RID mesh;
-    std::vector<RID> materials;
+    Ref<Mesh> mesh;
+    std::vector<Ref<Material>> materials;
     math::Mat44 transform{1.0F};
     std::uint32_t layerMask{1};
     float boundsRadius{0.0F}; // Bounding sphere radius in world units; 0 treats the object as a point.
     bool castShadow{true};
     bool receiveShadow{true};
 
-    [[nodiscard]] RID material(std::uint32_t slot) const {
+    [[nodiscard]] Ref<Material> material(std::uint32_t slot) const {
         if (slot < materials.size() && materials[slot])
             return materials[slot];
-        return !materials.empty() ? materials.front() : RID{};
+        return !materials.empty() ? materials.front() : Ref<Material>{};
     }
 };
 

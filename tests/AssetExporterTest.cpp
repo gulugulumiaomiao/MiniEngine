@@ -2,6 +2,8 @@
 
 #include "asset/base/AssetReference.h"
 #include "asset/base/GenericAsset.h"
+#include "asset/types/MaterialAsset.h"
+#include "asset/types/ShaderAsset.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/exporter/AssetExportPipeline.h"
 #include "asset/exporter/AssetExporterRegistry.h"
@@ -124,12 +126,12 @@ protected:
         std::filesystem::remove_all(root, error);
     }
 
-    [[nodiscard]] Material loadRuntimeMaterial(const VirtualPath& path) {
+    [[nodiscard]] Ref<Material> loadRuntimeMaterial(const VirtualPath& path) {
         const auto source = ASSET_MANAGER.loadAsset<MaterialAsset>(path);
         EXPECT_TRUE(source);
-        const RID shaderHandle = SHADER_MANAGER.load(source->shader);
-        EXPECT_TRUE(shaderHandle);
-        return source->instantiate(shaderHandle);
+        const Ref<Shader> shader = SHADER_RESOURCE_MANAGER.load(source->shader);
+        EXPECT_TRUE(shader);
+        return source->instantiate(shader);
     }
 
     std::filesystem::path root;
@@ -155,14 +157,14 @@ TEST_F(AssetExporterTest, MaterialRoundtripThroughRuntime) {
     const VirtualPath materialPath{"assets://materials/export_test.material.json"};
     const auto source = ASSET_MANAGER.loadAsset<MaterialAsset>(materialPath);
     ASSERT_TRUE(source);
-    Material material = source->instantiate(SHADER_MANAGER.load(source->shader));
-    material.setFloat("Shininess", 128.0F);
-    material.setVec4("BaseColor", math::Vec4{0.9F, 0.8F, 0.7F, 0.6F});
-    material.setBool("EnableFeature", false);
+    Ref<Material> material = source->instantiate(SHADER_RESOURCE_MANAGER.load(source->shader));
+    material->setFloat("Shininess", 128.0F);
+    material->setVec4("BaseColor", math::Vec4{0.9F, 0.8F, 0.7F, 0.6F});
+    material->setBool("EnableFeature", false);
 
     const VirtualPath targetPath{"assets://materials/roundtrip.material.json"};
     std::string error;
-    ASSERT_TRUE(ASSET_EXPORT_PIPELINE.saveMaterial(material, targetPath, error)) << error;
+    ASSERT_TRUE(ASSET_EXPORT_PIPELINE.saveMaterial(*material, targetPath, error)) << error;
 
     const auto reloaded = ASSET_MANAGER.loadAsset<MaterialAsset>(targetPath);
     ASSERT_TRUE(reloaded);
@@ -189,10 +191,10 @@ TEST_F(AssetExporterTest, MaterialRoundtripThroughRuntime) {
 // 数据库已知的引用（shader + texture）写出为 guid://，对齐新源文件的引用规范。
 TEST_F(AssetExporterTest, MaterialWritesGuidReferences) {
     const VirtualPath materialPath{"assets://materials/export_test.material.json"};
-    Material material = loadRuntimeMaterial(materialPath);
+    Ref<Material> material = loadRuntimeMaterial(materialPath);
     const VirtualPath targetPath{"assets://materials/guid_write.material.json"};
     std::string error;
-    ASSERT_TRUE(ASSET_EXPORT_PIPELINE.saveMaterial(material, targetPath, error)) << error;
+    ASSERT_TRUE(ASSET_EXPORT_PIPELINE.saveMaterial(*material, targetPath, error)) << error;
 
     const auto text = FILE_SYSTEM.readText(targetPath);
     ASSERT_TRUE(text);
@@ -209,13 +211,13 @@ TEST_F(AssetExporterTest, MaterialWritesGuidReferences) {
 // 不把派生值（shader 默认 queue、默认纹理）显式化。
 TEST_F(AssetExporterTest, MaterialOmitsOptionalFields) {
     const VirtualPath materialPath{"assets://materials/export_test.material.json"};
-    Material material = loadRuntimeMaterial(materialPath);
-    material.keywords.clear();
-    material.setTexture("MainTex", "");
+    Ref<Material> material = loadRuntimeMaterial(materialPath);
+    material->keywords.clear();
+    material->setTexture("MainTex", "");
 
     const VirtualPath targetPath{"assets://materials/omitted.material.json"};
     std::string error;
-    ASSERT_TRUE(ASSET_EXPORT_PIPELINE.saveMaterial(material, targetPath, error)) << error;
+    ASSERT_TRUE(ASSET_EXPORT_PIPELINE.saveMaterial(*material, targetPath, error)) << error;
 
     const auto text = FILE_SYSTEM.readText(targetPath);
     ASSERT_TRUE(text);
@@ -231,11 +233,11 @@ TEST_F(AssetExporterTest, MaterialPreservesRenderQueueOverride) {
     ASSERT_TRUE(queued);
     ASSERT_EQ(queued->renderQueue, std::optional<int>{2450});
 
-    Material material = queued->instantiate(SHADER_MANAGER.load(queued->shader));
-    ASSERT_EQ(material.renderQueueOverride(), std::optional<int>{2450});
+    Ref<Material> material = queued->instantiate(SHADER_RESOURCE_MANAGER.load(queued->shader));
+    ASSERT_EQ(material->renderQueueOverride(), std::optional<int>{2450});
     const VirtualPath targetPath{"assets://materials/queued_out.material.json"};
     std::string error;
-    ASSERT_TRUE(ASSET_EXPORT_PIPELINE.saveMaterial(material, targetPath, error)) << error;
+    ASSERT_TRUE(ASSET_EXPORT_PIPELINE.saveMaterial(*material, targetPath, error)) << error;
 
     const auto reloaded = ASSET_MANAGER.loadAsset<MaterialAsset>(targetPath);
     ASSERT_TRUE(reloaded);
@@ -246,15 +248,15 @@ TEST_F(AssetExporterTest, MaterialPreservesRenderQueueOverride) {
 // 没有写回器的类型（Shader）都明确失败且携带原因。
 TEST_F(AssetExporterTest, MaterialRejectsBadTargetsAndUnexportableTypes) {
     const VirtualPath materialPath{"assets://materials/export_test.material.json"};
-    Material material = loadRuntimeMaterial(materialPath);
+    Ref<Material> material = loadRuntimeMaterial(materialPath);
     std::string error;
 
-    EXPECT_FALSE(ASSET_EXPORT_PIPELINE.saveMaterial(material,
+    EXPECT_FALSE(ASSET_EXPORT_PIPELINE.saveMaterial(*material,
                                                     VirtualPath{"assets://materials/out.txt"},
                                                     error));
     EXPECT_FALSE(error.empty());
     error.clear();
-    EXPECT_FALSE(ASSET_EXPORT_PIPELINE.saveMaterial(material,
+    EXPECT_FALSE(ASSET_EXPORT_PIPELINE.saveMaterial(*material,
                                                     VirtualPath{"library://out.material.json"},
                                                     error));
     EXPECT_FALSE(error.empty());

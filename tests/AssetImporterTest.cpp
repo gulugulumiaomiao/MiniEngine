@@ -1,5 +1,7 @@
 ﻿#include "asset/database/AssetDatabase.h"
 #include "asset/derived_data/AssetArtifact.h"
+#include "asset/types/MaterialAsset.h"
+#include "asset/types/ShaderAsset.h"
 #include "asset/importer/AssetImporterRegistry.h"
 #include "asset/importer/BuiltinAssetImporters.h"
 #include "asset/importer/TextureAssetImporter.h"
@@ -370,15 +372,6 @@ int main() {
         samplerAsset.desc.sampler.addressModeU != TextureAddressMode::ClampToEdge ||
         samplerAsset.desc.sampler.addressModeV != TextureAddressMode::MirroredRepeat ||
         samplerAsset.desc.sampler.maxAnisotropy != 4.0F) {
-        return 18;
-    }
-    const rhi::SamplerDesc rhiSampler = samplerAsset.desc.sampler.toRhi();
-    if (rhiSampler.minFilter != rhi::SamplerFilter::Nearest ||
-        rhiSampler.magFilter != rhi::SamplerFilter::Nearest ||
-        rhiSampler.mipmapFilter != rhi::SamplerMipmapFilter::Nearest ||
-        rhiSampler.addressU != rhi::SamplerAddressMode::ClampToEdge ||
-        rhiSampler.addressV != rhi::SamplerAddressMode::MirroredRepeat ||
-        rhiSampler.maxAnisotropy != 4.0F) {
         return 18;
     }
 

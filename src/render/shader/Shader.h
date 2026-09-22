@@ -1,6 +1,8 @@
 #pragma once
 
 #include "asset/base/Asset.h"
+#include "core/base/Ref.h"
+#include "core/base/RefCounted.h"
 #include "asset/base/AssetId.h"
 #include "core/filesystem/VirtualPath.h"
 #include "core/math/Math.h"
@@ -20,7 +22,7 @@ namespace engine {
 
 class ShaderAsset;
 class Shader;
-class ShaderManager;
+class ShaderResourceManager;
 
 enum class ShaderPropertyType { Float, Range, Vec2, Vec3, Vec4, Color, Texture2D, Boolean, Matrix };
 enum class ShaderPassType { Forward, DepthOnly, ShadowCaster };
@@ -126,22 +128,6 @@ struct SubShaderDesc : public Transferable {
     [[nodiscard]] const ShaderPassDesc& requirePass(ShaderPassType type) const;
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
-
-class ShaderAsset final : public Asset {
-public:
-    [[nodiscard]] AssetType type() const override { return AssetType::Shader; }
-
-    std::string name;
-    std::vector<ShaderPropertyDesc> properties;
-    std::vector<ShaderPropertyDesc> globalProperties;
-    std::vector<SubShaderDesc> subShaders;
-
-    [[nodiscard]] const ShaderPropertyDesc* findProperty(const std::string& name) const;
-    [[nodiscard]] const ShaderPropertyDesc* findGlobalProperty(const std::string& name) const;
-    [[nodiscard]] Shader instantiate() const;
-    [[nodiscard]] bool transfer(Transfer& archive) override;
-};
-// Source .shader.json parsing lives in asset/format/ShaderAssetFormat.
 
 struct UniformMemberLayout {
     std::string name;
@@ -249,9 +235,14 @@ private:
     std::vector<ShaderPass> passes_;
 };
 
-class Shader final {
+class Shader final : public RefCounted {
 public:
     explicit Shader(const ShaderAsset& asset);
+    ~Shader() override;
+    Shader(const Shader&) = delete;
+    Shader& operator=(const Shader&) = delete;
+    Shader(Shader&&) = delete;
+    Shader& operator=(Shader&&) = delete;
 
     [[nodiscard]] const VirtualPath& assetPath() const { return assetPath_; }
     [[nodiscard]] const std::string& name() const { return name_; }
@@ -274,7 +265,8 @@ public:
 
     [[nodiscard]] AssetId assetId() const { return assetId_; }
     [[nodiscard]] bool isAssetBacked() const { return assetId_.valid(); }
-    [[nodiscard]] Shader clone() const;
+    [[nodiscard]] RID resourceId() const { return resourceId_; }
+    [[nodiscard]] Ref<Shader> clone() const;
     void rebuildFromAsset(const ShaderAsset& asset);
 
     // Unity-style global shader property API. Values set here are shared across
@@ -288,7 +280,8 @@ public:
     static void setGlobalTexture(std::string_view name, std::string_view texturePath);
 
 private:
-    friend class ShaderManager;
+    friend class ShaderResourceManager;
+    Shader() = default;
     VirtualPath assetPath_;
     AssetId assetId_;
     std::string name_;
@@ -298,6 +291,7 @@ private:
     UniformBlockLayout globalUniformBlockLayout_;
     std::vector<SubShader> subShaders_;
     std::uint64_t revision_{1};
+    RID resourceId_;
 };
 
 } // namespace engine

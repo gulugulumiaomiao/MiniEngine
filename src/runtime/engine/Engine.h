@@ -4,6 +4,7 @@
 #include "core/base/Singleton.h"
 #include "core/filesystem/VirtualPath.h"
 #include "render/scene/RenderScene.h"
+#include "core/base/Ref.h"
 #include "runtime/config/EngineConfig.h"
 #include "runtime/config/ProjectConfig.h"
 #include "scene/scene/Scene.h"
@@ -104,7 +105,7 @@ private:
     WindowConfig activeWindowConfig_;
     std::unique_ptr<Window> window_;
     std::unique_ptr<Renderer> renderer_;
-    std::unique_ptr<Scene> scene_{std::make_unique<Scene>("Main Scene")};
+    Ref<Scene> scene_{makeRef<Scene>("Main Scene")};
     RenderScene renderScene_;
     VirtualPath activeScenePath_;
     float deltaTime_{};

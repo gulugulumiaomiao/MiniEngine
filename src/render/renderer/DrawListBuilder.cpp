@@ -6,8 +6,9 @@
 #include "render/mesh/Mesh.h"
 #include "render/mesh/MeshManager.h"
 #include "render/pipeline/RenderContext.h"
-#include "render/gpu/mesh/MeshGpuManager.h"
-#include "render/gpu/pipeline/GraphicsPipelineManager.h"
+#include "render/gpu/material/MaterialStorage.h"
+#include "render/gpu/mesh/MeshStorage.h"
+#include "render/gpu/pipeline/GraphicsPipelineStorage.h"
 #include "render/render_target/RenderTarget.h"
 #include "render/scene/RenderScene.h"
 #include "render/shader/Shader.h"
@@ -40,33 +41,25 @@ DrawListBuilder::DrawListBuilder(std::string_view renderPipeline)
 
 DrawListBuilder::ResolvedMaterialPass
 DrawListBuilder::resolveMaterialPass(const RenderContext& context,
-                                     RID materialHandle,
+                                     const Ref<Material>& materialRef,
                                      const Mesh& meshInstance,
                                      RenderPhase phase) const {
-    const Material* material = MATERIAL_MANAGER.find(materialHandle);
+    const Material* material = materialRef.get();
     if (!material)
         return {};
-    const SubShader* subShader = material->shader().selectSubShader(renderPipeline_);
-    if (!subShader)
-        return {};
-    const ShaderPass* shaderPass = subShader->findPass(passTypeForPhase(phase));
-    if (!shaderPass)
-        return {};
-    const ShaderVariantKey variant = shaderPass->variantKey(material->keywords);
-    // ShadowCaster pipelines render depth-only into the off-screen shadow map: they are
-    // resolved against an empty color attachment list and the shadow map depth format.
     const bool shadowCaster = phase == RenderPhase::ShadowCaster;
     const rhi::PixelFormat colorFormat =
         shadowCaster ? rhi::PixelFormat::Undefined : context.sceneColorFormat();
     const rhi::PixelFormat depthFormat = shadowCaster
                                              ? rhi::PixelFormat::Depth32Float
                                              : context.currentForwardTarget().depthFormat();
-    return {
-        materialHandle,
-        shaderPass,
-        GRAPHICS_PIPELINE_MANAGER.resolve(
-            material->shader(), *shaderPass, variant, meshInstance, colorFormat, depthFormat),
-    };
+    const MaterialPassState state = MATERIAL_STORAGE.resolvePass(*material,
+                                                                 meshInstance,
+                                                                 passTypeForPhase(phase),
+                                                                 renderPipeline_,
+                                                                 colorFormat,
+                                                                 depthFormat);
+    return {materialRef, state.pass, state.pipeline};
 }
 
 DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& context) {
@@ -136,12 +129,12 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
                 continue;
             }
         }
-        Mesh* meshInstance = MESH_MANAGER.find(object.mesh);
+        Mesh* meshInstance = object.mesh.get();
         if (!meshInstance) {
             Log::warn("DrawListBuilder", "Skipping object with an invalid RID");
             continue;
         }
-        const MeshDrawInfo mesh = MESH_GPU_MANAGER.resolve(object.mesh);
+        const MeshDrawInfo mesh = MESH_STORAGE.resolve(*meshInstance);
         if (mesh.subMeshes.empty()) {
             Log::warn("DrawListBuilder", "Skipping Mesh without GPU draw data");
             continue;
@@ -150,7 +143,7 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
         drawList.objects.push_back({object.transform});
 
         for (const MeshDrawInfo::Range& range : mesh.subMeshes) {
-            const RID requestedMaterial = object.material(range.materialSlot);
+            const Ref<Material> requestedMaterial = object.material(range.materialSlot);
             for (const RenderPhase renderPhase : phases) {
                 if (renderPhase == RenderPhase::ShadowCaster && !object.castShadow) {
                     continue;
@@ -158,9 +151,10 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
                 ResolvedMaterialPass resolved =
                     resolveMaterialPass(context, requestedMaterial, *meshInstance, renderPhase);
                 ResolvedMaterialPass fallback;
+                const Ref<Material> errorMaterial = MATERIAL_RESOURCE_MANAGER.errorMaterial();
                 if (renderPhase == RenderPhase::Forward) {
                     fallback = resolveMaterialPass(
-                        context, MATERIAL_MANAGER.errorMaterial(), *meshInstance, renderPhase);
+                        context, errorMaterial, *meshInstance, renderPhase);
                     if (!resolved) {
                         Log::error("DrawListBuilder",
                                    "Using Error Material for an unavailable material");
@@ -170,13 +164,14 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
                 if (!resolved) {
                     continue;
                 }
-                const Material* material = MATERIAL_MANAGER.find(resolved.material);
+                const Material* material = resolved.material.get();
                 drawList.items.push_back({
                     .shaderPass = resolved.pass,
                     .renderPhase = renderPhase,
-                    .mesh = object.mesh,
+                    .mesh = object.mesh->resourceId(),
                     .pipeline = resolved.pipeline,
                     .material = resolved.material,
+                    .materialKey = resolved.material->resourceId(),
                     .fallbackPipeline = fallback.pipeline,
                     .fallbackMaterial = fallback.material,
                     .vertexBuffers = mesh.vertexBuffers,

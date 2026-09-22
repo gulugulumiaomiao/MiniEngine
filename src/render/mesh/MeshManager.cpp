@@ -7,231 +7,208 @@
 
 #include <limits>
 #include <utility>
+#include <vector>
 
 namespace engine {
 
-RID MeshManager::load(const AssetId& assetId) {
+Ref<Mesh> MeshResourceManager::load(const AssetId& assetId) {
     if (!assetId.valid()) {
-        Log::error("MeshManager", "Invalid Mesh AssetId");
+        Log::error("MeshResourceManager", "Invalid Mesh AssetId");
         return {};
     }
-    if (const RID existing = findHandle(assetId); existing) {
+    if (Ref<Mesh> existing = find(assetId))
         return existing;
-    }
     const std::optional<VirtualPath> path = ASSET_DATABASE.findPath(assetId);
     if (!path) {
-        Log::error(
-            "MeshManager", "Unknown Mesh AssetId: %s", assetId.toString().c_str());
+        Log::error("MeshResourceManager", "Unknown Mesh AssetId: %s", assetId.toString().c_str());
         return {};
     }
     return loadFromPath(*path, assetId);
 }
 
-RID MeshManager::load(const VirtualPath& meshPath) {
+Ref<Mesh> MeshResourceManager::load(const VirtualPath& meshPath) {
     if (!meshPath.valid()) {
-        Log::error("MeshManager", "Invalid Mesh path: %s", meshPath.string().c_str());
+        Log::error("MeshResourceManager", "Invalid Mesh path: %s", meshPath.string().c_str());
         return {};
     }
     const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(meshPath);
     if (!assetId) {
-        Log::error(
-            "MeshManager", "Mesh path has no AssetId: %s", meshPath.string().c_str());
+        Log::error("MeshResourceManager",
+                   "Mesh path has no AssetId: %s",
+                   meshPath.string().c_str());
         return {};
     }
-    if (const RID existing = findHandle(*assetId); existing) {
+    if (Ref<Mesh> existing = find(*assetId))
         return existing;
-    }
     return loadFromPath(meshPath, *assetId);
 }
 
-RID MeshManager::loadFromPath(const VirtualPath& meshPath, const AssetId& assetId) {
+Ref<Mesh> MeshResourceManager::loadFromPath(const VirtualPath& meshPath, const AssetId& assetId) {
     Log::info("Mesh", "Loading mesh: %s", meshPath.string().c_str());
     const std::shared_ptr<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
-    if (!asset) {
+    if (!asset)
         return {};
-    }
-    Mesh mesh = asset->instantiate();
-    mesh.assetId_ = assetId;
-    return insert(std::move(mesh));
+    Ref<Mesh> mesh = asset->instantiate();
+    if (!mesh)
+        return {};
+    mesh->assetId_ = assetId;
+    return insert(mesh);
 }
 
-RID MeshManager::clone(RID source) {
-    Mesh* mesh = find(source);
-    if (!mesh) {
-        Log::error("MeshManager", "Cannot clone an invalid Mesh");
+Ref<Mesh> MeshResourceManager::clone(const Ref<Mesh>& source) {
+    if (!source) {
+        Log::error("MeshResourceManager", "Cannot clone an invalid Mesh");
         return {};
     }
-    return insertUnkeyed(mesh->clone());
+    return insertUnkeyed(source->clone());
 }
 
-void MeshManager::refreshAsset(const AssetId& assetId) {
+void MeshResourceManager::refreshAsset(const AssetId& assetId) {
     if (!assetId.valid()) {
-        Log::error("MeshManager", "Cannot refresh an invalid AssetId");
+        Log::error("MeshResourceManager", "Cannot refresh an invalid AssetId");
         return;
     }
     const std::optional<VirtualPath> path = ASSET_DATABASE.findPath(assetId);
     if (!path) {
-        Log::error(
-            "MeshManager", "Unknown Mesh AssetId: %s", assetId.toString().c_str());
+        Log::error("MeshResourceManager", "Unknown Mesh AssetId: %s", assetId.toString().c_str());
         return;
     }
     const std::shared_ptr<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(*path);
-    if (!asset) {
-        Log::error("MeshManager", "Failed to reload mesh asset: %s", path->string().c_str());
+    Ref<Mesh> mesh = find(assetId);
+    if (!asset || !mesh) {
+        Log::error("MeshResourceManager", "Failed to reload mesh asset: %s", path->string().c_str());
         return;
     }
-    forEach([&assetId, &asset](Mesh& mesh) {
-        if (mesh.assetId() == assetId) {
-            mesh.rebuildFromAsset(*asset);
-        }
-    });
+    mesh->rebuildFromAsset(*asset);
 }
 
-void MeshManager::refreshAsset(const VirtualPath& meshPath) {
+void MeshResourceManager::refreshAsset(const VirtualPath& meshPath) {
     if (!meshPath.valid()) {
-        Log::error("MeshManager", "Invalid Mesh path: %s", meshPath.string().c_str());
+        Log::error("MeshResourceManager", "Invalid Mesh path: %s", meshPath.string().c_str());
         return;
     }
     const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(meshPath);
     if (!assetId) {
-        Log::error(
-            "MeshManager", "Mesh path has no AssetId: %s", meshPath.string().c_str());
+        Log::error("MeshResourceManager",
+                   "Mesh path has no AssetId: %s",
+                   meshPath.string().c_str());
         return;
     }
     refreshAsset(*assetId);
 }
 
-RID MeshManager::createRuntime(const MeshBuildRecipe& recipe) {
+Ref<Mesh> MeshResourceManager::createRuntime(const MeshBuildRecipe& recipe) {
     const std::optional<MeshBuildResult> built = MeshBuilder::build(recipe);
     if (!built) {
-        Log::error("MeshManager", "Cannot build runtime primitive Mesh: %s", recipe.name.c_str());
+        Log::error("MeshResourceManager", "Cannot build runtime primitive Mesh: %s", recipe.name.c_str());
         return {};
     }
-    return insertUnkeyed(Mesh{built->desc, built->data, recipe});
+    return insertUnkeyed(makeRef<Mesh>(built->desc, built->data, recipe));
 }
 
-bool MeshManager::rebuildRuntime(RID handle, const MeshBuildRecipe& recipe) {
-    const Mesh* current = find(handle);
-    if (!current || current->isAssetBacked()) {
-        Log::error("MeshManager", "Cannot rebuild a non-runtime RID");
-        return false;
-    }
-    const std::optional<MeshBuildResult> built = MeshBuilder::build(recipe);
-    if (!built) {
-        Log::error("MeshManager", "Cannot rebuild runtime primitive Mesh: %s", recipe.name.c_str());
-        return false;
-    }
-    return replace(handle, Mesh{built->desc, built->data, recipe});
-}
-
-bool MeshManager::destroyRuntime(RID handle) {
-    const Mesh* mesh = find(handle);
+bool MeshResourceManager::rebuildRuntime(const Ref<Mesh>& mesh, const MeshBuildRecipe& recipe) {
     if (!mesh || mesh->isAssetBacked()) {
-        Log::error("MeshManager", "Cannot destroy a non-runtime RID");
+        Log::error("MeshResourceManager", "Cannot rebuild a non-runtime Mesh");
         return false;
     }
-    return destroy(handle);
+    const std::optional<MeshBuildResult> built = MeshBuilder::build(recipe);
+    if (!built) {
+        Log::error("MeshResourceManager", "Cannot rebuild runtime primitive Mesh: %s", recipe.name.c_str());
+        return false;
+    }
+    if (mesh->version_ == std::numeric_limits<std::uint64_t>::max())
+        Log::fatal("MeshResourceManager", "Mesh version overflow");
+    mesh->desc_ = built->desc;
+    mesh->data_ = built->data;
+    mesh->buildRecipe_ = recipe;
+    mesh->cacheVertexLayoutHash();
+    ++mesh->version_;
+    mesh->dirty_ = true;
+    return true;
 }
 
-RID MeshManager::insert(Mesh mesh) {
-    if (!validate(mesh))
+Ref<Mesh> MeshResourceManager::insert(const Ref<Mesh>& mesh) {
+    if (!mesh || !validateMesh(mesh->desc(), mesh->data()))
         return {};
-
-    const AssetId assetId = mesh.assetId();
-    if (assetId.valid()) {
-        if (const RID existing = findHandle(assetId); existing)
+    if (mesh->assetId_.valid()) {
+        if (Ref<Mesh> existing = find(mesh->assetId_))
             return existing;
     }
-    const RID handle = KeyedHandleRegistry::insert(std::move(mesh));
-    return handle;
+    return insertUnkeyed(mesh);
 }
 
-RID MeshManager::insertUnkeyed(Mesh mesh) {
-    if (!validate(mesh))
+Ref<Mesh> MeshResourceManager::insertUnkeyed(const Ref<Mesh>& mesh) {
+    if (!mesh || mesh->resourceId_ || !validateMesh(mesh->desc(), mesh->data()))
         return {};
-    return KeyedHandleRegistry::insertUnkeyed(std::move(mesh));
+    const RID handle = resources_.insert(mesh.get());
+    mesh->resourceId_ = handle;
+    if (mesh->assetId_.valid())
+        assetIndex_.insert_or_assign(mesh->assetId_, handle);
+    return mesh;
 }
 
-Mesh* MeshManager::find(const VirtualPath& meshPath) {
-    return const_cast<Mesh*>(std::as_const(*this).find(meshPath));
+Mesh* MeshResourceManager::findRaw(RID handle) const {
+    Mesh* const* stored = resources_.find(handle);
+    return stored ? *stored : nullptr;
 }
 
-const Mesh* MeshManager::find(const VirtualPath& meshPath) const {
+Ref<Mesh> MeshResourceManager::find(RID handle) const {
+    return Ref<Mesh>{findRaw(handle)};
+}
+
+Ref<Mesh> MeshResourceManager::find(const AssetId& assetId) const {
+    const auto found = assetIndex_.find(assetId);
+    return found == assetIndex_.end() ? Ref<Mesh>{} : find(found->second);
+}
+
+Ref<Mesh> MeshResourceManager::find(const VirtualPath& meshPath) const {
     const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(meshPath);
-    if (!assetId)
-        return nullptr;
-    return KeyedHandleRegistry::find(*assetId);
+    return assetId ? find(*assetId) : Ref<Mesh>{};
 }
 
-RID MeshManager::findHandle(const VirtualPath& meshPath) const {
-    const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(meshPath);
-    if (!assetId)
-        return {};
-    return KeyedHandleRegistry::findHandle(*assetId);
-}
-
-bool MeshManager::destroy(RID handle) {
-    Mesh* mesh = find(handle);
-    if (!mesh)
-        return false;
+void MeshResourceManager::unregister(Mesh* mesh) {
+    if (!mesh || !mesh->resourceId_)
+        return;
+    const RID handle = mesh->resourceId_;
+    if (mesh->assetId_.valid()) {
+        const auto found = assetIndex_.find(mesh->assetId_);
+        if (found != assetIndex_.end() && found->second == handle)
+            assetIndex_.erase(found);
+    }
     if (destroyObserver_)
         destroyObserver_(handle);
-    return KeyedHandleRegistry::destroy(handle);
+    mesh->resourceId_ = {};
+    (void)resources_.release(handle);
 }
 
-void MeshManager::clear() {
-    if (destroyObserver_) {
-        forEachHandle([this](RID handle, const Mesh&) { destroyObserver_(handle); });
+void MeshResourceManager::clear() {
+    std::vector<std::pair<RID, Mesh*>> remaining;
+    remaining.reserve(resources_.size());
+    resources_.forEachHandle(
+        [&remaining](RID handle, Mesh* mesh) { remaining.emplace_back(handle, mesh); });
+    for (const auto& [handle, mesh] : remaining) {
+        if (!findRaw(handle))
+            continue;
+        if (destroyObserver_)
+            destroyObserver_(handle);
+        mesh->resourceId_ = {};
+        (void)resources_.release(handle);
     }
-    KeyedHandleRegistry::clear();
+    assetIndex_.clear();
 }
 
-bool MeshManager::replace(RID handle, Mesh mesh) {
-    Mesh* current = find(handle);
-    if (!current) {
-        Log::error("MeshManager", "Cannot replace an invalid RID");
-        return false;
-    }
-    if (current->assetPath() != mesh.assetPath() || !validate(mesh)) {
-        Log::error(
-            "MeshManager", "Replacement Mesh is invalid: %s", mesh.assetPath().string().c_str());
-        return false;
-    }
-    if (current->version_ == std::numeric_limits<std::uint64_t>::max()) {
-        Log::error("MeshManager", "Mesh version overflow");
-        return false;
-    }
-    const AssetId assetId = current->assetId_;
-    mesh.version_ = current->version_ + 1;
-    mesh.dirty_ = true;
-    *current = std::move(mesh);
-    current->assetId_ = assetId;
-    return true;
-}
-
-bool MeshManager::replace(const VirtualPath& meshPath) {
+bool MeshResourceManager::replace(const VirtualPath& meshPath) {
     const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(meshPath);
-    if (!assetId) {
+    if (!assetId)
         return true;
-    }
-    const RID handle = findHandle(*assetId);
-    if (!handle) {
+    Ref<Mesh> mesh = find(*assetId);
+    if (!mesh)
         return true;
-    }
     const std::shared_ptr<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
-    if (!asset) {
+    if (!asset)
         return false;
-    }
-    Mesh* current = find(handle);
-    if (!current) {
-        return false;
-    }
-    current->rebuildFromAsset(*asset);
+    mesh->rebuildFromAsset(*asset);
     return true;
-}
-
-bool MeshManager::validate(const Mesh& mesh) const {
-    return validateMesh(mesh.desc(), mesh.data());
 }
 
 } // namespace engine
