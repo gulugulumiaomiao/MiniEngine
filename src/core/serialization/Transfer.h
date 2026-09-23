@@ -49,6 +49,9 @@ public:
     bool transfer(std::string_view name, double& value);
     bool transfer(std::string_view name, std::string& value);
     bool transfer(std::string_view name, std::vector<std::byte>& value);
+    // Raw byte buffers held as uint8_t (e.g. pixel blobs) reuse the compact byte-block
+    // codec instead of the generic element-wise array path.
+    bool transfer(std::string_view name, std::vector<std::uint8_t>& value);
     bool transfer(std::string_view name, VirtualPath& value);
     bool transfer(std::string_view name, math::Vec2& value);
     bool transfer(std::string_view name, math::Vec3& value);

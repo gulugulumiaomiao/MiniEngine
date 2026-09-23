@@ -22,7 +22,6 @@ public:
     [[nodiscard]] Ref<Texture> load(const AssetId& assetId);
     [[nodiscard]] Ref<Texture> load(const VirtualPath& texturePath);
     [[nodiscard]] Ref<Texture> resolveReference(std::string_view reference);
-    [[nodiscard]] Ref<Texture> clone(const Ref<Texture>& source);
     void refreshAsset(const AssetId& assetId);
     void refreshAsset(const VirtualPath& texturePath);
 
@@ -51,7 +50,7 @@ private:
     [[nodiscard]] Ref<Texture> createTexture(VirtualPath path,
                                              AssetId assetId,
                                              TextureDesc desc,
-                                             std::vector<TextureMipData> mipData,
+                                             std::vector<std::uint8_t> pixels,
                                              std::uint64_t version = 1);
     [[nodiscard]] Ref<Texture> createBuiltin(const VirtualPath& path,
                                              std::uint32_t width,

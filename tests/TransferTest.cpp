@@ -303,7 +303,7 @@ bool testObjectScopes() {
     TextureAsset texture;
     texture.desc = {
         TextureType::Texture2D, TextureFormat::Rgba8Srgb, TextureColorSpace::Srgb, 1, 1, 1};
-    texture.mipData.emplace_back(1, 1, std::vector<std::byte>(4));
+    texture.pixels.assign(4, 0);
     MeshComponentAsset mesh;
     mesh.mesh = VirtualPath{"assets://meshes/test.mesh.json"};
     MeshBuildRecipe recipe;
@@ -327,7 +327,7 @@ bool testObjectScopes() {
            checkObjectScopes<ShaderInterfaceVariable>() && checkObjectScopes<RenderStateDesc>() &&
            checkObjectScopes(pass) && checkObjectScopes(subShader) && checkObjectScopes(shader) &&
            checkObjectScopes(material) && checkObjectScopes(texture) &&
-           checkObjectScopes<TextureDesc>() && checkObjectScopes<TextureMipData>() &&
+           checkObjectScopes<TextureDesc>() &&
            checkObjectScopes<WindowConfig>() && checkObjectScopes<RenderConfig>() &&
            checkObjectScopes<EngineConfig>();
 }

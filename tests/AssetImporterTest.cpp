@@ -282,8 +282,7 @@ int main() {
         textureArtifact->assetType != AssetType::Texture || !texture.transfer(textureReader) ||
         !textureReader.finished() || texture.desc.type != TextureType::Texture2D ||
         texture.desc.format != TextureFormat::Rgba8Unorm || texture.desc.width != 2 ||
-        texture.desc.height != 2 || texture.desc.mipCount != 1 || texture.mipData.size() != 1 ||
-        texture.mipData.front().bytes.size() != 16) {
+        texture.desc.height != 2 || texture.desc.mipCount != 1 || texture.pixels.size() != 16) {
         return 12;
     }
 
@@ -311,8 +310,7 @@ int main() {
         BinaryReader reader{artifact ? artifact->payload : std::span<const std::byte>{}};
         return result.success && artifact && asset.transfer(reader) && reader.finished() &&
                asset.desc.width == 2 && asset.desc.height == 2 && asset.desc.mipCount == 2 &&
-               asset.desc.format == TextureFormat::Rgba8Srgb && asset.mipData.size() == 2 &&
-               asset.mipData[0].bytes.size() == 16 && asset.mipData[1].bytes.size() == 4;
+               asset.desc.format == TextureFormat::Rgba8Srgb && asset.pixels.size() == 20;
     };
     if (!verifyImageImport(VirtualPath{"assets://textures/import_test.png"}, png)) {
         return 13;
@@ -340,8 +338,7 @@ int main() {
                                                    : std::span<const std::byte>{}};
     if (!singleMipResult.success || !singleMipArtifact ||
         !singleMip.transfer(singleMipReader) || !singleMipReader.finished() ||
-        singleMip.desc.mipCount != 1 || singleMip.mipData.size() != 1 ||
-        singleMip.mipData.front().bytes.size() != 16) {
+        singleMip.desc.mipCount != 1 || singleMip.pixels.size() != 16) {
         return 17;
     }
 

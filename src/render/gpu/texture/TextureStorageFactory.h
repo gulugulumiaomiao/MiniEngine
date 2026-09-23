@@ -8,7 +8,8 @@ namespace engine {
 class Texture;
 
 struct TextureStorageCreateInfo {
-    const Texture& texture;
+    // Non-const: create() moves the transient CPU pixel blob out for the one-shot upload.
+    Texture& texture;
 };
 
 class TextureStorageFactory final

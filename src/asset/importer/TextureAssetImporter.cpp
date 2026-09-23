@@ -53,18 +53,22 @@ std::uint64_t readU64(std::span<const std::byte> bytes, std::size_t offset) {
            (static_cast<std::uint64_t>(readU32(bytes, offset + 4U)) << 32U);
 }
 
-std::vector<TextureMipData> generateMipChain(TextureMipData base) {
-    std::vector<TextureMipData> result;
-    result.push_back(std::move(base));
-    while (result.back().width > 1 || result.back().height > 1) {
-        const TextureMipData& source = result.back();
-        TextureMipData destination;
-        destination.width = std::max(1U, source.width / 2U);
-        destination.height = std::max(1U, source.height / 2U);
-        destination.bytes.resize(static_cast<std::size_t>(destination.width) * destination.height *
-                                 4U);
-        for (std::uint32_t y = 0; y < destination.height; ++y) {
-            for (std::uint32_t x = 0; x < destination.width; ++x) {
+// Box-filters every remaining mip level for the RGBA8 base already stored in blob, appending
+// each level tightly after the previous one. Returns the total mip level count.
+std::uint32_t appendMipChain(std::vector<std::uint8_t>& blob,
+                            std::uint32_t baseWidth,
+                            std::uint32_t baseHeight) {
+    std::uint32_t levels = 1;
+    std::uint32_t srcWidth = baseWidth;
+    std::uint32_t srcHeight = baseHeight;
+    std::size_t srcOffset{};
+    while (srcWidth > 1 || srcHeight > 1) {
+        const std::uint32_t dstWidth = std::max(1U, srcWidth / 2U);
+        const std::uint32_t dstHeight = std::max(1U, srcHeight / 2U);
+        const std::size_t dstOffset = blob.size();
+        blob.resize(dstOffset + static_cast<std::size_t>(dstWidth) * dstHeight * 4U);
+        for (std::uint32_t y = 0; y < dstHeight; ++y) {
+            for (std::uint32_t x = 0; x < dstWidth; ++x) {
                 for (std::uint32_t channel = 0; channel < 4; ++channel) {
                     std::uint32_t total{};
                     std::uint32_t samples{};
@@ -72,25 +76,29 @@ std::vector<TextureMipData> generateMipChain(TextureMipData base) {
                         for (std::uint32_t dx = 0; dx < 2; ++dx) {
                             const std::uint32_t sourceX = x * 2U + dx;
                             const std::uint32_t sourceY = y * 2U + dy;
-                            if (sourceX >= source.width || sourceY >= source.height)
+                            if (sourceX >= srcWidth || sourceY >= srcHeight)
                                 continue;
                             const std::size_t index =
-                                (static_cast<std::size_t>(sourceY) * source.width + sourceX) * 4U +
+                                srcOffset +
+                                (static_cast<std::size_t>(sourceY) * srcWidth + sourceX) * 4U +
                                 channel;
-                            total += std::to_integer<std::uint8_t>(source.bytes[index]);
+                            total += blob[index];
                             ++samples;
                         }
                     }
                     const std::size_t destinationIndex =
-                        (static_cast<std::size_t>(y) * destination.width + x) * 4U + channel;
-                    destination.bytes[destinationIndex] =
-                        static_cast<std::byte>((total + samples / 2U) / samples);
+                        dstOffset + (static_cast<std::size_t>(y) * dstWidth + x) * 4U + channel;
+                    blob[destinationIndex] =
+                        static_cast<std::uint8_t>((total + samples / 2U) / samples);
                 }
             }
         }
-        result.push_back(std::move(destination));
+        srcOffset = dstOffset;
+        srcWidth = dstWidth;
+        srcHeight = dstHeight;
+        ++levels;
     }
-    return result;
+    return levels;
 }
 
 std::shared_ptr<TextureAsset> decodeImage(std::span<const std::byte> source, bool generateMipmaps) {
@@ -109,25 +117,22 @@ std::shared_ptr<TextureAsset> decodeImage(std::span<const std::byte> source, boo
         stbi_image_free};
     if (!pixels || width <= 0 || height <= 0)
         return {};
-    const std::uint64_t byteSize = static_cast<std::uint64_t>(width) * height * 4U;
+    const std::uint32_t baseWidth = static_cast<std::uint32_t>(width);
+    const std::uint32_t baseHeight = static_cast<std::uint32_t>(height);
+    const std::uint64_t byteSize = static_cast<std::uint64_t>(baseWidth) * baseHeight * 4U;
     if (byteSize > std::numeric_limits<std::size_t>::max())
         return {};
-    TextureMipData base{static_cast<std::uint32_t>(width),
-                        static_cast<std::uint32_t>(height),
-                        std::vector<std::byte>(static_cast<std::size_t>(byteSize))};
-    std::memcpy(base.bytes.data(), pixels.get(), base.bytes.size());
     auto asset = std::make_shared<TextureAsset>();
-    if (generateMipmaps) {
-        asset->mipData = generateMipChain(std::move(base));
-    } else {
-        asset->mipData.push_back(std::move(base));
-    }
+    asset->pixels.resize(static_cast<std::size_t>(byteSize));
+    std::memcpy(asset->pixels.data(), pixels.get(), asset->pixels.size());
+    const std::uint32_t mipCount =
+        generateMipmaps ? appendMipChain(asset->pixels, baseWidth, baseHeight) : 1U;
     asset->desc = {TextureType::Texture2D,
                    TextureFormat::Rgba8Srgb,
                    TextureColorSpace::Srgb,
-                   static_cast<std::uint32_t>(width),
-                   static_cast<std::uint32_t>(height),
-                   static_cast<std::uint32_t>(asset->mipData.size())};
+                   baseWidth,
+                   baseHeight,
+                   mipCount};
     return asset;
 }
 
@@ -147,7 +152,7 @@ std::shared_ptr<TextureAsset> decodeKtx1(std::span<const std::byte> source) {
     const std::uint32_t height = readU32(source, 40);
     const std::uint32_t levels = std::max(1U, readU32(source, 56));
     std::size_t offset = 64U + readU32(source, 60);
-    std::vector<TextureMipData> mips;
+    auto asset = std::make_shared<TextureAsset>();
     std::uint32_t mipWidth = width;
     std::uint32_t mipHeight = height;
     for (std::uint32_t level = 0; level < levels; ++level) {
@@ -160,14 +165,13 @@ std::shared_ptr<TextureAsset> decodeKtx1(std::span<const std::byte> source) {
             offset > source.size() || imageSize > source.size() - offset) {
             return {};
         }
-        TextureMipData mip{mipWidth, mipHeight, std::vector<std::byte>(imageSize)};
-        std::ranges::copy(source.subspan(offset, imageSize), mip.bytes.begin());
-        mips.push_back(std::move(mip));
+        const std::size_t dst = asset->pixels.size();
+        asset->pixels.resize(dst + imageSize);
+        std::memcpy(asset->pixels.data() + dst, source.data() + offset, imageSize);
         offset += (imageSize + 3U) & ~std::size_t{3U};
         mipWidth = std::max(1U, mipWidth / 2U);
         mipHeight = std::max(1U, mipHeight / 2U);
     }
-    auto asset = std::make_shared<TextureAsset>();
     const bool srgb = readU32(source, 28) == 0x8C43U;
     asset->desc = {TextureType::Texture2D,
                    srgb ? TextureFormat::Rgba8Srgb : TextureFormat::Rgba8Unorm,
@@ -175,7 +179,6 @@ std::shared_ptr<TextureAsset> decodeKtx1(std::span<const std::byte> source) {
                    width,
                    height,
                    levels};
-    asset->mipData = std::move(mips);
     return asset;
 }
 
@@ -195,7 +198,7 @@ std::shared_ptr<TextureAsset> decodeKtx2(std::span<const std::byte> source) {
     const std::uint32_t levels = readU32(source, 40);
     if (levels > (source.size() - 80U) / 24U)
         return {};
-    std::vector<TextureMipData> mips;
+    auto asset = std::make_shared<TextureAsset>();
     std::uint32_t mipWidth = width;
     std::uint32_t mipHeight = height;
     for (std::uint32_t level = 0; level < levels; ++level) {
@@ -207,14 +210,12 @@ std::shared_ptr<TextureAsset> decodeKtx2(std::span<const std::byte> source) {
             offset > source.size() || length > source.size() - offset) {
             return {};
         }
-        TextureMipData mip{mipWidth, mipHeight, std::vector<std::byte>(expected)};
-        std::ranges::copy(source.subspan(static_cast<std::size_t>(offset), expected),
-                          mip.bytes.begin());
-        mips.push_back(std::move(mip));
+        const std::size_t dst = asset->pixels.size();
+        asset->pixels.resize(dst + expected);
+        std::memcpy(asset->pixels.data() + dst, source.data() + offset, expected);
         mipWidth = std::max(1U, mipWidth / 2U);
         mipHeight = std::max(1U, mipHeight / 2U);
     }
-    auto asset = std::make_shared<TextureAsset>();
     const bool srgb = readU32(source, 12) == 43U;
     asset->desc = {TextureType::Texture2D,
                    srgb ? TextureFormat::Rgba8Srgb : TextureFormat::Rgba8Unorm,
@@ -222,7 +223,6 @@ std::shared_ptr<TextureAsset> decodeKtx2(std::span<const std::byte> source) {
                    width,
                    height,
                    levels};
-    asset->mipData = std::move(mips);
     return asset;
 }
 
@@ -292,7 +292,7 @@ AssetImportResult TextureAssetImporter::import(const AssetImportContext& context
                                                    textureSettings->wrapModeV,
                                                    textureSettings->anisoLevel};
 
-    if (!validateTexture(texture->desc, texture->mipData))
+    if (!validateTexture(texture->desc, texture->pixels))
         return fail("Unsupported or invalid Texture: " + context.sourcePath.string());
     return writeAssetArtifact(context, *texture, AssetType::Texture);
 }

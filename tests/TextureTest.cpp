@@ -207,7 +207,7 @@ TEST_F(TextureTest, BuiltinsOwnRhiTextureAndDefaultView) {
     EXPECT_EQ(white->desc().format, TextureFormat::Rgba8Srgb);
     EXPECT_EQ(normal->desc().format, TextureFormat::Rgba8Unorm);
     EXPECT_EQ(error->desc().width, 2U);
-    EXPECT_EQ(error->mipData()[0].bytes.size(), 16U);
+    EXPECT_EQ(error->pixels().size(), 16U);
     ASSERT_NE(TEXTURE_STORAGE.resolve(*white), nullptr);
     ASSERT_NE(TEXTURE_STORAGE.resolve(*black), nullptr);
     ASSERT_NE(TEXTURE_STORAGE.resolve(*normal), nullptr);
@@ -275,44 +275,13 @@ TEST_F(TextureTest, MaterialRetainsTextureByRef) {
     EXPECT_TRUE(TEXTURE_STORAGE.resolveBinding(*texture));
 }
 
-TEST_F(TextureTest, CloneCreatesIndependentRhiTexture) {
-    using namespace engine;
-    const Ref<Texture> source = TEXTURE_RESOURCE_MANAGER.defaultWhite();
-    const Ref<Texture> clone = TEXTURE_RESOURCE_MANAGER.clone(source);
-    ASSERT_TRUE(clone);
-    ASSERT_NE(source, clone);
-    const TextureStorageEntry* sourceStorage = TEXTURE_STORAGE.resolve(*source);
-    ASSERT_NE(sourceStorage, nullptr);
-    const rhi::RID sourceHandle = sourceStorage->texture;
-    const TextureStorageEntry* cloneStorage = TEXTURE_STORAGE.resolve(*clone);
-    ASSERT_NE(cloneStorage, nullptr);
-    EXPECT_NE(sourceHandle, cloneStorage->texture);
-    EXPECT_FALSE(clone->isAssetBacked());
-}
-
-TEST_F(TextureTest, LastRefReleasesStorageAndWeakCacheEntry) {
-    using namespace engine;
-    const Ref<Texture> source = TEXTURE_RESOURCE_MANAGER.defaultWhite();
-    Ref<Texture> clone = TEXTURE_RESOURCE_MANAGER.clone(source);
-    ASSERT_TRUE(clone);
-    const RID resourceId = clone->resourceId();
-    ASSERT_NE(TEXTURE_STORAGE.resolve(*clone), nullptr);
-    const std::uint32_t destroyedBefore = device.destroyedTextures;
-
-    clone.reset();
-
-    EXPECT_FALSE(TEXTURE_RESOURCE_MANAGER.find(resourceId));
-    EXPECT_EQ(device.destroyedTextures, destroyedBefore + 1);
-}
-
 TEST(TextureValidationTest, RejectsUnimplementedTextureDimensions) {
     using namespace engine;
     TextureDesc desc{
         TextureType::Texture2DArray, TextureFormat::Rgba8Unorm, TextureColorSpace::Linear, 1, 1, 1};
     desc.arrayLayers = 2;
-    const std::vector<TextureMipData> mipData{
-        {1, 1, {std::byte{0}, std::byte{0}, std::byte{0}, std::byte{0}}}};
-    EXPECT_FALSE(validateTexture(desc, mipData));
+    const std::vector<std::uint8_t> pixels{0, 0, 0, 0};
+    EXPECT_FALSE(validateTexture(desc, pixels));
 }
 
 } // namespace

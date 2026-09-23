@@ -73,38 +73,26 @@ Ref<Texture> TextureResourceManager::loadFromPath(const VirtualPath& texturePath
     const std::shared_ptr<TextureAsset> asset = ASSET_MANAGER.loadAsset<TextureAsset>(texturePath);
     if (!asset)
         return errorTexture();
-    return createTexture(texturePath, assetId, asset->desc, asset->mipData);
+    return createTexture(texturePath, assetId, asset->desc, std::move(asset->pixels));
 }
 
 Ref<Texture> TextureResourceManager::createTexture(VirtualPath path,
                                                    AssetId assetId,
                                                    TextureDesc desc,
-                                                   std::vector<TextureMipData> mipData,
+                                                   std::vector<std::uint8_t> pixels,
                                                    std::uint64_t version) {
-    if (!path.valid() || !validateTexture(desc, mipData)) {
+    if (!path.valid() || !validateTexture(desc, pixels)) {
         Log::error("TextureResourceManager", "Cannot create an invalid or unsupported Texture");
         return {};
     }
 
     Ref<Texture> texture{
-        new Texture(std::move(path), assetId, std::move(desc), std::move(mipData), version)};
+        new Texture(std::move(path), assetId, std::move(desc), std::move(pixels), version)};
     const RID handle = resources_.insert(texture.get());
     texture->resourceId_ = handle;
     if (assetId.valid())
         assetIndex_.insert_or_assign(assetId, handle);
     return texture;
-}
-
-Ref<Texture> TextureResourceManager::clone(const Ref<Texture>& source) {
-    if (!source) {
-        Log::error("TextureResourceManager", "Cannot clone an invalid Texture");
-        return {};
-    }
-    return createTexture(source->assetPath(),
-                         {},
-                         source->desc(),
-                         {source->mipData().begin(), source->mipData().end()},
-                         source->version());
 }
 
 void TextureResourceManager::refreshAsset(const AssetId& assetId) {
@@ -151,9 +139,16 @@ Ref<Texture> TextureResourceManager::createBuiltin(const VirtualPath& path,
                      width,
                      height,
                      1};
-    std::vector<TextureMipData> mipData;
-    mipData.push_back({width, height, {pixels.begin(), pixels.end()}});
-    return createTexture(path, {}, std::move(desc), std::move(mipData));
+    std::vector<std::uint8_t> blob;
+    blob.reserve(pixels.size());
+    for (const std::byte value : pixels)
+        blob.push_back(std::to_integer<std::uint8_t>(value));
+    Ref<Texture> texture = createTexture(path, {}, std::move(desc), std::move(blob));
+    // Builtins are held by this manager across device resets, so they keep their (tiny) CPU
+    // pixels to stay re-uploadable when the GPU cache is rebuilt against a new device.
+    if (texture)
+        texture->retainPixels_ = true;
+    return texture;
 }
 
 Ref<Texture> TextureResourceManager::defaultWhite() {
@@ -220,11 +215,11 @@ bool TextureResourceManager::replace(const VirtualPath& texturePath) {
     const std::shared_ptr<TextureAsset> asset = ASSET_MANAGER.loadAsset<TextureAsset>(texturePath);
     if (!asset || current->version() == std::numeric_limits<std::uint64_t>::max())
         return false;
-    if (!validateTexture(asset->desc, asset->mipData))
+    if (!validateTexture(asset->desc, asset->pixels))
         return false;
     if (destroyObserver_)
         destroyObserver_(current->resourceId());
-    current->rebuild(asset->desc, asset->mipData);
+    current->rebuild(asset->desc, std::move(asset->pixels));
     return true;
 }
 

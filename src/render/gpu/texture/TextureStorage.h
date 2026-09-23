@@ -20,9 +20,9 @@ public:
     ~TextureStorage();
 
     [[nodiscard]] bool initialize(rhi::IDevice& device);
-    [[nodiscard]] const TextureStorageEntry* resolve(const Texture& texture);
-    [[nodiscard]] TextureBinding resolveBinding(const Texture& texture);
-    [[nodiscard]] TextureView getView(const Texture& texture, rhi::TextureViewDesc desc);
+    [[nodiscard]] const TextureStorageEntry* resolve(Texture& texture);
+    [[nodiscard]] TextureBinding resolveBinding(Texture& texture);
+    [[nodiscard]] TextureView getView(Texture& texture, rhi::TextureViewDesc desc);
     void invalidate(RID handle);
     void shutdown();
     [[nodiscard]] bool initialized() const { return device_ != nullptr; }

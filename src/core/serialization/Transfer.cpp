@@ -31,6 +31,14 @@ MINI_TRANSFER_VALUE(std::vector<std::byte>, transferBytes)
 
 #undef MINI_TRANSFER_VALUE
 
+bool Transfer::transfer(std::string_view name, std::vector<std::uint8_t>& value) {
+    // std::vector<std::uint8_t> shares the layout of std::vector<std::byte>; route through the
+    // compact byte-block codec so large pixel buffers stay a single opaque blob on disk.
+    static_assert(sizeof(std::uint8_t) == sizeof(std::byte) &&
+                  alignof(std::uint8_t) == alignof(std::byte));
+    return transfer(name, reinterpret_cast<std::vector<std::byte>&>(value));
+}
+
 bool Transfer::transfer(std::string_view name, VirtualPath& value) {
     std::string path = writing() ? value.string() : std::string{};
     if (!transfer(name, path))

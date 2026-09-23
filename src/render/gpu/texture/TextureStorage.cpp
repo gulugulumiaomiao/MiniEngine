@@ -25,7 +25,7 @@ bool TextureStorage::initialize(rhi::IDevice& device) {
     return true;
 }
 
-const TextureStorageEntry* TextureStorage::resolve(const Texture& texture) {
+const TextureStorageEntry* TextureStorage::resolve(Texture& texture) {
     if (!initialized() || !texture.resourceId())
         return nullptr;
 
@@ -44,13 +44,13 @@ const TextureStorageEntry* TextureStorage::resolve(const Texture& texture) {
     return stored.stored;
 }
 
-TextureBinding TextureStorage::resolveBinding(const Texture& texture) {
+TextureBinding TextureStorage::resolveBinding(Texture& texture) {
     const TextureStorageEntry* resource = resolve(texture);
     return resource ? TextureBinding{resource->defaultView, resource->defaultSampler}
                     : TextureBinding{};
 }
 
-TextureView TextureStorage::getView(const Texture& texture, rhi::TextureViewDesc desc) {
+TextureView TextureStorage::getView(Texture& texture, rhi::TextureViewDesc desc) {
     const TextureStorageEntry* resource = resolve(texture);
     if (!resource || !device_)
         return {};

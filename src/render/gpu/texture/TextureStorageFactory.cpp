@@ -4,6 +4,10 @@
 #include "render/texture/Texture.h"
 #include "rhi/api/Device.h"
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <span>
 #include <vector>
 
 namespace engine {
@@ -73,11 +77,14 @@ namespace {
 
 bool TextureStorageFactory::create(const TextureStorageCreateInfo& request,
                                    TextureStorageEntry& destination) {
-    const Texture& source = request.texture;
-    if (!validateTexture(source.desc(), source.mipData()))
+    Texture& source = request.texture;
+    if (!validateTexture(source.desc(), source.pixels()))
         return false;
 
     const TextureDesc& desc = source.desc();
+    TextureMipLayout layout;
+    if (!computeTextureLayout(desc, layout))
+        return false;
     const rhi::TextureDesc deviceDesc{.dimension = toRhi(desc.type),
                                       .format = toRhi(desc.format),
                                       .width = desc.width,
@@ -93,11 +100,23 @@ bool TextureStorageFactory::create(const TextureStorageCreateInfo& request,
     if (!created.texture)
         return false;
 
+    // Move the CPU blob out and slice it into per-mip regions that borrow its memory. The
+    // blob dies when this function returns, so no texel data is retained on the CPU.
+    const std::vector<std::uint8_t> pixels = source.takePixelData();
     std::vector<rhi::TextureUploadRegion> uploads;
-    uploads.reserve(source.mipData().size());
-    std::uint32_t mipLevel{};
-    for (const TextureMipData& mip : source.mipData())
-        uploads.push_back({mipLevel++, 0, mip.width, mip.height, mip.bytes});
+    uploads.reserve(layout.offsets.size());
+    std::uint32_t mipWidth = desc.width;
+    std::uint32_t mipHeight = desc.height;
+    for (std::uint32_t level = 0; level < layout.offsets.size(); ++level) {
+        const std::size_t begin = layout.offsets[level];
+        const std::size_t end = level + 1U < layout.offsets.size() ? layout.offsets[level + 1U]
+                                                                   : layout.totalSize;
+        const std::span<const std::byte> data{
+            reinterpret_cast<const std::byte*>(pixels.data() + begin), end - begin};
+        uploads.push_back({level, 0, mipWidth, mipHeight, data});
+        mipWidth = std::max(1U, mipWidth / 2U);
+        mipHeight = std::max(1U, mipHeight / 2U);
+    }
     device_.uploadTexture(created.texture, uploads);
 
     const rhi::TextureViewDesc viewDesc{.type = toRhi(desc.type),

@@ -15,6 +15,7 @@
 namespace engine {
 
 class TextureResourceManager;
+class TextureStorageFactory;
 
 enum class TextureType { Texture2D, Texture2DArray, Texture3D, TextureCube, TextureCubeArray };
 enum class TextureFormat { Rgba8Unorm, Rgba8Srgb };
@@ -42,16 +43,11 @@ struct TextureSamplerSettings : public Transferable {
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct TextureMipData : public Transferable {
-    std::uint32_t width{};
-    std::uint32_t height{};
-    std::vector<std::byte> bytes;
-
-    TextureMipData() = default;
-    TextureMipData(std::uint32_t width, std::uint32_t height, std::vector<std::byte> bytes)
-        : width(width), height(height), bytes(std::move(bytes)) {}
-
-    [[nodiscard]] bool transfer(Transfer& archive) override;
+// Byte offset of every mip level inside a tightly packed pixel blob, plus the total blob
+// size. Levels run 0..mipCount-1 with no padding; only RGBA8 2D textures are supported.
+struct TextureMipLayout {
+    std::vector<std::size_t> offsets;
+    std::size_t totalSize{};
 };
 
 struct TextureDesc : public Transferable {
@@ -88,6 +84,10 @@ struct TextureDesc : public Transferable {
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
+// Derives the mip layout implied by desc. Returns false for unsupported dimensions/formats
+// or on byte-size overflow.
+[[nodiscard]] bool computeTextureLayout(const TextureDesc& desc, TextureMipLayout& layout);
+
 class Texture final : public RefCounted {
 public:
     ~Texture() override;
@@ -100,25 +100,40 @@ public:
     [[nodiscard]] AssetId assetId() const { return assetId_; }
     [[nodiscard]] bool isAssetBacked() const { return assetId_.valid(); }
     [[nodiscard]] const TextureDesc& desc() const { return desc_; }
-    [[nodiscard]] std::span<const TextureMipData> mipData() const { return mipData_; }
+    // Read-only view of the transient CPU pixel blob; empty once handed to the GPU.
+    [[nodiscard]] std::span<const std::uint8_t> pixels() const { return pixels_; }
     [[nodiscard]] std::uint64_t version() const { return version_; }
     [[nodiscard]] RID resourceId() const { return resourceId_; }
 
 private:
     friend class TextureResourceManager;
+    friend class TextureStorageFactory;
 
     Texture(VirtualPath assetPath,
             AssetId assetId,
             TextureDesc desc,
-            std::vector<TextureMipData> mipData,
+            std::vector<std::uint8_t> pixels,
             std::uint64_t version);
 
-    void rebuild(TextureDesc desc, std::vector<TextureMipData> mipData);
+    void rebuild(TextureDesc desc, std::vector<std::uint8_t> pixels);
+
+    // Hands the pixel blob to the uploader. Transient textures release their CPU copy so the
+    // GPU becomes the only owner of the texel data. Builtin textures (retainPixels_) keep it:
+    // they are held by the manager across device resets, so the GPU cache can be cleared and
+    // rebuilt while the layer-1 Texture survives, which requires re-uploadable pixels.
+    [[nodiscard]] std::vector<std::uint8_t> takePixelData() {
+        if (retainPixels_)
+            return pixels_;
+        std::vector<std::uint8_t> taken = std::move(pixels_);
+        pixels_.clear();
+        return taken;
+    }
 
     VirtualPath assetPath_;
     AssetId assetId_;
     TextureDesc desc_;
-    std::vector<TextureMipData> mipData_;
+    std::vector<std::uint8_t> pixels_;
+    bool retainPixels_{false};
     std::uint64_t version_{1};
     RID resourceId_;
 };
@@ -128,12 +143,11 @@ public:
     [[nodiscard]] AssetType type() const override { return AssetType::Texture; }
 
     TextureDesc desc;
-    std::vector<TextureMipData> mipData;
+    std::vector<std::uint8_t> pixels;
 
     [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-[[nodiscard]] bool validateTexture(const TextureDesc& desc,
-                                   std::span<const TextureMipData> mipData);
+[[nodiscard]] bool validateTexture(const TextureDesc& desc, std::span<const std::uint8_t> pixels);
 
 } // namespace engine
