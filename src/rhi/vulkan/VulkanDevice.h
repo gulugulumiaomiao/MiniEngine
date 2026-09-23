@@ -40,6 +40,13 @@ struct PipelineLayoutKeyHash final {
 
 using PipelineLayoutKey = std::vector<RID>;
 
+// Native pipeline handles resolved for command-buffer binding. Backend-specific, so it lives
+// here rather than on the backend-agnostic IDevice interface.
+struct ResolvedPipeline {
+    VkPipeline pipeline{VK_NULL_HANDLE};
+    VkPipelineLayout layout{VK_NULL_HANDLE};
+};
+
 class VulkanDevice final : public IDevice {
 public:
     // 禁用时不创建、读取或保存管线缓存。
@@ -84,32 +91,32 @@ public:
 
     void waitIdle() override;
 
-    [[nodiscard]] VkInstance instance() const override { return instance_; }
+    [[nodiscard]] VkInstance instance() const { return instance_; }
     [[nodiscard]] VkSurfaceKHR surface() const { return surface_; }
-    [[nodiscard]] VkPhysicalDevice physicalDevice() const override { return physicalDevice_; }
-    [[nodiscard]] VkDevice device() const override { return device_; }
-    [[nodiscard]] VkQueue graphicsQueue() const override { return graphicsQueue_; }
+    [[nodiscard]] VkPhysicalDevice physicalDevice() const { return physicalDevice_; }
+    [[nodiscard]] VkDevice device() const { return device_; }
+    [[nodiscard]] VkQueue graphicsQueue() const { return graphicsQueue_; }
     [[nodiscard]] VkQueue presentQueue() const { return presentQueue_; }
     [[nodiscard]] VkCommandPool commandPool() const { return commandPool_; }
     [[nodiscard]] VmaAllocator allocator() const;
-    [[nodiscard]] std::uint32_t graphicsQueueFamily() const override {
+    [[nodiscard]] std::uint32_t graphicsQueueFamily() const {
         return graphicsQueueFamily_;
     }
     [[nodiscard]] std::uint32_t presentQueueFamily() const { return presentQueueFamily_; }
 
-    [[nodiscard]] VkBuffer resolveBuffer(RID handle) const override;
+    [[nodiscard]] VkBuffer resolveBuffer(RID handle) const;
     [[nodiscard]] IRHITexture* resolveTextureResource(RID handle) override;
     [[nodiscard]] const IRHITexture* resolveTextureResource(RID handle) const override;
-    [[nodiscard]] VkImage resolveTexture(RID handle) const override;
+    [[nodiscard]] VkImage resolveTexture(RID handle) const;
     // RHI formats are only tracked for device-owned textures; external images
     // (e.g. swapchain) have no format in the handle table.
     [[nodiscard]] PixelFormat textureFormat(RID handle) const;
-    [[nodiscard]] VkImageView resolveTextureView(RID handle) const override;
+    [[nodiscard]] VkImageView resolveTextureView(RID handle) const;
     [[nodiscard]] VkSampler resolveSampler(RID handle) const;
     [[nodiscard]] VkShaderModule resolveShader(RID handle) const;
     [[nodiscard]] VkDescriptorSetLayout resolveBindGroupLayout(RID handle) const;
-    [[nodiscard]] ResolvedPipeline resolvePipeline(RID handle) const override;
-    [[nodiscard]] VkDescriptorSet resolveBindGroup(RID handle) const override;
+    [[nodiscard]] ResolvedPipeline resolvePipeline(RID handle) const;
+    [[nodiscard]] VkDescriptorSet resolveBindGroup(RID handle) const;
 
     [[nodiscard]] RID
     registerExternalTexture(VkImage image, const TextureDesc& desc, VkFormat nativeFormat);

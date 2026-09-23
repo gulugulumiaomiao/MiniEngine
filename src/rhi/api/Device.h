@@ -4,9 +4,8 @@
 #include "rhi/api/ResourceDesc.h"
 #include "rhi/api/RhiTypes.h"
 #include "rhi/api/Sampler.h"
+#include "rhi/api/Texture.h"
 #include "rhi/api/TextureView.h"
-
-#include <vulkan/vulkan.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -17,12 +16,12 @@ namespace engine::rhi {
 
 class ICommandBuffer;
 struct SubmitSync;
+class IRHITexture;
 
-struct ResolvedPipeline {
-    VkPipeline pipeline{VK_NULL_HANDLE};
-    VkPipelineLayout layout{VK_NULL_HANDLE};
-};
-
+// Backend-agnostic device interface: only handle(RID)-based create/destroy/resolve and
+// abstract RHI object access. It contains no backend-native (e.g. Vulkan) types; concrete
+// backends expose native-handle resolution (VkImage/VkSampler/VkPipeline/...) as their own
+// non-virtual methods.
 class IDevice {
 public:
     virtual ~IDevice() = default;
@@ -63,18 +62,9 @@ public:
     [[nodiscard]] virtual std::unique_ptr<ICommandBuffer> createCommandBuffer() = 0;
     virtual void submitCommand(ICommandBuffer& command, const SubmitSync& sync) = 0;
 
-    [[nodiscard]] virtual VkDevice device() const = 0;
-    [[nodiscard]] virtual VkInstance instance() const = 0;
-    [[nodiscard]] virtual VkPhysicalDevice physicalDevice() const = 0;
-    [[nodiscard]] virtual VkQueue graphicsQueue() const = 0;
-    [[nodiscard]] virtual std::uint32_t graphicsQueueFamily() const = 0;
-    [[nodiscard]] virtual VkBuffer resolveBuffer(RID handle) const = 0;
+    // Backend-agnostic resolution: returns the abstract RHI texture object for a handle.
     [[nodiscard]] virtual IRHITexture* resolveTextureResource(RID handle) = 0;
     [[nodiscard]] virtual const IRHITexture* resolveTextureResource(RID handle) const = 0;
-    [[nodiscard]] virtual VkImage resolveTexture(RID handle) const = 0;
-    [[nodiscard]] virtual VkImageView resolveTextureView(RID handle) const = 0;
-    [[nodiscard]] virtual ResolvedPipeline resolvePipeline(RID handle) const = 0;
-    [[nodiscard]] virtual VkDescriptorSet resolveBindGroup(RID handle) const = 0;
 
     virtual void waitIdle() = 0;
 };

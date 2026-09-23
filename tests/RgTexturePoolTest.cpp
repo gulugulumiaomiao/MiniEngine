@@ -69,29 +69,12 @@ public:
     void destroyBindGroup(engine::rhi::RID) override {}
     std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override { return nullptr; }
     void submitCommand(engine::rhi::ICommandBuffer&, const engine::rhi::SubmitSync&) override {}
-    VkDevice device() const override { return VK_NULL_HANDLE; }
-    VkInstance instance() const override { return VK_NULL_HANDLE; }
-    VkPhysicalDevice physicalDevice() const override { return VK_NULL_HANDLE; }
-    VkQueue graphicsQueue() const override { return VK_NULL_HANDLE; }
-    std::uint32_t graphicsQueueFamily() const override { return 0; }
-    VkBuffer resolveBuffer(engine::rhi::RID) const override { return VK_NULL_HANDLE; }
     engine::rhi::IRHITexture* resolveTextureResource(engine::rhi::RID) override {
         return nullptr;
     }
     const engine::rhi::IRHITexture*
     resolveTextureResource(engine::rhi::RID) const override {
         return nullptr;
-    }
-    VkImage resolveTexture(engine::rhi::RID) const override { return VK_NULL_HANDLE; }
-    VkImageView resolveTextureView(engine::rhi::RID) const override {
-        return VK_NULL_HANDLE;
-    }
-    engine::rhi::ResolvedPipeline
-    resolvePipeline(engine::rhi::RID) const override {
-        return {};
-    }
-    VkDescriptorSet resolveBindGroup(engine::rhi::RID) const override {
-        return VK_NULL_HANDLE;
     }
     void waitIdle() override {}
 

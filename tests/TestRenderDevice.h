@@ -188,12 +188,6 @@ public:
     }
     void submitCommand(rhi::ICommandBuffer&, const rhi::SubmitSync&) override { ++submissions; }
 
-    VkDevice device() const override { return VK_NULL_HANDLE; }
-    VkInstance instance() const override { return VK_NULL_HANDLE; }
-    VkPhysicalDevice physicalDevice() const override { return VK_NULL_HANDLE; }
-    VkQueue graphicsQueue() const override { return VK_NULL_HANDLE; }
-    std::uint32_t graphicsQueueFamily() const override { return 0; }
-    VkBuffer resolveBuffer(rhi::RID) const override { return VK_NULL_HANDLE; }
     rhi::IRHITexture* resolveTextureResource(rhi::RID handle) override {
         return handle.index() > 0 && handle.index() <= textureResources.size()
                    ? textureResources[handle.index() - 1].get()
@@ -204,10 +198,6 @@ public:
                    ? textureResources[handle.index() - 1].get()
                    : nullptr;
     }
-    VkImage resolveTexture(rhi::RID) const override { return VK_NULL_HANDLE; }
-    VkImageView resolveTextureView(rhi::RID) const override { return VK_NULL_HANDLE; }
-    rhi::ResolvedPipeline resolvePipeline(rhi::RID) const override { return {}; }
-    VkDescriptorSet resolveBindGroup(rhi::RID) const override { return VK_NULL_HANDLE; }
     void waitIdle() override {}
 
     std::vector<rhi::BufferDesc> buffers;
