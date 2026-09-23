@@ -46,7 +46,7 @@ AssetImportResult ShaderAssetImporter::import(const AssetImportContext& context,
     if (!source) {
         return failImport("Cannot read ShaderAsset: " + context.sourcePath.string());
     }
-    const std::shared_ptr<ShaderAsset> shader =
+    const Ref<ShaderAsset> shader =
         format::parseShaderAsset(context.sourcePath, *source);
     if (!shader) {
         return failImport("Cannot parse ShaderAsset: " + context.sourcePath.string());

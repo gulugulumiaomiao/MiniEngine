@@ -118,7 +118,7 @@ ShadowCaster → DepthOnly → Forward
 
 | 缓存 | 键 | 值 |
 |---|---|---|
-| AssetManager | 规范化 `assets://` 路径 | `weak_ptr<Asset>`（当前为 ShaderAsset / MaterialAsset） |
+| AssetManager | 规范化 `assets://` 路径 | `Ref<Asset>`（强缓存；当前为 ShaderAsset / MaterialAsset） |
 | CompiledShaderCache | SPIR-V 内容 + stage + entry + Variant | CompiledShader |
 | ShaderProgramCache | vertex CompileID + fragment CompileID + Variant | ShaderProgram |
 | ShaderModuleCache | CompileID | RHI Shader handle |

@@ -4,16 +4,17 @@
 // Importers and exporters share this unit; the runtime Shader classes no longer
 // carry source-file parsing.
 
+#include "asset/types/ShaderAsset.h"
+#include "core/base/Ref.h"
 #include "render/shader/Shader.h"
 
-#include <memory>
 #include <string_view>
 
 namespace engine::format {
 
 // Returns nullptr on any schema violation; failures are logged with the
 // "ShaderAsset" channel and include the JSON path of the offending field.
-[[nodiscard]] std::shared_ptr<ShaderAsset> parseShaderAsset(const VirtualPath& path,
-                                                            std::string_view source);
+[[nodiscard]] Ref<ShaderAsset> parseShaderAsset(const VirtualPath& path,
+                                                std::string_view source);
 
 } // namespace engine::format

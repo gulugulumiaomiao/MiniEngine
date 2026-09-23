@@ -58,7 +58,7 @@ std::vector<VirtualPath> SceneAssetImporter::gatherDependencies(
     if (!source) {
         return {};
     }
-    const std::shared_ptr<SceneAsset> scene =
+    const Ref<SceneAsset> scene =
         format::parseSceneAsset(context.sourcePath, *source, ASSET_DATABASE);
     if (!scene) {
         return {};
@@ -80,7 +80,7 @@ AssetImportResult SceneAssetImporter::import(const AssetImportContext& context,
     if (!source) {
         return fail("Cannot read SceneAsset: " + context.sourcePath.string());
     }
-    const std::shared_ptr<SceneAsset> scene =
+    const Ref<SceneAsset> scene =
         format::parseSceneAsset(context.sourcePath, *source, ASSET_DATABASE);
     if (!scene) {
         return fail("Cannot parse SceneAsset: " + context.sourcePath.string());

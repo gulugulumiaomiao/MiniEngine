@@ -122,7 +122,7 @@ bool AssetManager::ensureImported(const VirtualPath& path) {
            FILE_SYSTEM.isFile(record->artifactPath);
 }
 
-std::shared_ptr<Asset> AssetManager::loadAsset(const VirtualPath& path) {
+Ref<Asset> AssetManager::loadAsset(const VirtualPath& path) {
     if (!path.valid() || !isAssetScheme(path.scheme())) {
         Log::error("AssetManager", "Invalid Asset path: %s", path.string().c_str());
         return {};
@@ -140,14 +140,14 @@ std::shared_ptr<Asset> AssetManager::loadAsset(const VirtualPath& path) {
         return {};
     }
 
-    std::shared_ptr<Asset> asset;
+    Ref<Asset> asset;
     switch (artifact->assetType) {
-    case AssetType::Shader: asset = std::make_shared<ShaderAsset>(); break;
-    case AssetType::Material: asset = std::make_shared<MaterialAsset>(); break;
-    case AssetType::Mesh: asset = std::make_shared<MeshAsset>(); break;
-    case AssetType::Texture: asset = std::make_shared<TextureAsset>(); break;
-    case AssetType::Scene: asset = std::make_shared<SceneAsset>(); break;
-    case AssetType::Generic: asset = std::make_shared<GenericAsset>(); break;
+    case AssetType::Shader: asset = makeRef<ShaderAsset>(); break;
+    case AssetType::Material: asset = makeRef<MaterialAsset>(); break;
+    case AssetType::Mesh: asset = makeRef<MeshAsset>(); break;
+    case AssetType::Texture: asset = makeRef<TextureAsset>(); break;
+    case AssetType::Scene: asset = makeRef<SceneAsset>(); break;
+    case AssetType::Generic: asset = makeRef<GenericAsset>(); break;
     default:
         Log::error("AssetManager", "Unsupported Asset type for: %s", path.string().c_str());
         return {};

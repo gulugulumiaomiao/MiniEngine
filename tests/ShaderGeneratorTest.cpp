@@ -37,7 +37,7 @@ int main() {
         return 7;
     if (!test::initializeAssetEnvironment(fixtures))
         return 8;
-    const std::shared_ptr<ShaderAsset> shaderOwner =
+    const Ref<ShaderAsset> shaderOwner =
         ASSET_MANAGER.loadAsset<ShaderAsset>(VirtualPath{"assets://material_values.shader.json"});
     if (!shaderOwner)
         return 5;
@@ -54,7 +54,7 @@ int main() {
         return 1;
     }
 
-    const std::shared_ptr<ShaderAsset> interfaceShaderOwner = ASSET_MANAGER.loadAsset<ShaderAsset>(
+    const Ref<ShaderAsset> interfaceShaderOwner = ASSET_MANAGER.loadAsset<ShaderAsset>(
         VirtualPath{"assets://shader_interface_valid.shader.json"});
     if (!interfaceShaderOwner)
         return 6;

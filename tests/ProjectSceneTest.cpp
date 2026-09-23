@@ -139,7 +139,7 @@ int main() {
     if (!defaultContents)
         return 6;
     const BuiltinGuidResolver resolver{builtinSource};
-    const std::shared_ptr<SceneAsset> parsed =
+    const Ref<SceneAsset> parsed =
         format::parseSceneAsset(defaultScene, *defaultContents, resolver);
     if (!parsed || parsed->name != "Scene" || parsed->nodes.size() != 3)
         return 7;

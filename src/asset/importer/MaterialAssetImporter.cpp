@@ -25,14 +25,14 @@ collectMaterialDependencies(const VirtualPath& materialPath) {
     if (!source) {
         return {};
     }
-    const std::shared_ptr<MaterialAsset> material =
+    const Ref<MaterialAsset> material =
         format::parseMaterialAsset(materialPath, *source, ASSET_DATABASE);
     if (!material || inferAssetType(material->shader) != AssetType::Shader) {
         return {};
     }
     const auto shaderSource = FILE_SYSTEM.readText(material->shader);
-    const std::shared_ptr<ShaderAsset> shader =
-        shaderSource ? format::parseShaderAsset(material->shader, *shaderSource) : nullptr;
+    const Ref<ShaderAsset> shader =
+        shaderSource ? format::parseShaderAsset(material->shader, *shaderSource) : Ref<ShaderAsset>{};
     if (!shader) {
         return {};
     }
@@ -92,7 +92,7 @@ AssetImportResult MaterialAssetImporter::import(const AssetImportContext& contex
     if (!source) {
         return fail("Cannot read MaterialAsset: " + context.sourcePath.string());
     }
-    const std::shared_ptr<MaterialAsset> material =
+    const Ref<MaterialAsset> material =
         format::parseMaterialAsset(context.sourcePath, *source, ASSET_DATABASE);
     if (!material) {
         return fail("Cannot parse MaterialAsset: " + context.sourcePath.string());
@@ -107,7 +107,7 @@ AssetImportResult MaterialAssetImporter::import(const AssetImportContext& contex
         shaderArtifact->assetType != AssetType::Shader) {
         return fail("Cannot load Material Shader Artifact: " + material->shader.string());
     }
-    auto shader = std::make_shared<ShaderAsset>();
+    auto shader = makeRef<ShaderAsset>();
     shader->setAssetIdentity(shaderRecord->id, shaderRecord->sourcePath);
     BinaryReader shaderReader{shaderArtifact->payload};
     if (!shader->transfer(shaderReader) || !shaderReader.finished()) {

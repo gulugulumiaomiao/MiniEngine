@@ -191,7 +191,7 @@ int main() {
 
     // --- writeSceneAssetJson + parseSceneAsset roundtrip ---
     const std::string roundtripJson = format::writeSceneAssetJson(*asset, ASSET_DATABASE);
-    const std::shared_ptr<SceneAsset> reparsed = format::parseSceneAsset(targetPath, roundtripJson);
+    const Ref<SceneAsset> reparsed = format::parseSceneAsset(targetPath, roundtripJson);
     if (!reparsed || reparsed->name != asset->name || reparsed->nodes != asset->nodes)
         return 9;
 
@@ -300,7 +300,7 @@ int main() {
     const std::optional<std::string> written = FILE_SYSTEM.readText(targetPath);
     if (!written)
         return 19;
-    const std::shared_ptr<SceneAsset> fromDisk = format::parseSceneAsset(targetPath, *written);
+    const Ref<SceneAsset> fromDisk = format::parseSceneAsset(targetPath, *written);
     if (!fromDisk || fromDisk->name != asset->name || fromDisk->nodes != asset->nodes)
         return 20;
     (void)FILE_SYSTEM.unmount("assets");

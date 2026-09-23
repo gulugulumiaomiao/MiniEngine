@@ -1,6 +1,7 @@
 #include "asset/importer/TextureAssetImporter.h"
 
 #include "asset/importer/AssetImportHelpers.h"
+#include "core/base/Ref.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/logging/Log.h"
 #include "core/serialization/Transfer.h"
@@ -101,7 +102,7 @@ std::uint32_t appendMipChain(std::vector<std::uint8_t>& blob,
     return levels;
 }
 
-std::shared_ptr<TextureAsset> decodeImage(std::span<const std::byte> source, bool generateMipmaps) {
+Ref<TextureAsset> decodeImage(std::span<const std::byte> source, bool generateMipmaps) {
     if (source.empty() || source.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
         return {};
     int width{};
@@ -122,7 +123,7 @@ std::shared_ptr<TextureAsset> decodeImage(std::span<const std::byte> source, boo
     const std::uint64_t byteSize = static_cast<std::uint64_t>(baseWidth) * baseHeight * 4U;
     if (byteSize > std::numeric_limits<std::size_t>::max())
         return {};
-    auto asset = std::make_shared<TextureAsset>();
+    auto asset = makeRef<TextureAsset>();
     asset->pixels.resize(static_cast<std::size_t>(byteSize));
     std::memcpy(asset->pixels.data(), pixels.get(), asset->pixels.size());
     const std::uint32_t mipCount =
@@ -136,7 +137,7 @@ std::shared_ptr<TextureAsset> decodeImage(std::span<const std::byte> source, boo
     return asset;
 }
 
-std::shared_ptr<TextureAsset> decodeKtx1(std::span<const std::byte> source) {
+Ref<TextureAsset> decodeKtx1(std::span<const std::byte> source) {
     constexpr std::array<unsigned char, 12> identifier{
         0xAB, 0x4B, 0x54, 0x58, 0x20, 0x31, 0x31, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A};
     if (source.size() < 64 ||
@@ -152,7 +153,7 @@ std::shared_ptr<TextureAsset> decodeKtx1(std::span<const std::byte> source) {
     const std::uint32_t height = readU32(source, 40);
     const std::uint32_t levels = std::max(1U, readU32(source, 56));
     std::size_t offset = 64U + readU32(source, 60);
-    auto asset = std::make_shared<TextureAsset>();
+    auto asset = makeRef<TextureAsset>();
     std::uint32_t mipWidth = width;
     std::uint32_t mipHeight = height;
     for (std::uint32_t level = 0; level < levels; ++level) {
@@ -182,7 +183,7 @@ std::shared_ptr<TextureAsset> decodeKtx1(std::span<const std::byte> source) {
     return asset;
 }
 
-std::shared_ptr<TextureAsset> decodeKtx2(std::span<const std::byte> source) {
+Ref<TextureAsset> decodeKtx2(std::span<const std::byte> source) {
     constexpr std::array<unsigned char, 12> identifier{
         0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32, 0x30, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A};
     if (source.size() < 104 ||
@@ -198,7 +199,7 @@ std::shared_ptr<TextureAsset> decodeKtx2(std::span<const std::byte> source) {
     const std::uint32_t levels = readU32(source, 40);
     if (levels > (source.size() - 80U) / 24U)
         return {};
-    auto asset = std::make_shared<TextureAsset>();
+    auto asset = makeRef<TextureAsset>();
     std::uint32_t mipWidth = width;
     std::uint32_t mipHeight = height;
     for (std::uint32_t level = 0; level < levels; ++level) {
@@ -277,7 +278,7 @@ AssetImportResult TextureAssetImporter::import(const AssetImportContext& context
     std::ranges::transform(path, path.begin(), [](char character) {
         return static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
     });
-    std::shared_ptr<TextureAsset> texture;
+    Ref<TextureAsset> texture;
     if (path.ends_with(".ktx"))
         texture = decodeKtx1(*source);
     else if (path.ends_with(".ktx2"))

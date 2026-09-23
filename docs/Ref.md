@@ -19,7 +19,7 @@
 
 - 构造：默认与 `nullptr` 为空；`explicit Ref(T*)` 采纳裸指针并 +1（可安全地用 `this` 重建）；`makeRef<T>(args...)` 在堆上构造并返回首个 Ref（计数 1）。
 - 拷贝共享（+1），移动转移（计数不变、源置空）。
-- 隐式 upcast：`Ref<Derived>` 可转 `Ref<Base>`；`refCast<U>(ref)` 以 `static_cast` 在相关类型间转换（下行转换须自行保证有效）。
+- 隐式 upcast：`Ref<Derived>` 可转 `Ref<Base>`；`refCast<U>(ref)` 以 `static_cast` 在相关类型间转换（下行转换须自行保证有效）；`refDynamicCast<U>(ref)` 以 `dynamic_cast` 做运行时校验的下行转换，类型不符返回空 `Ref`（`AssetManager::loadAsset<T>` 用它从 `Ref<Asset>` 多态取回具体子类）。
 - 访问：`get()`、`operator*`、`operator->`、`explicit operator bool`、`valid()`、`useCount()`。
 - 比较：`operator==` 比较所指对象地址，支持与 `nullptr` 比较，C++20 自动合成 `!=`。
 

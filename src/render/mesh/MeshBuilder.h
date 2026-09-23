@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/base/Ref.h"
 #include "render/mesh/Mesh.h"
 
 #include <optional>
@@ -14,7 +15,7 @@ struct MeshBuildResult {
 class MeshBuilder final {
 public:
     [[nodiscard]] static std::optional<MeshBuildResult> build(const MeshBuildRecipe& recipe);
-    [[nodiscard]] static std::optional<MeshAsset> buildAsset(const MeshBuildRecipe& recipe);
+    [[nodiscard]] static Ref<MeshAsset> buildAsset(const MeshBuildRecipe& recipe);
 };
 
 } // namespace engine

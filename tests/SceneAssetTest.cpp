@@ -171,7 +171,7 @@ int main() {
     const std::string materialGuid = AssetReference{materialGuidValue}.toString();
     const std::string sceneJson = makeSceneJson(meshGuid, materialGuid);
 
-    std::shared_ptr<SceneAsset> asset = format::parseSceneAsset(scenePath, sceneJson, resolver);
+    Ref<SceneAsset> asset = format::parseSceneAsset(scenePath, sceneJson, resolver);
     if (!asset || asset->type() != AssetType::Scene || asset->assetPath() != scenePath ||
         asset->name != "Example Scene" || asset->nodes.size() != 4) {
         return 1;
@@ -297,11 +297,12 @@ int main() {
         return 11;
     }
 
-    SceneAsset unchanged = decoded;
+    const std::string unchangedName = decoded.name;
+    const std::vector<SceneNodeAsset> unchangedNodes = decoded.nodes;
     const std::byte invalid[]{std::byte{0}, std::byte{1}};
     BinaryReader invalidReader{invalid};
-    if (decoded.transfer(invalidReader) || decoded.name != unchanged.name ||
-        decoded.nodes != unchanged.nodes) {
+    if (decoded.transfer(invalidReader) || decoded.name != unchangedName ||
+        decoded.nodes != unchangedNodes) {
         return 6;
     }
 

@@ -45,7 +45,7 @@ Ref<Mesh> MeshResourceManager::load(const VirtualPath& meshPath) {
 
 Ref<Mesh> MeshResourceManager::loadFromPath(const VirtualPath& meshPath, const AssetId& assetId) {
     Log::info("Mesh", "Loading mesh: %s", meshPath.string().c_str());
-    const std::shared_ptr<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
+    const Ref<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
     if (!asset)
         return {};
     Ref<Mesh> mesh = asset->instantiate();
@@ -73,7 +73,7 @@ void MeshResourceManager::refreshAsset(const AssetId& assetId) {
         Log::error("MeshResourceManager", "Unknown Mesh AssetId: %s", assetId.toString().c_str());
         return;
     }
-    const std::shared_ptr<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(*path);
+    const Ref<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(*path);
     Ref<Mesh> mesh = find(assetId);
     if (!asset || !mesh) {
         Log::error("MeshResourceManager", "Failed to reload mesh asset: %s", path->string().c_str());
@@ -204,7 +204,7 @@ bool MeshResourceManager::replace(const VirtualPath& meshPath) {
     Ref<Mesh> mesh = find(*assetId);
     if (!mesh)
         return true;
-    const std::shared_ptr<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
+    const Ref<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
     if (!asset)
         return false;
     mesh->rebuildFromAsset(*asset);

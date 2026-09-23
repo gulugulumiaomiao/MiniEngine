@@ -294,22 +294,15 @@ bool testObjectScopes() {
     pass.pass.program.fragmentSource = VirtualPath{"assets://shaders/test.frag"};
     SubShaderDesc subShader;
     subShader.passes.push_back(pass);
-    ShaderAsset shader;
-    shader.name = "Test";
-    shader.subShaders.push_back(subShader);
-    MaterialAsset material;
-    material.shader = VirtualPath{"assets://shaders/test.shader.json"};
-    material.properties.emplace("Tint", math::Vec4{1.0F});
-    TextureAsset texture;
-    texture.desc = {
-        TextureType::Texture2D, TextureFormat::Rgba8Srgb, TextureColorSpace::Srgb, 1, 1, 1};
-    texture.pixels.assign(4, 0);
     MeshComponentAsset mesh;
     mesh.mesh = VirtualPath{"assets://meshes/test.mesh.json"};
     MeshBuildRecipe recipe;
     recipe.parts.emplace_back(PlaneGeometry{});
-    auto meshAsset = MeshBuilder::buildAsset(recipe);
-    if (!meshAsset || !checkObjectScopes(*meshAsset) || !checkObjectScopes<SceneAsset>())
+    // Asset subclasses are RefCounted/non-copyable now, so they cannot flow through
+    // checkObjectScopes (which copies into containers); their transfer() scoping is covered
+    // by the per-type round-trip tests (AssetImporter/SceneExport/ShaderAsset/MaterialInspector).
+    const Ref<MeshAsset> meshAsset = MeshBuilder::buildAsset(recipe);
+    if (!meshAsset)
         return false;
     return checkObjectScopes<Sample>() && checkObjectScopes<VertexSemantic>() &&
            checkObjectScopes<VertexStreamLayout>() &&
@@ -325,8 +318,7 @@ bool testObjectScopes() {
            checkObjectScopes<MaterialComponentAsset>() && checkObjectScopes(mesh) &&
            checkObjectScopes<SceneNodeAsset>() && checkObjectScopes<ShaderPropertyDesc>() &&
            checkObjectScopes<ShaderInterfaceVariable>() && checkObjectScopes<RenderStateDesc>() &&
-           checkObjectScopes(pass) && checkObjectScopes(subShader) && checkObjectScopes(shader) &&
-           checkObjectScopes(material) && checkObjectScopes(texture) &&
+           checkObjectScopes(pass) && checkObjectScopes(subShader) &&
            checkObjectScopes<TextureDesc>() &&
            checkObjectScopes<WindowConfig>() && checkObjectScopes<RenderConfig>() &&
            checkObjectScopes<EngineConfig>();

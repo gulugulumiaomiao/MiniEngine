@@ -1,6 +1,7 @@
 #pragma once
 
 #include "asset/base/AssetId.h"
+#include "core/base/RefCounted.h"
 #include "core/serialization/Transferable.h"
 #include "core/filesystem/VirtualPath.h"
 
@@ -33,7 +34,11 @@ enum class AssetType {
 
 [[nodiscard]] AssetType assetTypeFromName(std::string_view name);
 
-class Asset : public Transferable {
+// Serialized asset definition (artifact payload). Owned through Ref<Asset> via intrusive
+// RefCounted; the AssetManager cache holds a strong Ref, so cached assets are shared and
+// immutable for their whole resident lifetime (consumers must not mutate or move out of
+// them). Non-copyable/non-movable by virtue of RefCounted.
+class Asset : public Transferable, public RefCounted {
 public:
     ~Asset() override = default;
 

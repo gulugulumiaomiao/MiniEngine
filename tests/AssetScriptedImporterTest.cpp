@@ -108,7 +108,7 @@ TEST_F(AssetScriptedImporterTest, DefaultImporterPassesUnknownFilesThrough) {
     EXPECT_EQ(record->settingsHash, GenericImportSettings{}.hash());
     EXPECT_TRUE(record->dependencies.empty());
 
-    const std::shared_ptr<GenericAsset> asset =
+    const Ref<GenericAsset> asset =
         ASSET_MANAGER.loadAsset<GenericAsset>(textPath);
     ASSERT_TRUE(asset);
     const std::string data{reinterpret_cast<const char*>(asset->data.data()),
@@ -146,7 +146,7 @@ TEST_F(AssetScriptedImporterTest, ScriptedImporterTakesOverExtension) {
     EXPECT_EQ(record->type, AssetType::Generic);
     EXPECT_EQ(record->importerVersion, 7U);
 
-    const std::shared_ptr<GenericAsset> asset = ASSET_MANAGER.loadAsset<GenericAsset>(objPath);
+    const Ref<GenericAsset> asset = ASSET_MANAGER.loadAsset<GenericAsset>(objPath);
     ASSERT_TRUE(asset);
     const std::string data{reinterpret_cast<const char*>(asset->data.data()), asset->data.size()};
     EXPECT_EQ(data, std::string{kStubMarker} + "v 0 0 0");
@@ -166,7 +166,7 @@ TEST_F(AssetScriptedImporterTest, ScriptedImporterOverridesBuiltinRoute) {
     EXPECT_EQ(record->type, AssetType::Generic);
     EXPECT_EQ(record->importerVersion, 42U);
 
-    const std::shared_ptr<GenericAsset> asset =
+    const Ref<GenericAsset> asset =
         ASSET_MANAGER.loadAsset<GenericAsset>(shaderPath);
     ASSERT_TRUE(asset);
     const std::string data{reinterpret_cast<const char*>(asset->data.data()), asset->data.size()};

@@ -6,7 +6,7 @@
 - 根据 `assets://` 路径查询 `AssetDatabase`；
 - 从 `library://` 读取并反序列化 Artifact（MART 信封 → 具体 Asset）；
 - 开发模式下按需触发导入；
-- 用 `weak_ptr` 缓存已加载的 Asset（不延长生命周期）；
+- 用强 `Ref<Asset>` 缓存已加载的 Asset（作为共享所有者，直到 `invalidate`/`clear`）；
 - 将成功的资产变更通知运行时（热重载）。
 
 它**不**负责创建 Shader、Material、Mesh、Texture 的运行时 Handle——那是各领域
@@ -43,7 +43,7 @@ cooker 与测试复用，行为差异不依赖重新编译。
 ```text
 assets:// 路径
   -> 校验路径与 assets scheme
-  -> findCached：weak_ptr 缓存命中直接返回
+  -> findCached：Ref 缓存命中直接返回
   -> ensureImported：
        记录已 Imported 且 Artifact 存在 -> 通过；
        否则（仅 Development）触发 ASSET_IMPORT_PIPELINE.importAsset
@@ -53,13 +53,16 @@ assets:// 路径
   -> cache(path, asset) 后返回
 ```
 
-模板重载 `loadAsset<AssetTypeT>(path)` 在此之上做 `dynamic_pointer_cast`，类型
+模板重载 `loadAsset<AssetTypeT>(path)` 在此之上做 `refDynamicCast`，类型
 不符返回空。
 
 **设计意图**：信封与记录双重校验（id 与 type 都必须一致）防止 library 与数据库
-错位；`reader.finished()` 保证 Artifact 没有尾部垃圾。缓存用 `weak_ptr`——
-AssetManager 只加速重复加载，不决定资产生命周期，与领域 Manager 的 Handle 缓存
-互不替代。
+错位；`reader.finished()` 保证 Artifact 没有尾部垃圾。Asset 继承 `RefCounted`、
+统一用 `Ref<Asset>` 持有；缓存是**强引用**——命中即复用同一实例（GUID 身份稳定），
+资产常驻到 `invalidate(path)` / `clear()` 为止。因缓存共享且常驻，取回的 Asset 视为
+**只读**：消费者不得改写或从中 move 数据。纹理是例外——像素体积大，`TextureManager`
+拷贝出像素后立即 `invalidate` 该路径，避免整段像素常驻（纹理去重本就由
+`TextureResourceManager` 按 AssetId 负责）。
 
 ## 资产与运行时资源
 
@@ -88,7 +91,7 @@ AssetManager 订阅 `AssetImportPipeline` 的导入通知，成功导入后：
 
 ```text
 通知（成功且未 Removed）
-  -> invalidate(path)：失效 weak_ptr 缓存
+  -> invalidate(path)：从 Ref 缓存移除（释放该资产的强引用）
   -> Shader：SHADER_MANAGER.replace（原 Handle 上替换，revision + 1）
             -> MATERIAL_MANAGER.refreshShader：引用该 Shader 的材质重建布局
   -> Mesh / Texture：对应 Manager 在原 Handle 上 replace

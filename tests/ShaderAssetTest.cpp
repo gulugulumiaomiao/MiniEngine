@@ -24,7 +24,7 @@ int main() {
 
     if (!test::initializeAssetEnvironment(assetRoot))
         return 11;
-    const std::shared_ptr<ShaderAsset> vertexColorOwner = ASSET_MANAGER.loadAsset<ShaderAsset>(
+    const Ref<ShaderAsset> vertexColorOwner = ASSET_MANAGER.loadAsset<ShaderAsset>(
         VirtualPath{"assets://shaders/vertex_color.shader.json"});
     if (!vertexColorOwner)
         return 8;
@@ -41,7 +41,7 @@ int main() {
     FILE_WATCHER.stop();
     if (!test::initializeAssetEnvironment(fixtureRoot))
         return 12;
-    const std::shared_ptr<ShaderAsset> generatedOwner = ASSET_MANAGER.loadAsset<ShaderAsset>(
+    const Ref<ShaderAsset> generatedOwner = ASSET_MANAGER.loadAsset<ShaderAsset>(
         VirtualPath{"assets://shader_interface_valid.shader.json"});
     if (!generatedOwner)
         return 9;
@@ -57,7 +57,7 @@ int main() {
     }
 
     // lightMode omitted: the pass type is inferred from the pass name.
-    const std::shared_ptr<ShaderAsset> inferredOwner = ASSET_MANAGER.loadAsset<ShaderAsset>(
+    const Ref<ShaderAsset> inferredOwner = ASSET_MANAGER.loadAsset<ShaderAsset>(
         VirtualPath{"assets://shader_lightmode_inferred.shader.json"});
     if (!inferredOwner)
         return 3;

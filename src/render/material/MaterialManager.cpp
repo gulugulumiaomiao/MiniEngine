@@ -55,7 +55,7 @@ Ref<Material> MaterialResourceManager::load(const VirtualPath& materialPath) {
 Ref<Material> MaterialResourceManager::loadFromPath(const VirtualPath& materialPath,
                                                     const AssetId& assetId) {
     Log::info("Material", "Loading material: %s", materialPath.string().c_str());
-    const std::shared_ptr<MaterialAsset> asset =
+    const Ref<MaterialAsset> asset =
         ASSET_MANAGER.loadAsset<MaterialAsset>(materialPath);
     if (!asset)
         return materialPath == kErrorMaterialPath ? Ref<Material>{} : errorMaterial();
@@ -102,7 +102,7 @@ void MaterialResourceManager::refreshAsset(const AssetId& assetId) {
                    assetId.toString().c_str());
         return;
     }
-    const std::shared_ptr<MaterialAsset> asset =
+    const Ref<MaterialAsset> asset =
         ASSET_MANAGER.loadAsset<MaterialAsset>(*path);
     Ref<Material> material = find(assetId);
     if (!asset || !material) {

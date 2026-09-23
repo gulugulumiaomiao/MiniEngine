@@ -52,7 +52,7 @@ int main() {
 
     if (!test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR))
         return 5;
-    const std::shared_ptr<ShaderAsset> shaderOwner = ASSET_MANAGER.loadAsset<ShaderAsset>(
+    const Ref<ShaderAsset> shaderOwner = ASSET_MANAGER.loadAsset<ShaderAsset>(
         VirtualPath{"assets://shaders/vertex_color.shader.json"});
     if (!shaderOwner)
         return 4;

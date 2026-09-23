@@ -70,10 +70,14 @@ Ref<Texture> TextureResourceManager::resolveReference(std::string_view reference
 Ref<Texture> TextureResourceManager::loadFromPath(const VirtualPath& texturePath,
                                                   const AssetId& assetId) {
     Log::info("Texture", "Loading texture: %s", texturePath.string().c_str());
-    const std::shared_ptr<TextureAsset> asset = ASSET_MANAGER.loadAsset<TextureAsset>(texturePath);
+    const Ref<TextureAsset> asset = ASSET_MANAGER.loadAsset<TextureAsset>(texturePath);
+    // Textures are deduped by this manager (find(assetId)); drop the AssetManager cache entry
+    // right away so the (large) pixel blob is not retained for the whole session. The local Ref
+    // keeps the asset alive while its pixels are copied into the runtime Texture below.
+    ASSET_MANAGER.invalidate(texturePath);
     if (!asset)
         return errorTexture();
-    return createTexture(texturePath, assetId, asset->desc, std::move(asset->pixels));
+    return createTexture(texturePath, assetId, asset->desc, asset->pixels);
 }
 
 Ref<Texture> TextureResourceManager::createTexture(VirtualPath path,
@@ -212,14 +216,15 @@ bool TextureResourceManager::replace(const VirtualPath& texturePath) {
     Ref<Texture> current = find(*assetId);
     if (!current)
         return true;
-    const std::shared_ptr<TextureAsset> asset = ASSET_MANAGER.loadAsset<TextureAsset>(texturePath);
+    const Ref<TextureAsset> asset = ASSET_MANAGER.loadAsset<TextureAsset>(texturePath);
+    ASSET_MANAGER.invalidate(texturePath);
     if (!asset || current->version() == std::numeric_limits<std::uint64_t>::max())
         return false;
     if (!validateTexture(asset->desc, asset->pixels))
         return false;
     if (destroyObserver_)
         destroyObserver_(current->resourceId());
-    current->rebuild(asset->desc, std::move(asset->pixels));
+    current->rebuild(asset->desc, asset->pixels);
     return true;
 }
 

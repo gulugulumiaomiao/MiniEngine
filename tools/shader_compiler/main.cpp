@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
                            shaderPath.string().c_str());
         return 1;
     }
-    const std::shared_ptr<engine::ShaderAsset> shaderAsset =
+    const engine::Ref<engine::ShaderAsset> shaderAsset =
         ASSET_MANAGER.loadAsset<engine::ShaderAsset>(*shaderVirtualPath);
     if (!shaderAsset || !FILE_SYSTEM.mountDirectory("shader-cache", output / "runtime", false) ||
         !FILE_SYSTEM.mountDirectory("shader-bin", output / "compiled", false))

@@ -96,7 +96,7 @@ constexpr std::string_view kCoolMaterialJson = R"json({
 const VirtualPath kWarmMaterialPath{"assets://materials/warm.material.json"};
 const VirtualPath kCoolMaterialPath{"assets://materials/cool.material.json"};
 
-[[nodiscard]] std::shared_ptr<MaterialAsset> readMaterialFromDisk(const VirtualPath& path) {
+[[nodiscard]] Ref<MaterialAsset> readMaterialFromDisk(const VirtualPath& path) {
     const std::optional<std::string> source = FILE_SYSTEM.readText(path);
     if (!source)
         return nullptr;

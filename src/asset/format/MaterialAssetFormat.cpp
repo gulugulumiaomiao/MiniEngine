@@ -58,9 +58,9 @@ bool valueMatchesProperty(const ShaderValue& value, ShaderPropertyType type) {
     return false;
 }
 
-MaterialAsset parseMaterialAssetValue(const VirtualPath& path,
-                                      std::string_view source,
-                                      const GuidResolver* resolver) {
+Ref<MaterialAsset> parseMaterialAssetValue(const VirtualPath& path,
+                                          std::string_view source,
+                                          const GuidResolver* resolver) {
     const Json root = readJson(kCategory, path, source);
     if (!root.is_object()) {
         fail(kCategory, path, "$", "material asset root must be an object");
@@ -72,7 +72,8 @@ MaterialAsset parseMaterialAssetValue(const VirtualPath& path,
              "$.$schemaVersion",
              "unsupported schema version " + std::to_string(schemaVersion));
     }
-    MaterialAsset material;
+    Ref<MaterialAsset> materialRef = makeRef<MaterialAsset>();
+    MaterialAsset& material = *materialRef;
     material.setAssetPath(path);
     material.name = required<std::string>(kCategory, root, "name", path, "$");
     const std::string shaderPath = required<std::string>(kCategory, root, "shader", path, "$");
@@ -134,14 +135,14 @@ MaterialAsset parseMaterialAssetValue(const VirtualPath& path,
         }
         material.properties.emplace(name, std::move(parsed));
     }
-    return material;
+    return materialRef;
 }
 
 } // namespace
 
-std::shared_ptr<MaterialAsset> parseMaterialAsset(const VirtualPath& path, std::string_view source) {
+Ref<MaterialAsset> parseMaterialAsset(const VirtualPath& path, std::string_view source) {
     try {
-        return std::make_shared<MaterialAsset>(parseMaterialAssetValue(path, source, nullptr));
+        return parseMaterialAssetValue(path, source, nullptr);
     } catch (const AssetParseFailure&) {
         return {};
     } catch (const Json::exception& error) {
@@ -150,11 +151,11 @@ std::shared_ptr<MaterialAsset> parseMaterialAsset(const VirtualPath& path, std::
     }
 }
 
-std::shared_ptr<MaterialAsset> parseMaterialAsset(const VirtualPath& path,
-                                                  std::string_view source,
-                                                  const GuidResolver& resolver) {
+Ref<MaterialAsset> parseMaterialAsset(const VirtualPath& path,
+                                     std::string_view source,
+                                     const GuidResolver& resolver) {
     try {
-        return std::make_shared<MaterialAsset>(parseMaterialAssetValue(path, source, &resolver));
+        return parseMaterialAssetValue(path, source, &resolver);
     } catch (const AssetParseFailure&) {
         return {};
     } catch (const Json::exception& error) {

@@ -360,9 +360,9 @@ bool parseComponent(const VirtualPath& path,
     return false;
 }
 
-std::shared_ptr<SceneAsset> parseSceneAssetImpl(const VirtualPath& path,
-                                                std::string_view source,
-                                                const GuidResolver* resolver) {
+Ref<SceneAsset> parseSceneAssetImpl(const VirtualPath& path,
+                                    std::string_view source,
+                                    const GuidResolver* resolver) {
     const Json root = Json::parse(source, nullptr, false);
     if (root.is_discarded() || !root.is_object()) {
         fail(path, "Invalid Scene JSON");
@@ -379,7 +379,7 @@ std::shared_ptr<SceneAsset> parseSceneAssetImpl(const VirtualPath& path,
         return {};
     }
 
-    auto asset = std::make_shared<SceneAsset>();
+    auto asset = makeRef<SceneAsset>();
     asset->name = name->get<std::string>();
     asset->nodes.reserve(nodes->size());
     for (const Json& sourceNode : *nodes) {
@@ -423,18 +423,18 @@ std::shared_ptr<SceneAsset> parseSceneAssetImpl(const VirtualPath& path,
         asset->nodes.push_back(std::move(node));
     }
     asset->setAssetPath(path);
-    return validateSceneAsset(*asset, path) ? asset : nullptr;
+    return validateSceneAsset(*asset, path) ? asset : Ref<SceneAsset>{};
 }
 
 } // namespace
 
-std::shared_ptr<SceneAsset> parseSceneAsset(const VirtualPath& path, std::string_view source) {
+Ref<SceneAsset> parseSceneAsset(const VirtualPath& path, std::string_view source) {
     return parseSceneAssetImpl(path, source, nullptr);
 }
 
-std::shared_ptr<SceneAsset> parseSceneAsset(const VirtualPath& path,
-                                            std::string_view source,
-                                            const GuidResolver& resolver) {
+Ref<SceneAsset> parseSceneAsset(const VirtualPath& path,
+                                std::string_view source,
+                                const GuidResolver& resolver) {
     return parseSceneAssetImpl(path, source, &resolver);
 }
 

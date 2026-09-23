@@ -474,15 +474,16 @@ std::optional<MeshBuildResult> MeshBuilder::build(const MeshBuildRecipe& recipe)
     return result;
 }
 
-std::optional<MeshAsset> MeshBuilder::buildAsset(const MeshBuildRecipe& recipe) {
+Ref<MeshAsset> MeshBuilder::buildAsset(const MeshBuildRecipe& recipe) {
     auto result = build(recipe);
     if (!result)
-        return std::nullopt;
-    MeshAsset asset;
+        return {};
+    Ref<MeshAsset> assetRef = makeRef<MeshAsset>();
+    MeshAsset& asset = *assetRef;
     asset.desc = std::move(result->desc);
     asset.meshData = std::move(result->data);
     asset.buildRecipe = recipe;
-    return asset;
+    return assetRef;
 }
 
 } // namespace engine

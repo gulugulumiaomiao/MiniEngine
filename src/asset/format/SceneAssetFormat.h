@@ -6,19 +6,20 @@
 // parsing.
 
 #include "asset/base/GuidResolver.h"
+#include "core/base/Ref.h"
 #include "scene/scene/SceneAsset.h"
 
-#include <memory>
 #include <string_view>
 
 namespace engine::format {
 
 // Mesh and Material component references may be GUIDs (resolver required) or
 // virtual paths. Returns nullptr on any schema or validation violation.
-[[nodiscard]] std::shared_ptr<SceneAsset> parseSceneAsset(const VirtualPath& path,
-                                                          std::string_view source);
-[[nodiscard]] std::shared_ptr<SceneAsset> parseSceneAsset(
-    const VirtualPath& path, std::string_view source, const GuidResolver& resolver);
+[[nodiscard]] Ref<SceneAsset> parseSceneAsset(const VirtualPath& path,
+                                              std::string_view source);
+[[nodiscard]] Ref<SceneAsset> parseSceneAsset(const VirtualPath& path,
+                                              std::string_view source,
+                                              const GuidResolver& resolver);
 
 // Serializes a SceneAsset back into the source .scene.json format that
 // parseSceneAsset reads. Asset paths are written as GUID references when the

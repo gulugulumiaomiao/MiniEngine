@@ -321,7 +321,7 @@ int parseQueue(const Json& tags, const VirtualPath& file) {
     }
 }
 
-ShaderAsset parseShaderAssetValue(const VirtualPath& path, std::string_view source) {
+Ref<ShaderAsset> parseShaderAssetValue(const VirtualPath& path, std::string_view source) {
     const Json root = readJson(kCategory, path, source);
     if (!root.is_object()) {
         fail(kCategory, path, "$", "shader asset root must be an object");
@@ -333,7 +333,8 @@ ShaderAsset parseShaderAssetValue(const VirtualPath& path, std::string_view sour
              "$.$schemaVersion",
              "unsupported schema version " + std::to_string(schemaVersion));
     }
-    ShaderAsset asset;
+    Ref<ShaderAsset> assetRef = makeRef<ShaderAsset>();
+    ShaderAsset& asset = *assetRef;
     asset.setAssetPath(path);
     asset.name = required<std::string>(kCategory, root, "name", path, "$");
     const Json rootTags = root.value("tags", Json::object());
@@ -419,14 +420,14 @@ ShaderAsset parseShaderAssetValue(const VirtualPath& path, std::string_view sour
         }
         asset.subShaders.push_back(std::move(subShader));
     }
-    return asset;
+    return assetRef;
 }
 
 } // namespace
 
-std::shared_ptr<ShaderAsset> parseShaderAsset(const VirtualPath& path, std::string_view source) {
+Ref<ShaderAsset> parseShaderAsset(const VirtualPath& path, std::string_view source) {
     try {
-        return std::make_shared<ShaderAsset>(parseShaderAssetValue(path, source));
+        return parseShaderAssetValue(path, source);
     } catch (const AssetParseFailure&) {
         return {};
     } catch (const Json::exception& error) {

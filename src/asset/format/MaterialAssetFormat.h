@@ -6,19 +6,21 @@
 // parsing.
 
 #include "asset/base/GuidResolver.h"
+#include "asset/types/MaterialAsset.h"
+#include "core/base/Ref.h"
 #include "render/material/Material.h"
 
-#include <memory>
 #include <string_view>
 
 namespace engine::format {
 
 // Path references resolve inside the mount that owns the material; GUID
 // references require a resolver. Returns nullptr on any schema violation.
-[[nodiscard]] std::shared_ptr<MaterialAsset> parseMaterialAsset(const VirtualPath& path,
-                                                                std::string_view source);
-[[nodiscard]] std::shared_ptr<MaterialAsset> parseMaterialAsset(
-    const VirtualPath& path, std::string_view source, const GuidResolver& resolver);
+[[nodiscard]] Ref<MaterialAsset> parseMaterialAsset(const VirtualPath& path,
+                                                    std::string_view source);
+[[nodiscard]] Ref<MaterialAsset> parseMaterialAsset(const VirtualPath& path,
+                                                    std::string_view source,
+                                                    const GuidResolver& resolver);
 
 // Cross-asset validation: every property and keyword must be declared by the
 // referenced shader, and property values must match the declared types.

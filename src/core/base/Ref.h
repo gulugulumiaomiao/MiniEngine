@@ -122,4 +122,11 @@ template <typename U, typename T> [[nodiscard]] Ref<U> refCast(const Ref<T>& ref
     return Ref<U>(static_cast<U*>(ref.get()));
 }
 
+// Runtime-checked downcast between related ref-counted types. Returns an empty Ref when
+// the object's dynamic type is not U. The source Ref keeps the object alive across the
+// cast, and a successful result takes its own reference.
+template <typename U, typename T> [[nodiscard]] Ref<U> refDynamicCast(const Ref<T>& ref) noexcept {
+    return Ref<U>(dynamic_cast<U*>(ref.get()));
+}
+
 } // namespace engine

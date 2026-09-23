@@ -1,6 +1,7 @@
 #include "asset/importer/MeshAssetImporter.h"
 
 #include "asset/importer/AssetImportHelpers.h"
+#include "core/base/Ref.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/logging/Log.h"
 #include "render/mesh/Mesh.h"
@@ -207,7 +208,7 @@ bool readPrimitivePart(const Json& value, MeshPrimitivePart& part) {
     return true;
 }
 
-std::shared_ptr<MeshAsset>
+Ref<MeshAsset>
 parseProceduralMesh(const VirtualPath& path, const Json& root, const Json& source) {
     MeshBuildRecipe recipe;
     recipe.name = root.value("name", path.filename());
@@ -241,14 +242,14 @@ parseProceduralMesh(const VirtualPath& path, const Json& root, const Json& sourc
             return {};
         recipe.parts.push_back(std::move(part));
     }
-    auto built = MeshBuilder::buildAsset(recipe);
+    Ref<MeshAsset> built = MeshBuilder::buildAsset(recipe);
     if (!built)
         return {};
-    return std::make_shared<MeshAsset>(std::move(*built));
+    return built;
 }
 
-std::shared_ptr<MeshAsset> parseRawMesh(const VirtualPath& path, const Json& root) {
-    auto asset = std::make_shared<MeshAsset>();
+Ref<MeshAsset> parseRawMesh(const VirtualPath& path, const Json& root) {
+    auto asset = makeRef<MeshAsset>();
     asset->desc.debugName = root.value("name", path.filename());
     asset->desc.keepCpuCopy = root.value("keep_cpu_copy", false);
     if (!readEnum(root, "index_type", asset->desc.indexType) ||
@@ -339,7 +340,7 @@ std::shared_ptr<MeshAsset> parseRawMesh(const VirtualPath& path, const Json& roo
     return validateMesh(asset->desc, asset->meshData) ? asset : nullptr;
 }
 
-std::shared_ptr<MeshAsset> parseMesh(const VirtualPath& path, std::string_view text) {
+Ref<MeshAsset> parseMesh(const VirtualPath& path, std::string_view text) {
     const Json root = Json::parse(text, nullptr, false);
     if (root.is_discarded() || !root.is_object())
         return {};

@@ -47,7 +47,7 @@ assets:// 源文件（+ .meta 侧车）
   -> AssetImportPipeline（路由 -> 依赖调度 -> import）
   -> library://artifacts/<AssetId>/asset.bin（MART 信封）
   -> AssetDatabase（记录、哈希快照、依赖/反向依赖）
-  -> AssetManager（weak_ptr<Asset> 缓存）
+  -> AssetManager（Ref<Asset> 强缓存）
   -> ShaderManager / MeshManager / ...（KeyedHandleRegistry -> Handle）
   -> GPU 资源（Shader 编译、Texture 上传等按需执行）
 

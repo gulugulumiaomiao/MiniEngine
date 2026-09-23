@@ -52,7 +52,7 @@ assets://scenes/example.scene.json
   -> Scene Artifact
   -> BinaryReader
   -> SceneAsset::transfer
-  -> weak_ptr 缓存
+  -> Ref<Asset> 强缓存
 ```
 
 Scene 和 Shader、Material、Mesh 共用同一个 Asset 缓存。

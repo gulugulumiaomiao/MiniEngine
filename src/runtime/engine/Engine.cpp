@@ -350,7 +350,7 @@ bool Engine::loadScene(const VirtualPath& scenePath) {
         Log::error("Engine", "Invalid scene path: %s", scenePath.string().c_str());
         return false;
     }
-    const std::shared_ptr<SceneAsset> asset = ASSET_MANAGER.loadAsset<SceneAsset>(scenePath);
+    const Ref<SceneAsset> asset = ASSET_MANAGER.loadAsset<SceneAsset>(scenePath);
     if (!asset)
         return false;
 

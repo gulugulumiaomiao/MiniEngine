@@ -173,7 +173,7 @@ Scene 依赖 GPU/RHI，`MeshManager` 在资源销毁时发送生命周期通知�
 
 1. `MeshManager` 先按资产路径查找已有 handle，避免重复创建运行时对象。
 2. 缓存未命中时调用 `AssetManager::loadAsset<MeshAsset>()`。
-3. `AssetManager` 先查弱引用缓存，再通过 `ensureImported()` 确认数据库记录和 Artifact 有效。Debug 构建可以按需导入源资产；Release 构建只接受已经 Cook 好的 Artifact。
+3. `AssetManager` 先查 `Ref<Asset>` 强缓存，再通过 `ensureImported()` 确认数据库记录和 Artifact 有效。Debug 构建可以按需导入源资产；Release 构建只接受已经 Cook 好的 Artifact。
 4. 根据 `AssetDatabase` 记录读取 Artifact，校验 AssetId 和 AssetType，再以数据库中的请求路径设置资产身份。
 5. `BinaryReader` 调用 `MeshAsset::transfer()`，完整读取 payload，并在提交数据前再次执行 `validateMesh()`。
 6. `MeshAsset::instantiate()` 把资产路径、`MeshDesc`、`MeshData` 和可选构建配方复制到运行时 `Mesh`；`MeshManager` 保存实例并返回带 generation 的 `MeshHandle`。

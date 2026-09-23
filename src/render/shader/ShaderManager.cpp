@@ -52,7 +52,7 @@ Ref<Shader> ShaderResourceManager::load(const VirtualPath& shaderPath) {
 
 Ref<Shader> ShaderResourceManager::loadFromPath(const VirtualPath& shaderPath,
                                                 const AssetId& assetId) {
-    const std::shared_ptr<ShaderAsset> asset = ASSET_MANAGER.loadAsset<ShaderAsset>(shaderPath);
+    const Ref<ShaderAsset> asset = ASSET_MANAGER.loadAsset<ShaderAsset>(shaderPath);
     if (!asset)
         return {};
     Ref<Shader> shader = asset->instantiate();
@@ -88,7 +88,7 @@ void ShaderResourceManager::refreshAsset(const AssetId& assetId) {
                    assetId.toString().c_str());
         return;
     }
-    const std::shared_ptr<ShaderAsset> asset = ASSET_MANAGER.loadAsset<ShaderAsset>(*path);
+    const Ref<ShaderAsset> asset = ASSET_MANAGER.loadAsset<ShaderAsset>(*path);
     Ref<Shader> shader = find(assetId);
     if (!asset || !shader) {
         Log::error("ShaderResourceManager",
@@ -160,7 +160,7 @@ bool ShaderResourceManager::replace(const VirtualPath& shaderPath) {
     Ref<Shader> shader = find(*assetId);
     if (!shader)
         return true;
-    const std::shared_ptr<ShaderAsset> asset = ASSET_MANAGER.loadAsset<ShaderAsset>(shaderPath);
+    const Ref<ShaderAsset> asset = ASSET_MANAGER.loadAsset<ShaderAsset>(shaderPath);
     if (!asset)
         return false;
     shader->rebuildFromAsset(*asset);
