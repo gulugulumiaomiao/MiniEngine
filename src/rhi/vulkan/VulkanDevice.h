@@ -105,8 +105,6 @@ public:
     [[nodiscard]] std::uint32_t presentQueueFamily() const { return presentQueueFamily_; }
 
     [[nodiscard]] VkBuffer resolveBuffer(RID handle) const;
-    [[nodiscard]] IRHITexture* resolveTextureResource(RID handle) override;
-    [[nodiscard]] const IRHITexture* resolveTextureResource(RID handle) const override;
     [[nodiscard]] VkImage resolveTexture(RID handle) const;
     // RHI formats are only tracked for device-owned textures; external images
     // (e.g. swapchain) have no format in the handle table.
@@ -170,15 +168,6 @@ private:
         VkDescriptorSet resource{VK_NULL_HANDLE};
     };
 
-    // Samplers are pure value objects, so the registry dedups them by SamplerDesc: identical
-    // descriptors share one handle, which keeps VkSampler creation in one place.
-    class SamplerRegistry final
-        : public KeyedHandleRegistry<VulkanSampler, RID, SamplerDesc, SamplerDescHash> {
-        [[nodiscard]] SamplerDesc keyOf(const VulkanSampler& resource) const override {
-            return resource.desc();
-        }
-    };
-
     [[nodiscard]] BufferResource& requireBufferResource(RID handle);
     [[nodiscard]] const BufferResource& requireBufferResource(RID handle) const;
     [[nodiscard]] VulkanBuffer& requireBuffer(RID handle);
@@ -224,9 +213,10 @@ private:
     HandlePool<PipelineResource, RID> pipelines_;
     HandlePool<BindGroupLayoutResource, RID> bindGroupLayouts_;
     HandlePool<BindGroupResource, RID> bindGroups_;
-    HandlePool<VulkanTexture, RID> textures_;
-    HandlePool<VulkanTextureView, RID> textureViews_;
-    SamplerRegistry samplers_;
+    // Texture/view/sampler RID registries live in the IDevice base pools. Samplers are pure
+    // value objects, so this map preserves the identical-SamplerDesc sharing (one VkSampler per
+    // distinct descriptor) on top of the base pool.
+    std::unordered_map<SamplerDesc, RID, SamplerDescHash> samplerDedup_;
     std::unique_ptr<VulkanDescriptorAllocator> descriptorAllocator_;
     VkPipelineCache pipelineCache_{VK_NULL_HANDLE};
     std::unordered_map<PipelineLayoutKey, VkPipelineLayout, PipelineLayoutKeyHash> pipelineLayouts_;

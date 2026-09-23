@@ -87,14 +87,6 @@ public:
     void destroyBindGroup(engine::rhi::RID) override {}
     std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override { return nullptr; }
     void submitCommand(engine::rhi::ICommandBuffer&, const engine::rhi::SubmitSync&) override {}
-    engine::rhi::IRHITexture*
-    resolveTextureResource(engine::rhi::RID) override {
-        return nullptr;
-    }
-    const engine::rhi::IRHITexture*
-    resolveTextureResource(engine::rhi::RID) const override {
-        return nullptr;
-    }
     void waitIdle() override { ++waits; }
 
     std::vector<BufferRecord> buffers;
