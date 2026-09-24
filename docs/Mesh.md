@@ -264,7 +264,7 @@ Debug 模式下 `FileWatcher` 的事件由 `AssetImportPipeline` 处理。Mesh �
 - `src/render/gpu/mesh/MeshGpuCache.cpp`：不依赖 RHI 的键值与版本缓存。
 - `src/render/gpu/mesh/MeshGpuFactory.cpp`：GPU Buffer 创建、上传与释放。
 - `src/render/gpu/mesh/MeshGpuManager.cpp`：缓存与上传流程编排。
-- `src/rhi/api/Device.h`、`ResourceDesc.h`：设备接口和 API 无关的资源描述。
+- `src/rhi/api/Device.h` 及按主题拆分的 `Buffer.h`/`Texture.h`/`TextureView.h`/`Sampler.h`/`ShaderModule.h`/`BindGroup.h`/`PipelineDesc.h`：设备接口和 API 无关的资源描述。
 - `src/rhi/vulkan/VulkanDevice.cpp`：Buffer/Shader/Pipeline 资源表和 Vulkan staging 上传。
 - `src/render/renderer/Renderer.cpp`：上传以及 DrawList/RenderGraph 编排。
 - `src/rhi/vulkan/VulkanSwapchain.cpp`、`VulkanCommandBuffer.cpp`：命令记录、提交与 Vulkan draw 调用。

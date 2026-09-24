@@ -4,7 +4,8 @@
 #include "render/gpu/shader/ShaderStorageCache.h"
 #include "render/gpu/shader/ShaderStorageEntry.h"
 #include "render/shader/ShaderCompilePipeline.h"
-#include "rhi/api/ResourceDesc.h"
+#include "rhi/api/RhiTypes.h" // rhi::RID
+#include "rhi/api/ShaderModule.h"
 
 #include <cstdint>
 #include <memory>

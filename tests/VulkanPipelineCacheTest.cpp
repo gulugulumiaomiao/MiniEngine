@@ -1,6 +1,6 @@
 #include "core/filesystem/FileSystem.h"
 #include "core/filesystem/VirtualPath.h"
-#include "rhi/api/ResourceDesc.h"
+#include "rhi/api/Device.h"
 #include "rhi/vulkan/VulkanDevice.h"
 #include "rhi/vulkan/VulkanFactory.h"
 

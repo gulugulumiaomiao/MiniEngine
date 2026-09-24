@@ -1,11 +1,22 @@
 #pragma once
 
-#include "rhi/api/ResourceDesc.h"
-
 #include <cstddef>
+#include <cstdint>
+#include <span>
 #include <string>
 
 namespace engine::rhi {
+
+enum class ShaderStage {
+    Vertex,
+    Fragment,
+};
+
+struct ShaderDesc {
+    ShaderStage stage{ShaderStage::Vertex};
+    std::span<const std::byte> bytecode;
+    std::string debugName;
+};
 
 struct ShaderModuleInfo {
     ShaderStage stage{ShaderStage::Vertex};

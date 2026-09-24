@@ -1,10 +1,12 @@
 #pragma once
 
 #include "core/base/HandlePool.h"
+#include "rhi/api/BindGroup.h"
+#include "rhi/api/Buffer.h"
 #include "rhi/api/PipelineDesc.h"
-#include "rhi/api/ResourceDesc.h"
 #include "rhi/api/RhiTypes.h"
 #include "rhi/api/Sampler.h"
+#include "rhi/api/ShaderModule.h"
 #include "rhi/api/Texture.h"
 #include "rhi/api/TextureView.h"
 

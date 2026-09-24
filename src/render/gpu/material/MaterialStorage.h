@@ -3,7 +3,7 @@
 #include "core/base/Singleton.h"
 #include "render/gpu/material/MaterialStorageCache.h"
 #include "render/material/Material.h"
-#include "rhi/api/ResourceDesc.h"
+#include "rhi/api/TextureView.h"
 
 #include <cstdint>
 #include <memory>

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/math/Math.h"
-#include "rhi/api/ResourceDesc.h"
+#include "rhi/api/TextureView.h"
 #include "rhi/api/RhiTypes.h"
 
 #include <cstdint>

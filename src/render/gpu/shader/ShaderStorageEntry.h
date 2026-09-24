@@ -1,6 +1,7 @@
 #pragma once
 
-#include "rhi/api/ResourceDesc.h"
+#include "rhi/api/RhiTypes.h" // rhi::RID
+#include "rhi/api/ShaderModule.h"
 
 namespace engine {
 

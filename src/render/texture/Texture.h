@@ -5,7 +5,7 @@
 #include "core/base/RID.h"
 #include "core/base/Ref.h"
 #include "core/base/RefCounted.h"
-#include "rhi/api/ResourceDesc.h" // rhi::RID / rhi::TextureBinding
+#include "rhi/api/TextureView.h" // rhi::RID / rhi::TextureBinding
 #include "rhi/api/Sampler.h"      // rhi::SamplerDesc（toRhi 翻译目标）
 
 #include <cstddef>

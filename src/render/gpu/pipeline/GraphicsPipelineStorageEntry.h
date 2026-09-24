@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rhi/api/ResourceDesc.h"
+#include "rhi/api/PipelineDesc.h"
 
 #include <cstdint>
 

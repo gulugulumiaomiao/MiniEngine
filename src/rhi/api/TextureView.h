@@ -1,7 +1,6 @@
 #pragma once
 
-#include "rhi/api/ResourceDesc.h"
-#include "rhi/api/Texture.h"
+#include "rhi/api/Texture.h" // TextureType / PixelFormat / RhiTypes (RID, TextureSwizzle)
 
 #include <cstddef>
 #include <cstdint>
@@ -55,6 +54,14 @@ protected:
 
 private:
     IRHITexture* texture_{};
+};
+
+// A resolved (view, sampler) pair bound to a shader sampling slot.
+struct TextureBinding {
+    RID view;
+    RID sampler;
+
+    [[nodiscard]] bool operator==(const TextureBinding&) const = default;
 };
 
 } // namespace engine::rhi

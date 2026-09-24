@@ -1,7 +1,7 @@
 #pragma once
 
 #include "render/render_graph/RenderGraph.h"
-#include "rhi/api/ResourceDesc.h"
+#include "rhi/api/TextureView.h"
 
 #include <cstddef>
 #include <cstdint>
