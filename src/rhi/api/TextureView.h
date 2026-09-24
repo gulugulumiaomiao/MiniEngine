@@ -46,16 +46,15 @@ class IRHITextureView {
 public:
     virtual ~IRHITextureView() = default;
 
+    // Back-reference to the owning texture (non-owning). The view no longer retains its
+    // TextureViewDesc; the concrete backend view keeps only its native VkImageViewCreateInfo info.
     [[nodiscard]] IRHITexture* texture() const { return texture_; }
-    [[nodiscard]] const TextureViewDesc& desc() const { return desc_; }
 
 protected:
-    IRHITextureView(IRHITexture* texture, TextureViewDesc desc)
-        : texture_(texture), desc_(std::move(desc)) {}
+    explicit IRHITextureView(IRHITexture* texture) : texture_(texture) {}
 
 private:
     IRHITexture* texture_{};
-    TextureViewDesc desc_;
 };
 
 } // namespace engine::rhi

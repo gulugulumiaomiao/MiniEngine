@@ -33,15 +33,15 @@ public:
                        defaultView_);
     }
 
-    engine::rhi::TextureType type() const override { return desc_.dimension; }
-    engine::rhi::PixelFormat format() const override { return desc_.format; }
-    std::uint32_t width() const override { return desc_.width; }
-    std::uint32_t height() const override { return desc_.height; }
-    std::uint32_t depth() const override { return desc_.depth; }
-    std::uint32_t arrayLayers() const override { return desc_.arrayLayers; }
-    std::uint32_t mipCount() const override { return desc_.mipCount; }
-    engine::rhi::RID defaultView() const override { return defaultView_; }
-    engine::rhi::RID createView(const engine::rhi::TextureViewDesc& desc) override {
+    engine::rhi::TextureType type() const { return desc_.dimension; }
+    engine::rhi::PixelFormat format() const { return desc_.format; }
+    std::uint32_t width() const { return desc_.width; }
+    std::uint32_t height() const { return desc_.height; }
+    std::uint32_t depth() const { return desc_.depth; }
+    std::uint32_t arrayLayers() const { return desc_.arrayLayers; }
+    std::uint32_t mipCount() const { return desc_.mipCount; }
+    engine::rhi::RID defaultView() const { return defaultView_; }
+    engine::rhi::RID createView(const engine::rhi::TextureViewDesc& desc) {
         engine::rhi::TextureViewDesc normalized = desc;
         if (normalized.format == engine::rhi::PixelFormat::Undefined)
             normalized.format = desc_.format;
@@ -102,8 +102,8 @@ public:
         return {++createdViews, 1};
     }
     engine::rhi::RID
-    defaultTextureView(engine::rhi::RID texture) const override {
-        const auto* resource = resolveTextureResource(texture);
+    defaultTextureView(engine::rhi::RID texture) override {
+        const auto* resource = static_cast<const FakeRhiTexture*>(resolveTextureResource(texture));
         return resource ? resource->defaultView() : engine::rhi::RID{};
     }
     void destroyTextureView(engine::rhi::RID) override {}

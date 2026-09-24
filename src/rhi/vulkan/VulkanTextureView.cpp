@@ -36,7 +36,7 @@ VkComponentSwizzle toVulkan(SwizzleComponent component) {
 } // namespace
 
 VulkanTextureView::VulkanTextureView(VkDevice device, VulkanTexture& texture, TextureViewDesc desc)
-    : IRHITextureView(&texture, desc), device_(device), owned_(true) {
+    : IRHITextureView(&texture), device_(device), owned_(true) {
     const PixelFormat format =
         desc.format == PixelFormat::Undefined ? texture.format() : desc.format;
     VkImageViewCreateInfo info{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
@@ -62,14 +62,14 @@ VulkanTextureView::VulkanTextureView(VkDevice device,
                                      VulkanTexture& texture,
                                      VkImageView externalView,
                                      TextureViewDesc desc)
-    : IRHITextureView(&texture, desc), device_(device), view_(externalView), owned_(false) {
+    : IRHITextureView(&texture), device_(device), view_(externalView), owned_(false) {
     if (view_ == VK_NULL_HANDLE) {
         Log::fatal("VulkanTextureView", "Cannot wrap a null external texture view");
     }
 }
 
 VulkanTextureView::VulkanTextureView(VulkanTextureView&& other) noexcept
-    : IRHITextureView(other.texture(), other.desc()),
+    : IRHITextureView(other.texture()),
       device_(std::exchange(other.device_, VK_NULL_HANDLE)),
       view_(std::exchange(other.view_, VK_NULL_HANDLE)),
       owned_(std::exchange(other.owned_, false)) {}

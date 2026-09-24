@@ -68,7 +68,7 @@ public:
                        std::span<const TextureUploadRegion> regions) override;
     [[nodiscard]] RID createTextureView(RID texture,
                                                       const TextureViewDesc& desc) override;
-    [[nodiscard]] RID defaultTextureView(RID texture) const override;
+    [[nodiscard]] RID defaultTextureView(RID texture) override;
     void destroyTextureView(RID handle) override;
     [[nodiscard]] RID createSampler(const SamplerDesc& desc) override;
     void destroySampler(RID handle) override;
@@ -134,11 +134,6 @@ public:
     void collectStagingBuffers();
 
 private:
-    friend class VulkanTexture;
-
-    [[nodiscard]] RID acquireTextureView(VulkanTexture& texture,
-                                                       const TextureViewDesc& desc);
-
     struct QueueFamilies {
         std::uint32_t graphics{};
         std::uint32_t present{};
@@ -217,6 +212,12 @@ private:
     // value objects, so this map preserves the identical-SamplerDesc sharing (one VkSampler per
     // distinct descriptor) on top of the base pool.
     std::unordered_map<SamplerDesc, RID, SamplerDescHash> samplerDedup_;
+    // Device-level view dedup: texture RID -> (normalized view desc -> view RID). Replaces the
+    // old per-VulkanTexture view cache; the thinned IRHITexture no longer owns views. Named
+    // distinctly from the IDevice base pool `textureViews_` to avoid shadowing it.
+    std::unordered_map<std::uint64_t,
+                       std::unordered_map<TextureViewDesc, RID, TextureViewDescHash>>
+        viewDedup_;
     std::unique_ptr<VulkanDescriptorAllocator> descriptorAllocator_;
     VkPipelineCache pipelineCache_{VK_NULL_HANDLE};
     std::unordered_map<PipelineLayoutKey, VkPipelineLayout, PipelineLayoutKeyHash> pipelineLayouts_;

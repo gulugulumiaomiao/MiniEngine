@@ -60,7 +60,7 @@ public:
         return {};
     }
     engine::rhi::RID
-    defaultTextureView(engine::rhi::RID) const override {
+    defaultTextureView(engine::rhi::RID) override {
         return {};
     }
     void destroyTextureView(engine::rhi::RID) override {}

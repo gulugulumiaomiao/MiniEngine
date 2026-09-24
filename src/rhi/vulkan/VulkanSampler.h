@@ -6,6 +6,8 @@
 
 namespace engine::rhi::vulkan {
 
+// Concrete Vulkan sampler. Retains only the native VkSampler (built from the SamplerDesc's
+// VkSamplerCreateInfo), not the SamplerDesc itself; dedup lives at the device level.
 class VulkanSampler final : public IRHISampler {
 public:
     VulkanSampler(VkDevice device, const SamplerDesc& desc, float maxAnisotropyLimit);
@@ -17,12 +19,10 @@ public:
     VulkanSampler& operator=(VulkanSampler&&) = delete;
 
     [[nodiscard]] VkSampler handle() const { return sampler_; }
-    [[nodiscard]] const SamplerDesc& desc() const override { return desc_; }
 
 private:
     VkDevice device_{VK_NULL_HANDLE};
     VkSampler sampler_{VK_NULL_HANDLE};
-    SamplerDesc desc_;
 };
 
 } // namespace engine::rhi::vulkan

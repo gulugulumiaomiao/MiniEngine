@@ -39,7 +39,7 @@ public:
         views.push_back(desc);
         return {static_cast<std::uint32_t>(views.size()), 1};
     }
-    engine::rhi::RID defaultTextureView(engine::rhi::RID) const override {
+    engine::rhi::RID defaultTextureView(engine::rhi::RID) override {
         return views.empty()
                    ? engine::rhi::RID{}
                    : engine::rhi::RID{static_cast<std::uint32_t>(views.size()), 1};

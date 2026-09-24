@@ -58,7 +58,7 @@ public:
                                std::span<const TextureUploadRegion> regions) = 0;
     [[nodiscard]] virtual RID createTextureView(RID texture,
                                                               const TextureViewDesc& desc) = 0;
-    [[nodiscard]] virtual RID defaultTextureView(RID texture) const = 0;
+    [[nodiscard]] virtual RID defaultTextureView(RID texture) = 0;
     virtual void destroyTextureView(RID handle) = 0;
     [[nodiscard]] virtual RID createSampler(const SamplerDesc& desc) = 0;
     virtual void destroySampler(RID handle) = 0;

@@ -56,7 +56,7 @@ public:
         return {static_cast<std::uint32_t>(views.size() - 1), 1};
     }
     engine::rhi::RID
-    defaultTextureView(engine::rhi::RID texture) const override {
+    defaultTextureView(engine::rhi::RID texture) override {
         const auto found = defaultViews.find(texture.index());
         return found == defaultViews.end() ? engine::rhi::RID{} : found->second;
     }

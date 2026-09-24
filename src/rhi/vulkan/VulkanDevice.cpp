@@ -444,25 +444,20 @@ RID VulkanDevice::createTexture(const TextureDesc& desc) {
         (isDepthFormat(desc.format) && hasFlag(desc.usage, TextureUsage::ColorAttachment))) {
         Log::fatal("VulkanDevice", "Texture format and attachment usage do not match");
     }
-    const RID handle = registerTexture(std::make_unique<VulkanTexture>(
+    // No eager default view: defaultTextureView() creates + caches it lazily at device level.
+    return registerTexture(std::make_unique<VulkanTexture>(
         *this, allocator_, desc, toVulkan(desc.format), toVulkan(desc.usage)));
-    auto* texture = static_cast<VulkanTexture*>(resolveTextureResource(handle));
-    const TextureViewDesc defaultDesc{.type = desc.dimension,
-                                      .format = desc.format,
-                                      .baseMip = 0,
-                                      .mipCount = desc.mipCount,
-                                      .baseLayer = 0,
-                                      .layerCount = desc.arrayLayers};
-    texture->setDefaultView(createTextureView(handle, defaultDesc));
-    return handle;
 }
 
 void VulkanDevice::destroyTexture(RID handle) {
-    auto* texture = static_cast<VulkanTexture*>(resolveTextureResource(handle));
-    if (!texture)
+    if (!resolveTextureResource(handle))
         return;
-    for (RID view : texture->viewHandles())
-        releaseTextureView(view);
+    // Cascade-release every view deduped for this texture, then the texture itself.
+    if (const auto it = viewDedup_.find(handle.value()); it != viewDedup_.end()) {
+        for (const auto& [viewDesc, view] : it->second)
+            releaseTextureView(view);
+        viewDedup_.erase(it);
+    }
     releaseTexture(handle);
 }
 
@@ -544,48 +539,56 @@ void VulkanDevice::uploadTexture(RID destination,
     resource->markUploaded();
 }
 
-RID VulkanDevice::createTextureView(RID textureHandle,
-                                                  const TextureViewDesc& desc) {
+RID VulkanDevice::createTextureView(RID textureHandle, const TextureViewDesc& desc) {
     auto* texture = static_cast<VulkanTexture*>(resolveTextureResource(textureHandle));
     if (!texture)
         Log::fatal("VulkanDevice", "Invalid RHI Texture handle");
-    return texture->createView(desc);
-}
-
-RID VulkanDevice::acquireTextureView(VulkanTexture& texture,
-                                                   const TextureViewDesc& desc) {
     if (desc.type != TextureType::Texture2D || desc.mipCount == 0 || desc.layerCount != 1 ||
         desc.baseLayer != 0) {
         Log::fatal("VulkanDevice", "Invalid or unsupported TextureView description");
     }
     TextureViewDesc normalized = desc;
     if (normalized.format == PixelFormat::Undefined)
-        normalized.format = texture.format();
-    if (normalized.format != texture.format() || normalized.baseMip >= texture.mipCount() ||
-        normalized.mipCount > texture.mipCount() - normalized.baseMip) {
+        normalized.format = texture->format();
+    if (normalized.format != texture->format() || normalized.baseMip >= texture->mipCount() ||
+        normalized.mipCount > texture->mipCount() - normalized.baseMip) {
         Log::fatal("VulkanDevice", "TextureView does not match its Texture");
     }
-    if (const RID existing = texture.findView(normalized))
-        return existing;
+    auto& views = viewDedup_[textureHandle.value()];
+    if (const auto found = views.find(normalized);
+        found != views.end() && resolveTextureViewResource(found->second))
+        return found->second;
     const RID view =
-        registerTextureView(std::make_unique<VulkanTextureView>(device_, texture, normalized));
-    texture.cacheView(normalized, view);
+        registerTextureView(std::make_unique<VulkanTextureView>(device_, *texture, normalized));
+    views.insert_or_assign(normalized, view);
     return view;
 }
 
-RID VulkanDevice::defaultTextureView(RID texture) const {
+RID VulkanDevice::defaultTextureView(RID texture) {
     const auto* resource = static_cast<const VulkanTexture*>(resolveTextureResource(texture));
-    if (!resource || !resource->defaultView())
-        Log::fatal("VulkanDevice", "Texture has no default view");
-    return resource->defaultView();
+    if (!resource)
+        Log::fatal("VulkanDevice", "Invalid RHI Texture handle");
+    const TextureViewDesc fullRange{.type = resource->type(),
+                                    .format = resource->format(),
+                                    .baseMip = 0,
+                                    .mipCount = resource->mipCount(),
+                                    .baseLayer = 0,
+                                    .layerCount = resource->arrayLayers()};
+    return createTextureView(texture, fullRange);
 }
 
 void VulkanDevice::destroyTextureView(RID handle) {
-    auto* view = static_cast<VulkanTextureView*>(resolveTextureViewResource(handle));
-    if (!view)
+    if (!resolveTextureViewResource(handle))
         return;
-    if (IRHITexture* texture = view->texture())
-        static_cast<VulkanTexture*>(texture)->removeView(handle);
+    for (auto& [textureKey, views] : viewDedup_) {
+        for (auto it = views.begin(); it != views.end(); ++it) {
+            if (it->second == handle) {
+                views.erase(it);
+                releaseTextureView(handle);
+                return;
+            }
+        }
+    }
     releaseTextureView(handle);
 }
 
@@ -605,11 +608,14 @@ RID VulkanDevice::createSampler(const SamplerDesc& desc) {
 }
 
 void VulkanDevice::destroySampler(RID handle) {
-    if (const IRHISampler* resource = resolveSamplerResource(handle)) {
-        const SamplerDesc key = resource->desc();
-        if (const auto found = samplerDedup_.find(key);
-            found != samplerDedup_.end() && found->second == handle)
-            samplerDedup_.erase(found);
+    if (!resolveSamplerResource(handle))
+        return;
+    // Sampler no longer retains its desc; erase the dedup entry by matching the handle.
+    for (auto it = samplerDedup_.begin(); it != samplerDedup_.end(); ++it) {
+        if (it->second == handle) {
+            samplerDedup_.erase(it);
+            break;
+        }
     }
     releaseSampler(handle);
 }
@@ -904,8 +910,9 @@ RID VulkanDevice::registerExternalTextureView(RID textureHandle,
         normalized.format = texture->format();
     const RID handle =
         registerTextureView(std::make_unique<VulkanTextureView>(device_, *texture, view, normalized));
-    texture->cacheView(normalized, handle);
-    texture->setDefaultView(handle);
+    // Device-level dedup/ownership (replaces the removed per-texture view cache + default view);
+    // defaultTextureView() will find this entry via the same normalized full-range desc.
+    viewDedup_[textureHandle.value()].insert_or_assign(normalized, handle);
     return handle;
 }
 
@@ -1011,6 +1018,7 @@ void VulkanDevice::clear() {
     shaders_.clear();
     samplerDedup_.clear();
     samplers_.clear();
+    viewDedup_.clear();
     textureViews_.clear();
     textures_.clear();
     buffers_.clear();

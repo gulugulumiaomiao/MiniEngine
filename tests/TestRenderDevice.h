@@ -16,15 +16,15 @@ public:
     MockRhiTexture(rhi::TextureDesc desc, rhi::RID defaultView)
         : desc_(std::move(desc)), defaultView_(defaultView) {}
 
-    rhi::TextureType type() const override { return desc_.dimension; }
-    rhi::PixelFormat format() const override { return desc_.format; }
-    std::uint32_t width() const override { return desc_.width; }
-    std::uint32_t height() const override { return desc_.height; }
-    std::uint32_t depth() const override { return desc_.depth; }
-    std::uint32_t arrayLayers() const override { return desc_.arrayLayers; }
-    std::uint32_t mipCount() const override { return desc_.mipCount; }
-    rhi::RID defaultView() const override { return defaultView_; }
-    rhi::RID createView(const rhi::TextureViewDesc&) override { return defaultView_; }
+    rhi::TextureType type() const { return desc_.dimension; }
+    rhi::PixelFormat format() const { return desc_.format; }
+    std::uint32_t width() const { return desc_.width; }
+    std::uint32_t height() const { return desc_.height; }
+    std::uint32_t depth() const { return desc_.depth; }
+    std::uint32_t arrayLayers() const { return desc_.arrayLayers; }
+    std::uint32_t mipCount() const { return desc_.mipCount; }
+    rhi::RID defaultView() const { return defaultView_; }
+    rhi::RID createView(const rhi::TextureViewDesc&) { return defaultView_; }
 
 private:
     rhi::TextureDesc desc_;
@@ -148,7 +148,7 @@ public:
                                              const rhi::TextureViewDesc&) override {
         return {++views, 1};
     }
-    rhi::RID defaultTextureView(rhi::RID texture) const override {
+    rhi::RID defaultTextureView(rhi::RID texture) override {
         const auto found = defaultTextureViews.find(texture.index());
         return found == defaultTextureViews.end() ? rhi::RID{} : found->second;
     }

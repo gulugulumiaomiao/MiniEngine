@@ -57,11 +57,11 @@ struct SamplerDescHash {
     }
 };
 
+// Thin, opaque handle target: the concrete backend sampler retains only its native
+// VkSamplerCreateInfo info, not the SamplerDesc (dedup lives at the device level).
 class IRHISampler {
 public:
     virtual ~IRHISampler() = default;
-
-    [[nodiscard]] virtual const SamplerDesc& desc() const = 0;
 };
 
 } // namespace engine::rhi
