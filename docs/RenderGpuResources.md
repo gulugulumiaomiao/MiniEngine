@@ -31,11 +31,11 @@ Material
 
 ## 3. Texture 生命周期与去重
 
-层2 `Texture` 不持有 `TextureDesc` 与像素数据，只保留必要属性 + 三个 RID（texture / 默认 view / 默认 sampler）。构造（接 `TextureDesc`）经 `IDevice::active()` 分配三个 RID：`createTexture` 建纹理、`defaultTextureView` 取默认视图、`createSampler` 取去重采样器；`initialize`/`upload(pixels)` 按 `computeTextureLayout` 逐 mip 切片上传。
+层2 `Texture` 不持有 `TextureDesc` 与像素数据，只保留必要属性 + 三个 RID（texture / 默认 view / 默认 sampler）。构造（接 `TextureDesc`）经 `IDevice::active()` 分配三个 RID：`createTexture` 建纹理、`createTextureView`（翻译后的层2 `TextureViewDesc`）建层2 拥有的默认视图、`createSampler` 取去重采样器；`initialize`/`upload(pixels)` 按 `computeTextureLayout` 逐 mip 切片上传。
 
 - **去重**：没有纹理管理器时，"每个 `TextureAsset` 只 `instantiate()` 出一个运行时实例"天然承担去重——同一 asset 反复解析（`resolveTextureReference` → `AssetManager.loadAsset<TextureAsset>` → `instantiate`）命中缓存 asset 的同一实例。`clone()` 产出互不影响的脱离实例。
 - **Sampler**：设备级按 `SamplerDesc` 去重（`IDevice::createSampler`）；层2 `Sampler` 与 `Texture` 的默认 sampler 都**非拥有**，析构不 `destroySampler`，随设备释放。
-- **View**：默认 view 由层3 texture 持有，随 `destroyTexture` 级联释放；`IRHITexture::createView` 的自定义 view 仍在设备层去重。
+- **View**：层2 `Texture` 经 `IDevice::createTextureView` 创建并拥有默认 view；view 去重与所有权在 `VulkanDevice`（设备级 `(textureRID, rhi::TextureViewDesc)→RID`），`destroyTexture` 级联释放该纹理全部 view；`defaultTextureView` 是设备级惰性入口（RenderTarget/Swapchain/ImGui 用）。层3 `VulkanTexture/View/Sampler` 只留 Vk create-info 类原生 info、不持 desc，`IRHITexture` 已瘦身为不透明句柄（无 type/format/dims/createView/defaultView）。
 
 ## 4. Material binding
 

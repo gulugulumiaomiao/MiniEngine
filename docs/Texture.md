@@ -9,9 +9,9 @@ Texture 系统把资产数据、运行时 GPU 资源与采样状态拆成三层�
 | 层1 资产 | `TextureAsset` | 序列化 `TextureDesc` + 完整扁平 mip 像素；`instantiate()` 唯一实例、`clone()` 脱离实例 |
 | 层2 运行时 | `Texture` | 必要属性 + 三个 RHI RID（texture / 默认 view / 默认 sampler）；不持 desc 与像素 |
 | 层2 运行时 | `Sampler` | `RefCounted`，持一个设备去重的 sampler RID + 必要属性访问器；非拥有 |
-| 层3 RHI | `IRHITexture` / `VulkanTexture` | 管理 VkImage、VMA allocation、默认 view 与 view desc 去重缓存 |
-| 层3 RHI | `IRHITextureView` / `VulkanTextureView` | 管理 VkImageView，引用所属 RHI Texture |
-| 层3 RHI | `IRHISampler` / `VulkanSampler` | 管理 VkSampler；由 `IDevice` 按 `SamplerDesc` 去重 |
+| 层3 RHI | `IRHITexture`（仅虚析构）/ `VulkanTexture` | 管理 VkImage + VMA allocation，只留 VkImageCreateInfo 类原生 info（VkFormat/PixelFormat/extent/mipLevels/arrayLayers/usage），**不持 desc、不持 view** |
+| 层3 RHI | `IRHITextureView` / `VulkanTextureView` | 管理 VkImageView，回指所属 RHI Texture；**不持 TextureViewDesc** |
+| 层3 RHI | `IRHISampler`（仅虚析构）/ `VulkanSampler` | 管理 VkSampler，只留原生 create-info（不持 SamplerDesc）；由 `IDevice` 按 `SamplerDesc` 去重 |
 
 三个句柄池 `HandlePool<IRHITexture|IRHITextureView|IRHISampler, RID>` 全部内嵌 `rhi::IDevice`（全局单例，`IDevice::active()`）。**不存在** `TextureManager` / `TextureResourceManager` / gpu 层 `TextureStorage`，层2 也没有 `TextureView` 类（view 概念只在层3）。核心约束不变：`Texture` 不直接绑定 shader，规范绑定单位是 `rhi::TextureBinding { view, sampler }`。
 
@@ -29,14 +29,14 @@ Texture 系统把资产数据、运行时 GPU 资源与采样状态拆成三层�
   -> BindGroupEntry -> Vulkan descriptor { VkImageView, VkSampler }
 ```
 
-`Texture` 构造经 `IDevice::active()` 取设备（没有管理器可注入）：`createTexture` 建纹理、`defaultTextureView` 取默认视图、`createSampler` 取去重采样器。white/black/normal/error 内建纹理由 `Texture::defaultWhite()` 等静态方法经同一构造路径自建（非 asset-backed）。纹理引用字符串（路径/内建名）由自由函数 `resolveTextureReference` 统一解析。
+`Texture` 构造经 `IDevice::active()` 取设备（没有管理器可注入）：`createTexture` 建纹理、`createTextureView`（翻译后的层2 `TextureViewDesc`）建**层2 拥有**的默认视图、`createSampler` 取去重采样器。white/black/normal/error 内建纹理由 `Texture::defaultWhite()` 等静态方法经同一构造路径自建（非 asset-backed）。纹理引用字符串（路径/内建名）由自由函数 `resolveTextureReference` 统一解析。
 
 ## 3. 去重与生命周期
 
 - **去重**：无管理器时，"每个 `TextureAsset` 只 `instantiate()` 出一个运行时实例"天然承担去重——`resolveTextureReference` → 缓存 asset → `instantiate()` 命中同一实例。`clone()` 产出互不影响、不随 asset 变化的脱离实例（不继承 asset 链接）。
 - **两步初始化**：构造只分配 RID（不上传）；`initialize`/`upload(pixels)` 上传，可在热重载时重复调用。
-- **所有权**：默认 view 由层3 texture 持有，随 `destroyTexture` 级联释放；默认 sampler 由设备按 desc 去重持有，`~Texture` 不销毁它。
-- **跨设备**：`Texture` 记录创建设备的 `uid`（`IDevice` 进程内单调、永不复用）。`~Texture` 仅当 `active()->uid() == deviceUid_` 时才销毁 GPU 资源，避免旧设备资源被打到新设备（裸指针比较会因地址复用误判）；静态内建纹理按 `uid` 检测设备切换并自动重建。
+- **所有权**：层2 `Texture` 经 `createTextureView` 创建并**拥有**默认 view（`~Texture` 先 `destroyTextureView` 再 `destroyTexture`）；view 去重与级联释放在 `VulkanDevice`（设备级 `(textureRID, rhi::TextureViewDesc)→RID`，`destroyTexture` 释放该纹理全部 view）；默认 sampler 由设备按 desc 去重持有，`~Texture` 不销毁它。
+- **跨设备**：`IDevice` 有进程内单调、永不复用的 `uid()`。`~Texture` 用 `IDevice::active()` + 空检查销毁 GPU 资源（asset-backed 纹理在其设备仍 active 时析构，由工程 teardown 顺序保证）；静态内建纹理按 `uid` 检测设备切换，重建前对旧实例调 `detachFromDeadDevice()` 置空三 RID，使旧实例析构跳过销毁（旧设备已亡、资源随之消失）。这取代了裸指针比较（地址复用会误判）与旧的 `retainPixels` 补丁。
 - **双向观察者**：`TextureAsset` 以裸指针 `instance_` 观察唯一实例，实例以裸指针 `asset_` 回指 asset（asset 由 `AssetManager` 强缓存常驻）；`~Texture` 与 `~TextureAsset` 互相清空对方指针，任一方先销毁都安全（无 UAF）。
 
 ## 4. Sampler
