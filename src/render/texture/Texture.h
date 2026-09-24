@@ -5,8 +5,8 @@
 #include "core/base/RID.h"
 #include "core/base/Ref.h"
 #include "core/base/RefCounted.h"
-#include "rhi/api/TextureView.h" // rhi::RID / rhi::TextureBinding
-#include "rhi/api/Sampler.h"      // rhi::SamplerDesc（toRhi 翻译目标）
+#include "render/texture/Sampler.h" // engine::SamplerDesc / TextureFilterMode / toRhi
+#include "rhi/api/TextureView.h"    // rhi::RID / rhi::TextureBinding
 
 #include <cstddef>
 #include <cstdint>
@@ -21,33 +21,11 @@ namespace rhi {
 class IDevice;
 }
 
-class Sampler;
 class TextureAsset;
 
 enum class TextureType { Texture2D, Texture2DArray, Texture3D, TextureCube, TextureCubeArray };
 enum class TextureFormat { Rgba8Unorm, Rgba8Srgb };
 enum class TextureColorSpace { Linear, Srgb };
-
-// 层2 采样语义描述（Unity 风格）；构造层3 sampler 时由 toRhi 翻译成 rhi::SamplerDesc。
-enum class TextureFilterMode { Point, Bilinear, Trilinear };
-enum class TextureAddressMode { Repeat, MirroredRepeat, ClampToEdge };
-
-struct SamplerDesc : public Transferable {
-    TextureFilterMode filterMode{TextureFilterMode::Bilinear};
-    TextureAddressMode addressModeU{TextureAddressMode::Repeat};
-    TextureAddressMode addressModeV{TextureAddressMode::Repeat};
-    float maxAnisotropy{1.0F};
-
-    SamplerDesc() = default;
-    SamplerDesc(TextureFilterMode filterMode,
-                TextureAddressMode addressModeU,
-                TextureAddressMode addressModeV,
-                float maxAnisotropy)
-        : filterMode(filterMode), addressModeU(addressModeU), addressModeV(addressModeV),
-          maxAnisotropy(maxAnisotropy) {}
-
-    [[nodiscard]] bool transfer(Transfer& archive) override;
-};
 
 // 层2 视图语义描述：自定义 Swizzle + 高层 format；构造层3 view 时由 toRhi 翻译成
 // rhi::TextureViewDesc（MatchTexture 解析为源纹理格式）。
@@ -117,9 +95,6 @@ struct TextureDesc : public Transferable {
 // Derives the mip layout implied by desc. Returns false for unsupported dimensions/formats
 // or on byte-size overflow.
 [[nodiscard]] bool computeTextureLayout(const TextureDesc& desc, TextureMipLayout& layout);
-
-/// 层2 → 层3 采样描述翻译（Texture 默认 sampler 与层2 Sampler::resolve 共用）。
-[[nodiscard]] rhi::SamplerDesc toRhi(const SamplerDesc& desc);
 
 /// 层2 运行时纹理：只保留必要属性 + 访问器，持有 3 个层3 RID（texture / view / sampler），
 /// view + sampler 作为默认采样绑定。不持有 TextureDesc 与像素数据。

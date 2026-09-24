@@ -88,54 +88,6 @@ bool rgbaByteSize(std::uint32_t width, std::uint32_t height, std::size_t& result
 
 } // namespace
 
-rhi::SamplerDesc toRhi(const SamplerDesc& settings) {
-    rhi::SamplerDesc desc;
-    desc.maxAnisotropy = settings.maxAnisotropy;
-    switch (settings.addressModeU) {
-    case TextureAddressMode::Repeat: desc.addressU = rhi::SamplerAddressMode::Repeat; break;
-    case TextureAddressMode::MirroredRepeat:
-        desc.addressU = rhi::SamplerAddressMode::MirroredRepeat;
-        break;
-    case TextureAddressMode::ClampToEdge:
-        desc.addressU = rhi::SamplerAddressMode::ClampToEdge;
-        break;
-    }
-    switch (settings.addressModeV) {
-    case TextureAddressMode::Repeat: desc.addressV = rhi::SamplerAddressMode::Repeat; break;
-    case TextureAddressMode::MirroredRepeat:
-        desc.addressV = rhi::SamplerAddressMode::MirroredRepeat;
-        break;
-    case TextureAddressMode::ClampToEdge:
-        desc.addressV = rhi::SamplerAddressMode::ClampToEdge;
-        break;
-    }
-    switch (settings.filterMode) {
-    case TextureFilterMode::Point:
-        desc.minFilter = rhi::SamplerFilter::Nearest;
-        desc.magFilter = rhi::SamplerFilter::Nearest;
-        desc.mipmapFilter = rhi::SamplerMipmapFilter::Nearest;
-        break;
-    case TextureFilterMode::Bilinear:
-        desc.minFilter = rhi::SamplerFilter::Linear;
-        desc.magFilter = rhi::SamplerFilter::Linear;
-        desc.mipmapFilter = rhi::SamplerMipmapFilter::Nearest;
-        break;
-    case TextureFilterMode::Trilinear:
-        desc.minFilter = rhi::SamplerFilter::Linear;
-        desc.magFilter = rhi::SamplerFilter::Linear;
-        desc.mipmapFilter = rhi::SamplerMipmapFilter::Linear;
-        break;
-    }
-    return desc;
-}
-
-bool SamplerDesc::transfer(Transfer& archive) {
-    return archive.beginObject({}) && archive.transfer("filter_mode", filterMode) &&
-           archive.transfer("address_mode_u", addressModeU) &&
-           archive.transfer("address_mode_v", addressModeV) &&
-           archive.transfer("max_anisotropy", maxAnisotropy) && archive.endObject();
-}
-
 bool TextureDesc::transfer(Transfer& archive) {
     return archive.beginObject({}) && archive.transfer("type", type) &&
            archive.transfer("format", format) && archive.transfer("color_space", colorSpace) &&

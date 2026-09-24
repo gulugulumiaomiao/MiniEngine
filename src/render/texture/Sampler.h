@@ -2,9 +2,35 @@
 
 #include "core/base/Ref.h"
 #include "core/base/RefCounted.h"
-#include "render/texture/Texture.h" // engine::SamplerDesc / toRhi / rhi::RID
+#include "core/serialization/Transferable.h"
+#include "rhi/api/RhiTypes.h" // rhi::RID
+#include "rhi/api/Sampler.h"  // rhi::SamplerDesc（toRhi 翻译目标）
 
 namespace engine {
+
+// 层2 采样语义描述（Unity 风格）；构造层3 sampler 时由 toRhi 翻译成 rhi::SamplerDesc。
+enum class TextureFilterMode { Point, Bilinear, Trilinear };
+enum class TextureAddressMode { Repeat, MirroredRepeat, ClampToEdge };
+
+struct SamplerDesc : public Transferable {
+    TextureFilterMode filterMode{TextureFilterMode::Bilinear};
+    TextureAddressMode addressModeU{TextureAddressMode::Repeat};
+    TextureAddressMode addressModeV{TextureAddressMode::Repeat};
+    float maxAnisotropy{1.0F};
+
+    SamplerDesc() = default;
+    SamplerDesc(TextureFilterMode filterMode,
+                TextureAddressMode addressModeU,
+                TextureAddressMode addressModeV,
+                float maxAnisotropy)
+        : filterMode(filterMode), addressModeU(addressModeU), addressModeV(addressModeV),
+          maxAnisotropy(maxAnisotropy) {}
+
+    [[nodiscard]] bool transfer(Transfer& archive) override;
+};
+
+/// 层2 → 层3 采样描述翻译（Texture 默认 sampler 与 Sampler::resolve 共用）。
+[[nodiscard]] rhi::SamplerDesc toRhi(const SamplerDesc& desc);
 
 /// 层2 运行时采样器：只保留必要语义属性 + 访问器，持有一个层3 sampler RID。
 ///
