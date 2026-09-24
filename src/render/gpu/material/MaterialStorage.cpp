@@ -4,9 +4,8 @@
 #include "render/gpu/common/GpuResourceKey.h"
 #include "render/gpu/material/MaterialStorageFactory.h"
 #include "render/gpu/pipeline/GraphicsPipelineStorage.h"
-#include "render/gpu/texture/TextureStorage.h"
 #include "render/material/MaterialManager.h"
-#include "render/texture/TextureManager.h"
+#include "render/texture/Sampler.h"
 #include "render/shader/Shader.h"
 #include "rhi/api/Device.h"
 
@@ -42,8 +41,8 @@ std::uint64_t MaterialStorage::cacheKey(RID handle) {
 
 namespace {
 
-[[nodiscard]] bool sameTextureBindings(const std::vector<TextureBinding>& lhs,
-                                       std::span<const TextureBinding> rhs) {
+[[nodiscard]] bool sameTextureBindings(const std::vector<rhi::TextureBinding>& lhs,
+                                       std::span<const rhi::TextureBinding> rhs) {
     if (lhs.size() != rhs.size())
         return false;
     for (std::size_t i = 0; i < lhs.size(); ++i) {
@@ -116,9 +115,11 @@ bool MaterialStorage::collectTextureBindings(const Material& material) {
         if (property.type != ShaderPropertyType::Texture2D)
             continue;
         const Ref<Texture> texture = material.resolveTexture(property.name);
-        const TextureBinding resolved = texture ? TEXTURE_STORAGE.resolveBinding(*texture)
-                                                : TextureBinding{};
-        if (!resolved) {
+        const Ref<Sampler> sampler = material.resolveSampler(property.name);
+        const rhi::TextureBinding resolved =
+            texture ? (sampler ? texture->binding(sampler) : texture->binding())
+                    : rhi::TextureBinding{};
+        if (!resolved.view || !resolved.sampler) {
             Log::error(
                 "MaterialStorage", "Material Texture is unavailable: %s", property.name.c_str());
             return false;

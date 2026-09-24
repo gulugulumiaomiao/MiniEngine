@@ -1,7 +1,6 @@
 #pragma once
 
 #include "core/base/Singleton.h"
-#include "render/texture/TextureView.h"
 #include "rhi/api/ResourceDesc.h"
 
 #include <cstdint>
@@ -43,7 +42,7 @@ private:
         rhi::RID bindGroup;
         std::uint64_t uniformVersion{};
         std::uint64_t uniformSize{};
-        std::vector<TextureBinding> textureBindings;
+        std::vector<rhi::TextureBinding> textureBindings;
     };
 
     void updateFrame(std::uint32_t frameIndex);

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "render/texture/TextureView.h"
 #include "rhi/api/ResourceDesc.h"
 
 #include <cstdint>
@@ -21,7 +20,7 @@ struct MaterialStorageEntry {
     std::uint64_t ownerKey{};                    // cache key of the material owning this slot
     std::uint64_t lastUsed{};                    // LRU stamp, bumped on every acquire
     bool pendingRelease{};                       // evicted slot: manager must free handles first
-    std::vector<TextureBinding> textureBindings; // texture signature bound into bindGroup
+    std::vector<rhi::TextureBinding> textureBindings; // texture signature bound into bindGroup
 };
 
 } // namespace engine

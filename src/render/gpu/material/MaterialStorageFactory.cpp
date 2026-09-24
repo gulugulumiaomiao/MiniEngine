@@ -40,8 +40,7 @@ bool MaterialStorageFactory::create(const MaterialStorageCreateInfo& request,
         .size = byteSize,
     });
     std::uint32_t binding = 1;
-    for (const TextureBinding& texture : request.textures) {
-        const rhi::TextureBinding resolved = texture.toRhi();
+    for (const rhi::TextureBinding& resolved : request.textures) {
         bindings.push_back({
             .binding = binding++,
             .type = rhi::BindingType::SampledTexture,

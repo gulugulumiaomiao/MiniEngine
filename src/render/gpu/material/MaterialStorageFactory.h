@@ -11,7 +11,7 @@ class Material;
 
 struct MaterialStorageCreateInfo {
     const Material& material;
-    std::span<const TextureBinding> textures;
+    std::span<const rhi::TextureBinding> textures;
 };
 
 class MaterialStorageFactory final

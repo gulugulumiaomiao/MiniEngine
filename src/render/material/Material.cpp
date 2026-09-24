@@ -7,7 +7,7 @@
 #include "core/serialization/Transfer.h"
 #include "render/material/MaterialManager.h"
 #include "render/shader/ShaderManager.h"
-#include "render/texture/TextureManager.h"
+#include "render/texture/Sampler.h"
 
 #include <algorithm>
 #include <cassert>
@@ -385,10 +385,15 @@ Ref<Texture> Material::resolveTexture(std::string_view name) const {
     const auto path = textures.find(key);
     if (path == textures.end())
         return {};
-    Ref<Texture> texture = TEXTURE_RESOURCE_MANAGER.resolveReference(path->second);
+    Ref<Texture> texture = resolveTextureReference(path->second);
     if (texture)
         textureRefs_.insert_or_assign(key, texture);
     return texture;
+}
+
+Ref<Sampler> Material::resolveSampler(std::string_view name) const {
+    const auto existing = textureSamplers_.find(std::string{name});
+    return existing != textureSamplers_.end() ? existing->second : Ref<Sampler>{};
 }
 
 void Material::setFloat(std::string_view name, float value) {
@@ -460,6 +465,12 @@ void Material::setTexture(std::string_view name, Ref<Texture> texture) {
     textures[key] = texture->isAssetBacked() ? texture->assetPath().string() : std::string{};
     textureRefs_.insert_or_assign(key, std::move(texture));
     markChanged();
+}
+
+void Material::setTexture(std::string_view name, Ref<Texture> texture, const Ref<Sampler>& sampler) {
+    setTexture(name, std::move(texture));
+    if (sampler)
+        textureSamplers_.insert_or_assign(std::string{name}, sampler);
 }
 
 void Material::setPropertyValue(std::string_view name, const ShaderValue& value) {

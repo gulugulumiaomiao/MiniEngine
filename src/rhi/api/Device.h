@@ -8,6 +8,7 @@
 #include "rhi/api/Texture.h"
 #include "rhi/api/TextureView.h"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -34,6 +35,11 @@ public:
     // builtin texture defaults resolve the device through here (there is no texture manager to
     // inject it).
     [[nodiscard]] static IDevice* active() { return activeSlot(); }
+
+    // Process-wide monotonic device identity, assigned on construction and never reused. Lets a
+    // resource robustly test "is the device I was created on still the active one" without
+    // comparing raw pointers, whose addresses a freshly allocated device may recycle.
+    [[nodiscard]] std::uint64_t uid() const { return uid_; }
 
     virtual ~IDevice() {
         if (activeSlot() == this)
@@ -122,7 +128,7 @@ public:
     virtual void waitIdle() = 0;
 
 protected:
-    IDevice() { activeSlot() = this; }
+    IDevice() : uid_(nextDeviceUid()) { activeSlot() = this; }
 
     HandlePool<std::unique_ptr<IRHITexture>, RID> textures_;
     HandlePool<std::unique_ptr<IRHITextureView>, RID> textureViews_;
@@ -135,6 +141,12 @@ private:
         static IDevice* device = nullptr;
         return device;
     }
+    [[nodiscard]] static std::uint64_t nextDeviceUid() {
+        static std::atomic<std::uint64_t> counter{0};
+        return ++counter;
+    }
+
+    std::uint64_t uid_{};
 };
 
 } // namespace engine::rhi

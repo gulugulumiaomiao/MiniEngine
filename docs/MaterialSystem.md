@@ -46,18 +46,18 @@ MaterialManager 继承 KeyedHandleRegistry，由其统一管理 HandlePool、路
 
 Shader 热重载使用相同 Handle 并增加 Shader revision。MaterialManager 会刷新所有引用该 Handle 的材质，因此布局变化不要求游戏对象更新 MaterialHandle。
 
-## TextureView + Sampler 绑定
+## Texture + Sampler 绑定
 
-Shader 采样槽的规范输入是 `TextureView + Sampler`，不是 Texture。Material 提供：
+Shader 采样槽最终绑定的是 `rhi::TextureBinding { view, sampler }`。层2 已无 `TextureView` 类，Material 直接以 `Texture`（+ 可选 `Sampler`）为输入：
 
 ```cpp
-setTexture(name, const TextureView& view, const Sampler& sampler); // 主接口
-setTexture(name, const Texture& texture, const Sampler& sampler); // 转发到 defaultView
+setTexture(name, Ref<Texture> texture);                      // 默认 view + 默认 sampler
+setTexture(name, Ref<Texture> texture, Ref<Sampler> sampler); // 默认 view + 指定 sampler
 ```
 
-同一个 TextureView 可以搭配不同 Sampler；Texture 和 TextureView 都不拥有 sampler。指定 mip、layer、format 或 swizzle 时传自定义 TextureView，普通路径使用 Texture 的默认 view。
+`Texture` 持有 texture/默认 view/默认 sampler 三个 RID；`binding()` 给默认绑定，`binding(sampler)` 用指定 sampler 搭配同一默认 view。`Sampler` 与纹理默认 sampler 都非拥有（设备按 `SamplerDesc` 去重）。
 
-`MaterialGpuManager` 每次 resolve 都收集最终 binding：优先使用运行时 override，否则由 VirtualPath 加载 GPU-backed Texture，并采用资产的默认 sampler 建议。绑定签名变化（包括 texture 热重载后 default view handle 变化）会重建 BindGroup。`MaterialGpuFactory` 只向 RHI 提交 `TextureViewHandle + SamplerHandle`，TextureHandle 从不直接写入 sampled descriptor。
+`MaterialStorage::collectTextureBindings` 每次 resolve 收集最终 binding：`resolveTexture(name)`（缺省经 `resolveTextureReference` 由 VirtualPath 解析并 `instantiate`）+ `resolveSampler(name)`，组装 `sampler ? texture->binding(sampler) : texture->binding()`。绑定签名变化会重建 BindGroup；只向 RHI 提交 view/sampler handle，texture handle 从不直接写入 sampled descriptor。
 
 ## Renderer 与 GPU 资源
 

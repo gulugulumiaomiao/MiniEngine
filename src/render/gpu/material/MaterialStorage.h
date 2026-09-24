@@ -63,7 +63,7 @@ private:
     std::unique_ptr<MaterialStorageFactory> factory_;
     // Reused across resolve() calls so rebuilding a material's texture signature does not
     // allocate every time.
-    std::vector<TextureBinding> textureScratch_;
+    std::vector<rhi::TextureBinding> textureScratch_;
 };
 
 } // namespace engine

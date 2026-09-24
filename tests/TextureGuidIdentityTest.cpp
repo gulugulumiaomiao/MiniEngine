@@ -1,77 +1,70 @@
-#include "render/gpu/texture/TextureStorage.h"
 #include "render/texture/Texture.h"
-#include "render/texture/TextureManager.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/manager/AssetManager.h"
-#include "core/filesystem/FileWatcher.h"
 #include "TestAssetEnvironment.h"
 #include "TestRenderDevice.h"
 
 #include <gtest/gtest.h>
 
-#include <filesystem>
-
 namespace {
 
+// The MockDevice member registers itself as the active device on construction, so layer-2
+// Texture creation (which resolves the device through IDevice::active()) works headlessly.
 class TextureGuidIdentityTest : public ::testing::Test {
 protected:
     void SetUp() override {
         ASSERT_TRUE(engine::test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR));
-        TEXTURE_RESOURCE_MANAGER.clear();
-        ASSERT_TRUE(TEXTURE_STORAGE.initialize(device));
     }
 
-    void TearDown() override {
-        TEXTURE_RESOURCE_MANAGER.clear();
-        TEXTURE_STORAGE.shutdown();
-        engine::test::shutdownAssetEnvironment();
-    }
+    void TearDown() override { engine::test::shutdownAssetEnvironment(); }
 
     MockDevice device;
 };
 
-TEST_F(TextureGuidIdentityTest, LoadByGuidReturnsSameObject) {
+TEST_F(TextureGuidIdentityTest, ResolveSamePathReturnsSameInstance) {
     using namespace engine;
     const VirtualPath path{"assets://textures/checker.png"};
-    const Ref<Texture> byPath = TEXTURE_RESOURCE_MANAGER.load(path);
-    ASSERT_TRUE(byPath);
+    const Ref<Texture> first = resolveTextureReference(path.string());
+    ASSERT_TRUE(first);
 
-    const auto assetId = ASSET_DATABASE.findGuid(path);
-    ASSERT_TRUE(assetId);
+    // Resolving the same reference again yields the very same runtime instance: with no
+    // texture manager, "one instantiate instance per asset" is the dedup mechanism.
+    const Ref<Texture> second = resolveTextureReference(path.string());
+    EXPECT_EQ(first, second);
 
-    const Ref<Texture> byId = TEXTURE_RESOURCE_MANAGER.load(*assetId);
-    EXPECT_EQ(byId, byPath);
-    EXPECT_EQ(TEXTURE_RESOURCE_MANAGER.find(*assetId), byPath);
+    const Ref<TextureAsset> asset = ASSET_MANAGER.loadAsset<TextureAsset>(path);
+    ASSERT_TRUE(asset);
+    EXPECT_EQ(asset->instantiate(), first);
+    EXPECT_TRUE(first->isAssetBacked());
+    EXPECT_TRUE(first->textureHandle());
 }
 
-TEST_F(TextureGuidIdentityTest, LastRefReleasesStorageAndWeakCacheEntry) {
+TEST_F(TextureGuidIdentityTest, LastRefReleasesGpuTexture) {
     using namespace engine;
     const VirtualPath path{"assets://textures/checker.png"};
-    Ref<Texture> texture = TEXTURE_RESOURCE_MANAGER.load(path);
+    Ref<Texture> texture = resolveTextureReference(path.string());
     ASSERT_TRUE(texture);
-    const RID resourceId = texture->resourceId();
-    ASSERT_NE(TEXTURE_STORAGE.resolve(*texture), nullptr);
     const int destroyedBefore = device.destroyedTextures;
 
+    // The asset only holds a raw instance_ observer, so this Ref is the sole owner.
     texture.reset();
 
-    EXPECT_FALSE(TEXTURE_RESOURCE_MANAGER.find(resourceId));
     EXPECT_EQ(device.destroyedTextures, destroyedBefore + 1);
 }
 
-TEST_F(TextureGuidIdentityTest, RefreshAssetBumpsVersion) {
+TEST_F(TextureGuidIdentityTest, ReloadInPlacePreservesInstanceAndReuploads) {
     using namespace engine;
     const VirtualPath path{"assets://textures/checker.png"};
-    const auto assetId = ASSET_DATABASE.findGuid(path);
-    ASSERT_TRUE(assetId);
-
-    const Ref<Texture> original = TEXTURE_RESOURCE_MANAGER.load(path);
+    const Ref<Texture> original = resolveTextureReference(path.string());
     ASSERT_TRUE(original);
-    const std::uint64_t originalVersion = original->version();
+    const std::uint32_t uploadsBefore = device.textureUploads;
 
-    TEXTURE_RESOURCE_MANAGER.refreshAsset(*assetId);
+    // Hot reload re-transfers the cached asset in place; TextureAsset::transfer then pushes the
+    // refreshed pixels to the single live instance instead of creating a new object.
+    ASSET_MANAGER.reloadInPlace(path);
 
-    EXPECT_GT(original->version(), originalVersion);
+    EXPECT_EQ(resolveTextureReference(path.string()), original);
+    EXPECT_GT(device.textureUploads, uploadsBefore);
 }
 
 } // namespace

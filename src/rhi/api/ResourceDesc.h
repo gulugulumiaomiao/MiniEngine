@@ -132,6 +132,8 @@ struct BindGroupEntry {
 struct TextureBinding {
     RID view;
     RID sampler;
+
+    [[nodiscard]] bool operator==(const TextureBinding&) const = default;
 };
 
 struct BindGroupDesc {

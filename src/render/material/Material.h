@@ -4,6 +4,7 @@
 #include "core/base/Ref.h"
 #include "render/base/RenderHandle.h"
 #include "render/shader/Shader.h"
+#include "render/texture/Sampler.h"
 #include "render/texture/Texture.h"
 
 #include <cstddef>
@@ -74,6 +75,7 @@ public:
     [[nodiscard]] bool getBool(std::string_view name) const;
     [[nodiscard]] const std::string& getTexture(std::string_view name) const;
     [[nodiscard]] Ref<Texture> resolveTexture(std::string_view name) const;
+    [[nodiscard]] Ref<Sampler> resolveSampler(std::string_view name) const;
 
     void setFloat(std::string_view name, float value);
     void setVec2(std::string_view name, const math::Vec2& value);
@@ -82,6 +84,7 @@ public:
     void setBool(std::string_view name, bool value);
     void setTexture(std::string_view name, std::string value);
     void setTexture(std::string_view name, Ref<Texture> texture);
+    void setTexture(std::string_view name, Ref<Texture> texture, const Ref<Sampler>& sampler);
 
     [[nodiscard]] std::span<const std::byte> uniformBytes() const { return uniformData; }
     [[nodiscard]] bool dirty() const { return dirty_; }
@@ -108,6 +111,7 @@ private:
     std::uint64_t shaderRevision_{};
     std::optional<int> renderQueueOverride_;
     mutable std::unordered_map<std::string, Ref<Texture>> textureRefs_;
+    mutable std::unordered_map<std::string, Ref<Sampler>> textureSamplers_;
     bool suppressChanges_{};
     bool dirty_{true};
     std::uint64_t version_{1};

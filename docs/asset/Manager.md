@@ -60,9 +60,10 @@ assets:// 路径
 错位；`reader.finished()` 保证 Artifact 没有尾部垃圾。Asset 继承 `RefCounted`、
 统一用 `Ref<Asset>` 持有；缓存是**强引用**——命中即复用同一实例（GUID 身份稳定），
 资产常驻到 `invalidate(path)` / `clear()` 为止。因缓存共享且常驻，取回的 Asset 视为
-**只读**：消费者不得改写或从中 move 数据。纹理是例外——像素体积大，`TextureManager`
-拷贝出像素后立即 `invalidate` 该路径，避免整段像素常驻（纹理去重本就由
-`TextureResourceManager` 按 AssetId 负责）。
+**只读**：消费者不得改写或从中 move 数据。纹理**不再**是 invalidate 例外：`TextureAsset`
+连同像素常驻强缓存，其 `instantiate()` 出的唯一运行时 `Texture` 以裸指针回指 asset（asset
+就地重传经 `reloadInPlace` → `TextureAsset::transfer` → `syncInstance` 推送实例）；纹理去重
+由“每 asset 唯一 instantiate 实例”天然承担，不再有 `TextureManager`/`TextureResourceManager`。
 
 ## 资产与运行时资源
 

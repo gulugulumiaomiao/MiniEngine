@@ -34,6 +34,9 @@ public:
     }
 
     void invalidate(const VirtualPath& path);
+    /// 就地重传缓存中的资产（不丢弃、不新建对象）：用于纹理热重载把新内容推送给唯一运行时
+    /// 实例（TextureAsset::transfer 读取分支会调用 syncInstance）。未缓存则退化为 invalidate。
+    void reloadInPlace(const VirtualPath& path);
     void clear();
     void setChangeListener(ChangeListener listener) { changeListener_ = std::move(listener); }
 

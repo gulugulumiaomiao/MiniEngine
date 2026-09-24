@@ -12,7 +12,6 @@
 #include "render/gpu/mesh/MeshStorage.h"
 #include "render/gpu/pipeline/GraphicsPipelineStorage.h"
 #include "render/gpu/shader/ShaderStorage.h"
-#include "render/gpu/texture/TextureStorage.h"
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
@@ -20,7 +19,6 @@
 #include "render/renderer/Renderer.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderManager.h"
-#include "render/texture/TextureManager.h"
 #include "rhi/RhiFactory.h"
 #include "runtime/window/Window.h"
 #include "scene/scene/SceneAsset.h"
@@ -245,8 +243,7 @@ bool Engine::initializeGpuManagers(const rhi::IContextFactory& contextFactory,
                                       []() { return std::make_unique<MiniForwardPipeline>(); });
     renderer_->setPipeline(pipelineRegistry.create(config_.render.pipeline));
 
-    if (!TEXTURE_STORAGE.initialize(renderer_->device()) ||
-        !FRAME_GPU_MANAGER.initialize(renderer_->device()) ||
+    if (!FRAME_GPU_MANAGER.initialize(renderer_->device()) ||
         !MESH_STORAGE.initialize(renderer_->device()) ||
         !MATERIAL_STORAGE.initialize(renderer_->device(),
                                          FRAME_GPU_MANAGER.materialLayout(),
@@ -273,7 +270,6 @@ void Engine::teardownProjectSubsystems() {
     GRAPHICS_PIPELINE_STORAGE.shutdown();
     GLOBAL_UNIFORM_GPU_MANAGER.shutdown();
     SHADER_STORAGE.shutdown();
-    TEXTURE_STORAGE.shutdown();
     MESH_STORAGE.shutdown();
     FRAME_GPU_MANAGER.shutdown();
     renderer_.reset();

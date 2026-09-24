@@ -1,6 +1,6 @@
-#include "render/gpu/texture/TextureStorage.h"
 #include "render/material/Material.h"
-#include "render/texture/TextureManager.h"
+#include "render/texture/Sampler.h"
+#include "render/texture/Texture.h"
 #include "rhi/api/Device.h"
 
 #include <gtest/gtest.h>
@@ -158,94 +158,69 @@ public:
     std::uint32_t waits{};
 };
 
+// Constructing the FakeDevice registers it as the process-wide active device (IDevice
+// singleton), which is how layer-2 Texture/Sampler reach a backend without a manager.
 class TextureTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        TEXTURE_RESOURCE_MANAGER.clear();
-        TEXTURE_STORAGE.shutdown();
-        ASSERT_TRUE(TEXTURE_STORAGE.initialize(device));
-    }
-
-    void TearDown() override {
-        TEXTURE_RESOURCE_MANAGER.clear();
-        TEXTURE_STORAGE.shutdown();
-    }
-
     FakeDevice device;
 };
 
-TEST_F(TextureTest, BuiltinsOwnRhiTextureAndDefaultView) {
+TEST_F(TextureTest, BuiltinsAreDistinctUploadedAndSampleable) {
     using namespace engine;
-    const Ref<Texture> white = TEXTURE_RESOURCE_MANAGER.defaultWhite();
-    const Ref<Texture> black = TEXTURE_RESOURCE_MANAGER.defaultBlack();
-    const Ref<Texture> normal = TEXTURE_RESOURCE_MANAGER.defaultNormal();
-    const Ref<Texture> error = TEXTURE_RESOURCE_MANAGER.errorTexture();
+    const Ref<Texture> white = Texture::defaultWhite();
+    const Ref<Texture> black = Texture::defaultBlack();
+    const Ref<Texture> normal = Texture::defaultNormal();
+    const Ref<Texture> error = Texture::errorTexture();
 
     ASSERT_TRUE(white);
+    ASSERT_TRUE(black);
     ASSERT_TRUE(normal);
     ASSERT_TRUE(error);
     EXPECT_NE(white, black);
     EXPECT_NE(black, normal);
     EXPECT_NE(normal, error);
-    EXPECT_EQ(white->desc().format, TextureFormat::Rgba8Srgb);
-    EXPECT_EQ(normal->desc().format, TextureFormat::Rgba8Unorm);
-    EXPECT_EQ(error->desc().width, 2U);
-    EXPECT_EQ(error->pixels().size(), 16U);
-    ASSERT_NE(TEXTURE_STORAGE.resolve(*white), nullptr);
-    ASSERT_NE(TEXTURE_STORAGE.resolve(*black), nullptr);
-    ASSERT_NE(TEXTURE_STORAGE.resolve(*normal), nullptr);
-    ASSERT_NE(TEXTURE_STORAGE.resolve(*error), nullptr);
-    const TextureStorageEntry* whiteGpu = TEXTURE_STORAGE.resolve(*white);
-    ASSERT_NE(whiteGpu, nullptr);
-    EXPECT_TRUE(whiteGpu->texture);
-    EXPECT_TRUE(whiteGpu->defaultView);
-    EXPECT_EQ(device.createdTextures, 4U);
-    EXPECT_EQ(device.textureUploads, 4U);
+    EXPECT_EQ(white->format(), TextureFormat::Rgba8Srgb);
+    EXPECT_EQ(normal->format(), TextureFormat::Rgba8Unorm);
+    EXPECT_EQ(error->width(), 2U);
+    EXPECT_FALSE(white->isAssetBacked());
+
+    // Each builtin owns an RHI texture, a default view and a device sampler, and uploaded once.
+    EXPECT_TRUE(white->textureHandle());
+    EXPECT_TRUE(white->defaultView());
+    EXPECT_TRUE(white->defaultSampler());
+    const rhi::TextureBinding binding = white->binding();
+    EXPECT_TRUE(binding.view);
+    EXPECT_TRUE(binding.sampler);
+    EXPECT_EQ(binding.view, white->defaultView());
+    EXPECT_EQ(binding.sampler, white->defaultSampler());
+    EXPECT_GE(device.textureUploads, 4U);
 }
 
-TEST_F(TextureTest, ViewAndSamplerAreLightweightIndependentBindings) {
+TEST_F(TextureTest, InstantiateIsSingleInstanceAndCloneIsDetached) {
     using namespace engine;
-    const Ref<Texture> white = TEXTURE_RESOURCE_MANAGER.defaultWhite();
-    ASSERT_TRUE(white);
+    Ref<TextureAsset> asset = makeRef<TextureAsset>();
+    asset->desc = TextureDesc{
+        TextureType::Texture2D, TextureFormat::Rgba8Srgb, TextureColorSpace::Srgb, 1, 1, 1};
+    asset->pixels = {0xffU, 0xffU, 0xffU, 0xffU};
 
-    const rhi::TextureViewDesc viewDesc{.type = rhi::TextureType::Texture2D,
-                                        .format = rhi::PixelFormat::Rgba8Srgb,
-                                        .baseMip = 0,
-                                        .mipCount = 1,
-                                        .baseLayer = 0,
-                                        .layerCount = 1,
-                                        .swizzle = {.r = rhi::SwizzleComponent::B,
-                                                    .g = rhi::SwizzleComponent::G,
-                                                    .b = rhi::SwizzleComponent::R,
-                                                    .a = rhi::SwizzleComponent::A}};
-    const TextureStorageEntry* stored = TEXTURE_STORAGE.resolve(*white);
-    ASSERT_NE(stored, nullptr);
-    const rhi::RID textureHandle = stored->texture;
-    const Sampler linear = stored->defaultSampler;
-    const TextureView view = TEXTURE_STORAGE.getView(*white, viewDesc);
-    const TextureView cachedView = TEXTURE_STORAGE.getView(*white, viewDesc);
-    rhi::SamplerDesc pointDesc = linear.desc();
-    pointDesc.minFilter = rhi::SamplerFilter::Nearest;
-    pointDesc.magFilter = rhi::SamplerFilter::Nearest;
-    const Sampler point = Sampler::resolve(device, pointDesc);
+    const Ref<Texture> first = asset->instantiate();
+    const Ref<Texture> second = asset->instantiate();
+    ASSERT_TRUE(first);
+    EXPECT_EQ(first, second); // repeated instantiate reuses the single instance
+    EXPECT_TRUE(first->isAssetBacked());
+    EXPECT_EQ(first->width(), 1U);
+    EXPECT_TRUE(first->binding().view);
 
-    ASSERT_TRUE(view);
-    ASSERT_TRUE(linear);
-    ASSERT_TRUE(point);
-    EXPECT_EQ(view.textureHandle(), textureHandle);
-    EXPECT_EQ(view.rhiHandle(), cachedView.rhiHandle());
-    EXPECT_NE(linear.rhiHandle(), point.rhiHandle());
-    const TextureBinding linearBinding{view, linear};
-    const TextureBinding pointBinding{view, point};
-    EXPECT_EQ(linearBinding.toRhi().view, view.rhiHandle());
-    EXPECT_EQ(pointBinding.toRhi().sampler, point.rhiHandle());
-    ASSERT_EQ(device.viewDescs.size(), 1U);
-    EXPECT_EQ(device.viewDescs[0], viewDesc);
+    const Ref<Texture> cloned = asset->clone();
+    ASSERT_TRUE(cloned);
+    EXPECT_NE(cloned, first);            // clone is an independent runtime texture
+    EXPECT_FALSE(cloned->isAssetBacked()); // and is not linked back to the asset
+    EXPECT_EQ(cloned->width(), 1U);
 }
 
 TEST_F(TextureTest, MaterialRetainsTextureByRef) {
     using namespace engine;
-    Ref<Texture> texture = TEXTURE_RESOURCE_MANAGER.defaultWhite();
+    Ref<Texture> texture = Texture::defaultWhite();
     ASSERT_TRUE(texture);
     const std::uint32_t before = texture.useCount();
 
@@ -255,7 +230,25 @@ TEST_F(TextureTest, MaterialRetainsTextureByRef) {
 
     EXPECT_EQ(material.resolveTexture("mainTexture"), texture);
     EXPECT_EQ(texture.useCount(), before + 1);
-    EXPECT_TRUE(TEXTURE_STORAGE.resolveBinding(*texture));
+    EXPECT_TRUE(material.resolveSampler("mainTexture") == nullptr);
+}
+
+TEST_F(TextureTest, SamplerOverrideKeepsDefaultViewButSwapsSampler) {
+    using namespace engine;
+    const Ref<Texture> white = Texture::defaultWhite();
+    ASSERT_TRUE(white);
+
+    rhi::SamplerDesc pointDesc;
+    pointDesc.minFilter = rhi::SamplerFilter::Nearest;
+    pointDesc.magFilter = rhi::SamplerFilter::Nearest;
+    const Ref<Sampler> point = Sampler::resolve(pointDesc);
+    ASSERT_TRUE(point);
+
+    const rhi::TextureBinding defaultBinding = white->binding();
+    const rhi::TextureBinding pointBinding = white->binding(point);
+    EXPECT_EQ(defaultBinding.view, pointBinding.view);        // same default view
+    EXPECT_NE(defaultBinding.sampler, pointBinding.sampler);  // overridden sampler
+    EXPECT_EQ(pointBinding.sampler, point->rhiHandle());
 }
 
 TEST(TextureValidationTest, RejectsUnimplementedTextureDimensions) {

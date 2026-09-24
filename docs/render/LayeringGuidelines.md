@@ -53,7 +53,7 @@
 
 | 资源 | 层1 资源管理器 | 层2 后端存储管理器 | 层3 设备资源（统一 IDevice） |
 |---|---|---|---|
-| Texture | `TextureResourceManager` | `TextureStorage` | `IDevice` texture owner + `IRHITexture` |
+| Texture | `TextureAsset`（无运行时管理器） | 无（层2 `Texture` 自持 RHI 句柄） | `IDevice` 三池 texture/view/sampler + `IRHITexture` |
 | Mesh | `MeshResourceManager` | `MeshStorage` | `IDevice` buffer owner |
 | Material | `MaterialResourceManager` | `MaterialStorage` | `IDevice` bindGroup / uniform owner |
 | Shader | `ShaderResourceManager` | `ShaderStorage` | `IDevice` shaderModule / pipeline owner |
@@ -67,7 +67,7 @@
 ```
 
 硬约束：
-- `src/render/<x>/`（层1）内的头文件不得 `#include "rhi/..."`。
+- `src/render/<x>/`（层1）内的头文件不得 `#include "rhi/..."`。**例外**：`render/texture/Texture.h` 是层2 头（持 `rhi::RID`/`rhi::TextureBinding`、直连 `IDevice`），允许依赖 `rhi/api`，故 `RenderRhiBoundaryTest.cmake` 的层1 检查不含它。
 - `src/rhi/`（层3）不得 `#include "render/..."` 或 `asset/...`。现有 `tests/RenderRhiBoundaryTest.cmake` 守护该边界，迁移时应扩展其覆盖到层1 头文件。
 
 两套 RID 隔离：层2、层3 各自拥有独立的 RID_Owner/Registry 实例，句柄不可互换（层2 记录持有层3 RID）。RID 数值类型仍复用统一的 `engine::RID`（不重新引入按类型的强类型别名，避免推翻既有 RID 归一决策）；隔离靠“不同 owner 实例 + 命名约定”实现。
@@ -85,10 +85,11 @@
 
 ## 6. 四系统落地状态
 
-### 6.1 Texture
-- `Texture` 只保留 CPU 描述、mip 数据、AssetId 与版本，不含 RHI 类型。
-- `TextureStorage` 四件套负责格式转换、上传、默认 view/sampler 与版本缓存；自定义 view 继续走 `IRHITexture` 的设备层去重缓存。
-- `TextureResourceManager` 是弱索引；Texture 最后一个 Ref 归零会反注册并触发 Storage/Device 释放。
+### 6.1 Texture（三层：TextureAsset / Texture / rhi::Texture）
+- 层1 `TextureAsset`：序列化源（desc + 扁平像素），由 `AssetManager` 强缓存常驻；`instantiate()` 出**唯一**运行时实例（重复调用复用，天然去重），`clone()` 出多个脱离实例。
+- 层2 `Texture`：只保留必要属性 + 三个 RID（texture / 默认 view / 默认 sampler），不持 desc 与像素；构造经 `IDevice::active()` 分配 RID，`initialize`/`upload` 上传；无独立 Manager，也无 gpu 层 `TextureStorage`。
+- 层2 `Sampler`：`RefCounted`，持一个设备去重的 sampler RID，非拥有。层2 无 `TextureView` 类，view 概念只在层3。
+- 三个句柄池内嵌 `IDevice`（全局单例 `active()`）；`~Texture` 按设备 `uid` 判断是否仍需销毁 GPU 资源（防跨设备/地址复用误伤）。热重载经 `AssetManager::reloadInPlace` 就地重传 asset → `syncInstance` 推唯一实例。
 
 ### 6.2 Mesh
 - `Mesh` 以 Ref 管理，Component 与 RenderScene 持 `Ref<Mesh>`。
@@ -96,7 +97,7 @@
 - Manager 弱索引的 resourceId 只在 Storage 内作为版本缓存键；内容重建不触发生命周期销毁通知。
 
 ### 6.3 Material
-- `Material` 持 `Ref<Shader>` 与按属性名缓存的 `Ref<Texture>`，不再持 Shader RID 或 TextureView/Sampler。
+- `Material` 持 `Ref<Shader>`、按属性名缓存的 `Ref<Texture>` 与可选 `Ref<Sampler>`（`setTexture(tex)` 用默认 sampler，`setTexture(tex, sampler)` 用指定 sampler），不持 Shader RID。
 - `MaterialStorage` 集中完成 pass/variant 选择、GraphicsPipeline 查询、TextureBinding 解析、uniform 上传与跨帧常驻。
 - Material 最后一个 Ref 归零时，MaterialStorage 从所有帧缓存移除对应记录并释放 bind group/uniform buffer。
 
@@ -108,7 +109,7 @@
 ## 7. 已确认的架构约定
 1. 层2 与层3 缓存边界：渲染策略与 GPU 资源缓存留在层2（`render/gpu`）；层3 `IDevice` 只做无状态的 GPU 对象 create/destroy/去重/resolve。此约定优先于旧的“所有 `render/gpu` 缓存下沉 IDevice”表述。
 2. 层1 生命周期（一律 Ref）：Scene / Node / Component / Material / Shader / Mesh / Texture 等层1 对象一律继承 `RefCounted`、相互引用一律用 `Ref<T>`（不再用裸 RID/指针持有）。引用计数归零即析构，析构级联触发层2 `XxxStorage` 释放后端记录、层3 `IDevice` 释放 GPU 对象（层1 -> 层2 -> 层3 单向级联）。`XxxResourceManager` 从单一所有者 KeyedHandleRegistry 调整为路径/AssetId 去重缓存（保存弱引用，命中返回既有 `Ref`，析构时反注册），对应 Godot `ResourceCache` 模型。此约定取代早前‘以 RID+Manager 为主、Ref 仅用于共享所有权’的表述。去重缓存的弱引用需先补 `Ref` 的 `WeakRef`（上一轮列为未来扩展），或以裸指针 + 析构反注册过渡。
-3. TextureView/Sampler：GPU 对象缓存在层3，选择策略在层2。
+3. Texture view/sampler：句柄池与去重在层3 `IDevice`；层2 `Texture` 持默认 view/sampler RID、`Sampler` 为设备去重值的非拥有包装。
 4. Mesh 的 LOD/blendshape/skeleton：只在层2 预留结构位，不纳入实现范围。
 5. 目录更名：先只改类名（`XxxGpu*` -> `XxxStorage*`），`src/render/gpu/` -> `src/render/storage/` 的目录更名作为可选收尾，降低 diff 噪音。
 6. 命名与 RID：采用层1 `XxxResourceManager` / 层2 `XxxStorage` 家族 / 层3 统一 `IDevice`；两套独立 RID_Owner、句柄不可互换、RID 数值类型仍复用 `engine::RID`。
@@ -117,7 +118,7 @@
 - [x] 阶段 0：规范固化；`RenderRhiBoundaryTest` 已增加四个层1资源头的 RHI 直接依赖检查。
 - [x] 阶段 1：层1统一为 `XxxResourceManager`；层2统一为 `XxxStorage` / `XxxStorageEntry` / `XxxStorageFactory` / `XxxStorageCache`。
 - [x] 阶段 1b：Scene/Node/Component/Material/Shader/Mesh/Texture 继承 `RefCounted`；拥有关系使用 `Ref<T>`；四个 ResourceManager 使用裸指针弱索引与析构反注册。
-- [x] 阶段 2：`TextureStorage` 四件套落地，Texture 层1移除 RHI 句柄、View 与 Device 依赖。
+- [x] 阶段 2：（已被纹理三层重构取代）删除 `TextureStorage` 四件套与 `TextureResourceManager`；层2 `Texture` 改为自持三个 RHI 句柄、经 `IDevice::active()` 创建，`TextureAsset` 提供 `instantiate`/`clone`。
 - [x] 阶段 3：`MaterialAsset` / `ShaderAsset` 定义迁至 `src/asset/types/`，使用方显式包含资产类型头。
 - [x] 阶段 4：pass/variant 选择、pipeline 查询、纹理 View/Sampler 解析和 GPU 常驻统一进入 `MaterialStorage`；Material 只持 `Ref<Shader>` / `Ref<Texture>` 和用户参数。
 - [x] 阶段 5：`ShaderModuleInfo` 补全 RHI ShaderModule 描述契约；Program→Pipeline 映射由 `GraphicsPipelineStorage` 显式管理。

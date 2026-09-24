@@ -19,7 +19,6 @@
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderManager.h"
 #include "render/texture/Texture.h"
-#include "render/texture/TextureManager.h"
 #include "scene/scene/SceneAsset.h"
 
 namespace engine {
@@ -65,20 +64,21 @@ bool AssetManager::initialize(AssetManagerMode mode) {
     ASSET_IMPORT_PIPELINE.setListener([this](const AssetImportNotification& notification) {
         if (!notification.success)
             return;
-        invalidate(notification.path);
-        if (notification.type == AssetType::Shader && !notification.removed) {
-            const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(notification.path);
-            if (assetId && SHADER_RESOURCE_MANAGER.find(*assetId) &&
-                SHADER_RESOURCE_MANAGER.replace(notification.path)) {
-                MATERIAL_RESOURCE_MANAGER.refreshShader(*assetId);
-            }
-        } else if (notification.type == AssetType::Mesh && !notification.removed &&
-                   MESH_RESOURCE_MANAGER.find(notification.path)) {
-            (void)MESH_RESOURCE_MANAGER.replace(notification.path);
-        } else if (notification.type == AssetType::Texture && !notification.removed) {
-            const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(notification.path);
-            if (assetId && TEXTURE_RESOURCE_MANAGER.find(*assetId)) {
-                (void)TEXTURE_RESOURCE_MANAGER.replace(notification.path);
+        if (notification.type == AssetType::Texture && !notification.removed) {
+            // 纹理就地重传：同一缓存 asset 重新 transfer → syncInstance 推送唯一实例，保持活链接
+            // （若 invalidate+新建 asset，则持有旧 asset 的实例会失联）。
+            reloadInPlace(notification.path);
+        } else {
+            invalidate(notification.path);
+            if (notification.type == AssetType::Shader && !notification.removed) {
+                const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(notification.path);
+                if (assetId && SHADER_RESOURCE_MANAGER.find(*assetId) &&
+                    SHADER_RESOURCE_MANAGER.replace(notification.path)) {
+                    MATERIAL_RESOURCE_MANAGER.refreshShader(*assetId);
+                }
+            } else if (notification.type == AssetType::Mesh && !notification.removed &&
+                       MESH_RESOURCE_MANAGER.find(notification.path)) {
+                (void)MESH_RESOURCE_MANAGER.replace(notification.path);
             }
         }
         if (changeListener_) {
@@ -165,6 +165,30 @@ Ref<Asset> AssetManager::loadAsset(const VirtualPath& path) {
 void AssetManager::invalidate(const VirtualPath& path) {
     std::scoped_lock lock{mutex_};
     cache_.erase(path.string());
+}
+
+void AssetManager::reloadInPlace(const VirtualPath& path) {
+    Ref<Asset> cached = findCached(path);
+    if (!cached) {
+        invalidate(path); // 未加载：清掉可能的陈旧缓存，下次 loadAsset 取新数据
+        return;
+    }
+    if (!ensureImported(path))
+        return;
+    const auto record = ASSET_DATABASE.findByPath(path);
+    const auto artifact = record ? loadAssetArtifact(record->artifactPath) : std::nullopt;
+    if (!record || !artifact || artifact->assetId != record->id ||
+        artifact->assetType != record->type) {
+        Log::error("AssetManager", "Invalid Asset Artifact for reload: %s", path.string().c_str());
+        return;
+    }
+    BinaryReader reader{artifact->payload};
+    if (!cached->transfer(reader) || !reader.finished()) {
+        Log::error(
+            "AssetManager", "Cannot re-deserialize Asset in place: %s", path.string().c_str());
+        return;
+    }
+    // TextureAsset::transfer 的读取分支已调用 syncInstance()，唯一实例已重上传新像素。
 }
 
 void AssetManager::clear() {
