@@ -288,10 +288,10 @@ AssetImportResult TextureAssetImporter::import(const AssetImportContext& context
     if (!texture)
         return fail("Unsupported or invalid Texture: " + context.sourcePath.string());
 
-    texture->desc.sampler = TextureSamplerSettings{textureSettings->filterMode,
-                                                   textureSettings->wrapModeU,
-                                                   textureSettings->wrapModeV,
-                                                   textureSettings->anisoLevel};
+    texture->desc.sampler = SamplerDesc{textureSettings->filterMode,
+                                        textureSettings->wrapModeU,
+                                        textureSettings->wrapModeV,
+                                        textureSettings->anisoLevel};
 
     if (!validateTexture(texture->desc, texture->pixels))
         return fail("Unsupported or invalid Texture: " + context.sourcePath.string());

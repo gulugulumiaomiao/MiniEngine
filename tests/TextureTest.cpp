@@ -238,9 +238,8 @@ TEST_F(TextureTest, SamplerOverrideKeepsDefaultViewButSwapsSampler) {
     const Ref<Texture> white = Texture::defaultWhite();
     ASSERT_TRUE(white);
 
-    rhi::SamplerDesc pointDesc;
-    pointDesc.minFilter = rhi::SamplerFilter::Nearest;
-    pointDesc.magFilter = rhi::SamplerFilter::Nearest;
+    const SamplerDesc pointDesc{
+        TextureFilterMode::Point, TextureAddressMode::Repeat, TextureAddressMode::Repeat, 1.0F};
     const Ref<Sampler> point = Sampler::resolve(pointDesc);
     ASSERT_TRUE(point);
 

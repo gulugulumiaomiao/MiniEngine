@@ -52,7 +52,43 @@ bool rgbaByteSize(std::uint32_t width, std::uint32_t height, std::size_t& result
     Log::fatal("Texture", "Unsupported Texture format");
 }
 
-[[nodiscard]] rhi::SamplerDesc toRhi(const TextureSamplerSettings& settings) {
+[[nodiscard]] rhi::SwizzleComponent toRhiSwizzle(SwizzleChannel channel) {
+    switch (channel) {
+    case SwizzleChannel::Zero: return rhi::SwizzleComponent::Zero;
+    case SwizzleChannel::One: return rhi::SwizzleComponent::One;
+    case SwizzleChannel::R: return rhi::SwizzleComponent::R;
+    case SwizzleChannel::G: return rhi::SwizzleComponent::G;
+    case SwizzleChannel::B: return rhi::SwizzleComponent::B;
+    case SwizzleChannel::A: return rhi::SwizzleComponent::A;
+    case SwizzleChannel::Identity: return rhi::SwizzleComponent::Identity;
+    }
+    return rhi::SwizzleComponent::Identity;
+}
+
+[[nodiscard]] rhi::TextureViewDesc toRhiView(const TextureViewDesc& view,
+                                             TextureFormat textureFormat) {
+    rhi::TextureViewDesc out;
+    out.type = toRhi(view.type);
+    switch (view.format) {
+    case TextureViewFormat::MatchTexture: out.format = toRhi(textureFormat); break;
+    case TextureViewFormat::Rgba8Unorm: out.format = rhi::PixelFormat::Rgba8Unorm; break;
+    case TextureViewFormat::Rgba8Srgb: out.format = rhi::PixelFormat::Rgba8Srgb; break;
+    }
+    out.baseMip = view.baseMip;
+    out.mipCount = view.mipCount;
+    out.baseLayer = view.baseLayer;
+    out.layerCount = view.layerCount;
+    out.aspect = rhi::TextureAspect::Color;
+    out.swizzle = {toRhiSwizzle(view.swizzle.r),
+                   toRhiSwizzle(view.swizzle.g),
+                   toRhiSwizzle(view.swizzle.b),
+                   toRhiSwizzle(view.swizzle.a)};
+    return out;
+}
+
+} // namespace
+
+rhi::SamplerDesc toRhi(const SamplerDesc& settings) {
     rhi::SamplerDesc desc;
     desc.maxAnisotropy = settings.maxAnisotropy;
     switch (settings.addressModeU) {
@@ -93,9 +129,7 @@ bool rgbaByteSize(std::uint32_t width, std::uint32_t height, std::size_t& result
     return desc;
 }
 
-} // namespace
-
-bool TextureSamplerSettings::transfer(Transfer& archive) {
+bool SamplerDesc::transfer(Transfer& archive) {
     return archive.beginObject({}) && archive.transfer("filter_mode", filterMode) &&
            archive.transfer("address_mode_u", addressModeU) &&
            archive.transfer("address_mode_v", addressModeV) &&
@@ -176,8 +210,6 @@ Texture::Texture(const TextureDesc& desc)
         Log::error("Texture", "No active device for texture creation");
         return;
     }
-    device_ = device;
-    deviceUid_ = device->uid();
     const rhi::TextureDesc deviceDesc{.dimension = toRhi(desc.type),
                                       .format = toRhi(desc.format),
                                       .width = desc.width,
@@ -193,7 +225,12 @@ Texture::Texture(const TextureDesc& desc)
         Log::error("Texture", "Failed to create RHI texture");
         return;
     }
-    view_ = device->defaultTextureView(texture_);
+    // 层2 拥有默认 view：用层2 TextureViewDesc（全范围、格式跟随纹理）翻译成层3 desc 后创建。
+    TextureViewDesc viewDesc;
+    viewDesc.type = desc.type;
+    viewDesc.mipCount = desc.mipCount;
+    viewDesc.layerCount = desc.arrayLayers;
+    view_ = device->createTextureView(texture_, toRhiView(viewDesc, desc.format));
     sampler_ = device->createSampler(toRhi(desc.sampler));
     if (!view_ || !sampler_)
         Log::error("Texture", "Failed to create default view/sampler");
@@ -202,21 +239,28 @@ Texture::Texture(const TextureDesc& desc)
 Texture::~Texture() {
     if (asset_ && asset_->instance_ == this)
         asset_->instance_ = nullptr;
-    // 仅当创建本纹理的设备仍是当前 active 设备（按 uid 比对，防地址复用误判）时才销毁 GPU
-    // 资源：设备已切换则旧资源随旧设备消失，不能再打到新设备上。默认 view 随层3 texture 释放，
-    // 默认 sampler 由设备去重持有。
-    if (texture_) {
-        if (rhi::IDevice* active = rhi::IDevice::active(); active && active->uid() == deviceUid_)
-            active->destroyTexture(texture_);
+    // 层2 拥有默认 view：先毁 view 再毁 texture；默认 sampler 由设备去重持有、不在此销毁。
+    // 跨设备安全：asset-backed 纹理在其设备仍 active 时销毁（工程 teardown 顺序保证）；内建纹理
+    // 在设备切换时由静态方法先 detachFromDeadDevice() 置空句柄，故此处 view_/texture_ 为空即跳过。
+    if (rhi::IDevice* device = rhi::IDevice::active()) {
+        if (view_)
+            device->destroyTextureView(view_);
+        if (texture_)
+            device->destroyTexture(texture_);
     }
 }
 
 void Texture::bindAsset(TextureAsset* asset) {
     asset_ = asset;
-    if (asset_) {
-        assetPath_ = asset_->assetPath();
-        assetId_ = asset_->assetId();
-    }
+}
+
+const VirtualPath& Texture::assetPath() const {
+    static const VirtualPath kEmpty;
+    return asset_ ? asset_->assetPath() : kEmpty;
+}
+
+AssetId Texture::assetId() const {
+    return asset_ ? asset_->assetId() : AssetId{};
 }
 
 rhi::TextureBinding Texture::binding(const Ref<Sampler>& sampler) const {
@@ -226,7 +270,7 @@ rhi::TextureBinding Texture::binding(const Ref<Sampler>& sampler) const {
 void Texture::upload(std::span<const std::uint8_t> pixels) {
     if (!texture_)
         return;
-    rhi::IDevice* device = device_ ? device_ : rhi::IDevice::active();
+    rhi::IDevice* device = rhi::IDevice::active();
     if (!device) {
         Log::error("Texture", "No active device for texture upload");
         return;
@@ -282,6 +326,8 @@ Ref<Texture> Texture::defaultWhite() {
         static constexpr std::uint8_t kPixels[4] = {0xffU, 0xffU, 0xffU, 0xffU};
         const TextureDesc desc{
             TextureType::Texture2D, TextureFormat::Rgba8Srgb, TextureColorSpace::Srgb, 1, 1, 1};
+        if (instance)
+            instance->detachFromDeadDevice(); // 旧设备已亡，弃置句柄避免 ~Texture 误销毁
         instance = Ref<Texture>(new Texture(desc));
         if (instance->textureHandle())
             instance->upload(kPixels);
@@ -300,6 +346,8 @@ Ref<Texture> Texture::defaultBlack() {
         static constexpr std::uint8_t kPixels[4] = {0x00U, 0x00U, 0x00U, 0xffU};
         const TextureDesc desc{
             TextureType::Texture2D, TextureFormat::Rgba8Srgb, TextureColorSpace::Srgb, 1, 1, 1};
+        if (instance)
+            instance->detachFromDeadDevice(); // 旧设备已亡，弃置句柄避免 ~Texture 误销毁
         instance = Ref<Texture>(new Texture(desc));
         if (instance->textureHandle())
             instance->upload(kPixels);
@@ -318,6 +366,8 @@ Ref<Texture> Texture::defaultNormal() {
         static constexpr std::uint8_t kPixels[4] = {0x80U, 0x80U, 0xffU, 0xffU};
         const TextureDesc desc{
             TextureType::Texture2D, TextureFormat::Rgba8Unorm, TextureColorSpace::Linear, 1, 1, 1};
+        if (instance)
+            instance->detachFromDeadDevice(); // 旧设备已亡，弃置句柄避免 ~Texture 误销毁
         instance = Ref<Texture>(new Texture(desc));
         if (instance->textureHandle())
             instance->upload(kPixels);
@@ -339,6 +389,8 @@ Ref<Texture> Texture::errorTexture() {
         };
         const TextureDesc desc{
             TextureType::Texture2D, TextureFormat::Rgba8Srgb, TextureColorSpace::Srgb, 2, 2, 1};
+        if (instance)
+            instance->detachFromDeadDevice(); // 旧设备已亡，弃置句柄避免 ~Texture 误销毁
         instance = Ref<Texture>(new Texture(desc));
         if (instance->textureHandle())
             instance->upload(kPixels);

@@ -17,6 +17,7 @@ struct TextureViewDesc {
     std::uint32_t mipCount{1};
     std::uint32_t baseLayer{};
     std::uint32_t layerCount{1};
+    TextureAspect aspect{TextureAspect::Color};
     TextureSwizzle swizzle;
 
     [[nodiscard]] bool operator==(const TextureViewDesc&) const = default;
@@ -32,6 +33,7 @@ struct TextureViewDescHash {
         mix(desc.mipCount);
         mix(desc.baseLayer);
         mix(desc.layerCount);
+        mix(static_cast<std::size_t>(desc.aspect));
         mix(static_cast<std::size_t>(desc.swizzle.r));
         mix(static_cast<std::size_t>(desc.swizzle.g));
         mix(static_cast<std::size_t>(desc.swizzle.b));

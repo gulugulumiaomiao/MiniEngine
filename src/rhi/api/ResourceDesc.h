@@ -64,6 +64,8 @@ struct TextureDesc {
     std::uint32_t arrayLayers{1};
     std::uint32_t mipCount{1};
     TextureUsage usage{TextureUsage::None};
+    TextureTiling tiling{TextureTiling::Optimal};
+    SampleCount samples{SampleCount::One};
     std::string debugName;
 };
 

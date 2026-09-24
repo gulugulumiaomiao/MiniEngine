@@ -19,6 +19,10 @@ enum class LoadOp { Load, Clear, DontCare };
 enum class StoreOp { Store, DontCare };
 enum class TextureAspect { Color, Depth };
 
+// Image tiling and multisample count (map to VkImageTiling / VkSampleCountFlagBits).
+enum class TextureTiling { Optimal, Linear };
+enum class SampleCount { One, Two, Four, Eight };
+
 enum class SwizzleComponent { Identity, Zero, One, R, G, B, A };
 
 struct TextureSwizzle {

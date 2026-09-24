@@ -6,6 +6,7 @@
 #include "core/base/Ref.h"
 #include "core/base/RefCounted.h"
 #include "rhi/api/ResourceDesc.h" // rhi::RID / rhi::TextureBinding
+#include "rhi/api/Sampler.h"      // rhi::SamplerDesc（toRhi 翻译目标）
 
 #include <cstddef>
 #include <cstdint>
@@ -27,26 +28,49 @@ enum class TextureType { Texture2D, Texture2DArray, Texture3D, TextureCube, Text
 enum class TextureFormat { Rgba8Unorm, Rgba8Srgb };
 enum class TextureColorSpace { Linear, Srgb };
 
-// Unity-style texture sampling settings. These remain an asset-level default suggestion;
-// the layer-2 Texture turns them into a device sampler at construction time.
+// 层2 采样语义描述（Unity 风格）；构造层3 sampler 时由 toRhi 翻译成 rhi::SamplerDesc。
 enum class TextureFilterMode { Point, Bilinear, Trilinear };
 enum class TextureAddressMode { Repeat, MirroredRepeat, ClampToEdge };
 
-struct TextureSamplerSettings : public Transferable {
+struct SamplerDesc : public Transferable {
     TextureFilterMode filterMode{TextureFilterMode::Bilinear};
     TextureAddressMode addressModeU{TextureAddressMode::Repeat};
     TextureAddressMode addressModeV{TextureAddressMode::Repeat};
     float maxAnisotropy{1.0F};
 
-    TextureSamplerSettings() = default;
-    TextureSamplerSettings(TextureFilterMode filterMode,
-                           TextureAddressMode addressModeU,
-                           TextureAddressMode addressModeV,
-                           float maxAnisotropy)
+    SamplerDesc() = default;
+    SamplerDesc(TextureFilterMode filterMode,
+                TextureAddressMode addressModeU,
+                TextureAddressMode addressModeV,
+                float maxAnisotropy)
         : filterMode(filterMode), addressModeU(addressModeU), addressModeV(addressModeV),
           maxAnisotropy(maxAnisotropy) {}
 
     [[nodiscard]] bool transfer(Transfer& archive) override;
+};
+
+// 层2 视图语义描述：自定义 Swizzle + 高层 format；构造层3 view 时由 toRhi 翻译成
+// rhi::TextureViewDesc（MatchTexture 解析为源纹理格式）。
+enum class SwizzleChannel { Identity, Zero, One, R, G, B, A };
+struct Swizzle {
+    SwizzleChannel r{SwizzleChannel::Identity};
+    SwizzleChannel g{SwizzleChannel::Identity};
+    SwizzleChannel b{SwizzleChannel::Identity};
+    SwizzleChannel a{SwizzleChannel::Identity};
+    [[nodiscard]] bool operator==(const Swizzle&) const = default;
+};
+
+enum class TextureViewFormat { MatchTexture, Rgba8Unorm, Rgba8Srgb };
+
+struct TextureViewDesc {
+    TextureType type{TextureType::Texture2D};
+    TextureViewFormat format{TextureViewFormat::MatchTexture};
+    std::uint32_t baseMip{};
+    std::uint32_t mipCount{1};
+    std::uint32_t baseLayer{};
+    std::uint32_t layerCount{1};
+    Swizzle swizzle;
+    [[nodiscard]] bool operator==(const TextureViewDesc&) const = default;
 };
 
 // Byte offset of every mip level inside a tightly packed pixel blob, plus the total blob
@@ -65,7 +89,7 @@ struct TextureDesc : public Transferable {
     std::uint32_t depth{1};
     std::uint32_t arrayLayers{1};
     std::uint32_t mipCount{1};
-    TextureSamplerSettings sampler;
+    SamplerDesc sampler;
 
     TextureDesc() = default;
     TextureDesc(TextureType type,
@@ -83,7 +107,7 @@ struct TextureDesc : public Transferable {
                 std::uint32_t width,
                 std::uint32_t height,
                 std::uint32_t mipCount,
-                TextureSamplerSettings sampler)
+                SamplerDesc sampler)
         : type(type), format(format), colorSpace(colorSpace), width(width), height(height),
           mipCount(mipCount), sampler(std::move(sampler)) {}
 
@@ -93,6 +117,9 @@ struct TextureDesc : public Transferable {
 // Derives the mip layout implied by desc. Returns false for unsupported dimensions/formats
 // or on byte-size overflow.
 [[nodiscard]] bool computeTextureLayout(const TextureDesc& desc, TextureMipLayout& layout);
+
+/// 层2 → 层3 采样描述翻译（Texture 默认 sampler 与层2 Sampler::resolve 共用）。
+[[nodiscard]] rhi::SamplerDesc toRhi(const SamplerDesc& desc);
 
 /// 层2 运行时纹理：只保留必要属性 + 访问器，持有 3 个层3 RID（texture / view / sampler），
 /// view + sampler 作为默认采样绑定。不持有 TextureDesc 与像素数据。
@@ -111,9 +138,11 @@ public:
     Texture(Texture&&) = delete;
     Texture& operator=(Texture&&) = delete;
 
-    [[nodiscard]] const VirtualPath& assetPath() const { return assetPath_; }
-    [[nodiscard]] AssetId assetId() const { return assetId_; }
-    [[nodiscard]] bool isAssetBacked() const { return static_cast<bool>(asset_); }
+    // 资产身份委托给所链接的 TextureAsset（定义在 .cpp，因 TextureAsset 此处尚不完整）；
+    // 内建/克隆纹理无 asset，返回空路径 / 无效 id。
+    [[nodiscard]] const VirtualPath& assetPath() const;
+    [[nodiscard]] AssetId assetId() const;
+    [[nodiscard]] bool isAssetBacked() const { return asset_ != nullptr; }
 
     [[nodiscard]] TextureType type() const { return type_; }
     [[nodiscard]] TextureFormat format() const { return format_; }
@@ -156,6 +185,13 @@ private:
     void bindAsset(TextureAsset* asset);
     /// 第二步初始化：上传像素（等价 upload）。
     void initialize(std::span<const std::uint8_t> pixels) { upload(pixels); }
+    /// 弃置 GPU 句柄（所属设备已销毁）：置空三个 RID，使 ~Texture 不再对已亡设备发起销毁。
+    /// 仅静态默认纹理在检测到 active 设备切换、重建前对旧实例调用。
+    void detachFromDeadDevice() {
+        texture_ = {};
+        view_ = {};
+        sampler_ = {};
+    }
 
     TextureType type_{TextureType::Texture2D};
     TextureFormat format_{TextureFormat::Rgba8Srgb};
@@ -166,14 +202,10 @@ private:
     std::uint32_t arrayLayers_{1};
     std::uint32_t mipCount_{1};
 
-    rhi::IDevice* device_{};    // 创建时的 active device
-    std::uint64_t deviceUid_{}; // 该设备 uid：稳健判断设备是否仍活动（防裸地址被新设备复用而误判）
     rhi::RID texture_;
     rhi::RID view_;
     rhi::RID sampler_;
 
-    VirtualPath assetPath_;
-    AssetId assetId_;
     TextureAsset* asset_{}; // 非拥有活链接（asset 由 AssetManager 常驻）；仅 instantiate 实例设置
 };
 
