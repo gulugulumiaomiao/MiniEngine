@@ -1,13 +1,11 @@
 #pragma once
 
-#include "rhi/api/Swapchain.h"
-#include "rhi/vulkan/VulkanCommandBuffer.h"
+#include "rhi/api/Device.h"
 
 #include <vulkan/vulkan.h>
 
 #include <array>
 #include <cstdint>
-#include <memory>
 #include <vector>
 
 namespace engine::rhi::vulkan {
@@ -26,7 +24,7 @@ public:
     [[nodiscard]] FrameStatus endFrame() override;
     void resize(std::uint32_t width, std::uint32_t height) override;
 
-    [[nodiscard]] ICommandBuffer& commandBuffer() override;
+    [[nodiscard]] RID commandBuffer() override;
     [[nodiscard]] RID currentTexture() const override;
     [[nodiscard]] RID currentTextureView() const override;
     [[nodiscard]] ResourceState currentTextureState() const override;
@@ -47,7 +45,9 @@ private:
         std::vector<VkPresentModeKHR> presentModes;
     };
     struct Frame {
-        VkCommandBuffer commandBuffer{VK_NULL_HANDLE};
+        // Registers the pooled VkCommandBuffer in the device's command-buffer pool (owned =
+        // false, so the wrapper never frees it); recording goes through this RID.
+        RID commandBufferRid{};
         VkSemaphore imageAvailable{VK_NULL_HANDLE};
         VkFence inFlight{VK_NULL_HANDLE};
     };
@@ -71,8 +71,8 @@ private:
     std::vector<bool> imageInitialized_;
     std::vector<VkSemaphore> renderFinished_;
     std::array<Frame, kFramesInFlight> frames_{};
-    // Wraps the current frame's pooled VkCommandBuffer (not owned by the wrapper).
-    std::unique_ptr<VulkanCommandBuffer> commandBuffer_;
+    // The current frame's command buffer RID (into the device's command-buffer pool).
+    RID commandBufferRid_{};
     std::uint32_t currentFrame_{};
     std::uint32_t imageIndex_{};
     bool frameOpen_{};

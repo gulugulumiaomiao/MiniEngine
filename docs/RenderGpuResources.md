@@ -18,7 +18,7 @@ Material
   -> BindGroup
 ```
 
-三个句柄池 `HandlePool<IRHITexture|IRHITextureView|IRHISampler, RID>` 全部内嵌在 `rhi::IDevice`，由 IDevice 统一分配 RID；IDevice 接口不含任何后端原生类型。IDevice 是全局单例：后端构造时把自己注册为 `IDevice::active()`、析构时让位，未构造时 `active()` 返回 `nullptr`。层2 `Texture`/`Sampler` 与静态默认纹理都经 `IDevice::active()` 取设备（没有纹理管理器可注入）。
+句柄池按对象类型分开、直接存 `Vulkan*` 实例（不存指针、不经抽象接口），全部内嵌在具体 `VulkanDevice`；`rhi::IDevice` 只声明 RID 生命周期虚函数（`<type>_create/_destroy/_upload`），不含任何后端原生类型，也不再内嵌句柄池。`IRHITexture`/`IRHITextureView`/`IRHISampler` 抽象接口已删除。IDevice 是全局单例：后端构造时把自己注册为 `IDevice::active()`、析构时让位，未构造时 `active()` 返回 `nullptr`。层2 `Texture`/`Sampler` 与静态默认纹理都经 `IDevice::active()` 取设备（没有纹理管理器可注入）。
 
 ## 2. 层2 Storage（Mesh/Shader/Pipeline/Material）
 
@@ -31,11 +31,11 @@ Material
 
 ## 3. Texture 生命周期与去重
 
-层2 `Texture` 不持有 `TextureDesc` 与像素数据，只保留必要属性 + 三个 RID（texture / 默认 view / 默认 sampler）。构造（接 `TextureDesc`）经 `IDevice::active()` 分配三个 RID：`createTexture` 建纹理、`createTextureView`（翻译后的层2 `TextureViewDesc`）建层2 拥有的默认视图、`createSampler` 取去重采样器；`initialize`/`upload(pixels)` 按 `computeTextureLayout` 逐 mip 切片上传。
+层2 `Texture` 不持有 `TextureDesc` 与像素数据，只保留必要属性 + 三个 RID（texture / 默认 view / 默认 sampler）。构造（接 `TextureDesc`）经 `IDevice::active()` 分配三个 RID：`texture_create` 建纹理、`texture_view_create`（翻译后的层2 `TextureViewDesc`）建层2 拥有的默认视图、`sampler_create` 取去重采样器；`initialize`/`upload(pixels)` 按 `computeTextureLayout` 逐 mip 切片上传。
 
 - **去重**：没有纹理管理器时，"每个 `TextureAsset` 只 `instantiate()` 出一个运行时实例"天然承担去重——同一 asset 反复解析（`resolveTextureReference` → `AssetManager.loadAsset<TextureAsset>` → `instantiate`）命中缓存 asset 的同一实例。`clone()` 产出互不影响的脱离实例。
-- **Sampler**：设备级按 `SamplerDesc` 去重（`IDevice::createSampler`）；层2 `Sampler` 与 `Texture` 的默认 sampler 都**非拥有**，析构不 `destroySampler`，随设备释放。
-- **View**：层2 `Texture` 经 `IDevice::createTextureView` 创建并拥有默认 view；view 去重与所有权在 `VulkanDevice`（设备级 `(textureRID, rhi::TextureViewDesc)→RID`），`destroyTexture` 级联释放该纹理全部 view；`defaultTextureView` 是设备级惰性入口（RenderTarget/Swapchain/ImGui 用）。层3 `VulkanTexture/View/Sampler` 只留 Vk create-info 类原生 info、不持 desc，`IRHITexture` 已瘦身为不透明句柄（无 type/format/dims/createView/defaultView）。
+- **Sampler**：设备级按 `SamplerDesc` 去重（`IDevice::sampler_create`）；层2 `Sampler` 与 `Texture` 的默认 sampler 都**非拥有**，析构不 `sampler_destroy`，随设备释放。
+- **View**：层2 `Texture` 经 `IDevice::texture_view_create` 创建并拥有默认 view；view 去重与所有权在 `VulkanDevice`（设备级 `(textureRID, rhi::TextureViewDesc)→RID`），`texture_destroy` 级联释放该纹理全部 view；`texture_default_view` 是设备级惰性入口（RenderTarget/Swapchain/ImGui 用）。层3 `VulkanTexture/View/Sampler` 只留 Vk create-info 类原生 info、不持 desc，且不再有任何抽象基类（`IRHITexture` 等已删除），对上只以 RID 可见。
 
 ## 4. Material binding
 

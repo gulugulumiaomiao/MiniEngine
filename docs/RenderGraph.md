@@ -67,7 +67,7 @@ rendering.depthAttachments.push_back({shadowMap, LoadOp::Clear, StoreOp::Store, 
 graph.addGraphicsPass("ShadowCaster",
                       std::move(rendering),
                       {{shadowMap, TextureAspect::Depth, ResourceState::DepthAttachment}},
-                      [](ICommandBuffer& commandBuffer) { /* draw shadow casters */ });
+                      [](rhi::RID commandBuffer) { /* draw shadow casters */ });
 ```
 
 ### 编译与执行

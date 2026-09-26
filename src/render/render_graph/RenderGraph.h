@@ -2,7 +2,7 @@
 
 #include "render/render_graph/RgTexturePool.h"
 #include "render/render_graph/RgTypes.h"
-#include "rhi/api/CommandBuffer.h"
+#include "rhi/api/Command.h"
 
 #include <functional>
 #include <string>
@@ -28,7 +28,7 @@ namespace engine {
 // textures are released back to the pool.
 class RenderGraph final {
 public:
-    using ExecuteCallback = std::function<void(rhi::ICommandBuffer&)>;
+    using ExecuteCallback = std::function<void(rhi::RID)>;
 
     struct ImportedTexture {
         rhi::RID texture;
@@ -57,7 +57,7 @@ public:
                          ExecuteCallback execute);
 
     void compile(RgTexturePool& pool);
-    void execute(rhi::ICommandBuffer& commandBuffer) const;
+    void execute(rhi::RID commandBuffer) const;
     void reset();
 
     // Resolves a texture node to its RHI view; valid after compile() and before reset().

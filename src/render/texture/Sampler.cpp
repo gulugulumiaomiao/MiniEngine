@@ -65,7 +65,7 @@ Ref<Sampler> Sampler::resolve(const SamplerDesc& desc) {
         return {};
     }
     // 层2 语义 desc 翻译成层3 RHI desc 再创建（设备按 rhi::SamplerDesc 去重）。
-    const rhi::RID handle = device->createSampler(toRhi(desc));
+    const rhi::RID handle = device->sampler_create(toRhi(desc));
     if (!handle) {
         Log::error("Sampler", "Failed to create sampler");
         return {};

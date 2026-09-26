@@ -26,7 +26,7 @@ bool GlobalUniformGpuManager::initialize(rhi::IDevice& device, std::uint32_t fra
     entries[0] = {0, rhi::BindingType::UniformBuffer, allGraphics};
     for (std::uint32_t binding = 1; binding < entries.size(); ++binding)
         entries[binding] = {binding, rhi::BindingType::SampledTexture, allGraphics};
-    layout_ = device_->createBindGroupLayout({entries, "Global uniform bind group layout"});
+    layout_ = device_->bind_group_layout_create({entries, "Global uniform bind group layout"});
     if (!layout_) {
         shutdown();
         return false;
@@ -84,16 +84,16 @@ void GlobalUniformGpuManager::updateFrame(std::uint32_t frameIndex) {
 
     if (needsRebuild) {
         if (frame.bindGroup) {
-            device_->destroyBindGroup(frame.bindGroup);
+            device_->bind_group_destroy(frame.bindGroup);
             frame.bindGroup = {};
         }
         if (bufferTooSmall && frame.uniformBuffer) {
-            device_->destroyBuffer(frame.uniformBuffer);
+            device_->buffer_destroy(frame.uniformBuffer);
             frame.uniformBuffer = {};
             frame.uniformSize = 0;
         }
         if (!frame.uniformBuffer) {
-            frame.uniformBuffer = device_->createBuffer({
+            frame.uniformBuffer = device_->buffer_create({
                 .size = byteSize,
                 .usage = rhi::BufferUsage::Uniform,
                 .memoryUsage = rhi::MemoryUsage::Upload,
@@ -105,7 +105,7 @@ void GlobalUniformGpuManager::updateFrame(std::uint32_t frameIndex) {
 
     if (frame.uniformVersion != globals.version() || needsRebuild) {
         if (!globals.uniformBytes().empty())
-            device_->uploadBuffer(frame.uniformBuffer, globals.uniformBytes());
+            device_->buffer_upload(frame.uniformBuffer, globals.uniformBytes());
         frame.uniformVersion = globals.version();
     }
 
@@ -130,7 +130,7 @@ void GlobalUniformGpuManager::updateFrame(std::uint32_t frameIndex) {
         }
 
         frame.bindGroup =
-            device_->createBindGroup({layout_, bindings, "Global uniform bind group"});
+            device_->bind_group_create({layout_, bindings, "Global uniform bind group"});
         frame.textureBindings = std::move(resolvedTextures);
         lastLayoutVersion_ = globals.version();
     }
@@ -141,13 +141,13 @@ void GlobalUniformGpuManager::shutdown() {
         return;
     for (FrameResources& frame : frames_) {
         if (frame.bindGroup)
-            device_->destroyBindGroup(frame.bindGroup);
+            device_->bind_group_destroy(frame.bindGroup);
         if (frame.uniformBuffer)
-            device_->destroyBuffer(frame.uniformBuffer);
+            device_->buffer_destroy(frame.uniformBuffer);
         frame = {};
     }
     if (layout_)
-        device_->destroyBindGroupLayout(layout_);
+        device_->bind_group_layout_destroy(layout_);
     layout_ = {};
     device_ = nullptr;
     lastLayoutVersion_ = 0;

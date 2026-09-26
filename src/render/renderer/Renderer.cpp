@@ -6,7 +6,7 @@
 #include "render/render_target/RenderTarget.h"
 #include "render/gpu/frame/FrameGpuManager.h"
 #include "render/gpu/pipeline/GraphicsPipelineStorage.h"
-#include "rhi/api/CommandBuffer.h"
+#include "rhi/api/Command.h"
 #include "runtime/window/Window.h"
 
 #include <span>
@@ -72,28 +72,28 @@ void Renderer::renderFrame(const RenderScene& scene) {
         // no draw items the acquired swapchain image was never transitioned and is
         // still in the undefined layout. Presenting it unmodified trips the validation
         // layer, so clear it into PRESENT_SRC ourselves.
-        rhi::ICommandBuffer& commandBuffer = swapchain_->commandBuffer();
+        const rhi::RID commandBuffer = swapchain_->commandBuffer();
         const rhi::RID texture = swapchain_->currentTexture();
         const rhi::TextureBarrier toAttachment{
             .texture = texture,
             .before = rhi::ResourceState::Undefined,
             .after = rhi::ResourceState::ColorAttachment,
         };
-        commandBuffer.resourceBarriers(std::span{&toAttachment, 1});
-        commandBuffer.beginRendering({
+        rhi::resourceBarriers(commandBuffer, std::span{&toAttachment, 1});
+        rhi::beginRendering(commandBuffer, {
             .renderArea = {.width = swapchain_->width(), .height = swapchain_->height()},
             .colorAttachments = {{
                 .view = swapchain_->currentTextureView(),
                 .loadOp = rhi::LoadOp::Clear,
             }},
         });
-        commandBuffer.endRendering();
+        rhi::endRendering(commandBuffer);
         const rhi::TextureBarrier toPresent{
             .texture = texture,
             .before = rhi::ResourceState::ColorAttachment,
             .after = rhi::ResourceState::Present,
         };
-        commandBuffer.resourceBarriers(std::span{&toPresent, 1});
+        rhi::resourceBarriers(commandBuffer, std::span{&toPresent, 1});
     }
     const bool resized = window_.consumeResize();
     const rhi::FrameStatus status = swapchain_->endFrame();

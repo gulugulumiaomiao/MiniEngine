@@ -4,6 +4,7 @@
 #include "core/filesystem/VirtualPath.h"
 #include "core/logging/Log.h"
 #include "rhi/vulkan/VulkanBuffer.h"
+#include "rhi/vulkan/VulkanConversions.h"
 #include "rhi/vulkan/VulkanDescriptorAllocator.h"
 #include "rhi/vulkan/VulkanGraphicsPipeline.h"
 #include "rhi/vulkan/VulkanTexture.h"
@@ -64,79 +65,6 @@ VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo() {
     return info;
 }
 #endif
-
-VkBufferUsageFlags toVulkan(BufferUsage usage) {
-    VkBufferUsageFlags result = 0;
-    if (hasFlag(usage, BufferUsage::Vertex))
-        result |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    if (hasFlag(usage, BufferUsage::Index))
-        result |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-    if (hasFlag(usage, BufferUsage::Uniform))
-        result |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    if (hasFlag(usage, BufferUsage::Storage))
-        result |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    if (hasFlag(usage, BufferUsage::TransferSource))
-        result |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    if (hasFlag(usage, BufferUsage::TransferDestination))
-        result |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    return result;
-}
-
-VkDescriptorType toVulkan(BindingType type) {
-    switch (type) {
-    case BindingType::UniformBuffer: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    case BindingType::StorageBuffer: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    case BindingType::SampledTexture: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    }
-    Log::fatal("VulkanDevice", "Unsupported RHI binding type");
-}
-
-VkFormat toVulkan(PixelFormat format) {
-    switch (format) {
-    case PixelFormat::Rgba8Unorm: return VK_FORMAT_R8G8B8A8_UNORM;
-    case PixelFormat::Rgba8Srgb: return VK_FORMAT_R8G8B8A8_SRGB;
-    case PixelFormat::Bgra8Unorm: return VK_FORMAT_B8G8R8A8_UNORM;
-    case PixelFormat::Bgra8Srgb: return VK_FORMAT_B8G8R8A8_SRGB;
-    case PixelFormat::Depth32Float: return VK_FORMAT_D32_SFLOAT;
-    case PixelFormat::Undefined: break;
-    }
-    Log::fatal("VulkanDevice", "Unsupported Texture format");
-}
-
-VkImageUsageFlags toVulkan(TextureUsage usage) {
-    VkImageUsageFlags result{};
-    if (hasFlag(usage, TextureUsage::Sampled))
-        result |= VK_IMAGE_USAGE_SAMPLED_BIT;
-    if (hasFlag(usage, TextureUsage::TransferSource))
-        result |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-    if (hasFlag(usage, TextureUsage::TransferDestination))
-        result |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    if (hasFlag(usage, TextureUsage::ColorAttachment))
-        result |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    if (hasFlag(usage, TextureUsage::DepthStencilAttachment))
-        result |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    return result;
-}
-
-VkShaderStageFlags toVulkan(ShaderVisibility visibility) {
-    VkShaderStageFlags result{};
-    if (hasFlag(visibility, ShaderVisibility::Vertex))
-        result |= VK_SHADER_STAGE_VERTEX_BIT;
-    if (hasFlag(visibility, ShaderVisibility::Fragment))
-        result |= VK_SHADER_STAGE_FRAGMENT_BIT;
-    return result;
-}
-
-std::pair<VmaMemoryUsage, VmaAllocationCreateFlags> toVulkan(MemoryUsage usage) {
-    switch (usage) {
-    case MemoryUsage::DeviceLocal: return {VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, 0};
-    case MemoryUsage::Upload:
-        return {VMA_MEMORY_USAGE_AUTO, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT};
-    case MemoryUsage::Readback:
-        return {VMA_MEMORY_USAGE_AUTO, VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT};
-    }
-    return {VMA_MEMORY_USAGE_AUTO, 0};
-}
 
 std::vector<std::byte> loadPipelineCacheInitialData(const VirtualPath& path,
                                                     VkPhysicalDevice physicalDevice) {
@@ -385,56 +313,51 @@ void VulkanDevice::createAllocator() {
     check(vmaCreateAllocator(&createInfo, &allocator_), "vmaCreateAllocator");
 }
 
-VmaAllocator VulkanDevice::allocator() const {
-    return allocator_;
-}
-
-RID VulkanDevice::createBuffer(const BufferDesc& desc) {
+RID VulkanDevice::buffer_create(const BufferDesc& desc) {
     if (desc.size == 0 || desc.usage == BufferUsage::None) {
         Log::fatal("VulkanDevice", "Invalid buffer description");
     }
-    const auto [memoryUsage, allocationFlags] = toVulkan(desc.memoryUsage);
-    return buffers_.insert(BufferResource{
-        std::make_unique<VulkanBuffer>(
-            allocator_, desc.size, toVulkan(desc.usage), memoryUsage, allocationFlags),
-        desc.memoryUsage,
-    });
+    return buffers_.emplace(allocator_,
+                            static_cast<VkDeviceSize>(desc.size),
+                            desc.usage,
+                            desc.memoryUsage);
 }
 
-void VulkanDevice::destroyBuffer(RID handle) {
-    (void)buffers_.release(handle);
+void VulkanDevice::buffer_destroy(RID handle) {
+    buffer_release_rid(handle);
 }
 
-void VulkanDevice::uploadBuffer(RID destination,
-                                std::span<const std::byte> data,
-                                std::uint64_t offset) {
+void VulkanDevice::buffer_upload(RID destination,
+                                 std::span<const std::byte> data,
+                                 std::uint64_t offset) {
     VulkanBuffer& target = requireBuffer(destination);
     if (data.empty() || offset > target.size() || data.size_bytes() > target.size() - offset) {
         Log::fatal("VulkanDevice", "Invalid buffer upload range");
     }
 
-    if (requireBufferResource(destination).memoryUsage == MemoryUsage::Upload) {
+    if (target.memoryUsage() == MemoryUsage::Upload) {
         target.upload(data, offset);
         return;
     }
 
     const BufferDesc stagingDesc{
         data.size_bytes(), BufferUsage::TransferSource, MemoryUsage::Upload, "upload staging"};
-    const RID staging = createBuffer(stagingDesc);
+    const RID staging = buffer_create(stagingDesc);
     requireBuffer(staging).upload(data);
 
-    std::unique_ptr<ICommandBuffer> command = createCommandBuffer();
-    command->begin();
-    command->copyBuffer({staging, destination, 0, offset, data.size_bytes()});
-    command->end();
-    submitCommand(*command, SubmitSync{});
+    const RID command = command_buffer_create();
+    VulkanCommandBuffer& cmd = command_buffer(command);
+    cmd.begin();
+    cmd.copyBuffer({staging, destination, 0, offset, data.size_bytes()});
+    cmd.end();
+    submit(command, SubmitSync{});
     waitIdle();
 
-    destroyBuffer(staging);
-    // command is freed after waitIdle, so its VkCommandBuffer is no longer in use.
+    command_buffer_destroy(command);
+    buffer_destroy(staging);
 }
 
-RID VulkanDevice::createTexture(const TextureDesc& desc) {
+RID VulkanDevice::texture_create(const TextureDesc& desc) {
     if (desc.dimension != TextureType::Texture2D || desc.format == PixelFormat::Undefined ||
         desc.width == 0 || desc.height == 0 || desc.depth != 1 || desc.arrayLayers != 1 ||
         desc.mipCount == 0 || desc.usage == TextureUsage::None) {
@@ -444,26 +367,25 @@ RID VulkanDevice::createTexture(const TextureDesc& desc) {
         (isDepthFormat(desc.format) && hasFlag(desc.usage, TextureUsage::ColorAttachment))) {
         Log::fatal("VulkanDevice", "Texture format and attachment usage do not match");
     }
-    // No eager default view: defaultTextureView() creates + caches it lazily at device level.
-    return registerTexture(std::make_unique<VulkanTexture>(
-        *this, allocator_, desc, toVulkan(desc.format), toVulkan(desc.usage)));
+    // No eager default view: texture_default_view() creates + caches it lazily at device level.
+    return textures_.emplace(allocator_, desc);
 }
 
-void VulkanDevice::destroyTexture(RID handle) {
-    if (!resolveTextureResource(handle))
+void VulkanDevice::texture_destroy(RID handle) {
+    if (!textures_.find(handle))
         return;
     // Cascade-release every view deduped for this texture, then the texture itself.
     if (const auto it = viewDedup_.find(handle.value()); it != viewDedup_.end()) {
         for (const auto& [viewDesc, view] : it->second)
-            releaseTextureView(view);
+            texture_view_release_rid(view);
         viewDedup_.erase(it);
     }
-    releaseTexture(handle);
+    texture_release_rid(handle);
 }
 
-void VulkanDevice::uploadTexture(RID destination,
-                                 std::span<const TextureUploadRegion> regions) {
-    auto* resource = static_cast<VulkanTexture*>(resolveTextureResource(destination));
+void VulkanDevice::texture_upload(RID destination,
+                                  std::span<const TextureUploadRegion> regions) {
+    VulkanTexture* resource = textures_.find(destination);
     if (!resource || resource->uploaded() || regions.empty())
         Log::fatal("VulkanDevice", "Invalid Texture upload");
     const VulkanTexture& image = *resource;
@@ -490,7 +412,7 @@ void VulkanDevice::uploadTexture(RID destination,
     }
     const BufferDesc stagingDesc{
         totalSize, BufferUsage::TransferSource, MemoryUsage::Upload, "texture upload staging"};
-    const RID staging = createBuffer(stagingDesc);
+    const RID staging = buffer_create(stagingDesc);
     std::uint64_t stagingOffset{};
     std::vector<BufferImageCopy> copies;
     copies.reserve(regions.size());
@@ -508,8 +430,9 @@ void VulkanDevice::uploadTexture(RID destination,
         stagingOffset += region.data.size_bytes();
     }
 
-    std::unique_ptr<ICommandBuffer> command = createCommandBuffer();
-    command->begin();
+    const RID command = command_buffer_create();
+    VulkanCommandBuffer& cmd = command_buffer(command);
+    cmd.begin();
     const TextureBarrier toCopyDestination{destination,
                                            TextureAspect::Color,
                                            ResourceState::Undefined,
@@ -518,9 +441,9 @@ void VulkanDevice::uploadTexture(RID destination,
                                            kRemainingMipLevels,
                                            0,
                                            1};
-    command->resourceBarriers(std::span{&toCopyDestination, 1});
+    cmd.resourceBarriers(std::span{&toCopyDestination, 1});
     for (const BufferImageCopy& copy : copies) {
-        command->copyBufferToImage(copy);
+        cmd.copyBufferToImage(copy);
     }
     const TextureBarrier toShaderRead{destination,
                                       TextureAspect::Color,
@@ -530,17 +453,18 @@ void VulkanDevice::uploadTexture(RID destination,
                                       kRemainingMipLevels,
                                       0,
                                       1};
-    command->resourceBarriers(std::span{&toShaderRead, 1});
-    command->end();
-    submitCommand(*command, SubmitSync{});
+    cmd.resourceBarriers(std::span{&toShaderRead, 1});
+    cmd.end();
+    submit(command, SubmitSync{});
     waitIdle();
 
-    destroyBuffer(staging);
+    command_buffer_destroy(command);
+    buffer_destroy(staging);
     resource->markUploaded();
 }
 
-RID VulkanDevice::createTextureView(RID textureHandle, const TextureViewDesc& desc) {
-    auto* texture = static_cast<VulkanTexture*>(resolveTextureResource(textureHandle));
+RID VulkanDevice::texture_view_create(RID textureHandle, const TextureViewDesc& desc) {
+    VulkanTexture* texture = textures_.find(textureHandle);
     if (!texture)
         Log::fatal("VulkanDevice", "Invalid RHI Texture handle");
     if (desc.type != TextureType::Texture2D || desc.mipCount == 0 || desc.layerCount != 1 ||
@@ -556,16 +480,15 @@ RID VulkanDevice::createTextureView(RID textureHandle, const TextureViewDesc& de
     }
     auto& views = viewDedup_[textureHandle.value()];
     if (const auto found = views.find(normalized);
-        found != views.end() && resolveTextureViewResource(found->second))
+        found != views.end() && textureViews_.find(found->second))
         return found->second;
-    const RID view =
-        registerTextureView(std::make_unique<VulkanTextureView>(device_, *texture, normalized));
+    const RID view = textureViews_.emplace(device_, *texture, normalized);
     views.insert_or_assign(normalized, view);
     return view;
 }
 
-RID VulkanDevice::defaultTextureView(RID texture) {
-    const auto* resource = static_cast<const VulkanTexture*>(resolveTextureResource(texture));
+RID VulkanDevice::texture_default_view(RID texture) {
+    const VulkanTexture* resource = textures_.find(texture);
     if (!resource)
         Log::fatal("VulkanDevice", "Invalid RHI Texture handle");
     const TextureViewDesc fullRange{.type = resource->type(),
@@ -574,41 +497,40 @@ RID VulkanDevice::defaultTextureView(RID texture) {
                                     .mipCount = resource->mipCount(),
                                     .baseLayer = 0,
                                     .layerCount = resource->arrayLayers()};
-    return createTextureView(texture, fullRange);
+    return texture_view_create(texture, fullRange);
 }
 
-void VulkanDevice::destroyTextureView(RID handle) {
-    if (!resolveTextureViewResource(handle))
+void VulkanDevice::texture_view_destroy(RID handle) {
+    if (!textureViews_.find(handle))
         return;
     for (auto& [textureKey, views] : viewDedup_) {
         for (auto it = views.begin(); it != views.end(); ++it) {
             if (it->second == handle) {
                 views.erase(it);
-                releaseTextureView(handle);
+                texture_view_release_rid(handle);
                 return;
             }
         }
     }
-    releaseTextureView(handle);
+    texture_view_release_rid(handle);
 }
 
-RID VulkanDevice::createSampler(const SamplerDesc& desc) {
+RID VulkanDevice::sampler_create(const SamplerDesc& desc) {
     SamplerDesc clamped = desc;
     clamped.maxAnisotropy = std::min(clamped.maxAnisotropy, maxSamplerAnisotropy_);
     if (clamped.maxAnisotropy < 1.0F)
         clamped.maxAnisotropy = 1.0F;
     // Identical descriptors share one VkSampler; only create on a cache miss.
     if (const auto found = samplerDedup_.find(clamped);
-        found != samplerDedup_.end() && resolveSamplerResource(found->second))
+        found != samplerDedup_.end() && samplers_.find(found->second))
         return found->second;
-    const RID handle =
-        registerSampler(std::make_unique<VulkanSampler>(device_, clamped, maxSamplerAnisotropy_));
+    const RID handle = samplers_.emplace(device_, clamped, maxSamplerAnisotropy_);
     samplerDedup_.insert_or_assign(clamped, handle);
     return handle;
 }
 
-void VulkanDevice::destroySampler(RID handle) {
-    if (!resolveSamplerResource(handle))
+void VulkanDevice::sampler_destroy(RID handle) {
+    if (!samplers_.find(handle))
         return;
     // Sampler no longer retains its desc; erase the dedup entry by matching the handle.
     for (auto it = samplerDedup_.begin(); it != samplerDedup_.end(); ++it) {
@@ -617,22 +539,21 @@ void VulkanDevice::destroySampler(RID handle) {
             break;
         }
     }
-    releaseSampler(handle);
+    sampler_release_rid(handle);
 }
 
-RID VulkanDevice::createShader(const ShaderDesc& desc) {
+RID VulkanDevice::shader_create(const ShaderDesc& desc) {
     if (desc.bytecode.empty()) {
         Log::fatal("VulkanDevice", "Cannot create an empty shader");
     }
-    return shaders_.insert(ShaderResource{
-        std::make_unique<VulkanShaderModule>(device_, desc.stage, desc.bytecode, desc.debugName)});
+    return shaders_.emplace(device_, desc.bytecode, desc.debugName);
 }
 
-void VulkanDevice::destroyShader(RID handle) {
-    (void)shaders_.release(handle);
+void VulkanDevice::shader_destroy(RID handle) {
+    shader_release_rid(handle);
 }
 
-RID VulkanDevice::createGraphicsPipeline(const GraphicsPipelineDesc& desc) {
+RID VulkanDevice::pipeline_create(const GraphicsPipelineDesc& desc) {
     if (!desc.vertexShader || !desc.fragmentShader ||
         (desc.colorFormats.empty() && desc.depthFormat == PixelFormat::Undefined) ||
         std::ranges::any_of(desc.colorFormats,
@@ -641,20 +562,19 @@ RID VulkanDevice::createGraphicsPipeline(const GraphicsPipelineDesc& desc) {
         Log::fatal("VulkanDevice", "Invalid graphics pipeline description");
     }
     const PipelineLayoutKey key(desc.bindGroupLayouts.begin(), desc.bindGroupLayouts.end());
-    return pipelines_.insert(PipelineResource{
-        std::make_unique<VulkanGraphicsPipeline>(device_,
-                                                 desc,
-                                                 resolveShader(desc.vertexShader),
-                                                 resolveShader(desc.fragmentShader),
-                                                 acquirePipelineLayout(key),
-                                                 pipelineCache_)});
+    return pipelines_.emplace(device_,
+                              desc,
+                              resolveShader(desc.vertexShader),
+                              resolveShader(desc.fragmentShader),
+                              acquirePipelineLayout(key),
+                              pipelineCache_);
 }
 
-void VulkanDevice::destroyGraphicsPipeline(RID handle) {
-    (void)pipelines_.release(handle);
+void VulkanDevice::pipeline_destroy(RID handle) {
+    pipeline_release_rid(handle);
 }
 
-RID VulkanDevice::createBindGroupLayout(const BindGroupLayoutDesc& desc) {
+RID VulkanDevice::bind_group_layout_create(const BindGroupLayoutDesc& desc) {
     if (desc.entries.empty()) {
         Log::fatal("VulkanDevice", "Cannot create an empty bind group layout");
     }
@@ -667,18 +587,18 @@ RID VulkanDevice::createBindGroupLayout(const BindGroupLayoutDesc& desc) {
         bindings.push_back(
             {entry.binding, toVulkan(entry.type), 1, toVulkan(entry.visibility), nullptr});
     }
-    return bindGroupLayouts_.insert(
-        BindGroupLayoutResource{std::make_unique<VulkanDescriptorSetLayout>(device_, bindings)});
+    return bindGroupLayouts_.emplace(device_,
+                                     std::span<const VkDescriptorSetLayoutBinding>{bindings});
 }
 
-void VulkanDevice::destroyBindGroupLayout(RID handle) {
+void VulkanDevice::bind_group_layout_destroy(RID handle) {
     // Pipelines must be destroyed before the layouts they reference; drop the
     // cached pipeline layouts that still point at this descriptor set layout.
     destroyPipelineLayoutsReferencing(handle);
-    (void)bindGroupLayouts_.release(handle);
+    bind_group_layout_release_rid(handle);
 }
 
-RID VulkanDevice::createBindGroup(const BindGroupDesc& desc) {
+RID VulkanDevice::bind_group_create(const BindGroupDesc& desc) {
     const VkDescriptorSet descriptor =
         descriptorAllocator_->allocate(resolveBindGroupLayout(desc.layout));
     std::vector<VkDescriptorBufferInfo> bufferInfos;
@@ -712,18 +632,18 @@ RID VulkanDevice::createBindGroup(const BindGroupDesc& desc) {
     }
     vkUpdateDescriptorSets(
         device_, static_cast<std::uint32_t>(writes.size()), writes.data(), 0, nullptr);
-    return bindGroups_.insert(BindGroupResource{descriptor});
+    return bindGroups_.emplace(descriptor);
 }
 
-void VulkanDevice::destroyBindGroup(RID handle) {
-    BindGroupResource* resource = bindGroups_.find(handle);
-    if (!resource)
+void VulkanDevice::bind_group_destroy(RID handle) {
+    VkDescriptorSet* descriptor = bindGroups_.find(handle);
+    if (!descriptor)
         return;
-    descriptorAllocator_->free(resource->resource);
-    (void)bindGroups_.release(handle);
+    descriptorAllocator_->free(*descriptor);
+    bind_group_release_rid(handle);
 }
 
-std::unique_ptr<ICommandBuffer> VulkanDevice::createCommandBuffer() {
+RID VulkanDevice::command_buffer_create() {
     VkCommandBufferAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
     allocateInfo.commandPool = commandPool_;
     allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -731,20 +651,36 @@ std::unique_ptr<ICommandBuffer> VulkanDevice::createCommandBuffer() {
     VkCommandBuffer commandBuffer{VK_NULL_HANDLE};
     check(vkAllocateCommandBuffers(device_, &allocateInfo, &commandBuffer),
           "vkAllocateCommandBuffers");
-    return std::make_unique<VulkanCommandBuffer>(commandBuffer, *this, /*owned=*/true);
+    return commandBuffers_.emplace(commandBuffer, *this, /*owned=*/true);
 }
 
-void VulkanDevice::submitCommand(ICommandBuffer& command, const SubmitSync& sync) {
-    if (command.state() != CommandState::Executable) {
+void VulkanDevice::command_buffer_destroy(RID handle) {
+    command_buffer_release_rid(handle);
+}
+
+RID VulkanDevice::command_buffer_allocate_rid(VkCommandBuffer native, bool owned) {
+    return commandBuffers_.emplace(native, *this, owned);
+}
+
+void VulkanDevice::command_buffer_release_rid(RID handle) {
+    (void)commandBuffers_.release(handle);
+}
+
+VulkanCommandBuffer& VulkanDevice::command_buffer(RID handle) {
+    VulkanCommandBuffer* command = commandBuffers_.find(handle);
+    if (!command) {
+        Log::fatal("VulkanDevice", "Invalid or stale RHI command buffer handle");
+    }
+    return *command;
+}
+
+void VulkanDevice::submit(RID command, const SubmitSync& sync) {
+    VulkanCommandBuffer& recorded = command_buffer(command);
+    if (recorded.state() != CommandState::Executable) {
         Log::fatal("VulkanDevice",
-                   "submitCommand requires a command buffer that finished recording (call end() "
-                   "first)");
+                   "submit requires a command buffer that finished recording (call end() first)");
     }
-    const auto* native = dynamic_cast<const IVulkanCommandBuffer*>(&command);
-    if (!native) {
-        Log::fatal("VulkanDevice", "submitCommand requires a Vulkan command buffer");
-    }
-    VkCommandBuffer nativeCommandBuffer = native->nativeCommandBuffer();
+    VkCommandBuffer nativeCommandBuffer = recorded.nativeCommandBuffer();
     VkSemaphore waitSemaphore = sync.waitSemaphore;
     VkSemaphore signalSemaphore = sync.signalSemaphore;
     VkPipelineStageFlags waitStage = sync.waitStage;
@@ -772,7 +708,7 @@ RID VulkanDevice::acquireStagingBuffer(std::uint64_t size) {
     }
     const BufferDesc desc{
         size, BufferUsage::TransferSource, MemoryUsage::Upload, "command buffer staging"};
-    const RID handle = createBuffer(desc);
+    const RID handle = buffer_create(desc);
     pendingStagingBuffers_.push_back(StagingBuffer{handle, VK_NULL_HANDLE});
     return handle;
 }
@@ -795,7 +731,7 @@ void VulkanDevice::retireStagingBuffers(std::vector<StagingBuffer>& pending) {
         // leave them to the device teardown (which waits idle first).
         if (entry->fence != VK_NULL_HANDLE &&
             vkGetFenceStatus(device_, entry->fence) == VK_SUCCESS) {
-            destroyBuffer(entry->handle);
+            buffer_destroy(entry->handle);
             entry = pending.erase(entry);
             continue;
         }
@@ -807,20 +743,12 @@ VulkanBuffer& VulkanDevice::requireBuffer(RID handle) {
     return const_cast<VulkanBuffer&>(std::as_const(*this).requireBuffer(handle));
 }
 
-VulkanDevice::BufferResource& VulkanDevice::requireBufferResource(RID handle) {
-    return const_cast<BufferResource&>(std::as_const(*this).requireBufferResource(handle));
-}
-
-const VulkanDevice::BufferResource& VulkanDevice::requireBufferResource(RID handle) const {
-    const BufferResource* resource = buffers_.find(handle);
-    if (!resource) {
+const VulkanBuffer& VulkanDevice::requireBuffer(RID handle) const {
+    const VulkanBuffer* buffer = buffers_.find(handle);
+    if (!buffer) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI buffer handle");
     }
-    return *resource;
-}
-
-const VulkanBuffer& VulkanDevice::requireBuffer(RID handle) const {
-    return *requireBufferResource(handle).resource;
+    return *buffer;
 }
 
 VkBuffer VulkanDevice::resolveBuffer(RID handle) const {
@@ -828,21 +756,21 @@ VkBuffer VulkanDevice::resolveBuffer(RID handle) const {
 }
 
 VkImage VulkanDevice::resolveTexture(RID handle) const {
-    const auto* resource = static_cast<const VulkanTexture*>(resolveTextureResource(handle));
+    const VulkanTexture* resource = textures_.find(handle);
     if (!resource)
         Log::fatal("VulkanDevice", "Invalid or stale RHI texture handle");
     return resource->handle();
 }
 
 PixelFormat VulkanDevice::textureFormat(RID handle) const {
-    const auto* resource = static_cast<const VulkanTexture*>(resolveTextureResource(handle));
+    const VulkanTexture* resource = textures_.find(handle);
     if (!resource)
         Log::fatal("VulkanDevice", "RHI texture handle has no tracked format");
     return resource->format();
 }
 
 VkImageView VulkanDevice::resolveTextureView(RID handle) const {
-    const auto* resource = static_cast<const VulkanTextureView*>(resolveTextureViewResource(handle));
+    const VulkanTextureView* resource = textureViews_.find(handle);
     if (!resource) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI texture view handle");
     }
@@ -850,7 +778,7 @@ VkImageView VulkanDevice::resolveTextureView(RID handle) const {
 }
 
 VkSampler VulkanDevice::resolveSampler(RID handle) const {
-    const auto* resource = static_cast<const VulkanSampler*>(resolveSamplerResource(handle));
+    const VulkanSampler* resource = samplers_.find(handle);
     if (!resource) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI sampler handle");
     }
@@ -858,66 +786,55 @@ VkSampler VulkanDevice::resolveSampler(RID handle) const {
 }
 
 VkShaderModule VulkanDevice::resolveShader(RID handle) const {
-    const ShaderResource* resource = shaders_.find(handle);
+    const VulkanShaderModule* resource = shaders_.find(handle);
     if (!resource) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI shader handle");
     }
-    return resource->resource->handle();
+    return resource->handle();
 }
 
 VkDescriptorSetLayout VulkanDevice::resolveBindGroupLayout(RID handle) const {
-    const BindGroupLayoutResource* resource = bindGroupLayouts_.find(handle);
+    const VulkanDescriptorSetLayout* resource = bindGroupLayouts_.find(handle);
     if (!resource) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI bind group layout handle");
     }
-    return resource->resource->handle();
+    return resource->handle();
 }
 
 ResolvedPipeline VulkanDevice::resolvePipeline(RID handle) const {
-    const PipelineResource* resource = pipelines_.find(handle);
+    const VulkanGraphicsPipeline* resource = pipelines_.find(handle);
     if (!resource) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI graphics pipeline handle");
     }
-    return {resource->resource->handle(), resource->resource->layout()};
+    return {resource->handle(), resource->layout()};
 }
 
 VkDescriptorSet VulkanDevice::resolveBindGroup(RID handle) const {
-    const BindGroupResource* resource = bindGroups_.find(handle);
-    if (!resource) {
+    const VkDescriptorSet* descriptor = bindGroups_.find(handle);
+    if (!descriptor) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI bind group handle");
     }
-    return resource->resource;
+    return *descriptor;
 }
 
-RID VulkanDevice::registerExternalTexture(VkImage image,
-                                                    const TextureDesc& desc,
-                                                    VkFormat nativeFormat) {
-    return registerTexture(std::make_unique<VulkanTexture>(*this, image, desc, nativeFormat));
+RID VulkanDevice::texture_allocate_rid(VkImage image, const TextureDesc& desc) {
+    return textures_.emplace(image, desc);
 }
 
-void VulkanDevice::unregisterExternalTexture(RID handle) {
-    destroyTexture(handle);
-}
-
-RID VulkanDevice::registerExternalTextureView(RID textureHandle,
-                                                            VkImageView view,
-                                                            const TextureViewDesc& desc) {
-    auto* texture = static_cast<VulkanTexture*>(resolveTextureResource(textureHandle));
+RID VulkanDevice::texture_view_allocate_rid(RID textureHandle,
+                                            VkImageView view,
+                                            const TextureViewDesc& desc) {
+    VulkanTexture* texture = textures_.find(textureHandle);
     if (!texture)
         Log::fatal("VulkanDevice", "Cannot register a view for an invalid external texture");
     TextureViewDesc normalized = desc;
     if (normalized.format == PixelFormat::Undefined)
         normalized.format = texture->format();
-    const RID handle =
-        registerTextureView(std::make_unique<VulkanTextureView>(device_, *texture, view, normalized));
+    const RID handle = textureViews_.emplace(device_, *texture, view, normalized);
     // Device-level dedup/ownership (replaces the removed per-texture view cache + default view);
-    // defaultTextureView() will find this entry via the same normalized full-range desc.
+    // texture_default_view() will find this entry via the same normalized full-range desc.
     viewDedup_[textureHandle.value()].insert_or_assign(normalized, handle);
     return handle;
-}
-
-void VulkanDevice::unregisterExternalTextureView(RID handle) {
-    destroyTextureView(handle);
 }
 
 void VulkanDevice::createPipelineCache() {
@@ -1005,12 +922,15 @@ void VulkanDevice::destroyPipelineLayoutsReferencing(RID handle) {
 }
 
 void VulkanDevice::clear() {
+    // Command buffers only reference the device and command pool (both still alive here), so
+    // clear them first; owned wrappers free their VkCommandBuffer back to the pool.
+    commandBuffers_.clear();
     pipelines_.clear();
     for (auto& [key, layout] : pipelineLayouts_)
         vkDestroyPipelineLayout(device_, layout, nullptr);
     pipelineLayouts_.clear();
-    bindGroups_.forEach([this](const BindGroupResource& resource) {
-        descriptorAllocator_->free(resource.resource);
+    bindGroups_.forEach([this](VkDescriptorSet descriptor) {
+        descriptorAllocator_->free(descriptor);
     });
     bindGroups_.clear();
     descriptorAllocator_.reset();

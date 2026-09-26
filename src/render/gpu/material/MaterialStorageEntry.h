@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rhi/api/TextureView.h"
+#include "rhi/api/ResourceDesc.h"
 
 #include <cstdint>
 #include <vector>

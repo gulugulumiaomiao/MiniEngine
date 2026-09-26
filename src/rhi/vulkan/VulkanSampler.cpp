@@ -1,48 +1,11 @@
 #include "rhi/vulkan/VulkanSampler.h"
 #include "core/logging/Log.h"
+#include "rhi/vulkan/VulkanConversions.h"
 
 #include <algorithm>
 #include <utility>
 
 namespace engine::rhi::vulkan {
-namespace {
-
-VkFilter toVulkan(SamplerFilter filter) {
-    return filter == SamplerFilter::Nearest ? VK_FILTER_NEAREST : VK_FILTER_LINEAR;
-}
-
-VkSamplerAddressMode toVulkan(SamplerAddressMode mode) {
-    switch (mode) {
-    case SamplerAddressMode::Repeat: return VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    case SamplerAddressMode::MirroredRepeat: return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-    case SamplerAddressMode::ClampToEdge: return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    }
-    return VK_SAMPLER_ADDRESS_MODE_REPEAT;
-}
-
-VkBorderColor toVulkan(SamplerBorderColor color) {
-    switch (color) {
-    case SamplerBorderColor::TransparentBlack: return VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
-    case SamplerBorderColor::OpaqueBlack: return VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-    case SamplerBorderColor::OpaqueWhite: return VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-    }
-    return VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-}
-
-VkCompareOp toVulkan(CompareOp op) {
-    switch (op) {
-    case CompareOp::Never: return VK_COMPARE_OP_NEVER;
-    case CompareOp::Less: return VK_COMPARE_OP_LESS;
-    case CompareOp::LessEqual: return VK_COMPARE_OP_LESS_OR_EQUAL;
-    case CompareOp::Equal: return VK_COMPARE_OP_EQUAL;
-    case CompareOp::Greater: return VK_COMPARE_OP_GREATER;
-    case CompareOp::GreaterEqual: return VK_COMPARE_OP_GREATER_OR_EQUAL;
-    case CompareOp::Always: return VK_COMPARE_OP_ALWAYS;
-    }
-    return VK_COMPARE_OP_LESS_OR_EQUAL;
-}
-
-} // namespace
 
 VulkanSampler::VulkanSampler(VkDevice device, const SamplerDesc& desc, float maxAnisotropyLimit)
     : device_(device) {
@@ -66,10 +29,6 @@ VulkanSampler::VulkanSampler(VkDevice device, const SamplerDesc& desc, float max
         Log::fatal("VulkanSampler", "vkCreateSampler failed");
     }
 }
-
-VulkanSampler::VulkanSampler(VulkanSampler&& other) noexcept
-    : device_(std::exchange(other.device_, VK_NULL_HANDLE)),
-      sampler_(std::exchange(other.sampler_, VK_NULL_HANDLE)) {}
 
 VulkanSampler::~VulkanSampler() {
     if (sampler_ != VK_NULL_HANDLE)

@@ -3,6 +3,17 @@ if(NOT DEFINED MINI_SOURCE_DIR)
 endif()
 
 set(render_dir "${MINI_SOURCE_DIR}/src/render")
+
+# rhi/api is intentionally a three-header surface: Device.h (IDevice + ISwapchain),
+# Command.h (command free functions) and ResourceDesc.h (every desc/enum/POD). Guard it so a
+# new backend-agnostic header is a deliberate act rather than accidental sprawl.
+file(GLOB rhi_api_headers "${MINI_SOURCE_DIR}/src/rhi/api/*.h")
+list(LENGTH rhi_api_headers rhi_api_header_count)
+if(NOT rhi_api_header_count EQUAL 3)
+    message(FATAL_ERROR
+        "rhi/api must contain exactly Device.h, Command.h and ResourceDesc.h (found ${rhi_api_header_count}): ${rhi_api_headers}")
+endif()
+
 if(EXISTS "${render_dir}/backend")
     file(GLOB_RECURSE legacy_backend_files
         "${render_dir}/backend/*.h"
@@ -32,7 +43,9 @@ foreach(legacy_renderer_file IN ITEMS RenderResources.h RenderScene.h Lighting.h
 endforeach()
 
 file(READ "${render_dir}/renderer/Renderer.cpp" renderer_contents)
-if(renderer_contents MATCHES "device_->(create|destroy|upload)")
+# Resource lifecycle now uses the <type>_<op> device API (buffer_create, texture_destroy,
+# buffer_upload, ...), so match the verb suffix rather than a leading create/destroy/upload.
+if(renderer_contents MATCHES "device_->.*_(create|destroy|upload|allocate_rid|release_rid)")
     message(FATAL_ERROR "Renderer directly creates, destroys, or uploads GPU resources")
 endif()
 file(READ "${render_dir}/renderer/Renderer.h" renderer_header)

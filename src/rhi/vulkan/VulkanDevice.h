@@ -1,34 +1,40 @@
 #pragma once
 
 #include "core/base/HandlePool.h"
-#include "core/base/KeyedHandleRegistry.h"
 #include "rhi/RhiFactory.h"
 #include "rhi/api/Device.h"
-#include "rhi/api/Sampler.h"
+#include "rhi/vulkan/VulkanBuffer.h"
 #include "rhi/vulkan/VulkanCommandBuffer.h"
+#include "rhi/vulkan/VulkanDescriptorAllocator.h"
+#include "rhi/vulkan/VulkanGraphicsPipeline.h"
 #include "rhi/vulkan/VulkanSampler.h"
+#include "rhi/vulkan/VulkanShaderModule.h"
 #include "rhi/vulkan/VulkanTexture.h"
 #include "rhi/vulkan/VulkanTextureView.h"
 
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 
+#include <cstddef>
 #include <cstdint>
-#include <memory>
+#include <span>
 #include <unordered_map>
 #include <vector>
 
 namespace engine::rhi::vulkan {
 
-class VulkanGraphicsPipeline;
-class VulkanBuffer;
-class VulkanShaderModule;
-class VulkanDescriptorAllocator;
-class VulkanDescriptorSetLayout;
+// Native pipeline handles resolved for command-buffer binding. Backend-specific, so it lives
+// here rather than on the backend-agnostic IDevice interface.
+struct ResolvedPipeline {
+    VkPipeline pipeline{VK_NULL_HANDLE};
+    VkPipelineLayout layout{VK_NULL_HANDLE};
+};
+
+// A pipeline layout is keyed by the ordered set of bind group layout RIDs it references.
+using PipelineLayoutKey = std::vector<RID>;
 
 struct PipelineLayoutKeyHash final {
-    [[nodiscard]] std::size_t
-    operator()(const std::vector<RID>& key) const noexcept {
+    [[nodiscard]] std::size_t operator()(const std::vector<RID>& key) const noexcept {
         std::size_t seed = key.size();
         for (const RID& handle : key) {
             seed ^= static_cast<std::size_t>(handle.value());
@@ -38,15 +44,24 @@ struct PipelineLayoutKeyHash final {
     }
 };
 
-using PipelineLayoutKey = std::vector<RID>;
-
-// Native pipeline handles resolved for command-buffer binding. Backend-specific, so it lives
-// here rather than on the backend-agnostic IDevice interface.
-struct ResolvedPipeline {
-    VkPipeline pipeline{VK_NULL_HANDLE};
-    VkPipelineLayout layout{VK_NULL_HANDLE};
+// Synchronization primitives attached to a submission. Null handles disable the corresponding
+// sync point; waitStage is the pipeline stage the wait semaphore blocks before. These are
+// Vulkan-native handles, so SubmitSync lives in the backend rather than the api headers; only
+// the backend submits (the render layer records into a command-buffer RID and never submits).
+struct SubmitSync {
+    VkSemaphore waitSemaphore{VK_NULL_HANDLE};
+    VkSemaphore signalSemaphore{VK_NULL_HANDLE};
+    VkFence signalFence{VK_NULL_HANDLE};
+    VkPipelineStageFlags waitStage{VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 };
 
+// The single concrete RHI device. It owns one HandlePool per object family, storing the concrete
+// Vulkan instances directly (by value, never through a pointer or an abstract interface). Every
+// family is managed through a consistent <type>_<op> set that resolves its own pool:
+//   xxx_create / xxx_destroy / xxx_upload  - the backend-agnostic IDevice API (desc -> RID)
+//   xxx_allocate_rid / xxx_release_rid      - the pool primitives (emplace / release an instance)
+// RIDs are untyped; the family is implied by the operation, so a RID minted by texture_create is
+// only ever passed back to texture_* operations.
 class VulkanDevice final : public IDevice {
 public:
     // 禁用时不创建、读取或保存管线缓存。
@@ -56,54 +71,47 @@ public:
     VulkanDevice(const VulkanDevice&) = delete;
     VulkanDevice& operator=(const VulkanDevice&) = delete;
 
-    [[nodiscard]] RID createBuffer(const BufferDesc& desc) override;
-    void destroyBuffer(RID handle) override;
-    void uploadBuffer(RID destination,
-                      std::span<const std::byte> data,
-                      std::uint64_t offset = 0) override;
+    // ---- IDevice resource lifecycle (RID-based, backend-agnostic) ----
+    [[nodiscard]] RID buffer_create(const BufferDesc& desc) override;
+    void buffer_destroy(RID handle) override;
+    void buffer_upload(RID destination,
+                       std::span<const std::byte> data,
+                       std::uint64_t offset = 0) override;
 
-    [[nodiscard]] RID createTexture(const TextureDesc& desc) override;
-    void destroyTexture(RID handle) override;
-    void uploadTexture(RID destination,
-                       std::span<const TextureUploadRegion> regions) override;
-    [[nodiscard]] RID createTextureView(RID texture,
-                                                      const TextureViewDesc& desc) override;
-    [[nodiscard]] RID defaultTextureView(RID texture) override;
-    void destroyTextureView(RID handle) override;
-    [[nodiscard]] RID createSampler(const SamplerDesc& desc) override;
-    void destroySampler(RID handle) override;
+    [[nodiscard]] RID texture_create(const TextureDesc& desc) override;
+    void texture_destroy(RID handle) override;
+    void texture_upload(RID destination, std::span<const TextureUploadRegion> regions) override;
+    [[nodiscard]] RID texture_view_create(RID texture, const TextureViewDesc& desc) override;
+    [[nodiscard]] RID texture_default_view(RID texture) override;
+    void texture_view_destroy(RID handle) override;
+    [[nodiscard]] RID sampler_create(const SamplerDesc& desc) override;
+    void sampler_destroy(RID handle) override;
 
-    [[nodiscard]] RID createShader(const ShaderDesc& desc) override;
-    void destroyShader(RID handle) override;
+    [[nodiscard]] RID shader_create(const ShaderDesc& desc) override;
+    void shader_destroy(RID handle) override;
 
-    [[nodiscard]] RID
-    createGraphicsPipeline(const GraphicsPipelineDesc& desc) override;
-    void destroyGraphicsPipeline(RID handle) override;
+    [[nodiscard]] RID pipeline_create(const GraphicsPipelineDesc& desc) override;
+    void pipeline_destroy(RID handle) override;
 
-    [[nodiscard]] RID
-    createBindGroupLayout(const BindGroupLayoutDesc& desc) override;
-    void destroyBindGroupLayout(RID handle) override;
-    [[nodiscard]] RID createBindGroup(const BindGroupDesc& desc) override;
-    void destroyBindGroup(RID handle) override;
-
-    [[nodiscard]] std::unique_ptr<ICommandBuffer> createCommandBuffer() override;
-    void submitCommand(ICommandBuffer& command, const SubmitSync& sync) override;
+    [[nodiscard]] RID bind_group_layout_create(const BindGroupLayoutDesc& desc) override;
+    void bind_group_layout_destroy(RID handle) override;
+    [[nodiscard]] RID bind_group_create(const BindGroupDesc& desc) override;
+    void bind_group_destroy(RID handle) override;
 
     void waitIdle() override;
 
-    [[nodiscard]] VkInstance instance() const { return instance_; }
+    // ---- Backend-native device accessors ----
     [[nodiscard]] VkSurfaceKHR surface() const { return surface_; }
     [[nodiscard]] VkPhysicalDevice physicalDevice() const { return physicalDevice_; }
     [[nodiscard]] VkDevice device() const { return device_; }
     [[nodiscard]] VkQueue graphicsQueue() const { return graphicsQueue_; }
     [[nodiscard]] VkQueue presentQueue() const { return presentQueue_; }
     [[nodiscard]] VkCommandPool commandPool() const { return commandPool_; }
-    [[nodiscard]] VmaAllocator allocator() const;
-    [[nodiscard]] std::uint32_t graphicsQueueFamily() const {
-        return graphicsQueueFamily_;
-    }
+    [[nodiscard]] VmaAllocator allocator() const { return allocator_; }
+    [[nodiscard]] std::uint32_t graphicsQueueFamily() const { return graphicsQueueFamily_; }
     [[nodiscard]] std::uint32_t presentQueueFamily() const { return presentQueueFamily_; }
 
+    // ---- Native handle resolution (backend-specific; used by the command backend) ----
     [[nodiscard]] VkBuffer resolveBuffer(RID handle) const;
     [[nodiscard]] VkImage resolveTexture(RID handle) const;
     // RHI formats are only tracked for device-owned textures; external images
@@ -116,18 +124,26 @@ public:
     [[nodiscard]] ResolvedPipeline resolvePipeline(RID handle) const;
     [[nodiscard]] VkDescriptorSet resolveBindGroup(RID handle) const;
 
-    [[nodiscard]] RID
-    registerExternalTexture(VkImage image, const TextureDesc& desc, VkFormat nativeFormat);
-    void unregisterExternalTexture(RID handle);
-    [[nodiscard]] RID registerExternalTextureView(RID texture,
-                                                                VkImageView view,
-                                                                const TextureViewDesc& desc);
-    void unregisterExternalTextureView(RID handle);
+    // ---- Command buffers ----
+    // Created/registered here, recorded through the rhi:: command free functions (which resolve
+    // the RID via command_buffer()), and submitted through submit(). The swapchain registers its
+    // pooled per-frame buffers with command_buffer_allocate_rid(owned = false).
+    [[nodiscard]] RID command_buffer_create();
+    void command_buffer_destroy(RID handle);
+    [[nodiscard]] RID command_buffer_allocate_rid(VkCommandBuffer native, bool owned);
+    void command_buffer_release_rid(RID handle);
+    [[nodiscard]] VulkanCommandBuffer& command_buffer(RID handle);
+    void submit(RID command, const SubmitSync& sync);
 
-    // Command buffer staging support. update* commands run while a command buffer is
-    // being recorded, so scratch buffers must outlive the recording itself. The device
-    // owns them: submitCommand tags them with the submitting frame's fence and they are
-    // destroyed once that fence has been signaled.
+    // ---- External (swapchain-owned) texture/view registration ----
+    [[nodiscard]] RID texture_allocate_rid(VkImage image, const TextureDesc& desc);
+    [[nodiscard]] RID
+    texture_view_allocate_rid(RID texture, VkImageView view, const TextureViewDesc& desc);
+
+    // ---- Command buffer staging support ----
+    // update* commands run while a command buffer is being recorded, so scratch buffers must
+    // outlive the recording itself. The device owns them: submit tags them with the submitting
+    // frame's fence and they are destroyed once that fence has been signaled.
     [[nodiscard]] RID acquireStagingBuffer(std::uint64_t size);
     void tagPendingStagingBuffers(VkFence fence);
     // Destroys staging buffers whose fence has been signaled. Called at frame boundaries.
@@ -142,29 +158,19 @@ private:
         [[nodiscard]] bool complete() const { return hasGraphics && hasPresent; }
     };
 
-    struct BufferResource {
-        std::unique_ptr<VulkanBuffer> resource;
-        MemoryUsage memoryUsage{MemoryUsage::DeviceLocal};
-    };
+    // Per-family pool primitives. allocate_rid emplaces a concrete instance and returns its RID;
+    // release_rid destroys it in place. create/destroy wrap these with validation and native
+    // teardown (dedup tables, descriptor frees, view cascades). Bind groups are plain
+    // VkDescriptorSet values, so their pool needs no wrapper type.
+    void buffer_release_rid(RID handle) { (void)buffers_.release(handle); }
+    void texture_release_rid(RID handle) { (void)textures_.release(handle); }
+    void texture_view_release_rid(RID handle) { (void)textureViews_.release(handle); }
+    void sampler_release_rid(RID handle) { (void)samplers_.release(handle); }
+    void shader_release_rid(RID handle) { (void)shaders_.release(handle); }
+    void pipeline_release_rid(RID handle) { (void)pipelines_.release(handle); }
+    void bind_group_layout_release_rid(RID handle) { (void)bindGroupLayouts_.release(handle); }
+    void bind_group_release_rid(RID handle) { (void)bindGroups_.release(handle); }
 
-    struct ShaderResource {
-        std::unique_ptr<VulkanShaderModule> resource;
-    };
-
-    struct PipelineResource {
-        std::unique_ptr<VulkanGraphicsPipeline> resource;
-    };
-
-    struct BindGroupLayoutResource {
-        std::unique_ptr<VulkanDescriptorSetLayout> resource;
-    };
-
-    struct BindGroupResource {
-        VkDescriptorSet resource{VK_NULL_HANDLE};
-    };
-
-    [[nodiscard]] BufferResource& requireBufferResource(RID handle);
-    [[nodiscard]] const BufferResource& requireBufferResource(RID handle) const;
     [[nodiscard]] VulkanBuffer& requireBuffer(RID handle);
     [[nodiscard]] const VulkanBuffer& requireBuffer(RID handle) const;
     void createInstance();
@@ -178,7 +184,7 @@ private:
     void createCommandPool();
     void createPipelineCache();
     void savePipelineCache();
-    [[nodiscard]] VkPipelineLayout acquirePipelineLayout(const PipelineLayoutKey& key);
+    [[nodiscard]] VkPipelineLayout acquirePipelineLayout(const std::vector<RID>& key);
     void destroyPipelineLayoutsReferencing(RID handle);
     void clear();
 
@@ -202,19 +208,23 @@ private:
     std::uint32_t graphicsQueueFamily_{};
     std::uint32_t presentQueueFamily_{};
     float maxSamplerAnisotropy_{1.0F};
-    HandlePool<BufferResource, RID> buffers_;
+
+    // One pool per object family, storing concrete Vulkan instances directly (by value).
+    HandlePool<VulkanBuffer, RID> buffers_;
+    HandlePool<VulkanTexture, RID> textures_;
+    HandlePool<VulkanTextureView, RID> textureViews_;
+    HandlePool<VulkanSampler, RID> samplers_;
+    HandlePool<VulkanShaderModule, RID> shaders_;
+    HandlePool<VulkanGraphicsPipeline, RID> pipelines_;
+    HandlePool<VulkanDescriptorSetLayout, RID> bindGroupLayouts_;
+    HandlePool<VkDescriptorSet, RID> bindGroups_;
+    HandlePool<VulkanCommandBuffer, RID> commandBuffers_;
+
     std::vector<StagingBuffer> pendingStagingBuffers_;
-    HandlePool<ShaderResource, RID> shaders_;
-    HandlePool<PipelineResource, RID> pipelines_;
-    HandlePool<BindGroupLayoutResource, RID> bindGroupLayouts_;
-    HandlePool<BindGroupResource, RID> bindGroups_;
-    // Texture/view/sampler RID registries live in the IDevice base pools. Samplers are pure
-    // value objects, so this map preserves the identical-SamplerDesc sharing (one VkSampler per
-    // distinct descriptor) on top of the base pool.
+    // Samplers are pure value objects, so this map preserves identical-SamplerDesc sharing
+    // (one VkSampler per distinct descriptor) on top of the sampler pool.
     std::unordered_map<SamplerDesc, RID, SamplerDescHash> samplerDedup_;
-    // Device-level view dedup: texture RID -> (normalized view desc -> view RID). Replaces the
-    // old per-VulkanTexture view cache; the thinned IRHITexture no longer owns views. Named
-    // distinctly from the IDevice base pool `textureViews_` to avoid shadowing it.
+    // Device-level view dedup: texture RID -> (normalized view desc -> view RID).
     std::unordered_map<std::uint64_t,
                        std::unordered_map<TextureViewDesc, RID, TextureViewDescHash>>
         viewDedup_;

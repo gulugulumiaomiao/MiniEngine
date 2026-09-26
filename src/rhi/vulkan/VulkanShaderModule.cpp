@@ -1,18 +1,12 @@
 #include "rhi/vulkan/VulkanShaderModule.h"
 #include "core/logging/Log.h"
 
-#include <string>
-
 namespace engine::rhi::vulkan {
 
 VulkanShaderModule::VulkanShaderModule(VkDevice device,
-                                       ShaderStage stage,
                                        std::span<const std::byte> bytecode,
                                        std::string_view debugName)
-    : device_(device),
-      info_{.stage = stage,
-            .bytecodeSize = bytecode.size(),
-            .debugName = std::string{debugName}} {
+    : device_(device) {
     const std::size_t byteCount = bytecode.size();
     if (byteCount == 0 || byteCount % sizeof(std::uint32_t) != 0) {
         Log::fatal("VulkanShaderModule",

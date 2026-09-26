@@ -1,7 +1,7 @@
 #pragma once
 
 #include "render/scene/RenderScene.h"
-#include "rhi/api/PipelineDesc.h"
+#include "rhi/api/ResourceDesc.h"
 
 #include <cstdint>
 
@@ -14,7 +14,6 @@ class RgTexturePool;
 namespace rhi {
 class IDevice;
 class ISwapchain;
-class ICommandBuffer;
 } // namespace rhi
 
 class RenderContext final {
@@ -23,7 +22,7 @@ public:
 
     [[nodiscard]] rhi::IDevice& device() const;
     [[nodiscard]] rhi::ISwapchain& swapchain() const;
-    [[nodiscard]] rhi::ICommandBuffer& commandBuffer() const;
+    [[nodiscard]] rhi::RID commandBuffer() const;
     [[nodiscard]] RenderTarget& currentForwardTarget() const;
     [[nodiscard]] RgTexturePool& rgTexturePool() const;
     [[nodiscard]] std::uint32_t frameIndex() const;

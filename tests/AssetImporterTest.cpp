@@ -10,7 +10,7 @@
 #include "render/mesh/Mesh.h"
 #include "render/shader/Shader.h"
 #include "render/texture/Texture.h"
-#include "rhi/api/Sampler.h"
+#include "rhi/api/ResourceDesc.h"
 
 #include <algorithm>
 #include <array>

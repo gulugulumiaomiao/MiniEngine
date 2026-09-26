@@ -66,16 +66,17 @@ rhi::ColorWriteMask toRhiColorMask(std::string_view mask) {
     return result;
 }
 
-void applyRenderState(rhi::ICommandBuffer& commandBuffer, const RenderStateDesc& state) {
-    commandBuffer.setPrimitiveTopology(toRhi(state.topology));
-    commandBuffer.setFillMode(toRhi(state.fill));
-    commandBuffer.setCullMode(toRhi(state.cull));
-    commandBuffer.setFrontFace(toRhi(state.frontFace));
-    commandBuffer.setDepthTestEnable(state.depthTest != DepthCompare::Always || state.depthWrite);
-    commandBuffer.setDepthWriteEnable(state.depthWrite);
-    commandBuffer.setDepthCompareOp(toRhi(state.depthTest));
-    commandBuffer.setBlendState(toRhi(state.blend));
-    commandBuffer.setColorWriteMask(toRhiColorMask(state.colorMask));
+void applyRenderState(rhi::RID commandBuffer, const RenderStateDesc& state) {
+    rhi::setPrimitiveTopology(commandBuffer, toRhi(state.topology));
+    rhi::setFillMode(commandBuffer, toRhi(state.fill));
+    rhi::setCullMode(commandBuffer, toRhi(state.cull));
+    rhi::setFrontFace(commandBuffer, toRhi(state.frontFace));
+    rhi::setDepthTestEnable(commandBuffer,
+                            state.depthTest != DepthCompare::Always || state.depthWrite);
+    rhi::setDepthWriteEnable(commandBuffer, state.depthWrite);
+    rhi::setDepthCompareOp(commandBuffer, toRhi(state.depthTest));
+    rhi::setBlendState(commandBuffer, toRhi(state.blend));
+    rhi::setColorWriteMask(commandBuffer, toRhiColorMask(state.colorMask));
 }
 
 } // namespace
@@ -84,7 +85,7 @@ void drawFilteredItems(std::uint32_t frameIndex,
                        std::span<const DrawItem> items,
                        rhi::RID sceneBindGroup,
                        rhi::RID globalBindGroup,
-                       rhi::ICommandBuffer& commandBuffer) {
+                       rhi::RID commandBuffer) {
     DrawBatcher batcher;
     BatchedDrawList batched = batcher.build(items);
     if (batched.batches.empty()) {
@@ -106,8 +107,8 @@ void drawFilteredItems(std::uint32_t frameIndex,
     const ShaderPass* boundShaderPass = nullptr;
     for (const DrawBatch& batch : batched.batches) {
         if (batch.pipeline != boundPipeline) {
-            commandBuffer.bindPipeline(batch.pipeline);
-            commandBuffer.bindGroup(0, sceneBindGroup);
+            rhi::bindPipeline(commandBuffer, batch.pipeline);
+            rhi::bindGroup(commandBuffer, 0, sceneBindGroup);
             boundPipeline = batch.pipeline;
             boundGlobal = {}; // Pipeline change may require set 2 rebind.
         }
@@ -116,22 +117,23 @@ void drawFilteredItems(std::uint32_t frameIndex,
             boundShaderPass = batch.shaderPass;
         }
         if (batch.materialBindGroup != boundMaterial) {
-            commandBuffer.bindGroup(1, batch.materialBindGroup);
+            rhi::bindGroup(commandBuffer, 1, batch.materialBindGroup);
             boundMaterial = batch.materialBindGroup;
         }
         if (globalBindGroup && globalBindGroup != boundGlobal) {
-            commandBuffer.bindGroup(2, globalBindGroup);
+            rhi::bindGroup(commandBuffer, 2, globalBindGroup);
             boundGlobal = globalBindGroup;
         }
         for (const DrawItem::VertexBuffer& vertex : batch.vertexBuffers) {
-            commandBuffer.bindVertexBuffer(vertex.binding, vertex.buffer);
+            rhi::bindVertexBuffer(commandBuffer, vertex.binding, vertex.buffer);
         }
-        commandBuffer.bindIndexBuffer(batch.indexBuffer, 0, batch.indexFormat);
-        commandBuffer.drawIndexed({.indexCount = batch.indexCount,
-                             .instanceCount = batch.instanceCount,
-                             .firstIndex = batch.firstIndex,
-                             .vertexOffset = batch.vertexOffset,
-                             .firstInstance = baseSlot + batch.firstInstance});
+        rhi::bindIndexBuffer(commandBuffer, batch.indexBuffer, 0, batch.indexFormat);
+        rhi::drawIndexed(commandBuffer,
+                         {.indexCount = batch.indexCount,
+                          .instanceCount = batch.instanceCount,
+                          .firstIndex = batch.firstIndex,
+                          .vertexOffset = batch.vertexOffset,
+                          .firstInstance = baseSlot + batch.firstInstance});
     }
 }
 

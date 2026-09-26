@@ -1,7 +1,7 @@
 #pragma once
 
 #include "render/render_graph/RgTypes.h"
-#include "rhi/api/RhiTypes.h"
+#include "rhi/api/ResourceDesc.h"
 
 #include <cstdint>
 #include <memory>

@@ -6,7 +6,7 @@
 #include "core/base/Ref.h"
 #include "core/base/RefCounted.h"
 #include "render/texture/Sampler.h" // engine::SamplerDesc / TextureFilterMode / toRhi
-#include "rhi/api/TextureView.h"    // rhi::RID / rhi::TextureBinding
+#include "rhi/api/ResourceDesc.h" // rhi::RID / rhi::TextureBinding
 
 #include <cstddef>
 #include <cstdint>

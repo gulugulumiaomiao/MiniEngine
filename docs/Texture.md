@@ -1,6 +1,6 @@
 # Texture 系统
 
-Texture 系统把资产数据、运行时 GPU 资源与采样状态拆成三层：`TextureAsset`（层1 序列化源）、`Texture` / `Sampler`（层2 运行时）、`rhi::IRHITexture` / `IRHITextureView` / `IRHISampler`（层3）。当前 Vulkan 创建与上传路径只接受单层 `Texture2D`；`Texture2DArray`、`Texture3D`、`TextureCube`、`TextureCubeArray` 已进入数据模型，但在 `computeTextureLayout`/`validateTexture` 统一校验点被明确拒绝。
+Texture 系统把资产数据、运行时 GPU 资源与采样状态拆成三层：`TextureAsset`（层1 序列化源）、`Texture` / `Sampler`（层2 运行时）、`rhi::RID`（层3；实例为 `VulkanDevice` 分类型池持有的 `VulkanTexture`/`VulkanTextureView`/`VulkanSampler`，`IRHITexture` 等抽象接口已删除）。当前 Vulkan 创建与上传路径只接受单层 `Texture2D`；`Texture2DArray`、`Texture3D`、`TextureCube`、`TextureCubeArray` 已进入数据模型，但在 `computeTextureLayout`/`validateTexture` 统一校验点被明确拒绝。
 
 ## 1. 分层模型
 
@@ -13,7 +13,7 @@ Texture 系统把资产数据、运行时 GPU 资源与采样状态拆成三层�
 | 层3 RHI | `IRHITextureView` / `VulkanTextureView` | 管理 VkImageView，回指所属 RHI Texture；**不持 TextureViewDesc** |
 | 层3 RHI | `IRHISampler`（仅虚析构）/ `VulkanSampler` | 管理 VkSampler，只留原生 create-info（不持 SamplerDesc）；由 `IDevice` 按 `SamplerDesc` 去重 |
 
-三个句柄池 `HandlePool<IRHITexture|IRHITextureView|IRHISampler, RID>` 全部内嵌 `rhi::IDevice`（全局单例，`IDevice::active()`）。**不存在** `TextureManager` / `TextureResourceManager` / gpu 层 `TextureStorage`，层2 也没有 `TextureView` 类（view 概念只在层3）。核心约束不变：`Texture` 不直接绑定 shader，规范绑定单位是 `rhi::TextureBinding { view, sampler }`。
+句柄池按类型分开、直接存 `VulkanTexture`/`VulkanTextureView`/`VulkanSampler` 实例，全部内嵌具体 `VulkanDevice`；`rhi::IDevice`（全局单例，`IDevice::active()`）只声明 RID 生命周期虚函数，`IRHITexture`/`IRHITextureView`/`IRHISampler` 抽象接口已删除。**不存在** `TextureManager` / `TextureResourceManager` / gpu 层 `TextureStorage`，层2 也没有 `TextureView` 类（view 概念只在层3）。核心约束不变：`Texture` 不直接绑定 shader，规范绑定单位是 `rhi::TextureBinding { view, sampler }`。
 
 ## 2. 数据与加载流程
 

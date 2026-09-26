@@ -42,7 +42,7 @@ bool RenderTarget::createAttachment(rhi::PixelFormat format,
                                     Attachment& destination) {
     Attachment created;
     created.format = format;
-    created.texture = device_.createTexture({
+    created.texture = device_.texture_create({
         .dimension = rhi::TextureType::Texture2D,
         .format = format,
         .width = desc_.width,
@@ -56,9 +56,9 @@ bool RenderTarget::createAttachment(rhi::PixelFormat format,
         Log::error("RenderTarget", "The RHI did not create a render-target texture");
         return false;
     }
-    created.view = device_.defaultTextureView(created.texture);
+    created.view = device_.texture_default_view(created.texture);
     if (!created.view) {
-        device_.destroyTexture(created.texture);
+        device_.texture_destroy(created.texture);
         Log::error("RenderTarget", "The RHI did not create a render-target texture view");
         return false;
     }
@@ -130,7 +130,7 @@ bool RenderTarget::resize(std::uint32_t width, std::uint32_t height) {
 void RenderTarget::releaseAttachment(Attachment& attachment) {
     // The default view is owned by the RHI Texture and is released with it.
     if (attachment.texture)
-        device_.destroyTexture(attachment.texture);
+        device_.texture_destroy(attachment.texture);
     attachment = {};
 }
 

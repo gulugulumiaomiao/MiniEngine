@@ -1,7 +1,7 @@
 #pragma once
 
 #include "render/material/Material.h"
-#include "rhi/api/RhiTypes.h"
+#include "rhi/api/ResourceDesc.h"
 #include "render/base/RenderHandle.h"
 
 #include <cstddef>

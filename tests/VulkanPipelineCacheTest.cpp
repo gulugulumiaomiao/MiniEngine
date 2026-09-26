@@ -154,7 +154,7 @@ engine::rhi::RID createLayout(engine::rhi::vulkan::VulkanDevice& device,
     engine::rhi::BindGroupLayoutDesc desc;
     desc.entries = entries;
     desc.debugName = "TestLayout";
-    return device.createBindGroupLayout(desc);
+    return device.bind_group_layout_create(desc);
 }
 
 Fixture createFixture(engine::rhi::vulkan::VulkanDevice& device) {
@@ -163,20 +163,20 @@ Fixture createFixture(engine::rhi::vulkan::VulkanDevice& device) {
     vertexDesc.stage = engine::rhi::ShaderStage::Vertex;
     vertexDesc.bytecode = spirvBytes(kVertexSpirv.data(), kVertexSpirv.size());
     vertexDesc.debugName = "TestVertex";
-    fixture.vertex = device.createShader(vertexDesc);
+    fixture.vertex = device.shader_create(vertexDesc);
     engine::rhi::ShaderDesc fragmentDesc;
     fragmentDesc.stage = engine::rhi::ShaderStage::Fragment;
     fragmentDesc.bytecode = spirvBytes(kFragmentSpirv.data(), kFragmentSpirv.size());
     fragmentDesc.debugName = "TestFragment";
-    fixture.fragment = device.createShader(fragmentDesc);
+    fixture.fragment = device.shader_create(fragmentDesc);
     fixture.layout = createLayout(device, 1);
     return fixture;
 }
 
 void destroyFixture(engine::rhi::vulkan::VulkanDevice& device, const Fixture& fixture) {
-    device.destroyBindGroupLayout(fixture.layout);
-    device.destroyShader(fixture.vertex);
-    device.destroyShader(fixture.fragment);
+    device.bind_group_layout_destroy(fixture.layout);
+    device.shader_destroy(fixture.vertex);
+    device.shader_destroy(fixture.fragment);
 }
 
 engine::rhi::GraphicsPipelineDesc basePipelineDesc(const Fixture& fixture) {
@@ -199,10 +199,10 @@ engine::rhi::GraphicsPipelineDesc basePipelineDesc(const Fixture& fixture) {
     });
     auto& device = static_cast<engine::rhi::vulkan::VulkanDevice&>(*context.device);
     const Fixture fixture = createFixture(device);
-    const auto pipeline = device.createGraphicsPipeline(basePipelineDesc(fixture));
+    const auto pipeline = device.pipeline_create(basePipelineDesc(fixture));
     const auto resolved = device.resolvePipeline(pipeline);
     const bool valid = resolved.layout != VK_NULL_HANDLE && resolved.pipeline != VK_NULL_HANDLE;
-    device.destroyGraphicsPipeline(pipeline);
+    device.pipeline_destroy(pipeline);
     destroyFixture(device, fixture);
     return valid;
 }
@@ -263,16 +263,16 @@ int main() {
         const Fixture fixture = createFixture(device);
         engine::rhi::GraphicsPipelineDesc desc = basePipelineDesc(fixture);
 
-        const engine::rhi::RID first = device.createGraphicsPipeline(desc);
-        const engine::rhi::RID second = device.createGraphicsPipeline(desc);
+        const engine::rhi::RID first = device.pipeline_create(desc);
+        const engine::rhi::RID second = device.pipeline_create(desc);
         if (device.resolvePipeline(first).layout == VK_NULL_HANDLE ||
             device.resolvePipeline(first).layout != device.resolvePipeline(second).layout) {
             return 1;
         }
 
         // Destroying a pipeline must not invalidate the shared layout cache.
-        device.destroyGraphicsPipeline(first);
-        const engine::rhi::RID third = device.createGraphicsPipeline(desc);
+        device.pipeline_destroy(first);
+        const engine::rhi::RID third = device.pipeline_create(desc);
         if (device.resolvePipeline(third).layout != device.resolvePipeline(second).layout) {
             return 2;
         }
@@ -280,7 +280,7 @@ int main() {
         // A different bind group layout gets a different pipeline layout.
         const engine::rhi::RID other = createLayout(device, 2);
         desc.bindGroupLayouts = {other};
-        const engine::rhi::RID fourth = device.createGraphicsPipeline(desc);
+        const engine::rhi::RID fourth = device.pipeline_create(desc);
         if (device.resolvePipeline(fourth).layout == VK_NULL_HANDLE ||
             device.resolvePipeline(fourth).layout == device.resolvePipeline(second).layout) {
             return 3;
@@ -288,22 +288,22 @@ int main() {
 
         // Destroying a bind group layout invalidates cached pipeline layouts;
         // rebuilding an equivalent layout yields a usable pipeline again.
-        device.destroyGraphicsPipeline(second);
-        device.destroyGraphicsPipeline(third);
-        device.destroyGraphicsPipeline(fourth);
-        device.destroyBindGroupLayout(fixture.layout);
-        device.destroyBindGroupLayout(other);
+        device.pipeline_destroy(second);
+        device.pipeline_destroy(third);
+        device.pipeline_destroy(fourth);
+        device.bind_group_layout_destroy(fixture.layout);
+        device.bind_group_layout_destroy(other);
         const engine::rhi::RID recreated = createLayout(device, 1);
         desc.bindGroupLayouts = {recreated};
-        const engine::rhi::RID fifth = device.createGraphicsPipeline(desc);
+        const engine::rhi::RID fifth = device.pipeline_create(desc);
         if (device.resolvePipeline(fifth).layout == VK_NULL_HANDLE ||
             device.resolvePipeline(fifth).pipeline == VK_NULL_HANDLE) {
             return 4;
         }
-        device.destroyGraphicsPipeline(fifth);
-        device.destroyBindGroupLayout(recreated);
-        device.destroyShader(fixture.vertex);
-        device.destroyShader(fixture.fragment);
+        device.pipeline_destroy(fifth);
+        device.bind_group_layout_destroy(recreated);
+        device.shader_destroy(fixture.vertex);
+        device.shader_destroy(fixture.fragment);
     }
     if (!cacheFileHasEntries(cachePath)) {
         return 5;
@@ -319,12 +319,12 @@ int main() {
         auto& device = static_cast<engine::rhi::vulkan::VulkanDevice&>(*context.device);
         const Fixture fixture = createFixture(device);
         engine::rhi::GraphicsPipelineDesc desc = basePipelineDesc(fixture);
-        const engine::rhi::RID pipeline = device.createGraphicsPipeline(desc);
+        const engine::rhi::RID pipeline = device.pipeline_create(desc);
         if (device.resolvePipeline(pipeline).layout == VK_NULL_HANDLE ||
             device.resolvePipeline(pipeline).pipeline == VK_NULL_HANDLE) {
             return 6;
         }
-        device.destroyGraphicsPipeline(pipeline);
+        device.pipeline_destroy(pipeline);
         destroyFixture(device, fixture);
     }
     if (!cacheFileHasEntries(cachePath)) {
@@ -342,12 +342,12 @@ int main() {
         engine::rhi::vulkan::VulkanDevice device{surface};
         const Fixture fixture = createFixture(device);
         engine::rhi::GraphicsPipelineDesc desc = basePipelineDesc(fixture);
-        const engine::rhi::RID pipeline = device.createGraphicsPipeline(desc);
+        const engine::rhi::RID pipeline = device.pipeline_create(desc);
         if (device.resolvePipeline(pipeline).layout == VK_NULL_HANDLE ||
             device.resolvePipeline(pipeline).pipeline == VK_NULL_HANDLE) {
             return 9;
         }
-        device.destroyGraphicsPipeline(pipeline);
+        device.pipeline_destroy(pipeline);
         destroyFixture(device, fixture);
     }
     if (!cacheFileHasEntries(cachePath)) {

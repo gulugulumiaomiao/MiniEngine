@@ -3,6 +3,7 @@
 #include "core/logging/Log.h"
 
 #include "core/base/BuildConfig.h"
+#include "rhi/vulkan/VulkanConversions.h"
 #include "rhi/vulkan/VulkanDevice.h"
 
 #include <array>
@@ -62,45 +63,6 @@ VkAttachmentLoadOp mapLoadOp(LoadOp operation) {
 VkAttachmentStoreOp mapStoreOp(StoreOp operation) {
     return operation == StoreOp::Store ? VK_ATTACHMENT_STORE_OP_STORE
                                        : VK_ATTACHMENT_STORE_OP_DONT_CARE;
-}
-
-VkCullModeFlags toVulkan(CullMode mode) {
-    switch (mode) {
-    case CullMode::None: return VK_CULL_MODE_NONE;
-    case CullMode::Front: return VK_CULL_MODE_FRONT_BIT;
-    case CullMode::Back: return VK_CULL_MODE_BACK_BIT;
-    }
-    return VK_CULL_MODE_NONE;
-}
-
-VkFrontFace toVulkan(FrontFace face) {
-    return face == FrontFace::Clockwise ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE;
-}
-
-VkCompareOp toVulkan(CompareOp compare) {
-    switch (compare) {
-    case CompareOp::Never: return VK_COMPARE_OP_NEVER;
-    case CompareOp::Less: return VK_COMPARE_OP_LESS;
-    case CompareOp::LessEqual: return VK_COMPARE_OP_LESS_OR_EQUAL;
-    case CompareOp::Equal: return VK_COMPARE_OP_EQUAL;
-    case CompareOp::Greater: return VK_COMPARE_OP_GREATER;
-    case CompareOp::GreaterEqual: return VK_COMPARE_OP_GREATER_OR_EQUAL;
-    case CompareOp::Always: return VK_COMPARE_OP_ALWAYS;
-    }
-    return VK_COMPARE_OP_ALWAYS;
-}
-
-VkColorComponentFlags toVulkan(ColorWriteMask mask) {
-    VkColorComponentFlags result = 0;
-    if (hasFlag(mask, ColorWriteMask::Red))
-        result |= VK_COLOR_COMPONENT_R_BIT;
-    if (hasFlag(mask, ColorWriteMask::Green))
-        result |= VK_COLOR_COMPONENT_G_BIT;
-    if (hasFlag(mask, ColorWriteMask::Blue))
-        result |= VK_COLOR_COMPONENT_B_BIT;
-    if (hasFlag(mask, ColorWriteMask::Alpha))
-        result |= VK_COLOR_COMPONENT_A_BIT;
-    return result;
 }
 
 void toVulkanBlend(BlendMode mode, VkColorBlendEquationEXT& equation, VkBool32& enable) {
@@ -542,7 +504,7 @@ void VulkanCommandBuffer::updateBuffer(const BufferUpdate& update) {
     // Vulkan has no arbitrary-size in-command update, so stage the payload in a
     // host-visible scratch buffer owned by the device and copy from there.
     const RID staging = device_.acquireStagingBuffer(update.data.size_bytes());
-    device_.uploadBuffer(staging, update.data);
+    device_.buffer_upload(staging, update.data);
     const BufferCopy copy{staging, update.destination, 0, update.offset, update.data.size_bytes()};
     copyBuffer(copy);
 }
@@ -560,7 +522,7 @@ void VulkanCommandBuffer::updateImage(const ImageUpdate& update) {
         Log::fatal("VulkanCommandBuffer", "Image update data does not match the extent");
     }
     const RID staging = device_.acquireStagingBuffer(update.data.size_bytes());
-    device_.uploadBuffer(staging, update.data);
+    device_.buffer_upload(staging, update.data);
     const BufferImageCopy copy{staging,
                                update.destination,
                                0,

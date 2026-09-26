@@ -92,7 +92,7 @@ void RenderGraph::compile(RgTexturePool& pool) {
     compiled_ = true;
 }
 
-void RenderGraph::execute(rhi::ICommandBuffer& commandBuffer) const {
+void RenderGraph::execute(rhi::RID commandBuffer) const {
     if (!compiled_) {
         Log::fatal("RenderGraph", "RenderGraph must be compiled before execute");
     }
@@ -132,12 +132,12 @@ void RenderGraph::execute(rhi::ICommandBuffer& commandBuffer) const {
                 state->current = usage.state;
             }
         }
-        commandBuffer.beginDebugLabel(pass.name, {0.25F, 0.55F, 1.0F, 1.0F});
-        commandBuffer.resourceBarriers(barriers);
-        commandBuffer.beginRendering(pass.rendering);
+        rhi::beginDebugLabel(commandBuffer, pass.name, {0.25F, 0.55F, 1.0F, 1.0F});
+        rhi::resourceBarriers(commandBuffer, barriers);
+        rhi::beginRendering(commandBuffer, pass.rendering);
         pass.execute(commandBuffer);
-        commandBuffer.endRendering();
-        commandBuffer.endDebugLabel();
+        rhi::endRendering(commandBuffer);
+        rhi::endDebugLabel(commandBuffer);
     }
 
     std::vector<rhi::TextureBarrier> finalBarriers;
@@ -152,7 +152,7 @@ void RenderGraph::execute(rhi::ICommandBuffer& commandBuffer) const {
             finalBarriers.push_back({state.texture, state.aspect, state.current, state.final});
         }
     }
-    commandBuffer.resourceBarriers(finalBarriers);
+    rhi::resourceBarriers(commandBuffer, finalBarriers);
     for (State& state : states) {
         if (state.tracked) {
             *state.tracked = state.final;

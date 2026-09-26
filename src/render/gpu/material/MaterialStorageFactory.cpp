@@ -11,7 +11,7 @@ namespace engine {
 bool MaterialStorageFactory::create(const MaterialStorageCreateInfo& request,
                                     MaterialStorageEntry& destination) {
     if (destination.bindGroup) {
-        device_.destroyBindGroup(destination.bindGroup);
+        device_.bind_group_destroy(destination.bindGroup);
         destination.bindGroup = {};
     }
 
@@ -19,8 +19,8 @@ bool MaterialStorageFactory::create(const MaterialStorageCreateInfo& request,
         std::max<std::size_t>(16, request.material.uniformBytes().size());
     if (!destination.uniformBuffer || destination.uniformCapacity < byteSize) {
         if (destination.uniformBuffer)
-            device_.destroyBuffer(destination.uniformBuffer);
-        destination.uniformBuffer = device_.createBuffer({
+            device_.buffer_destroy(destination.uniformBuffer);
+        destination.uniformBuffer = device_.buffer_create({
             .size = byteSize,
             .usage = rhi::BufferUsage::Uniform,
             .memoryUsage = rhi::MemoryUsage::Upload,
@@ -29,7 +29,7 @@ bool MaterialStorageFactory::create(const MaterialStorageCreateInfo& request,
         destination.uniformCapacity = byteSize;
     }
     if (!request.material.uniformBytes().empty())
-        device_.uploadBuffer(destination.uniformBuffer, request.material.uniformBytes());
+        device_.buffer_upload(destination.uniformBuffer, request.material.uniformBytes());
 
     std::vector<rhi::BindGroupEntry> bindings;
     bindings.reserve(request.textures.size() + 1);
@@ -48,7 +48,7 @@ bool MaterialStorageFactory::create(const MaterialStorageCreateInfo& request,
             .sampler = resolved.sampler,
         });
     }
-    destination.bindGroup = device_.createBindGroup({layout_, bindings, "Material bind group"});
+    destination.bindGroup = device_.bind_group_create({layout_, bindings, "Material bind group"});
     if (!destination.bindGroup)
         return false;
 
@@ -67,16 +67,16 @@ bool MaterialStorageFactory::updateUniforms(const Material& material,
     if (material.version() == resource.uniformVersion)
         return true;
     if (!material.uniformBytes().empty())
-        device_.uploadBuffer(resource.uniformBuffer, material.uniformBytes());
+        device_.buffer_upload(resource.uniformBuffer, material.uniformBytes());
     resource.uniformVersion = material.version();
     return true;
 }
 
 void MaterialStorageFactory::release(MaterialStorageEntry& resource) {
     if (resource.bindGroup)
-        device_.destroyBindGroup(resource.bindGroup);
+        device_.bind_group_destroy(resource.bindGroup);
     if (resource.uniformBuffer)
-        device_.destroyBuffer(resource.uniformBuffer);
+        device_.buffer_destroy(resource.uniformBuffer);
     resource = {};
 }
 

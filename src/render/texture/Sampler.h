@@ -3,8 +3,7 @@
 #include "core/base/Ref.h"
 #include "core/base/RefCounted.h"
 #include "core/serialization/Transferable.h"
-#include "rhi/api/RhiTypes.h" // rhi::RID
-#include "rhi/api/Sampler.h"  // rhi::SamplerDesc（toRhi 翻译目标）
+#include "rhi/api/ResourceDesc.h" // rhi::RID / rhi::SamplerDesc（toRhi 翻译目标）
 
 namespace engine {
 

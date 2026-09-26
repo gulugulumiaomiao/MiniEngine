@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rhi/api/TextureView.h"
+#include "rhi/api/ResourceDesc.h"
 
 #include <vulkan/vulkan.h>
 
@@ -8,7 +8,10 @@ namespace engine::rhi::vulkan {
 
 class VulkanTexture;
 
-class VulkanTextureView final : public IRHITextureView {
+// Concrete Vulkan image view. Stored directly (by value) in the device's texture-view handle
+// pool; view creation and dedup live in VulkanDevice, so this object keeps only its native
+// VkImageView. Non-copyable and non-movable (the pool constructs it in place).
+class VulkanTextureView final {
 public:
     VulkanTextureView(VkDevice device, VulkanTexture& texture, TextureViewDesc desc);
     // Wraps an externally owned view (for example a swapchain image view).
@@ -16,11 +19,11 @@ public:
                       VulkanTexture& texture,
                       VkImageView externalView,
                       TextureViewDesc desc);
-    ~VulkanTextureView() override;
+    ~VulkanTextureView();
 
     VulkanTextureView(const VulkanTextureView&) = delete;
     VulkanTextureView& operator=(const VulkanTextureView&) = delete;
-    VulkanTextureView(VulkanTextureView&& other) noexcept;
+    VulkanTextureView(VulkanTextureView&&) = delete;
     VulkanTextureView& operator=(VulkanTextureView&&) = delete;
 
     [[nodiscard]] VkImageView handle() const { return view_; }

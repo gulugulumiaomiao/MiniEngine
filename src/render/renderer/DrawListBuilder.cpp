@@ -12,7 +12,7 @@
 #include "render/render_target/RenderTarget.h"
 #include "render/scene/RenderScene.h"
 #include "render/shader/Shader.h"
-#include "rhi/api/Swapchain.h"
+#include "rhi/api/Device.h"
 
 #include <algorithm>
 #include <array>

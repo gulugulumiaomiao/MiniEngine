@@ -14,7 +14,7 @@ RgTexturePool::~RgTexturePool() {
     for (Bucket& bucket : buckets_) {
         for (const std::unique_ptr<PooledTexture>& entry : bucket.entries) {
             if (entry->texture)
-                device_.destroyTexture(entry->texture);
+                device_.texture_destroy(entry->texture);
         }
     }
 }
@@ -105,14 +105,14 @@ RgTexturePool::createEntry(const RgTextureDesc& desc) {
     textureDesc.usage = desc.usage;
     textureDesc.debugName = desc.debugName;
 
-    entry->texture = device_.createTexture(textureDesc);
+    entry->texture = device_.texture_create(textureDesc);
     if (!entry->texture) {
         Log::fatal("RgTexturePool", "Failed to create pooled texture");
     }
 
-    entry->view = device_.defaultTextureView(entry->texture);
+    entry->view = device_.texture_default_view(entry->texture);
     if (!entry->view) {
-        device_.destroyTexture(entry->texture);
+        device_.texture_destroy(entry->texture);
         Log::fatal("RgTexturePool", "Failed to create pooled texture view");
     }
 

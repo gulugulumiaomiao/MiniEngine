@@ -6,7 +6,7 @@
 #include "core/serialization/Transfer.h"
 #include "render/texture/Sampler.h"
 #include "rhi/api/Device.h"
-#include "rhi/api/Sampler.h"
+#include "rhi/api/ResourceDesc.h"
 
 #include <algorithm>
 #include <limits>
@@ -172,7 +172,7 @@ Texture::Texture(const TextureDesc& desc)
                                       .usage = rhi::TextureUsage::Sampled |
                                                rhi::TextureUsage::TransferDestination,
                                       .debugName = "Texture"};
-    texture_ = device->createTexture(deviceDesc);
+    texture_ = device->texture_create(deviceDesc);
     if (!texture_) {
         Log::error("Texture", "Failed to create RHI texture");
         return;
@@ -182,8 +182,8 @@ Texture::Texture(const TextureDesc& desc)
     viewDesc.type = desc.type;
     viewDesc.mipCount = desc.mipCount;
     viewDesc.layerCount = desc.arrayLayers;
-    view_ = device->createTextureView(texture_, toRhiView(viewDesc, desc.format));
-    sampler_ = device->createSampler(toRhi(desc.sampler));
+    view_ = device->texture_view_create(texture_, toRhiView(viewDesc, desc.format));
+    sampler_ = device->sampler_create(toRhi(desc.sampler));
     if (!view_ || !sampler_)
         Log::error("Texture", "Failed to create default view/sampler");
 }
@@ -196,9 +196,9 @@ Texture::~Texture() {
     // 在设备切换时由静态方法先 detachFromDeadDevice() 置空句柄，故此处 view_/texture_ 为空即跳过。
     if (rhi::IDevice* device = rhi::IDevice::active()) {
         if (view_)
-            device->destroyTextureView(view_);
+            device->texture_view_destroy(view_);
         if (texture_)
-            device->destroyTexture(texture_);
+            device->texture_destroy(texture_);
     }
 }
 
@@ -257,7 +257,7 @@ void Texture::upload(std::span<const std::uint8_t> pixels) {
         mipWidth = std::max(1U, mipWidth / 2U);
         mipHeight = std::max(1U, mipHeight / 2U);
     }
-    device->uploadTexture(texture_, uploads);
+    device->texture_upload(texture_, uploads);
 }
 
 Ref<Texture> Texture::clone() const {

@@ -2,8 +2,7 @@
 
 #include "core/math/Math.h"
 #include "render/gpu/frame/FrameGpuManager.h"
-#include "rhi/api/PipelineDesc.h"
-#include "rhi/api/RhiTypes.h"
+#include "rhi/api/ResourceDesc.h"
 
 #include "imgui.h"
 
@@ -15,7 +14,6 @@ namespace engine {
 
 namespace rhi {
 class IDevice;
-class ICommandBuffer;
 } // namespace rhi
 
 } // namespace engine
@@ -52,7 +50,7 @@ public:
 
     // Records the draw calls for drawData. frameIndex selects the geometry buffers;
     // the swapchain fence already proved that frame's buffers are free to overwrite.
-    void render(rhi::ICommandBuffer& commandBuffer,
+    void render(rhi::RID commandBuffer,
                 const ImDrawData& drawData,
                 std::uint32_t frameIndex);
 

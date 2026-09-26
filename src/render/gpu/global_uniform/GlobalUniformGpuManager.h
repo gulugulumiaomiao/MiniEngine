@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/base/Singleton.h"
-#include "rhi/api/TextureView.h"
+#include "rhi/api/ResourceDesc.h"
 
 #include <cstdint>
 #include <memory>

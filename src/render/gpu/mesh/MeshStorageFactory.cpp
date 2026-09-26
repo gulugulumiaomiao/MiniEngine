@@ -23,22 +23,22 @@ bool MeshStorageFactory::create(const MeshStorageCreateInfo& request,
     uploaded.lods.push_back(std::move(baseLod));
     uploaded.drawInfo.vertexBuffers.reserve(mesh.data().vertexStreams.size());
     for (const VertexStream& stream : mesh.data().vertexStreams) {
-        const rhi::RID buffer = device_.createBuffer({
+        const rhi::RID buffer = device_.buffer_create({
             .size = stream.bytes.size(),
             .usage = rhi::BufferUsage::Vertex | rhi::BufferUsage::TransferDestination,
             .memoryUsage = rhi::MemoryUsage::DeviceLocal,
             .debugName = mesh.desc().debugName + ".vertex." + std::to_string(stream.binding),
         });
-        device_.uploadBuffer(buffer, stream.bytes);
+        device_.buffer_upload(buffer, stream.bytes);
         uploaded.drawInfo.vertexBuffers.push_back({stream.binding, buffer});
     }
-    uploaded.drawInfo.indexBuffer = device_.createBuffer({
+    uploaded.drawInfo.indexBuffer = device_.buffer_create({
         .size = mesh.data().indices.size(),
         .usage = rhi::BufferUsage::Index | rhi::BufferUsage::TransferDestination,
         .memoryUsage = rhi::MemoryUsage::DeviceLocal,
         .debugName = mesh.desc().debugName + ".index",
     });
-    device_.uploadBuffer(uploaded.drawInfo.indexBuffer, mesh.data().indices);
+    device_.buffer_upload(uploaded.drawInfo.indexBuffer, mesh.data().indices);
     uploaded.drawInfo.indexFormat = mesh.desc().indexType == IndexType::UInt16
                                         ? rhi::IndexFormat::UInt16
                                         : rhi::IndexFormat::UInt32;
@@ -54,9 +54,9 @@ bool MeshStorageFactory::create(const MeshStorageCreateInfo& request,
 
 void MeshStorageFactory::release(MeshStorageEntry& resource) {
     for (const DrawItem::VertexBuffer& vertex : resource.drawInfo.vertexBuffers)
-        device_.destroyBuffer(vertex.buffer);
+        device_.buffer_destroy(vertex.buffer);
     if (resource.drawInfo.indexBuffer)
-        device_.destroyBuffer(resource.drawInfo.indexBuffer);
+        device_.buffer_destroy(resource.drawInfo.indexBuffer);
     resource = {};
 }
 

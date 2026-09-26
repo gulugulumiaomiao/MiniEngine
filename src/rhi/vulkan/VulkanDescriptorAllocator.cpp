@@ -84,14 +84,4 @@ void VulkanDescriptorAllocator::free(VkDescriptorSet descriptor) {
     owners_.erase(found);
 }
 
-void VulkanDescriptorAllocator::reset() {
-    for (VkDescriptorPool pool : pools_) {
-        if (vkResetDescriptorPool(device_, pool, 0) != VK_SUCCESS) {
-            Log::fatal("VulkanDescriptorAllocator", "vkResetDescriptorPool failed");
-        }
-    }
-    owners_.clear();
-    activePool_ = 0;
-}
-
 } // namespace engine::rhi::vulkan

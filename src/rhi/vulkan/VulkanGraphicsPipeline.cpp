@@ -1,38 +1,12 @@
 #include "rhi/vulkan/VulkanGraphicsPipeline.h"
 
 #include "core/logging/Log.h"
+#include "rhi/vulkan/VulkanConversions.h"
 
 #include <array>
 #include <vector>
 
 namespace engine::rhi::vulkan {
-namespace {
-
-VkFormat toVulkan(VertexFormat format) {
-    switch (format) {
-    case VertexFormat::Float32: return VK_FORMAT_R32_SFLOAT;
-    case VertexFormat::Vec2Float32: return VK_FORMAT_R32G32_SFLOAT;
-    case VertexFormat::Vec3Float32: return VK_FORMAT_R32G32B32_SFLOAT;
-    case VertexFormat::Vec4Float32: return VK_FORMAT_R32G32B32A32_SFLOAT;
-    case VertexFormat::UInt16x4: return VK_FORMAT_R16G16B16A16_UINT;
-    case VertexFormat::UInt8x4Normalized: return VK_FORMAT_R8G8B8A8_UNORM;
-    }
-    Log::fatal("VulkanGraphicsPipeline", "Unsupported vertex format");
-}
-
-VkFormat toVulkan(PixelFormat format) {
-    switch (format) {
-    case PixelFormat::Rgba8Unorm: return VK_FORMAT_R8G8B8A8_UNORM;
-    case PixelFormat::Rgba8Srgb: return VK_FORMAT_R8G8B8A8_SRGB;
-    case PixelFormat::Bgra8Unorm: return VK_FORMAT_B8G8R8A8_UNORM;
-    case PixelFormat::Bgra8Srgb: return VK_FORMAT_B8G8R8A8_SRGB;
-    case PixelFormat::Depth32Float: return VK_FORMAT_D32_SFLOAT;
-    case PixelFormat::Undefined: break;
-    }
-    Log::fatal("VulkanGraphicsPipeline", "Unsupported attachment format");
-}
-
-} // namespace
 
 VulkanGraphicsPipeline::VulkanGraphicsPipeline(VkDevice device,
                                                const GraphicsPipelineDesc& desc,

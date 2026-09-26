@@ -11,12 +11,11 @@ namespace {
 
 class FakeDevice final : public engine::rhi::IDevice {
 public:
-    engine::rhi::RID createBuffer(const engine::rhi::BufferDesc&) override { return {}; }
-    void destroyBuffer(engine::rhi::RID) override {}
-    void
-    uploadBuffer(engine::rhi::RID, std::span<const std::byte>, std::uint64_t) override {}
+    engine::rhi::RID buffer_create(const engine::rhi::BufferDesc&) override { return {}; }
+    void buffer_destroy(engine::rhi::RID) override {}
+    void buffer_upload(engine::rhi::RID, std::span<const std::byte>, std::uint64_t) override {}
 
-    engine::rhi::RID createTexture(const engine::rhi::TextureDesc& desc) override {
+    engine::rhi::RID texture_create(const engine::rhi::TextureDesc& desc) override {
         textures.push_back(desc);
         views.push_back({.type = desc.dimension,
                          .format = desc.format,
@@ -26,49 +25,40 @@ public:
                          .layerCount = desc.arrayLayers});
         return {static_cast<std::uint32_t>(textures.size()), 1};
     }
-    void destroyTexture(engine::rhi::RID handle) override {
+    void texture_destroy(engine::rhi::RID handle) override {
         if (handle)
             destroyedTextures.push_back(handle);
     }
-    void uploadTexture(engine::rhi::RID,
-                       std::span<const engine::rhi::TextureUploadRegion>) override {}
+    void texture_upload(engine::rhi::RID,
+                        std::span<const engine::rhi::TextureUploadRegion>) override {}
     engine::rhi::RID
-    createTextureView(engine::rhi::RID,
-                      const engine::rhi::TextureViewDesc& desc) override {
+    texture_view_create(engine::rhi::RID, const engine::rhi::TextureViewDesc& desc) override {
         views.push_back(desc);
         return {static_cast<std::uint32_t>(views.size()), 1};
     }
-    engine::rhi::RID defaultTextureView(engine::rhi::RID) override {
-        return views.empty()
-                   ? engine::rhi::RID{}
-                   : engine::rhi::RID{static_cast<std::uint32_t>(views.size()), 1};
+    engine::rhi::RID texture_default_view(engine::rhi::RID) override {
+        return views.empty() ? engine::rhi::RID{}
+                             : engine::rhi::RID{static_cast<std::uint32_t>(views.size()), 1};
     }
-    void destroyTextureView(engine::rhi::RID handle) override {
+    void texture_view_destroy(engine::rhi::RID handle) override {
         if (handle)
             destroyedViews.push_back(handle);
     }
-    engine::rhi::RID createSampler(const engine::rhi::SamplerDesc&) override {
+    engine::rhi::RID sampler_create(const engine::rhi::SamplerDesc&) override { return {}; }
+    void sampler_destroy(engine::rhi::RID) override {}
+    engine::rhi::RID shader_create(const engine::rhi::ShaderDesc&) override { return {}; }
+    void shader_destroy(engine::rhi::RID) override {}
+    engine::rhi::RID pipeline_create(const engine::rhi::GraphicsPipelineDesc&) override {
         return {};
     }
-    void destroySampler(engine::rhi::RID) override {}
-    engine::rhi::RID createShader(const engine::rhi::ShaderDesc&) override { return {}; }
-    void destroyShader(engine::rhi::RID) override {}
+    void pipeline_destroy(engine::rhi::RID) override {}
     engine::rhi::RID
-    createGraphicsPipeline(const engine::rhi::GraphicsPipelineDesc&) override {
+    bind_group_layout_create(const engine::rhi::BindGroupLayoutDesc&) override {
         return {};
     }
-    void destroyGraphicsPipeline(engine::rhi::RID) override {}
-    engine::rhi::RID
-    createBindGroupLayout(const engine::rhi::BindGroupLayoutDesc&) override {
-        return {};
-    }
-    void destroyBindGroupLayout(engine::rhi::RID) override {}
-    engine::rhi::RID createBindGroup(const engine::rhi::BindGroupDesc&) override {
-        return {};
-    }
-    void destroyBindGroup(engine::rhi::RID) override {}
-    std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override { return nullptr; }
-    void submitCommand(engine::rhi::ICommandBuffer&, const engine::rhi::SubmitSync&) override {}
+    void bind_group_layout_destroy(engine::rhi::RID) override {}
+    engine::rhi::RID bind_group_create(const engine::rhi::BindGroupDesc&) override { return {}; }
+    void bind_group_destroy(engine::rhi::RID) override {}
     void waitIdle() override {}
 
     std::vector<engine::rhi::TextureDesc> textures;

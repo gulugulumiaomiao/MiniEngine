@@ -40,7 +40,6 @@ public:
 
     [[nodiscard]] VkDescriptorSet allocate(VkDescriptorSetLayout layout);
     void free(VkDescriptorSet descriptor);
-    void reset();
 
 private:
     [[nodiscard]] VkDescriptorPool createPool(std::uint32_t maxSets) const;

@@ -9,7 +9,7 @@ namespace engine {
 bool ShaderStorageFactory::create(const CompiledShader& description,
                                   ShaderStorageEntry& destination) {
     ShaderStorageEntry created;
-    created.shader = device_.createShader({
+    created.shader = device_.shader_create({
         .stage = description.stage == ShaderStage::Vertex ? rhi::ShaderStage::Vertex
                                                           : rhi::ShaderStage::Fragment,
         .bytecode = description.bytecode,
@@ -24,7 +24,7 @@ bool ShaderStorageFactory::create(const CompiledShader& description,
 
 void ShaderStorageFactory::release(ShaderStorageEntry& resource) {
     if (resource.shader)
-        device_.destroyShader(resource.shader);
+        device_.shader_destroy(resource.shader);
     resource = {};
 }
 

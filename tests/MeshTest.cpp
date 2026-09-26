@@ -26,22 +26,22 @@ public:
         bool alive{true};
     };
 
-    engine::rhi::RID createBuffer(const engine::rhi::BufferDesc& desc) override {
+    engine::rhi::RID buffer_create(const engine::rhi::BufferDesc& desc) override {
         buffers.push_back({desc, std::vector<std::byte>(desc.size), true});
         ++createdBuffers;
         return {static_cast<std::uint32_t>(buffers.size() - 1), 1};
     }
 
-    void destroyBuffer(engine::rhi::RID handle) override {
+    void buffer_destroy(engine::rhi::RID handle) override {
         if (handle.index() >= buffers.size() || !buffers[handle.index()].alive)
             return;
         buffers[handle.index()].alive = false;
         ++destroyedBuffers;
     }
 
-    void uploadBuffer(engine::rhi::RID destination,
-                      std::span<const std::byte> data,
-                      std::uint64_t offset) override {
+    void buffer_upload(engine::rhi::RID destination,
+                       std::span<const std::byte> data,
+                       std::uint64_t offset) override {
         if (destination.index() >= buffers.size())
             return;
         BufferRecord& target = buffers[destination.index()];
@@ -49,44 +49,41 @@ public:
         ++uploads;
     }
 
-    engine::rhi::RID createTexture(const engine::rhi::TextureDesc&) override {
+    engine::rhi::RID texture_create(const engine::rhi::TextureDesc&) override {
         return {};
     }
-    void destroyTexture(engine::rhi::RID) override {}
-    void uploadTexture(engine::rhi::RID,
-                       std::span<const engine::rhi::TextureUploadRegion>) override {}
-    engine::rhi::RID createTextureView(engine::rhi::RID,
-                                                     const engine::rhi::TextureViewDesc&) override {
-        return {};
-    }
+    void texture_destroy(engine::rhi::RID) override {}
+    void texture_upload(engine::rhi::RID,
+                        std::span<const engine::rhi::TextureUploadRegion>) override {}
     engine::rhi::RID
-    defaultTextureView(engine::rhi::RID) override {
+    texture_view_create(engine::rhi::RID, const engine::rhi::TextureViewDesc&) override {
         return {};
     }
-    void destroyTextureView(engine::rhi::RID) override {}
-    engine::rhi::RID createSampler(const engine::rhi::SamplerDesc&) override {
+    engine::rhi::RID texture_default_view(engine::rhi::RID) override {
         return {};
     }
-    void destroySampler(engine::rhi::RID) override {}
+    void texture_view_destroy(engine::rhi::RID) override {}
+    engine::rhi::RID sampler_create(const engine::rhi::SamplerDesc&) override {
+        return {};
+    }
+    void sampler_destroy(engine::rhi::RID) override {}
 
-    engine::rhi::RID createShader(const engine::rhi::ShaderDesc&) override { return {}; }
-    void destroyShader(engine::rhi::RID) override {}
+    engine::rhi::RID shader_create(const engine::rhi::ShaderDesc&) override { return {}; }
+    void shader_destroy(engine::rhi::RID) override {}
     engine::rhi::RID
-    createGraphicsPipeline(const engine::rhi::GraphicsPipelineDesc&) override {
+    pipeline_create(const engine::rhi::GraphicsPipelineDesc&) override {
         return {};
     }
-    void destroyGraphicsPipeline(engine::rhi::RID) override {}
+    void pipeline_destroy(engine::rhi::RID) override {}
     engine::rhi::RID
-    createBindGroupLayout(const engine::rhi::BindGroupLayoutDesc&) override {
+    bind_group_layout_create(const engine::rhi::BindGroupLayoutDesc&) override {
         return {};
     }
-    void destroyBindGroupLayout(engine::rhi::RID) override {}
-    engine::rhi::RID createBindGroup(const engine::rhi::BindGroupDesc&) override {
+    void bind_group_layout_destroy(engine::rhi::RID) override {}
+    engine::rhi::RID bind_group_create(const engine::rhi::BindGroupDesc&) override {
         return {};
     }
-    void destroyBindGroup(engine::rhi::RID) override {}
-    std::unique_ptr<engine::rhi::ICommandBuffer> createCommandBuffer() override { return nullptr; }
-    void submitCommand(engine::rhi::ICommandBuffer&, const engine::rhi::SubmitSync&) override {}
+    void bind_group_destroy(engine::rhi::RID) override {}
     void waitIdle() override { ++waits; }
 
     std::vector<BufferRecord> buffers;

@@ -8,7 +8,7 @@
 #include "render/render_graph/RenderGraph.h"
 #include "render/render_target/RenderTarget.h"
 #include "render/scene/RenderScene.h"
-#include "rhi/api/Swapchain.h"
+#include "rhi/api/Device.h"
 
 #include <algorithm>
 #include <vector>
@@ -100,15 +100,16 @@ void ForwardPass::execute(RenderContext& context,
                           std::move(rendering),
                           std::move(resources),
                           [items = std::move(items), &context](
-                              rhi::ICommandBuffer& commandBuffer) mutable {
-                              commandBuffer.setViewport({0.0F,
-                                                         0.0F,
-                                                         static_cast<float>(context.sceneWidth()),
-                                                         static_cast<float>(context.sceneHeight()),
-                                                         0.0F,
-                                                         1.0F});
-                              commandBuffer.setScissor(
-                                  {0, 0, context.sceneWidth(), context.sceneHeight()});
+                              rhi::RID commandBuffer) mutable {
+                              rhi::setViewport(commandBuffer,
+                                               {0.0F,
+                                                0.0F,
+                                                static_cast<float>(context.sceneWidth()),
+                                                static_cast<float>(context.sceneHeight()),
+                                                0.0F,
+                                                1.0F});
+                              rhi::setScissor(commandBuffer,
+                                              {0, 0, context.sceneWidth(), context.sceneHeight()});
                               drawFilteredItems(context.frameIndex(),
                                                 items,
                                                 FRAME_GPU_MANAGER.sceneBindGroup(context.frameIndex()),

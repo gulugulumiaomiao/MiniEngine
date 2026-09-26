@@ -105,11 +105,11 @@ TEST_F(TextureViewCacheTest, TextureOwnsDefaultAndDescriptorViewCache) {
         .usage = engine::rhi::TextureUsage::Sampled,
         .debugName = "TextureViewCacheTest",
     };
-    const auto firstTexture = device.createTexture(textureDesc);
-    const auto secondTexture = device.createTexture(textureDesc);
+    const auto firstTexture = device.texture_create(textureDesc);
+    const auto secondTexture = device.texture_create(textureDesc);
     ASSERT_TRUE(firstTexture);
     ASSERT_TRUE(secondTexture);
-    EXPECT_TRUE(device.defaultTextureView(firstTexture));
+    EXPECT_TRUE(device.texture_default_view(firstTexture));
 
     const engine::rhi::TextureViewDesc swizzled{
         .type = engine::rhi::TextureType::Texture2D,
@@ -123,25 +123,25 @@ TEST_F(TextureViewCacheTest, TextureOwnsDefaultAndDescriptorViewCache) {
                     .b = engine::rhi::SwizzleComponent::R,
                     .a = engine::rhi::SwizzleComponent::A},
     };
-    const auto first = device.createTextureView(firstTexture, swizzled);
-    const auto repeated = device.createTextureView(firstTexture, swizzled);
-    const auto otherTexture = device.createTextureView(secondTexture, swizzled);
+    const auto first = device.texture_view_create(firstTexture, swizzled);
+    const auto repeated = device.texture_view_create(firstTexture, swizzled);
+    const auto otherTexture = device.texture_view_create(secondTexture, swizzled);
     EXPECT_EQ(first, repeated);
     EXPECT_NE(first, otherTexture);
 
-    device.destroyTexture(firstTexture);
-    device.destroyTexture(secondTexture);
+    device.texture_destroy(firstTexture);
+    device.texture_destroy(secondTexture);
 }
 
 TEST_F(TextureViewCacheTest, SamplerDescriptorsAreDeviceCached) {
     auto& device = *context.device;
     engine::rhi::SamplerDesc linear;
-    const auto first = device.createSampler(linear);
-    const auto repeated = device.createSampler(linear);
+    const auto first = device.sampler_create(linear);
+    const auto repeated = device.sampler_create(linear);
     engine::rhi::SamplerDesc point = linear;
     point.minFilter = engine::rhi::SamplerFilter::Nearest;
     point.magFilter = engine::rhi::SamplerFilter::Nearest;
-    const auto different = device.createSampler(point);
+    const auto different = device.sampler_create(point);
     EXPECT_EQ(first, repeated);
     EXPECT_NE(first, different);
 }

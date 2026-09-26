@@ -1,6 +1,8 @@
 #include "rhi/vulkan/VulkanSwapchain.h"
 
 #include "core/logging/Log.h"
+#include "rhi/vulkan/VulkanCommandBuffer.h"
+#include "rhi/vulkan/VulkanConversions.h"
 #include "rhi/vulkan/VulkanDevice.h"
 
 #include <algorithm>
@@ -21,16 +23,6 @@ void check(VkResult result, const char* operation) {
     }
 }
 
-PixelFormat toRhi(VkFormat format) {
-    switch (format) {
-    case VK_FORMAT_R8G8B8A8_UNORM: return PixelFormat::Rgba8Unorm;
-    case VK_FORMAT_R8G8B8A8_SRGB: return PixelFormat::Rgba8Srgb;
-    case VK_FORMAT_B8G8R8A8_UNORM: return PixelFormat::Bgra8Unorm;
-    case VK_FORMAT_B8G8R8A8_SRGB: return PixelFormat::Bgra8Srgb;
-    default: Log::fatal("VulkanSwapchain", "Unsupported swapchain format");
-    }
-}
-
 } // namespace
 
 VulkanSwapchain::VulkanSwapchain(VulkanDevice& device, const SwapchainDesc& desc)
@@ -41,9 +33,11 @@ VulkanSwapchain::VulkanSwapchain(VulkanDevice& device, const SwapchainDesc& desc
 
 VulkanSwapchain::~VulkanSwapchain() {
     device_.waitIdle();
-    commandBuffer_.reset();
+    commandBufferRid_ = {};
     destroy();
     for (const Frame& frame : frames_) {
+        if (frame.commandBufferRid)
+            device_.command_buffer_release_rid(frame.commandBufferRid);
         vkDestroyFence(device(), frame.inFlight, nullptr);
         vkDestroySemaphore(device(), frame.imageAvailable, nullptr);
     }
@@ -134,8 +128,7 @@ void VulkanSwapchain::create() {
                                    .mipCount = 1,
                                    .usage = TextureUsage::ColorAttachment};
     for (VkImage image : images_)
-        textureHandles_.push_back(
-            device_.registerExternalTexture(image, externalDesc, surfaceFormat.format));
+        textureHandles_.push_back(device_.texture_allocate_rid(image, externalDesc));
     format_ = surfaceFormat.format;
     imageInitialized_.assign(imageCount, false);
     imageViews_.resize(imageCount);
@@ -160,7 +153,7 @@ void VulkanSwapchain::create() {
                                        .baseLayer = 0,
                                        .layerCount = 1};
         textureViewHandles_.push_back(
-            device_.registerExternalTextureView(textureHandles_[i], imageViews_[i], viewDesc));
+            device_.texture_view_allocate_rid(textureHandles_[i], imageViews_[i], viewDesc));
         check(vkCreateSemaphore(device(), &semaphoreInfo, nullptr, &renderFinished_[i]),
               "vkCreateSemaphore(renderFinished)");
     }
@@ -172,14 +165,14 @@ void VulkanSwapchain::destroy() {
     }
     renderFinished_.clear();
     for (RID handle : textureViewHandles_) {
-        device_.unregisterExternalTextureView(handle);
+        device_.texture_view_destroy(handle);
     }
     textureViewHandles_.clear();
     for (VkImageView view : imageViews_)
         vkDestroyImageView(device(), view, nullptr);
     imageViews_.clear();
     for (RID handle : textureHandles_) {
-        device_.unregisterExternalTexture(handle);
+        device_.texture_destroy(handle);
     }
     textureHandles_.clear();
     images_.clear();
@@ -201,7 +194,8 @@ void VulkanSwapchain::createFrameResources() {
     VkFenceCreateInfo fenceInfo{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     for (std::size_t i = 0; i < frames_.size(); ++i) {
-        frames_[i].commandBuffer = buffers[i];
+        frames_[i].commandBufferRid =
+            device_.command_buffer_allocate_rid(buffers[i], /*owned=*/false);
         check(vkCreateSemaphore(device(), &semaphoreInfo, nullptr, &frames_[i].imageAvailable),
               "vkCreateSemaphore(imageAvailable)");
         check(vkCreateFence(device(), &fenceInfo, nullptr, &frames_[i].inFlight), "vkCreateFence");
@@ -224,10 +218,11 @@ FrameStatus VulkanSwapchain::beginFrame() {
         check(acquire, "vkAcquireNextImageKHR");
     }
     check(vkResetFences(device(), 1, &frame.inFlight), "vkResetFences");
-    // The wrapper does not own the pooled VkCommandBuffer; begin() resets and reopens
-    // it for this frame's recording.
-    commandBuffer_ = std::make_unique<VulkanCommandBuffer>(frame.commandBuffer, device_);
-    commandBuffer_->begin();
+    // The pooled VkCommandBuffer is registered in the device's command-buffer pool; begin()
+    // resets and reopens it for this frame's recording.
+    commandBufferRid_ = frame.commandBufferRid;
+    VulkanCommandBuffer& cmd = device_.command_buffer(commandBufferRid_);
+    cmd.begin();
 
     // On first use, transition from UNDEFINED to COLOR_ATTACHMENT_OPTIMAL
     if (!imageInitialized_[imageIndex_]) {
@@ -239,7 +234,7 @@ FrameStatus VulkanSwapchain::beginFrame() {
                                                1,
                                                0,
                                                1};
-        commandBuffer_->resourceBarriers(std::span{&toColorAttachment, 1});
+        cmd.resourceBarriers(std::span{&toColorAttachment, 1});
     }
 
     frameOpen_ = true;
@@ -251,16 +246,16 @@ FrameStatus VulkanSwapchain::endFrame() {
         Log::fatal("VulkanSwapchain", "No frame is open");
     Frame& frame = frames_[currentFrame_];
     // Note: Layout transition to PRESENT_SRC_KHR is handled by RenderGraph
-    commandBuffer_->end();
+    device_.command_buffer(commandBufferRid_).end();
     // Command buffer staging buffers recorded this frame retire once this submission's
     // fence is signaled; tag them before submitting so collection sees the fence.
     device_.tagPendingStagingBuffers(frame.inFlight);
-    device_.submitCommand(*commandBuffer_,
-                          SubmitSync{frame.imageAvailable,
-                                     renderFinished_[imageIndex_],
-                                     frame.inFlight,
-                                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT});
-    commandBuffer_.reset();
+    device_.submit(commandBufferRid_,
+                   SubmitSync{frame.imageAvailable,
+                              renderFinished_[imageIndex_],
+                              frame.inFlight,
+                              VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT});
+    commandBufferRid_ = {};
     const VkSemaphore finished = renderFinished_[imageIndex_];
     VkPresentInfoKHR presentInfo{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     presentInfo.waitSemaphoreCount = 1;
@@ -289,10 +284,10 @@ void VulkanSwapchain::resize(std::uint32_t width, std::uint32_t height) {
     create();
 }
 
-ICommandBuffer& VulkanSwapchain::commandBuffer() {
-    if (!commandBuffer_)
+RID VulkanSwapchain::commandBuffer() {
+    if (!commandBufferRid_)
         Log::fatal("VulkanSwapchain", "No active command buffer");
-    return *commandBuffer_;
+    return commandBufferRid_;
 }
 
 RID VulkanSwapchain::currentTexture() const {

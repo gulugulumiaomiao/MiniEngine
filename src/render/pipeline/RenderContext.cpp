@@ -3,7 +3,6 @@
 #include "render/renderer/Renderer.h"
 #include "render/render_target/RenderTarget.h"
 #include "rhi/api/Device.h"
-#include "rhi/api/Swapchain.h"
 
 namespace engine {
 
@@ -31,7 +30,7 @@ rhi::ISwapchain& RenderContext::swapchain() const {
     return renderer_.swapchain();
 }
 
-rhi::ICommandBuffer& RenderContext::commandBuffer() const {
+rhi::RID RenderContext::commandBuffer() const {
     return renderer_.swapchain().commandBuffer();
 }
 

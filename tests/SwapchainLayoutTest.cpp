@@ -5,8 +5,8 @@
 #include "core/base/BuildConfig.h"
 #include "core/logging/Log.h"
 #include "rhi/RhiFactory.h"
+#include "rhi/api/Command.h"
 #include "rhi/api/Device.h"
-#include "rhi/api/Swapchain.h"
 #include "rhi/vulkan/VulkanDevice.h"
 #include "rhi/vulkan/VulkanFactory.h"
 #include "rhi/vulkan/VulkanSwapchain.h"
@@ -70,7 +70,7 @@ int main() {
 
     // Record a simple clear operation
     {
-        auto& commandBuffer = swapchain.commandBuffer();
+        const RID commandBuffer = swapchain.commandBuffer();
         RenderingInfo rendering;
         rendering.renderArea = {0, 0, swapchain.width(), swapchain.height()};
         rendering.colorAttachments.push_back({
@@ -79,8 +79,8 @@ int main() {
             StoreOp::Store,
             {0.0F, 0.0F, 0.0F, 1.0F},
         });
-        commandBuffer.beginRendering(rendering);
-        commandBuffer.endRendering();
+        beginRendering(commandBuffer, rendering);
+        endRendering(commandBuffer);
     }
 
     status = swapchain.endFrame();
@@ -95,7 +95,7 @@ int main() {
     }
 
     {
-        auto& commandBuffer = swapchain.commandBuffer();
+        const RID commandBuffer = swapchain.commandBuffer();
         RenderingInfo rendering;
         rendering.renderArea = {0, 0, swapchain.width(), swapchain.height()};
         rendering.colorAttachments.push_back({
@@ -104,8 +104,8 @@ int main() {
             StoreOp::Store,
             {1.0F, 0.0F, 0.0F, 1.0F},
         });
-        commandBuffer.beginRendering(rendering);
-        commandBuffer.endRendering();
+        beginRendering(commandBuffer, rendering);
+        endRendering(commandBuffer);
     }
 
     status = swapchain.endFrame();
@@ -124,7 +124,7 @@ int main() {
     }
 
     {
-        auto& commandBuffer = swapchain.commandBuffer();
+        const RID commandBuffer = swapchain.commandBuffer();
         RenderingInfo rendering;
         rendering.renderArea = {0, 0, swapchain.width(), swapchain.height()};
         rendering.colorAttachments.push_back({
@@ -133,8 +133,8 @@ int main() {
             StoreOp::Store,
             {0.0F, 1.0F, 0.0F, 1.0F},
         });
-        commandBuffer.beginRendering(rendering);
-        commandBuffer.endRendering();
+        beginRendering(commandBuffer, rendering);
+        endRendering(commandBuffer);
     }
 
     status = swapchain.endFrame();
@@ -149,7 +149,7 @@ int main() {
     }
 
     {
-        auto& commandBuffer = swapchain.commandBuffer();
+        const RID commandBuffer = swapchain.commandBuffer();
         RenderingInfo rendering;
         rendering.renderArea = {0, 0, swapchain.width(), swapchain.height()};
         rendering.colorAttachments.push_back({
@@ -158,8 +158,8 @@ int main() {
             StoreOp::Store,
             {0.0F, 0.0F, 1.0F, 1.0F},
         });
-        commandBuffer.beginRendering(rendering);
-        commandBuffer.endRendering();
+        beginRendering(commandBuffer, rendering);
+        endRendering(commandBuffer);
     }
 
     status = swapchain.endFrame();

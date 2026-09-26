@@ -1,7 +1,6 @@
 #pragma once
 
 #include "rhi/api/Device.h"
-#include "rhi/api/Swapchain.h"
 
 #include <memory>
 

@@ -1,23 +1,21 @@
 #include "rhi/vulkan/VulkanBuffer.h"
 #include "core/logging/Log.h"
+#include "rhi/vulkan/VulkanConversions.h"
 
 #include <cstring>
 
 namespace engine::rhi::vulkan {
 
-VulkanBuffer::VulkanBuffer(VmaAllocator allocator,
-                           VkDeviceSize size,
-                           VkBufferUsageFlags usage,
-                           VmaMemoryUsage memoryUsage,
-                           VmaAllocationCreateFlags allocationFlags)
-    : allocator_(allocator), size_(size) {
+VulkanBuffer::VulkanBuffer(VmaAllocator allocator, VkDeviceSize size, BufferUsage usage, MemoryUsage memoryUsage)
+    : allocator_(allocator), size_(size), memoryUsage_(memoryUsage) {
     VkBufferCreateInfo bufferInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
     bufferInfo.size = size;
-    bufferInfo.usage = usage;
+    bufferInfo.usage = toVulkan(usage);
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+    const auto [vmaUsage, allocationFlags] = toVulkan(memoryUsage);
     VmaAllocationCreateInfo allocationInfo{};
-    allocationInfo.usage = memoryUsage;
+    allocationInfo.usage = vmaUsage;
     allocationInfo.flags = allocationFlags;
     if (vmaCreateBuffer(
             allocator_, &bufferInfo, &allocationInfo, &buffer_, &allocation_, nullptr) !=

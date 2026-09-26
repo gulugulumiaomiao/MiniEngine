@@ -53,7 +53,7 @@
 
 | 资源 | 层1 资源管理器 | 层2 后端存储管理器 | 层3 设备资源（统一 IDevice） |
 |---|---|---|---|
-| Texture | `TextureAsset`（无运行时管理器） | 无（层2 `Texture` 自持 RHI 句柄） | `IDevice` 三池 texture/view/sampler + `IRHITexture` |
+| Texture | `TextureAsset`（无运行时管理器） | 无（层2 `Texture` 自持 RHI 句柄） | `VulkanDevice` 分类型句柄池（存实例）texture/view/sampler，对上只暴露 RID |
 | Mesh | `MeshResourceManager` | `MeshStorage` | `IDevice` buffer owner |
 | Material | `MaterialResourceManager` | `MaterialStorage` | `IDevice` bindGroup / uniform owner |
 | Shader | `ShaderResourceManager` | `ShaderStorage` | `IDevice` shaderModule / pipeline owner |

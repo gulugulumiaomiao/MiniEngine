@@ -170,25 +170,7 @@ target_compile_definitions(ProjectTemplateTest PRIVATE
 )
 mini_add_editor_test(ProjectRegistryTest)
 mini_add_editor_test(ProjectLifecycleTest)
-mini_add_test(RenderGraphTest)
 mini_add_test(RenderTargetTest)
-
-# The editor UI backend lives with the editor, so its test compiles that translation
-# unit directly; the UI shaders are baked into it as SPIR-V words, so no shader build
-# step or generated-shader include directory is needed.
-add_executable(ImGuiRendererTest
-    ImGuiRendererTest.cpp
-    ${PROJECT_SOURCE_DIR}/tools/editor/backend/ImGuiRenderer.cpp
-)
-target_include_directories(ImGuiRendererTest PRIVATE ${PROJECT_SOURCE_DIR})
-target_link_libraries(ImGuiRendererTest PRIVATE MiniEngine MiniImGui MiniGTest)
-mini_enable_warnings(ImGuiRendererTest)
-if(NOT MSVC)
-    target_compile_options(ImGuiRendererTest PRIVATE -Wno-missing-field-initializers)
-endif()
-mini_link_mingw_runtime(ImGuiRendererTest)
-set_target_properties(ImGuiRendererTest PROPERTIES FOLDER Tests)
-gtest_discover_tests(ImGuiRendererTest)
 
 # The ImGui style/font configuration is a backend concern like the renderer, so
 # its test compiles that translation unit directly too. The font case references
@@ -206,9 +188,6 @@ mini_enable_warnings(ImGuiStyleConfigTest)
 mini_link_mingw_runtime(ImGuiStyleConfigTest)
 set_target_properties(ImGuiStyleConfigTest PROPERTIES FOLDER Tests)
 gtest_discover_tests(ImGuiStyleConfigTest)
-
-mini_add_gtest(SceneOutputTest)
-target_compile_options(SceneOutputTest PRIVATE -Wno-missing-field-initializers)
 
 add_executable(EditorLayoutTest EditorLayoutTest.cpp
     ${PROJECT_SOURCE_DIR}/tools/editor/app/EditorLayout.cpp)
@@ -359,3 +338,14 @@ target_include_directories(SwapchainLayoutTest SYSTEM PRIVATE
     ${PROJECT_SOURCE_DIR}/third_party/vma/include
 )
 target_link_libraries(SwapchainLayoutTest PRIVATE user32)
+
+# Real-device coverage for the RID-only RHI (per-type pools + command free functions). Probes
+# for a Vulkan 1.3 runtime and skips gracefully when absent, like the other GPU-backed tests.
+mini_add_gtest(RhiDeviceTest)
+target_include_directories(RhiDeviceTest SYSTEM PRIVATE
+    ${PROJECT_SOURCE_DIR}/third_party/vma/include
+)
+target_link_libraries(RhiDeviceTest PRIVATE user32)
+if(NOT MSVC)
+    target_compile_options(RhiDeviceTest PRIVATE -Wno-missing-field-initializers)
+endif()

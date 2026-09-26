@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rhi/api/PipelineDesc.h"
+#include "rhi/api/ResourceDesc.h"
 
 #include <vulkan/vulkan.h>
 
