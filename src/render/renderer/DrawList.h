@@ -41,7 +41,6 @@ static_assert(sizeof(ObjectDrawData) == 64, "ObjectDrawData must match the std43
 struct DrawItem {
     const ShaderPass* shaderPass{};
     RenderPhase renderPhase{RenderPhase::Forward};
-    RID mesh;
     rhi::RID pipeline;
     Ref<Material> material;
     RID materialKey;
@@ -66,19 +65,6 @@ struct DrawList {
     std::vector<ObjectDrawData> objects;
     SceneDrawData scene;
     math::Vec4 clearColor{0.025F, 0.055F, 0.10F, 1.0F};
-};
-
-struct MeshDrawInfo {
-    std::vector<DrawItem::VertexBuffer> vertexBuffers;
-    rhi::RID indexBuffer;
-    rhi::IndexFormat indexFormat{rhi::IndexFormat::UInt32};
-    struct Range {
-        std::uint32_t firstIndex{};
-        std::uint32_t indexCount{};
-        std::int32_t vertexOffset{};
-        std::uint32_t materialSlot{};
-    };
-    std::vector<Range> subMeshes;
 };
 
 } // namespace engine

@@ -9,12 +9,12 @@
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
-#include "render/mesh/MeshManager.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderManager.h"
 #include "scene/scene/Scene.h"
 #include "scene/scene/SceneAsset.h"
 #include "TestAssetEnvironment.h"
+#include "TestRenderDevice.h"
 
 #include <array>
 #include <chrono>
@@ -41,7 +41,6 @@ static_assert(std::is_base_of_v<engine::Singleton<engine::AssetManager>, engine:
 static_assert(std::is_base_of_v<engine::Singleton<engine::ShaderResourceManager>, engine::ShaderResourceManager>);
 static_assert(
     std::is_base_of_v<engine::Singleton<engine::MaterialResourceManager>, engine::MaterialResourceManager>);
-static_assert(std::is_base_of_v<engine::Singleton<engine::MeshResourceManager>, engine::MeshResourceManager>);
 
 struct TestWorkspace {
     std::filesystem::path root =
@@ -58,7 +57,6 @@ struct TestWorkspace {
     }
 
     ~TestWorkspace() {
-        MESH_MANAGER.clear();
         MATERIAL_MANAGER.clear();
         SHADER_MANAGER.clear();
         engine::test::shutdownAssetEnvironment();
@@ -127,6 +125,10 @@ std::string meshSource(float leftX) {
 int main() {
     using namespace engine;
 
+    // Mesh 构造需 active device；MockDevice 注册为进程级 active 设备（须先于任何 Mesh，
+    // 且生命周期长于 TestWorkspace 与所有 Mesh）。
+    MockDevice device;
+
     TestWorkspace workspace;
     if (!test::initializeAssetEnvironment(workspace.assets))
         return 20;
@@ -184,20 +186,21 @@ int main() {
         !ASSET_IMPORT_PIPELINE.importAsset(meshPath)) {
         return 25;
     }
-    const Ref<Mesh> meshHandle = MESH_MANAGER.load(meshPath);
+    const Ref<Mesh> meshHandle = resolveMeshReference(meshPath.string());
     const auto meshAsset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
     Mesh* runtimeMesh = meshHandle.get();
     if (!meshHandle || !meshAsset || !runtimeMesh || runtimeMesh->assetPath() != meshPath ||
-        runtimeMesh->data().indexCount != 3) {
+        !runtimeMesh->isValid()) {
         return 26;
     }
-    const std::uint64_t meshVersion = runtimeMesh->version();
+    // 就地重导入（热重载）：唯一实例身份不变，但被重新上传（syncInstance → upload）。
+    const std::size_t uploadsBeforeReimport = device.uploadedBytes.size();
     if (!FILE_SYSTEM.writeText(meshPath, meshSource(-2.0F)) ||
         !ASSET_IMPORT_PIPELINE.reimportAsset(meshPath)) {
         return 27;
     }
-    runtimeMesh = meshHandle.get();
-    if (!runtimeMesh || runtimeMesh->version() != meshVersion + 1 || !runtimeMesh->dirty()) {
+    if (meshHandle.get() != runtimeMesh || !runtimeMesh->isValid() ||
+        device.uploadedBytes.size() == uploadsBeforeReimport) {
         return 28;
     }
 
@@ -236,7 +239,7 @@ int main() {
         return 30;
     }
     const SceneInstantiationContext sceneContext{
-        .loadMesh = [](const VirtualPath& path) { return MESH_MANAGER.load(path); },
+        .loadMesh = [](const VirtualPath& path) { return resolveMeshReference(path.string()); },
         .loadMaterial = [](const VirtualPath& path) { return MATERIAL_MANAGER.load(path); },
     };
     const Ref<Scene> runtimeScene = sceneAsset->instantiate(sceneContext);

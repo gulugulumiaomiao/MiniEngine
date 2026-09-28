@@ -1,6 +1,5 @@
 #include "render/gpu/common/IGpuResourceFactory.h"
 #include "render/gpu/material/MaterialStorageCache.h"
-#include "render/gpu/mesh/MeshStorageCache.h"
 #include "render/gpu/pipeline/GraphicsPipelineStorageCache.h"
 #include "render/gpu/shader/ShaderStorageCache.h"
 
@@ -13,29 +12,31 @@ struct Resource {};
 
 static_assert(std::is_abstract_v<engine::IGpuResourceFactory<Request, Resource>>);
 static_assert(std::is_abstract_v<engine::IGpuCache<int, Resource>>);
-static_assert(std::is_base_of_v<engine::IGpuCache<engine::MeshStorageCacheKey, engine::MeshStorageEntry>,
-                                engine::MeshStorageCache>);
+static_assert(
+    std::is_base_of_v<
+        engine::IGpuCache<engine::GraphicsPipelineStorageCacheKey, engine::GraphicsPipelineStorageEntry>,
+        engine::GraphicsPipelineStorageCache>);
 
 } // namespace
 
 int main() {
     using namespace engine;
 
-    MeshStorageCache meshes;
+    GraphicsPipelineStorageCache simpleCache;
     ShaderStorageCache shaders;
     GraphicsPipelineStorageCache pipelines;
     MaterialStorageCache materials;
     if (!materials.initialize(2, 4))
         return 1;
 
-    const MeshStorageCacheKey key{7, 3};
-    if (meshes.find(key) || meshes.size() != 0)
+    const GraphicsPipelineStorageCacheKey key = 7;
+    if (simpleCache.find(key) || simpleCache.size() != 0)
         return 2;
-    if (meshes.put(key, MeshStorageEntry{}) || !meshes.find(key)) {
+    if (simpleCache.put(key, GraphicsPipelineStorageEntry{}) || !simpleCache.find(key)) {
         return 3;
     }
-    const auto extracted = meshes.extractAll();
-    if (extracted.size() != 1 || meshes.size() != 0)
+    const auto extracted = simpleCache.extractAll();
+    if (extracted.size() != 1 || simpleCache.size() != 0)
         return 4;
 
     // Resident materials: slots persist across frames instead of being cleared.

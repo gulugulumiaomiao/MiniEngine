@@ -15,7 +15,7 @@
 派生类实现 `keyOf(resource)`，并可覆盖 `validate(resource)`。具体 Manager 自行实现 `load()`、热重载和领域校验。
 
 ```text
-MeshManager / MaterialManager / ShaderManager / TextureManager
+MaterialManager / ShaderManager
                          │ 继承
                          ▼
               KeyedHandleRegistry

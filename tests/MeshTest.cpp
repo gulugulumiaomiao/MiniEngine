@@ -1,9 +1,6 @@
 ﻿#include "render/mesh/Mesh.h"
-#include "render/mesh/MeshManager.h"
 #include "core/serialization/BinaryTransfer.h"
 #include "core/serialization/JsonTransfer.h"
-#include "render/gpu/mesh/MeshStorageCache.h"
-#include "render/gpu/mesh/MeshStorageFactory.h"
 #include "render/mesh/MeshBuilder.h"
 #include "rhi/api/Device.h"
 
@@ -26,17 +23,32 @@ public:
         bool alive{true};
     };
 
-    engine::rhi::RID buffer_create(const engine::rhi::BufferDesc& desc) override {
+    engine::rhi::RID buffer_allocate_rid(const engine::rhi::BufferDesc& desc) override {
         buffers.push_back({desc, std::vector<std::byte>(desc.size), true});
         ++createdBuffers;
         return {static_cast<std::uint32_t>(buffers.size() - 1), 1};
     }
 
-    void buffer_destroy(engine::rhi::RID handle) override {
+    void buffer_allocate_memory(engine::rhi::RID) override {}
+
+    void buffer_free_memory(engine::rhi::RID) override {}
+
+    void buffer_release_rid(engine::rhi::RID handle) override {
         if (handle.index() >= buffers.size() || !buffers[handle.index()].alive)
             return;
         buffers[handle.index()].alive = false;
         ++destroyedBuffers;
+    }
+
+    engine::rhi::RID buffer_create(const engine::rhi::BufferDesc& desc) override {
+        const engine::rhi::RID handle = buffer_allocate_rid(desc);
+        buffer_allocate_memory(handle);
+        return handle;
+    }
+
+    void buffer_destroy(engine::rhi::RID handle) override {
+        buffer_free_memory(handle);
+        buffer_release_rid(handle);
     }
 
     void buffer_upload(engine::rhi::RID destination,
@@ -47,6 +59,11 @@ public:
         BufferRecord& target = buffers[destination.index()];
         std::ranges::copy(data, target.bytes.begin() + static_cast<std::ptrdiff_t>(offset));
         ++uploads;
+    }
+
+    engine::rhi::RID buffer_acquire_transient(const engine::rhi::BufferDesc& desc) override {
+        ++transientBuffers;
+        return buffer_create(desc);
     }
 
     engine::rhi::RID texture_create(const engine::rhi::TextureDesc&) override {
@@ -90,6 +107,7 @@ public:
     std::uint32_t createdBuffers{};
     std::uint32_t destroyedBuffers{};
     std::uint32_t uploads{};
+    std::uint32_t transientBuffers{};
     std::uint32_t waits{};
 };
 
@@ -103,6 +121,11 @@ template <typename Value> Value readAt(const std::vector<std::byte>& bytes, std:
 
 int main() {
     using namespace engine;
+
+    // Mesh 现为 GPU 资源持有者：构造/上传/销毁均经 active device。FakeDevice 注册为进程级
+    // active 设备并记录 buffer 的分配/上传/释放，使 headless 测试能验证三步创建与两步销毁。
+    // 必须先于任何 Mesh 声明，保证其生命周期长于所有 Mesh。
+    FakeDevice fakeDevice;
 
     constexpr std::array positions{
         math::Vec3{-1.0F, -1.0F, 0.0F},
@@ -134,6 +157,7 @@ int main() {
         return 1;
     }
 
+    // --- 序列化（binary + json）：与 GPU 无关，验证 MeshAsset 持久化 ---
     BinaryWriter writer;
     if (!source.transfer(writer))
         return 2;
@@ -167,38 +191,61 @@ int main() {
         return 10;
     }
 
+    // --- instantiate：唯一运行时实例，三步创建（分配RID + 分配内存 + 上传）---
+    // decoded 有 2 个 vertex stream + 1 个 index buffer = 3 个 buffer，各上传一次。
+    const std::uint32_t buffersBefore = fakeDevice.createdBuffers;
+    const std::uint32_t uploadsBefore = fakeDevice.uploads;
     Ref<Mesh> runtime = decoded.instantiate();
-    if (!runtime || runtime->assetPath() != source.assetPath() || runtime->version() != 1 ||
-        !runtime->dirty() || runtime->data().vertexStreams.size() != 2) {
+    if (!runtime || !runtime->isValid() || runtime->assetPath() != source.assetPath() ||
+        !runtime->isAssetBacked() || runtime->vertexBuffers().size() != 2 ||
+        !runtime->indexBuffer() || runtime->indexFormat() != rhi::IndexFormat::UInt16 ||
+        runtime->subMeshes().size() != 1 || runtime->usage() != MeshUsage::Dynamic ||
+        runtime->topology() != MeshTopology::TriangleList) {
         return 4;
     }
-    runtime->markClean();
-    const math::Vec3 replacement{2.0F, 3.0F, 4.0F};
-    if (!runtime->updateVertexData(0, 1, std::as_bytes(std::span{&replacement, 1})) ||
-        runtime->version() != 2 || !runtime->dirty()) {
+    if (fakeDevice.createdBuffers != buffersBefore + 3 ||
+        fakeDevice.uploads != uploadsBefore + 3) {
+        return 4;
+    }
+    // 复用唯一实例：再次 instantiate 返回同一对象，不再新建 buffer。
+    if (decoded.instantiate() != runtime || fakeDevice.createdBuffers != buffersBefore + 3) {
         return 5;
     }
-    const std::uint16_t replacementIndex = 1;
-    if (!runtime->updateIndexData(2, std::as_bytes(std::span{&replacementIndex, 1})) ||
-        runtime->version() != 3) {
+
+    // --- 修改监控：就地重传（热重载）→ transfer 读取分支调 syncInstance 重新上传唯一实例 ---
+    const std::uint32_t uploadsBeforeSync = fakeDevice.uploads;
+    BinaryReader syncReader{binary};
+    if (!decoded.transfer(syncReader) || fakeDevice.uploads != uploadsBeforeSync + 3) {
         return 6;
     }
 
+    // --- clone：脱离 asset 的独立实例（新建 buffer，不登记、不链接 asset）---
+    const std::uint32_t buffersBeforeClone = fakeDevice.createdBuffers;
+    Ref<Mesh> cloned = runtime->clone();
+    if (!cloned || cloned == runtime || !cloned->isValid() || cloned->isAssetBacked() ||
+        cloned->assetPath().valid() || fakeDevice.createdBuffers != buffersBeforeClone + 3) {
+        return 7;
+    }
+
+    // --- 无效 payload 不得破坏 asset，也不得触发上传 ---
     std::vector<std::byte> invalid = binary;
     invalid.front() = std::byte{0};
     const std::string originalName = decoded.desc.debugName;
+    const std::uint32_t uploadsBeforeInvalid = fakeDevice.uploads;
     BinaryReader invalidReader{invalid};
-    if (decoded.transfer(invalidReader) || decoded.desc.debugName != originalName) {
-        return 7;
-    }
-    Ref<Mesh> registered = MESH_RESOURCE_MANAGER.insertUnkeyed(decoded.instantiate());
-    if (!registered || MESH_RESOURCE_MANAGER.size() != 1)
+    if (decoded.transfer(invalidReader) || decoded.desc.debugName != originalName ||
+        fakeDevice.uploads != uploadsBeforeInvalid) {
         return 8;
-    const RID registeredId = registered->resourceId();
-    registered.reset();
-    if (MESH_RESOURCE_MANAGER.find(registeredId) || MESH_RESOURCE_MANAGER.size() != 0)
-        return 9;
+    }
 
+    // --- 两步销毁：~Mesh 释放 GPU 内存并回收 RID（克隆网格的 3 个 buffer）---
+    const std::uint32_t destroyedBefore = fakeDevice.destroyedBuffers;
+    cloned.reset();
+    if (fakeDevice.destroyedBuffers != destroyedBefore + 3) {
+        return 9;
+    }
+
+    // --- MeshBuilder::build：几何生成（与 GPU 无关）---
     MeshBuildRecipe planeRecipe;
     planeRecipe.name = "Plane";
     planeRecipe.parts.push_back({PlaneGeometry{{2.0F, 4.0F}, 1, 1}});
@@ -210,34 +257,16 @@ int main() {
         return 11;
     }
 
-    Ref<Mesh> runtimePlane = MESH_RESOURCE_MANAGER.createRuntime(planeRecipe);
-    Ref<Mesh> secondRuntimePlane = MESH_RESOURCE_MANAGER.createRuntime(planeRecipe);
-    if (!runtimePlane || !secondRuntimePlane || runtimePlane == secondRuntimePlane ||
-        runtimePlane->assetPath().valid() || MESH_RESOURCE_MANAGER.size() != 2) {
+    // 运行时图元经 buildAsset → instantiate（取代已删除的 MeshResourceManager::createRuntime）。
+    const Ref<MeshAsset> planeAsset = MeshBuilder::buildAsset(planeRecipe);
+    Ref<Mesh> runtimePlane = planeAsset ? planeAsset->instantiate() : Ref<Mesh>{};
+    if (!runtimePlane || !runtimePlane->isValid()) {
         return 20;
     }
-    const std::uint64_t runtimeVersion = runtimePlane->version();
-    const RID runtimePlaneId = runtimePlane->resourceId();
-    const RID secondRuntimePlaneId = secondRuntimePlane->resourceId();
-    std::vector<RID> destroyedRuntimeMeshes;
-    MESH_RESOURCE_MANAGER.setDestroyObserver(
-        [&destroyedRuntimeMeshes](RID handle) { destroyedRuntimeMeshes.push_back(handle); });
-    planeRecipe.parts[0].primitive = PlaneGeometry{{4.0F, 4.0F}, 2, 2};
-    if (!MESH_RESOURCE_MANAGER.rebuildRuntime(runtimePlane, planeRecipe) ||
-        runtimePlane->version() != runtimeVersion + 1 ||
-        runtimePlane->data().indexCount != 24) {
-        return 21;
-    }
-    runtimePlane.reset();
-    secondRuntimePlane.reset();
-    if (MESH_RESOURCE_MANAGER.size() != 0 ||
-        destroyedRuntimeMeshes != std::vector<RID>{runtimePlaneId, secondRuntimePlaneId}) {
-        return 21;
-    }
-    MESH_RESOURCE_MANAGER.setDestroyObserver({});
 
+    // --- 多部件图元组装 + 序列化 + instantiate ---
     MeshBuildRecipe primitives;
-    primitives.name = "PrimitiveAssembly";
+    primitives.name = "Primitive Assembly";
     MeshPrimitivePart boxPart;
     boxPart.primitive = BoxGeometry{};
     boxPart.translation = {-2.0F, 0.0F, 0.0F};
@@ -271,11 +300,14 @@ int main() {
         proceduralDecoded.buildRecipe->parts[1].primitive.type() != MeshPrimitiveType::UvSphere) {
         return 13;
     }
+    // instantiate 后 Mesh 暴露 subMeshes（取代已删除的 Mesh::buildRecipe()）。
     Ref<Mesh> proceduralRuntime = proceduralDecoded.instantiate();
-    if (!proceduralRuntime || !proceduralRuntime->buildRecipe() ||
-        proceduralRuntime->buildRecipe()->name != "PrimitiveAssembly")
+    if (!proceduralRuntime || !proceduralRuntime->isValid() ||
+        proceduralRuntime->subMeshes().size() != 3) {
         return 14;
+    }
 
+    // --- 镜像切线 handedness ---
     MeshBuildRecipe mirroredRecipe;
     MeshPrimitivePart mirroredPart;
     mirroredPart.primitive = PlaneGeometry{};
@@ -288,6 +320,7 @@ int main() {
     if (!math::nearlyEqual(mirroredTangent.w, -1.0F))
         return 15;
 
+    // --- 索引类型策略：Auto 大体量升 UInt32，强制 UInt16 超界则失败 ---
     MeshBuildRecipe largeRecipe;
     largeRecipe.parts.push_back({PlaneGeometry{{1.0F, 1.0F}, 256, 256}});
     const auto large = MeshBuilder::build(largeRecipe);
@@ -302,7 +335,7 @@ int main() {
     if (MeshBuilder::build(invalidRecipe))
         return 17;
 
-    // A payload with no build recipe must remain readable after the stream refactor.
+    // --- 无 build recipe 的 payload 仍可读 ---
     BinaryWriter v4Writer;
     if (!source.transfer(v4Writer))
         return 18;
@@ -312,64 +345,33 @@ int main() {
         v4Decoded.desc.debugName != source.desc.debugName) {
         return 18;
     }
-    // The render-side cache is testable without Vulkan and uploads only when
-    // the Mesh version changes.
-    FakeDevice fakeDevice;
-    MeshStorageCache gpuCache;
-    MeshStorageFactory gpuFactory{fakeDevice};
-    Ref<Mesh> gpuMesh = source.instantiate();
-    if (!gpuMesh)
-        return 19;
-    const RID gpuHandle{7, 1};
-    MeshStorageEntry firstResource;
-    if (!gpuFactory.create({*gpuMesh}, firstResource))
-        return 19;
-    const MeshStorageCacheKey firstKey = MeshStorageCache::key(gpuHandle, gpuMesh->version());
-    (void)gpuCache.put(firstKey, std::move(firstResource));
-    gpuMesh->markClean();
-    const MeshDrawInfo firstDraw = gpuCache.find(firstKey)->drawInfo;
-    if (firstDraw.vertexBuffers.size() != 2 || !firstDraw.indexBuffer ||
-        fakeDevice.createdBuffers != 3 || fakeDevice.uploads != 3 || gpuMesh->dirty()) {
-        return 19;
+
+    // --- Stream：瞬态 orphan。每次 upload 获取新瞬态缓冲，旧的不被 Mesh 释放（设备 fence 池拥有）---
+    MeshBuildRecipe streamRecipe;
+    streamRecipe.name = "Stream";
+    streamRecipe.usage = MeshUsage::Stream;
+    streamRecipe.parts.push_back({PlaneGeometry{}});
+    const Ref<MeshAsset> streamAsset = MeshBuilder::buildAsset(streamRecipe);
+    Ref<Mesh> streamMesh = streamAsset ? streamAsset->instantiate() : Ref<Mesh>{};
+    if (!streamMesh || !streamMesh->isValid() || streamMesh->usage() != MeshUsage::Stream ||
+        fakeDevice.transientBuffers == 0) {
+        return 22;
     }
-    const MeshDrawInfo cachedDraw = gpuCache.find(firstKey)->drawInfo;
-    if (cachedDraw.indexBuffer != firstDraw.indexBuffer || fakeDevice.createdBuffers != 3 ||
-        fakeDevice.uploads != 3) {
-        return 19;
+    const std::uint32_t transientBefore = fakeDevice.transientBuffers;
+    const std::uint32_t createdBeforeStream = fakeDevice.createdBuffers;
+    const std::uint32_t destroyedBeforeStream = fakeDevice.destroyedBuffers;
+    // 模拟每帧生产者：再次 upload → 获取新瞬态缓冲（orphan 旧的，Mesh 不释放）。
+    streamMesh->upload(streamAsset->meshData);
+    if (fakeDevice.transientBuffers == transientBefore ||
+        fakeDevice.createdBuffers == createdBeforeStream ||
+        fakeDevice.destroyedBuffers != destroyedBeforeStream) {
+        return 23;
     }
-    const math::Vec3 gpuReplacement{5.0F, 6.0F, 7.0F};
-    if (!gpuMesh->updateVertexData(0, 0, std::as_bytes(std::span{&gpuReplacement, 1}))) {
-        return 19;
+    // ~Mesh 对 Stream 不释放瞬态缓冲（池拥有）：重置后 destroyedBuffers 不变。
+    streamMesh.reset();
+    if (fakeDevice.destroyedBuffers != destroyedBeforeStream) {
+        return 24;
     }
-    MeshStorageEntry rebuiltResource;
-    if (!gpuFactory.create({*gpuMesh}, rebuiltResource))
-        return 19;
-    auto oldResources = gpuCache.extractIf([sourceKey = MeshStorageCache::sourceKey(gpuHandle)](
-                                               const MeshStorageCacheKey& key, const MeshStorageEntry&) {
-        return key.source == sourceKey;
-    });
-    fakeDevice.waitIdle();
-    for (auto& [unused, resource] : oldResources) {
-        (void)unused;
-        gpuFactory.release(resource);
-    }
-    const MeshStorageCacheKey rebuiltKey = MeshStorageCache::key(gpuHandle, gpuMesh->version());
-    (void)gpuCache.put(rebuiltKey, std::move(rebuiltResource));
-    gpuMesh->markClean();
-    const MeshDrawInfo rebuiltDraw = gpuCache.find(rebuiltKey)->drawInfo;
-    if (!rebuiltDraw.indexBuffer || rebuiltDraw.indexBuffer == firstDraw.indexBuffer ||
-        fakeDevice.createdBuffers != 6 || fakeDevice.destroyedBuffers != 3 ||
-        fakeDevice.uploads != 6 || fakeDevice.waits != 1 || gpuMesh->dirty()) {
-        return 19;
-    }
-    auto removed = gpuCache.extractAll();
-    fakeDevice.waitIdle();
-    for (auto& [unused, resource] : removed) {
-        (void)unused;
-        gpuFactory.release(resource);
-    }
-    if (fakeDevice.destroyedBuffers != 6 || fakeDevice.waits != 2 || gpuCache.size() != 0) {
-        return 19;
-    }
+
     return 0;
 }

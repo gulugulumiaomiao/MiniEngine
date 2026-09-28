@@ -1,7 +1,8 @@
 #include "scene/components/MeshComponent.h"
 
 #include "core/serialization/Transfer.h"
-#include "render/mesh/MeshManager.h"
+#include "render/mesh/Mesh.h"
+#include "render/mesh/MeshBuilder.h"
 
 #include <utility>
 
@@ -63,12 +64,17 @@ bool MeshComponent::applyPrimitiveChanges() {
     if (!primitiveDirty_)
         return static_cast<bool>(mesh_);
     primitiveDirty_ = false;
-    if (ownsRuntimeMesh_ && mesh_)
-        return MESH_RESOURCE_MANAGER.rebuildRuntime(mesh_, *primitiveRecipe_);
-
-    mesh_ = MESH_RESOURCE_MANAGER.createRuntime(*primitiveRecipe_);
-    ownsRuntimeMesh_ = static_cast<bool>(mesh_);
-    return ownsRuntimeMesh_;
+    // 运行时图元：经 MeshBuilder 产出临时 MeshAsset 再 instantiate（取代已删除的
+    // MeshResourceManager::createRuntime/rebuildRuntime）。重建即替换：旧 mesh_ 的最后一个
+    // Ref 归零时，~Mesh 自动释放其 GPU 缓冲。临时 asset 随即析构并清除观察者回指，
+    // 得到的 Mesh 脱离 asset（等价 clone）。
+    const Ref<MeshAsset> asset = MeshBuilder::buildAsset(*primitiveRecipe_);
+    Ref<Mesh> built = asset ? asset->instantiate() : Ref<Mesh>{};
+    if (!built)
+        return false;
+    mesh_ = std::move(built);
+    ownsRuntimeMesh_ = true;
+    return true;
 }
 
 void MeshComponent::onAttach() {

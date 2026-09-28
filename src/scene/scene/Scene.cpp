@@ -2,7 +2,6 @@
 
 #include "core/logging/Log.h"
 #include "render/mesh/Mesh.h"
-#include "render/mesh/MeshManager.h"
 #include "render/scene/RenderScene.h"
 #include "scene/components/CameraComponent.h"
 #include "scene/components/LightComponent.h"
@@ -299,7 +298,7 @@ void Scene::extractRenderNode(Node& node, RenderScene& output, float aspectRatio
             for (std::uint32_t column = 0; column < 3; ++column) {
                 maxAxisScale = std::max(maxAxisScale, math::length(math::Vec3(world[column])));
             }
-            boundsRadius = meshInstance->desc().bounds.sphere.radius * maxAxisScale;
+            boundsRadius = meshInstance->bounds().sphere.radius * maxAxisScale;
         }
         output.submit({
             .mesh = mesh->mesh(),

@@ -15,7 +15,7 @@ engine::DrawItem makeItem(int renderQueue,
     item.renderQueue = renderQueue;
     item.pipeline = engine::rhi::RID{pipelineIndex, 1};
     item.materialKey = engine::RID{materialIndex, 1};
-    item.mesh = engine::RID{meshIndex, 1};
+    item.indexBuffer = engine::rhi::RID{meshIndex, 1};
     item.arguments.firstInstance = firstInstance;
     return item;
 }
@@ -93,10 +93,10 @@ int main() {
 
         assert(items[0].pipeline.index() == 1);
         assert(items[0].materialKey.index() == 2);
-        assert(items[0].mesh.index() == 1);
+        assert(items[0].indexBuffer.index() == 1);
         assert(items[1].pipeline.index() == 1);
         assert(items[1].materialKey.index() == 2);
-        assert(items[1].mesh.index() == 3);
+        assert(items[1].indexBuffer.index() == 3);
         assert(items[2].pipeline.index() == 3);
     }
 

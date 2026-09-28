@@ -1,4 +1,5 @@
 ﻿#include "TestAssetEnvironment.h"
+#include "TestRenderDevice.h"
 
 #include "asset/types/MaterialAsset.h"
 #include "asset/database/AssetDatabase.h"
@@ -7,7 +8,6 @@
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
-#include "render/mesh/MeshManager.h"
 #include "render/shader/ShaderManager.h"
 #include "scene/components/CameraComponent.h"
 #include "scene/components/LightComponent.h"
@@ -30,8 +30,7 @@ namespace {
 
 using namespace engine;
 
-[[nodiscard]] Ref<Mesh> registerTriangleMesh() {
-    MESH_MANAGER.clear();
+[[nodiscard]] Ref<MeshAsset> makeTriangleMeshAsset() {
     constexpr std::array positions{
         math::Vec3{-1.0F, -1.0F, 0.0F},
         math::Vec3{1.0F, -1.0F, 0.0F},
@@ -39,21 +38,21 @@ using namespace engine;
     };
     constexpr std::array<std::uint16_t, 3> indices{0, 1, 2};
 
-    MeshAsset source;
-    source.setAssetPath(VirtualPath{"assets://meshes/triangle.mesh.json"});
-    source.desc.debugName = "ExportTriangle";
-    source.desc.vertexLayout.streams = {
+    Ref<MeshAsset> source = makeRef<MeshAsset>();
+    source->setAssetPath(VirtualPath{"assets://meshes/triangle.mesh.json"});
+    source->desc.debugName = "ExportTriangle";
+    source->desc.vertexLayout.streams = {
         {{VertexSemanticType::Position, 0}, VertexFormat::Vec3Float32, 0, 0},
     };
-    source.desc.indexType = IndexType::UInt16;
-    source.desc.bounds = calculateBounds(positions);
-    source.desc.subMeshes.push_back({0, 3, 0, 0, source.desc.bounds});
-    if (!source.meshData.setVertexData(0, std::span{positions}) ||
-        !source.meshData.setIndexData(std::span{indices}) ||
-        !validateMesh(source.desc, source.meshData)) {
+    source->desc.indexType = IndexType::UInt16;
+    source->desc.bounds = calculateBounds(positions);
+    source->desc.subMeshes.push_back({0, 3, 0, 0, source->desc.bounds});
+    if (!source->meshData.setVertexData(0, std::span{positions}) ||
+        !source->meshData.setIndexData(std::span{indices}) ||
+        !validateMesh(source->desc, source->meshData)) {
         return {};
     }
-    return MESH_MANAGER.insertUnkeyed(source.instantiate());
+    return source;
 }
 
 [[nodiscard]] Ref<Scene> buildExportScene(Ref<Mesh> mesh,
@@ -104,10 +103,15 @@ using namespace engine;
 int main() {
     using namespace engine;
 
+    // Mesh 构造需 active device；MockDevice 注册为进程级 active 设备（须先于任何 Mesh）。
+    MockDevice device;
+
     if (!test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR))
         return 30;
 
-    const Ref<Mesh> meshHandle = registerTriangleMesh();
+    // 持有 MeshAsset 存活：新 Mesh::assetPath() 委托给所链接的 asset，导出时需要它。
+    const Ref<MeshAsset> meshAsset = makeTriangleMeshAsset();
+    const Ref<Mesh> meshHandle = meshAsset ? meshAsset->instantiate() : Ref<Mesh>{};
     if (!meshHandle)
         return 31;
 
@@ -307,7 +311,6 @@ int main() {
 
     runtime.reset();
     scene.reset();
-    MESH_MANAGER.clear();
     MATERIAL_MANAGER.clear();
     return 0;
 }

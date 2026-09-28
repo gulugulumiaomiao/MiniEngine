@@ -14,13 +14,27 @@ using namespace engine;
 // that dispatch to the concrete Vulkan backend, so it cannot be exercised through this mock.
 class MockDevice final : public rhi::IDevice {
 public:
-    rhi::RID buffer_create(const rhi::BufferDesc& desc) override {
+    rhi::RID buffer_allocate_rid(const rhi::BufferDesc& desc) override {
         buffers.push_back(desc);
         return {static_cast<std::uint32_t>(buffers.size()), 1};
     }
-    void buffer_destroy(rhi::RID) override { ++destroyedBuffers; }
+    void buffer_allocate_memory(rhi::RID) override {}
+    void buffer_free_memory(rhi::RID) override {}
+    void buffer_release_rid(rhi::RID) override { ++destroyedBuffers; }
+    rhi::RID buffer_create(const rhi::BufferDesc& desc) override {
+        const rhi::RID handle = buffer_allocate_rid(desc);
+        buffer_allocate_memory(handle);
+        return handle;
+    }
+    void buffer_destroy(rhi::RID handle) override {
+        buffer_free_memory(handle);
+        buffer_release_rid(handle);
+    }
     void buffer_upload(rhi::RID, std::span<const std::byte> data, std::uint64_t) override {
         uploadedBytes.push_back(data.size_bytes());
+    }
+    rhi::RID buffer_acquire_transient(const rhi::BufferDesc& desc) override {
+        return buffer_create(desc);
     }
 
     rhi::RID texture_create(const rhi::TextureDesc& desc) override {

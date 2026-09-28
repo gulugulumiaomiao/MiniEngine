@@ -1,11 +1,13 @@
-﻿#include "asset/derived_data/AssetArtifact.h"
+﻿#include "TestRenderDevice.h"
+#include "asset/derived_data/AssetArtifact.h"
 #include "asset/base/AssetId.h"
 #include "asset/base/AssetMeta.h"
 #include "asset/base/AssetReference.h"
 #include "asset/base/GuidResolver.h"
 #include "asset/format/SceneAssetFormat.h"
 #include "core/serialization/BinaryTransfer.h"
-#include "render/mesh/MeshManager.h"
+#include "render/mesh/Mesh.h"
+#include "render/mesh/MeshBuilder.h"
 #include "scene/scene/SceneAsset.h"
 #include "scene/components/MaterialComponent.h"
 #include "scene/components/MeshComponent.h"
@@ -145,6 +147,9 @@ std::string makeSceneJson(std::string_view meshGuid, std::string_view materialGu
 int main() {
     using namespace engine;
 
+    // Mesh 构造需 active device；MockDevice 注册为进程级 active 设备（须先于任何 Mesh）。
+    MockDevice device;
+
     static_assert(std::is_base_of_v<Transferable, TransformComponentAsset>);
     static_assert(std::is_base_of_v<Transferable, MeshComponentAsset>);
     static_assert(std::is_base_of_v<Transferable, MaterialComponentAsset>);
@@ -225,8 +230,11 @@ int main() {
 
     std::vector<VirtualPath> loadedMeshes;
     std::vector<VirtualPath> loadedMaterials;
-    MESH_RESOURCE_MANAGER.clear();
-    const Ref<Mesh> loadedMesh = makeRef<Mesh>();
+    MeshBuildRecipe stubRecipe;
+    stubRecipe.name = "Stub";
+    stubRecipe.parts.push_back({PlaneGeometry{}});
+    const Ref<MeshAsset> stubAsset = MeshBuilder::buildAsset(stubRecipe);
+    const Ref<Mesh> loadedMesh = stubAsset ? stubAsset->instantiate() : Ref<Mesh>{};
     const Ref<Material> loadedMaterial = makeRef<Material>();
     const SceneInstantiationContext context{
         .loadMesh =
@@ -251,8 +259,6 @@ int main() {
         return 123;
     if (loadedMaterials.size() != 1)
         return 124;
-    if (MESH_RESOURCE_MANAGER.size() != 1)
-        return 125;
     if (loadedMeshes.front() != VirtualPath{"assets://meshes/cube.mesh.json"})
         return 126;
     if (loadedMaterials.front() != VirtualPath{"assets://materials/default.material.json"})
@@ -279,14 +285,11 @@ int main() {
     if (!runtimePrimitive || !runtimePrimitive->getComponent<MeshComponent>() ||
         runtimePrimitive->getComponent<MeshComponent>()->sourceType() !=
             MeshComponentSourceType::Primitive ||
-        !runtimePrimitive->getComponent<MeshComponent>()->mesh()) {
+        !runtimePrimitive->getComponent<MeshComponent>()->mesh() ||
+        !runtimePrimitive->getComponent<MeshComponent>()->mesh()->isValid()) {
         return 17;
     }
-    const RID runtimePrimitiveHandle =
-        runtimePrimitive->getComponent<MeshComponent>()->mesh()->resourceId();
-    runtime.reset();
-    if (MESH_RESOURCE_MANAGER.find(runtimePrimitiveHandle) || MESH_RESOURCE_MANAGER.size() != 0)
-        return 18;
+    runtime.reset(); // 场景释放后，运行时图元 Mesh 的最后一个 Ref 归零 → ~Mesh 释放 GPU 缓冲
 
     const AssetArtifact artifact{1, AssetId{1, 2}, AssetType::Scene, scenePath, binary};
     const std::vector<std::byte> artifactBinary = serializeAssetArtifact(artifact);

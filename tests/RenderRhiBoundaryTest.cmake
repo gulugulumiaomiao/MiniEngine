@@ -53,11 +53,11 @@ if(renderer_header MATCHES "(createMesh|createProceduralMesh|loadMesh|loadMateri
     message(FATAL_ERROR "Renderer exposes CPU/GPU asset management APIs")
 endif()
 
-# NOTE: render/texture/Texture.h is a layer-2 header now: it holds rhi::RID handles and
-# rhi::TextureBinding and talks to IDevice directly, so it legitimately includes rhi/api
-# headers and is intentionally excluded from the layer-1 "no RHI" invariant below.
+# NOTE: render/texture/Texture.h and render/mesh/Mesh.h are layer-2 headers now: they hold
+# rhi::RID handles (Texture: texture/view/sampler; Mesh: vertex/index buffers) and talk to IDevice
+# directly, so they legitimately include rhi/api headers and are intentionally excluded from the
+# layer-1 "no RHI" invariant below.
 foreach(layer1_header IN ITEMS
-    "${render_dir}/mesh/Mesh.h"
     "${render_dir}/material/Material.h"
     "${render_dir}/shader/Shader.h"
 )

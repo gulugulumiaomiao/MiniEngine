@@ -7,7 +7,7 @@
 #include "core/math/Math.h"
 #include "core/serialization/Transferable.h"
 #include "render/mesh/MeshPrimitive.h"
-#include "render/base/RenderHandle.h"
+#include "rhi/api/ResourceDesc.h" // rhi::RID / rhi::IndexFormat
 
 #include <compare>
 #include <cstddef>
@@ -15,13 +15,13 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
 namespace engine {
 
 class MeshAsset;
-class MeshResourceManager;
 
 enum class VertexSemanticType {
     Position,
@@ -236,68 +236,115 @@ struct MeshData final : public Transferable {
     }
 };
 
+/// 一个顶点缓冲槽：每个 binding 对应一个层3 buffer RID。
+struct MeshVertexBuffer {
+    std::uint32_t binding{};
+    rhi::RID buffer;
+
+    [[nodiscard]] bool operator==(const MeshVertexBuffer&) const = default;
+};
+
+/// 层2 运行时网格：GPU 资源持有者（对齐 Texture）。持有 vertex/index buffer 的层3 RID 与
+/// 绘制必要属性（vertexLayout/indexFormat/topology/subMeshes/bounds/usage），不持有 MeshDesc/
+/// MeshData/buildRecipe/version/assetPath/assetId/device。
+///
+/// 三步创建：构造按 desc+data 分配每个 buffer 的 RID（步1）与 GPU 内存（步2），`upload` 上传
+/// 数据（步3）。两步销毁：`~Mesh` 对每个 buffer 先 free memory 再 release rid。
+/// MeshUsage 决定 GPU 策略：Static→DeviceLocal 持久缓冲（staging 拷贝上传）；Dynamic→host-visible
+/// 持久缓冲（就地 memcpy 更新）；Stream→host-visible 瞬态缓冲（每次 upload 经
+/// `IDevice::buffer_acquire_transient` 获取新缓冲并 orphan 旧的，由设备按帧 fence 自动回收，
+/// `~Mesh` 不释放）。Stream 语义要求每帧重新 upload；引擎尚无自动每帧生产者，属前瞻基础设施。
+/// 由 `MeshAsset::instantiate()`/`clone()` 创建；析构经 `rhi::IDevice::active()` 释放（asset-backed
+/// 网格在其设备仍 active 时销毁）。
 class Mesh final : public RefCounted {
 public:
-    Mesh() = default;
-    Mesh(MeshDesc desc, MeshData data, std::optional<MeshBuildRecipe> buildRecipe = std::nullopt);
     ~Mesh() override;
     Mesh(const Mesh&) = delete;
     Mesh& operator=(const Mesh&) = delete;
     Mesh(Mesh&&) = delete;
     Mesh& operator=(Mesh&&) = delete;
 
-    [[nodiscard]] const VirtualPath& assetPath() const { return assetPath_; }
-    [[nodiscard]] const MeshDesc& desc() const { return desc_; }
-    [[nodiscard]] const MeshData& data() const { return data_; }
-    [[nodiscard]] const std::optional<MeshBuildRecipe>& buildRecipe() const { return buildRecipe_; }
-    [[nodiscard]] std::uint64_t version() const { return version_; }
-    // Hash of desc().vertexLayout, computed once because the layout is fixed for the
-    // lifetime of the Mesh; data updates never reshape it. Pipeline cache keys use this
-    // instead of walking the bindings and attributes on every draw item.
-    [[nodiscard]] std::uint64_t vertexLayoutHash() const { return vertexLayoutHash_; }
-    [[nodiscard]] bool dirty() const { return dirty_; }
-    void markClean() { dirty_ = false; }
+    // 资产身份委托给所链接的 MeshAsset（.cpp 定义，因此处 MeshAsset 尚不完整）；
+    // 内建/克隆网格无 asset，返回空路径 / 无效 id。
+    [[nodiscard]] const VirtualPath& assetPath() const;
+    [[nodiscard]] AssetId assetId() const;
+    [[nodiscard]] bool isAssetBacked() const { return asset_ != nullptr; }
 
-    [[nodiscard]] AssetId assetId() const { return assetId_; }
-    [[nodiscard]] bool isAssetBacked() const { return assetId_.valid(); }
-    [[nodiscard]] RID resourceId() const { return resourceId_; }
+    // 绘制必要属性 + GPU 句柄（供渲染侧直接读取，取代已删除的 MeshStorage）。
+    [[nodiscard]] const std::vector<MeshVertexBuffer>& vertexBuffers() const { return vertexBuffers_; }
+    [[nodiscard]] rhi::RID indexBuffer() const { return indexBuffer_; }
+    [[nodiscard]] rhi::IndexFormat indexFormat() const { return indexFormat_; }
+    [[nodiscard]] MeshTopology topology() const { return topology_; }
+    [[nodiscard]] const std::vector<SubMesh>& subMeshes() const { return subMeshes_; }
+    [[nodiscard]] const VertexLayout& vertexLayout() const { return vertexLayout_; }
+    [[nodiscard]] const MeshBounds& bounds() const { return bounds_; }
+    [[nodiscard]] MeshUsage usage() const { return usage_; }
+    /// 构造是否成功（设备可用且 buffer RID 已分配）。
+    [[nodiscard]] bool isValid() const { return indexBuffer_ && !vertexBuffers_.empty(); }
+
+    /// 步3：把 CPU 数据上传到 GPU 缓冲（按 binding 匹配 vertex stream）。Static/Dynamic 写入
+    /// 构造期分配的持久缓冲；Stream 每次获取新瞬态缓冲并 orphan 旧的（见类注释）。
+    void upload(const MeshData& data);
+
+    /// 克隆一个脱离 asset 的独立网格（与 `MeshAsset::clone` 同义，需 asset-backed）。
     [[nodiscard]] Ref<Mesh> clone() const;
-    void rebuildFromAsset(const MeshAsset& asset);
-
-    [[nodiscard]] bool updateVertexData(std::uint32_t binding,
-                                        std::uint32_t firstVertex,
-                                        std::span<const std::byte> source);
-    [[nodiscard]] bool updateIndexData(std::uint32_t firstIndex, std::span<const std::byte> source);
 
 private:
     friend class MeshAsset;
-    friend class MeshResourceManager;
 
-    void markChanged();
-    void cacheVertexLayoutHash() { vertexLayoutHash_ = desc_.vertexLayout.hash(); }
+    /// 步1+2：按 desc/data 分配 vertex/index buffer 的 RID 与 GPU 内存（不上传）。
+    /// Static/Dynamic 在此分配持久缓冲；Stream 推迟到 upload（瞬态获取），构造仅记录属性。
+    Mesh(const MeshDesc& desc, const MeshData& data);
+    /// 建立与 asset 的活链接（仅 instantiate 实例调用）。asset 为非拥有裸指针。
+    void bindAsset(MeshAsset* asset) { asset_ = asset; }
+    /// 释放 GPU 缓冲：Static/Dynamic 两步销毁（free memory 后 release rid）；Stream 的瞬态
+    /// 缓冲由设备 fence 池拥有，仅弃置引用不释放。
+    void releaseGpuResources();
 
-    VirtualPath assetPath_;
-    AssetId assetId_;
-    MeshDesc desc_;
-    MeshData data_;
-    std::optional<MeshBuildRecipe> buildRecipe_;
-    std::uint64_t vertexLayoutHash_{};
-    std::uint64_t version_{1};
-    bool dirty_{true};
-    RID resourceId_;
+    std::vector<MeshVertexBuffer> vertexBuffers_;
+    rhi::RID indexBuffer_;
+    rhi::IndexFormat indexFormat_{rhi::IndexFormat::UInt32};
+    MeshTopology topology_{MeshTopology::TriangleList};
+    std::vector<SubMesh> subMeshes_;
+    VertexLayout vertexLayout_;
+    MeshBounds bounds_;
+    MeshUsage usage_{MeshUsage::Static};
+    bool constructed_{}; // 构造是否拿到 active device（且持久分配成功）；供 MeshAsset 校验
+
+    MeshAsset* asset_{}; // 非拥有活链接（asset 由 AssetManager 常驻）；仅 instantiate 实例设置
 };
 
+/// 层1 网格资产：序列化源（desc + meshData + buildRecipe）。可 instantiate 出唯一运行时 Mesh，
+/// 或 clone 出多个脱离实例。
 class MeshAsset final : public Asset {
 public:
+    ~MeshAsset() override;
     [[nodiscard]] AssetType type() const override { return AssetType::Mesh; }
 
     MeshDesc desc;
     MeshData meshData;
     std::optional<MeshBuildRecipe> buildRecipe;
 
-    [[nodiscard]] Ref<Mesh> instantiate() const;
     [[nodiscard]] bool transfer(Transfer& archive) override;
+
+    /// 唯一运行时实例：首次创建并登记，之后复用同一实例（asset 就地重传会推送到它）。
+    [[nodiscard]] Ref<Mesh> instantiate();
+    /// 克隆一个脱离 asset 的独立运行时网格（每次新建，不随 asset 变化）。
+    [[nodiscard]] Ref<Mesh> clone();
+
+private:
+    friend class Mesh;
+
+    /// 把当前 meshData 重新上传给唯一实例（存在时）。就地重传（热重载）后调用。
+    void syncInstance();
+
+    Mesh* instance_{}; // 裸观察者指针；~Mesh 反注册置空
 };
+
+/// 解析网格引用为运行时 Mesh：`assets://` 或裸路径 → 经 AssetManager 加载 `MeshAsset` 并
+/// `instantiate`（按 asset 天然去重）；失败 → 空 Ref（调用方跳过）。取代已删除的
+/// `MeshResourceManager::load`。
+[[nodiscard]] Ref<Mesh> resolveMeshReference(std::string_view reference);
 
 [[nodiscard]] std::uint32_t vertexFormatSize(VertexFormat format);
 [[nodiscard]] std::uint32_t indexTypeSize(IndexType type);

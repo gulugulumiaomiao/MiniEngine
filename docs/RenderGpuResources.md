@@ -20,18 +20,21 @@ Material
 
 句柄池按对象类型分开、直接存 `Vulkan*` 实例（不存指针、不经抽象接口），全部内嵌在具体 `VulkanDevice`；`rhi::IDevice` 只声明 RID 生命周期虚函数（`<type>_create/_destroy/_upload`），不含任何后端原生类型，也不再内嵌句柄池。`IRHITexture`/`IRHITextureView`/`IRHISampler` 抽象接口已删除。IDevice 是全局单例：后端构造时把自己注册为 `IDevice::active()`、析构时让位，未构造时 `active()` 返回 `nullptr`。层2 `Texture`/`Sampler` 与静态默认纹理都经 `IDevice::active()` 取设备（没有纹理管理器可注入）。
 
-## 2. 层2 Storage（Mesh/Shader/Pipeline/Material）
+## 2. 层2 Storage（Shader/Pipeline/Material）
 
-- `MeshStorage`：版本化上传顶点/索引 Buffer。
+> Mesh 不再有自己的层2 Storage：它已对齐 Texture，成为自持 RHI 句柄的层2 运行时对象（见第 3 节）。
+
 - `MaterialStorage`：材质 BindGroup 与 uniform buffer 跨帧常驻；每次 resolve 经 `collectTextureBindings` 重新解析 `rhi::TextureBinding` 签名，签名变化触发 BindGroup 重建。
 - `ShaderStorage`：管理编译结果、ShaderModule 缓存和延迟退役。
 - `GraphicsPipelineStorage`：管理 Pipeline 描述、缓存和 shader 变化失效。
 - `FrameGpuManager`：管理场景/对象/实例表 Buffer、固定 BindGroupLayout 和每帧 BindGroup。
 - `GlobalUniformGpuManager`：按帧保存 global BindGroup，比较 `rhi::TextureBinding` 签名以处理纹理热替换。
 
-## 3. Texture 生命周期与去重
+## 3. Texture / Mesh 生命周期与去重
 
 层2 `Texture` 不持有 `TextureDesc` 与像素数据，只保留必要属性 + 三个 RID（texture / 默认 view / 默认 sampler）。构造（接 `TextureDesc`）经 `IDevice::active()` 分配三个 RID：`texture_create` 建纹理、`texture_view_create`（翻译后的层2 `TextureViewDesc`）建层2 拥有的默认视图、`sampler_create` 取去重采样器；`initialize`/`upload(pixels)` 按 `computeTextureLayout` 逐 mip 切片上传。
+
+层2 `Mesh` 同理不持有 `MeshDesc`/`MeshData`，只保留绘制必要属性 + vertex/index buffer 的 RHI RID。构造经 `IDevice::active()` 对每个 buffer 走拆分的三步创建：`buffer_allocate_rid`（仅句柄）→ `buffer_allocate_memory`（VkBuffer+VMA）→ `upload` 经 `buffer_upload`；`~Mesh` 两步销毁：`buffer_free_memory` → `buffer_release_rid`。`MeshUsage` 决定策略：Static→DeviceLocal 持久（staging 拷贝），Dynamic→host-visible 持久（就地 memcpy），Stream→host-visible 瞬态（每次 upload 经 `buffer_acquire_transient` orphan 旧的，设备按帧 fence 回收）。去重同样靠“每 `MeshAsset` 唯一 `instantiate` 实例”，热重载经 `reloadInPlace` → `syncInstance` 重上传。
 
 - **去重**：没有纹理管理器时，"每个 `TextureAsset` 只 `instantiate()` 出一个运行时实例"天然承担去重——同一 asset 反复解析（`resolveTextureReference` → `AssetManager.loadAsset<TextureAsset>` → `instantiate`）命中缓存 asset 的同一实例。`clone()` 产出互不影响的脱离实例。
 - **Sampler**：设备级按 `SamplerDesc` 去重（`IDevice::sampler_create`）；层2 `Sampler` 与 `Texture` 的默认 sampler 都**非拥有**，析构不 `sampler_destroy`，随设备释放。

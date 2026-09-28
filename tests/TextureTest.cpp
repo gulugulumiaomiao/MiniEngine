@@ -69,9 +69,14 @@ private:
 
 class FakeDevice final : public engine::rhi::IDevice {
 public:
+    engine::rhi::RID buffer_allocate_rid(const engine::rhi::BufferDesc&) override { return {}; }
+    void buffer_allocate_memory(engine::rhi::RID) override {}
+    void buffer_free_memory(engine::rhi::RID) override {}
+    void buffer_release_rid(engine::rhi::RID) override {}
     engine::rhi::RID buffer_create(const engine::rhi::BufferDesc&) override { return {}; }
     void buffer_destroy(engine::rhi::RID) override {}
     void buffer_upload(engine::rhi::RID, std::span<const std::byte>, std::uint64_t) override {}
+    engine::rhi::RID buffer_acquire_transient(const engine::rhi::BufferDesc&) override { return {}; }
 
     engine::rhi::RID texture_create(const engine::rhi::TextureDesc& desc) override {
         textureDescs.push_back(desc);

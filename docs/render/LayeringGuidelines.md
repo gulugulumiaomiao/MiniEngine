@@ -54,7 +54,7 @@
 | 资源 | 层1 资源管理器 | 层2 后端存储管理器 | 层3 设备资源（统一 IDevice） |
 |---|---|---|---|
 | Texture | `TextureAsset`（无运行时管理器） | 无（层2 `Texture` 自持 RHI 句柄） | `VulkanDevice` 分类型句柄池（存实例）texture/view/sampler，对上只暴露 RID |
-| Mesh | `MeshResourceManager` | `MeshStorage` | `IDevice` buffer owner |
+| Mesh | `MeshAsset`（无运行时管理器） | 无（层2 `Mesh` 自持 vertex/index buffer 的 RHI RID） | `IDevice` buffer owner（拆分的 allocate_rid/allocate_memory/upload/free_memory/release_rid） |
 | Material | `MaterialResourceManager` | `MaterialStorage` | `IDevice` bindGroup / uniform owner |
 | Shader | `ShaderResourceManager` | `ShaderStorage` | `IDevice` shaderModule / pipeline owner |
 
@@ -67,7 +67,7 @@
 ```
 
 硬约束：
-- `src/render/<x>/`（层1）内的头文件不得 `#include "rhi/..."`。**例外**：`render/texture/Texture.h` 是层2 头（持 `rhi::RID`/`rhi::TextureBinding`、直连 `IDevice`），允许依赖 `rhi/api`，故 `RenderRhiBoundaryTest.cmake` 的层1 检查不含它。
+- `src/render/<x>/`（层1）内的头文件不得 `#include "rhi/..."`。**例外**：`render/texture/Texture.h` 与 `render/mesh/Mesh.h` 是层2 头（持 `rhi::RID`、直连 `IDevice`），允许依赖 `rhi/api`，故 `RenderRhiBoundaryTest.cmake` 的层1 检查不含它们。
 - `src/rhi/`（层3）不得 `#include "render/..."` 或 `asset/...`。现有 `tests/RenderRhiBoundaryTest.cmake` 守护该边界，迁移时应扩展其覆盖到层1 头文件。
 
 两套 RID 隔离：层2、层3 各自拥有独立的 RID_Owner/Registry 实例，句柄不可互换（层2 记录持有层3 RID）。RID 数值类型仍复用统一的 `engine::RID`（不重新引入按类型的强类型别名，避免推翻既有 RID 归一决策）；隔离靠“不同 owner 实例 + 命名约定”实现。
@@ -91,10 +91,11 @@
 - 层2 `Sampler`：`RefCounted`，持一个设备去重的 sampler RID，非拥有。层2 无 `TextureView` 类，view 概念只在层3。
 - 三个句柄池内嵌 `IDevice`（全局单例 `active()`）；`~Texture` 按设备 `uid` 判断是否仍需销毁 GPU 资源（防跨设备/地址复用误伤）。热重载经 `AssetManager::reloadInPlace` 就地重传 asset → `syncInstance` 推唯一实例。
 
-### 6.2 Mesh
-- `Mesh` 以 Ref 管理，Component 与 RenderScene 持 `Ref<Mesh>`。
-- `MeshStorageEntry` 包含 DrawInfo，并预留 surface/LOD/skinned/blendshape/keepCpuCopy 策略字段。
-- Manager 弱索引的 resourceId 只在 Storage 内作为版本缓存键；内容重建不触发生命周期销毁通知。
+### 6.2 Mesh（三层：MeshAsset / Mesh / rhi buffer，已对齐 Texture）
+- 层1 `MeshAsset`：序列化源（desc + meshData + buildRecipe），由 `AssetManager` 强缓存常驻；`instantiate()` 出**唯一**运行时实例（重复调用复用，天然去重），`clone()` 出多个脱离实例；热重载经 `reloadInPlace` → `transfer` 读取分支 `syncInstance` 重上传唯一实例。
+- 层2 `Mesh`：GPU 资源持有者，只保留绘制必要属性（vertexLayout/indexFormat/topology/subMeshes/bounds/usage）+ vertex/index buffer 的 RHI RID，不持 desc/data/buildRecipe/version；构造经 `IDevice::active()` 三步创建（allocate_rid → allocate_memory → upload），`~Mesh` 两步销毁（free_memory → release_rid）；无独立 Manager，也无 gpu 层 `MeshStorage`。
+- `Mesh` 以 Ref 管理，Component 与 RenderScene 持 `Ref<Mesh>`；`MeshAsset` 与 `Mesh` 以裸指针互指（观察者），析构互清。
+- `MeshUsage` 决定 GPU 策略：Static→DeviceLocal 持久缓冲（staging 拷贝上传）；Dynamic→host-visible 持久缓冲（就地 memcpy）；Stream→host-visible 瞬态缓冲（每次 upload 经 `IDevice::buffer_acquire_transient` orphan 旧的，设备按帧 fence 回收，`~Mesh` 不释放；需每帧重传，尚无自动生产者）。
 
 ### 6.3 Material
 - `Material` 持 `Ref<Shader>`、按属性名缓存的 `Ref<Texture>` 与可选 `Ref<Sampler>`（`setTexture(tex)` 用默认 sampler，`setTexture(tex, sampler)` 用指定 sampler），不持 Shader RID。
@@ -122,7 +123,7 @@
 - [x] 阶段 3：`MaterialAsset` / `ShaderAsset` 定义迁至 `src/asset/types/`，使用方显式包含资产类型头。
 - [x] 阶段 4：pass/variant 选择、pipeline 查询、纹理 View/Sampler 解析和 GPU 常驻统一进入 `MaterialStorage`；Material 只持 `Ref<Shader>` / `Ref<Texture>` 和用户参数。
 - [x] 阶段 5：`ShaderModuleInfo` 补全 RHI ShaderModule 描述契约；Program→Pipeline 映射由 `GraphicsPipelineStorage` 显式管理。
-- [x] 阶段 6：`MeshStorageEntry` 增加 surface/LOD/skinned/blendshape/keepCpuCopy 扩展位；当前单 LOD 数据在上传时建立。
+- [x] 阶段 6：（已被 Mesh 三层重构取代）删除 `MeshStorage` 四件套与 `MeshResourceManager`；层2 `Mesh` 改为自持 vertex/index buffer 的 RHI RID、经 `IDevice` 三步创建/两步销毁，`MeshAsset` 提供 `instantiate`/`clone`/`syncInstance`，新增 `resolveMeshReference`。
 - [x] 阶段 7：命名与边界收口；Debug/Release 全量构建和 177 项 CTest 通过；两配置均完成 Vulkan demo 场景实跑。
 
 `src/render/gpu/` 目录保留，不执行可选的 `src/render/storage/` 物理目录重命名，以避免纯路径变更制造无价值 diff。旧 `XxxManager` 类型名与宏仅作为迁移兼容别名保留，新代码必须使用 `XxxResourceManager`。

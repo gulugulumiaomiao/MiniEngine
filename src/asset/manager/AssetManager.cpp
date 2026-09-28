@@ -15,7 +15,6 @@
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
-#include "render/mesh/MeshManager.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderManager.h"
 #include "render/texture/Texture.h"
@@ -64,9 +63,10 @@ bool AssetManager::initialize(AssetManagerMode mode) {
     ASSET_IMPORT_PIPELINE.setListener([this](const AssetImportNotification& notification) {
         if (!notification.success)
             return;
-        if (notification.type == AssetType::Texture && !notification.removed) {
-            // 纹理就地重传：同一缓存 asset 重新 transfer → syncInstance 推送唯一实例，保持活链接
-            // （若 invalidate+新建 asset，则持有旧 asset 的实例会失联）。
+        if ((notification.type == AssetType::Texture || notification.type == AssetType::Mesh) &&
+            !notification.removed) {
+            // 纹理/网格就地重传：同一缓存 asset 重新 transfer → syncInstance 推送唯一实例，
+            // 保持活链接（若 invalidate+新建 asset，则持有旧 asset 的实例会失联）。
             reloadInPlace(notification.path);
         } else {
             invalidate(notification.path);
@@ -76,9 +76,6 @@ bool AssetManager::initialize(AssetManagerMode mode) {
                     SHADER_RESOURCE_MANAGER.replace(notification.path)) {
                     MATERIAL_RESOURCE_MANAGER.refreshShader(*assetId);
                 }
-            } else if (notification.type == AssetType::Mesh && !notification.removed &&
-                       MESH_RESOURCE_MANAGER.find(notification.path)) {
-                (void)MESH_RESOURCE_MANAGER.replace(notification.path);
             }
         }
         if (changeListener_) {
@@ -188,7 +185,7 @@ void AssetManager::reloadInPlace(const VirtualPath& path) {
             "AssetManager", "Cannot re-deserialize Asset in place: %s", path.string().c_str());
         return;
     }
-    // TextureAsset::transfer 的读取分支已调用 syncInstance()，唯一实例已重上传新像素。
+    // TextureAsset/MeshAsset::transfer 的读取分支已调用 syncInstance()，唯一实例已重上传新数据。
 }
 
 void AssetManager::clear() {

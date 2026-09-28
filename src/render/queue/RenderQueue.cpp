@@ -61,7 +61,8 @@ std::uint64_t DrawSorter::computeKey(const DrawItem& item,
     }
 
     if (hasFlag(criteria, SortingCriteria::Mesh)) {
-        key |= static_cast<std::uint64_t>(item.mesh.index()) & 0xFFFULL;
+        // The index buffer RID is a stable per-mesh identity (each Mesh owns its index buffer).
+        key |= static_cast<std::uint64_t>(item.indexBuffer.index()) & 0xFFFULL;
     }
 
     return key;

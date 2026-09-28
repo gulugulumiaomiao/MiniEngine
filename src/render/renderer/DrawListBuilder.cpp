@@ -4,10 +4,8 @@
 #include "core/math/Frustum.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
-#include "render/mesh/MeshManager.h"
 #include "render/pipeline/RenderContext.h"
 #include "render/gpu/material/MaterialStorage.h"
-#include "render/gpu/mesh/MeshStorage.h"
 #include "render/gpu/pipeline/GraphicsPipelineStorage.h"
 #include "render/render_target/RenderTarget.h"
 #include "render/scene/RenderScene.h"
@@ -130,20 +128,25 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
             }
         }
         Mesh* meshInstance = object.mesh.get();
-        if (!meshInstance) {
-            Log::warn("DrawListBuilder", "Skipping object with an invalid RID");
+        if (!meshInstance || !meshInstance->isValid()) {
+            Log::warn("DrawListBuilder", "Skipping object with an invalid mesh");
             continue;
         }
-        const MeshDrawInfo mesh = MESH_STORAGE.resolve(*meshInstance);
-        if (mesh.subMeshes.empty()) {
-            Log::warn("DrawListBuilder", "Skipping Mesh without GPU draw data");
+        if (meshInstance->subMeshes().empty()) {
+            Log::warn("DrawListBuilder", "Skipping Mesh without sub-meshes");
             continue;
         }
         const std::uint32_t objectIndex = static_cast<std::uint32_t>(drawList.objects.size());
         drawList.objects.push_back({object.transform});
 
-        for (const MeshDrawInfo::Range& range : mesh.subMeshes) {
-            const Ref<Material> requestedMaterial = object.material(range.materialSlot);
+        // Mesh 现直接持有 GPU 句柄；把它的 vertex buffers 转成 DrawItem 格式（结构相同）。
+        std::vector<DrawItem::VertexBuffer> drawVertexBuffers;
+        drawVertexBuffers.reserve(meshInstance->vertexBuffers().size());
+        for (const MeshVertexBuffer& vertexBuffer : meshInstance->vertexBuffers())
+            drawVertexBuffers.push_back({vertexBuffer.binding, vertexBuffer.buffer});
+
+        for (const SubMesh& subMesh : meshInstance->subMeshes()) {
+            const Ref<Material> requestedMaterial = object.material(subMesh.materialSlot);
             for (const RenderPhase renderPhase : phases) {
                 if (renderPhase == RenderPhase::ShadowCaster && !object.castShadow) {
                     continue;
@@ -168,19 +171,18 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
                 drawList.items.push_back({
                     .shaderPass = resolved.pass,
                     .renderPhase = renderPhase,
-                    .mesh = object.mesh->resourceId(),
                     .pipeline = resolved.pipeline,
                     .material = resolved.material,
                     .materialKey = resolved.material->resourceId(),
                     .fallbackPipeline = fallback.pipeline,
                     .fallbackMaterial = fallback.material,
-                    .vertexBuffers = mesh.vertexBuffers,
-                    .indexBuffer = mesh.indexBuffer,
-                    .indexFormat = mesh.indexFormat,
-                    .arguments = {.indexCount = range.indexCount,
+                    .vertexBuffers = drawVertexBuffers,
+                    .indexBuffer = meshInstance->indexBuffer(),
+                    .indexFormat = meshInstance->indexFormat(),
+                    .arguments = {.indexCount = subMesh.indexCount,
                                   .instanceCount = 1,
-                                  .firstIndex = range.firstIndex,
-                                  .vertexOffset = range.vertexOffset,
+                                  .firstIndex = subMesh.firstIndex,
+                                  .vertexOffset = subMesh.vertexOffset,
                                   .firstInstance = objectIndex},
                     .renderQueue = material->renderQueue,
                 });

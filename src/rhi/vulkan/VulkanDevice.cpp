@@ -313,7 +313,7 @@ void VulkanDevice::createAllocator() {
     check(vmaCreateAllocator(&createInfo, &allocator_), "vmaCreateAllocator");
 }
 
-RID VulkanDevice::buffer_create(const BufferDesc& desc) {
+RID VulkanDevice::buffer_allocate_rid(const BufferDesc& desc) {
     if (desc.size == 0 || desc.usage == BufferUsage::None) {
         Log::fatal("VulkanDevice", "Invalid buffer description");
     }
@@ -323,7 +323,28 @@ RID VulkanDevice::buffer_create(const BufferDesc& desc) {
                             desc.memoryUsage);
 }
 
+void VulkanDevice::buffer_allocate_memory(RID handle) {
+    requireBuffer(handle).allocateMemory();
+}
+
+void VulkanDevice::buffer_free_memory(RID handle) {
+    if (VulkanBuffer* buffer = buffers_.find(handle)) {
+        buffer->freeMemory();
+    }
+}
+
+void VulkanDevice::buffer_release_rid(RID handle) {
+    (void)buffers_.release(handle);
+}
+
+RID VulkanDevice::buffer_create(const BufferDesc& desc) {
+    const RID handle = buffer_allocate_rid(desc);
+    buffer_allocate_memory(handle);
+    return handle;
+}
+
 void VulkanDevice::buffer_destroy(RID handle) {
+    buffer_free_memory(handle);
     buffer_release_rid(handle);
 }
 
@@ -702,15 +723,21 @@ void VulkanDevice::waitIdle() {
     }
 }
 
+RID VulkanDevice::buffer_acquire_transient(const BufferDesc& desc) {
+    // A transient buffer is a normal host-visible buffer whose lifetime the device owns: it is
+    // registered here, tagged with the submitting frame's fence at submit, and destroyed by
+    // collectStagingBuffers() once that fence signals. Callers never free it (orphan semantics).
+    const RID handle = buffer_create(desc);
+    pendingStagingBuffers_.push_back(StagingBuffer{handle, VK_NULL_HANDLE});
+    return handle;
+}
+
 RID VulkanDevice::acquireStagingBuffer(std::uint64_t size) {
     if (size == 0) {
         Log::fatal("VulkanDevice", "Staging buffer size must be positive");
     }
-    const BufferDesc desc{
-        size, BufferUsage::TransferSource, MemoryUsage::Upload, "command buffer staging"};
-    const RID handle = buffer_create(desc);
-    pendingStagingBuffers_.push_back(StagingBuffer{handle, VK_NULL_HANDLE});
-    return handle;
+    return buffer_acquire_transient(
+        {size, BufferUsage::TransferSource, MemoryUsage::Upload, "command buffer staging"});
 }
 
 void VulkanDevice::tagPendingStagingBuffers(VkFence fence) {

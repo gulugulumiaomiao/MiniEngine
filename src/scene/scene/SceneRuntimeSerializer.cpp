@@ -4,7 +4,6 @@
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
-#include "render/mesh/MeshManager.h"
 #include "scene/components/CameraComponent.h"
 #include "scene/components/LightComponent.h"
 #include "scene/components/MaterialComponent.h"

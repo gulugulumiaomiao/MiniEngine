@@ -37,12 +37,25 @@ public:
             activeSlot() = nullptr;
     }
 
-    // Buffers.
+    // Buffers. Creation is split into three physical steps so a caller can reserve handles
+    // before committing GPU memory: buffer_allocate_rid (handle only) -> buffer_allocate_memory
+    // (VkBuffer + VMA allocation) -> buffer_upload (data). Destruction is the two-step reverse:
+    // buffer_free_memory (release GPU memory, keep the handle) -> buffer_release_rid (recycle the
+    // handle). buffer_create / buffer_destroy compose these for the common one-shot case.
+    [[nodiscard]] virtual RID buffer_allocate_rid(const BufferDesc& desc) = 0;
+    virtual void buffer_allocate_memory(RID handle) = 0;
+    virtual void buffer_free_memory(RID handle) = 0;
+    virtual void buffer_release_rid(RID handle) = 0;
     [[nodiscard]] virtual RID buffer_create(const BufferDesc& desc) = 0;
     virtual void buffer_destroy(RID handle) = 0;
     virtual void buffer_upload(RID destination,
                                std::span<const std::byte> data,
                                std::uint64_t offset = 0) = 0;
+    // Transient (streaming) buffer: a host-visible buffer valid only for the current frame's
+    // recording, reclaimed automatically by the backend once the submitting frame's fence
+    // signals. Callers never free it; each acquire orphans the previous one. Backs
+    // MeshUsage::Stream, whose data is regenerated every frame (orphan/rename semantics).
+    [[nodiscard]] virtual RID buffer_acquire_transient(const BufferDesc& desc) = 0;
 
     // Textures and texture views. Views are deduped and owned at the device level.
     [[nodiscard]] virtual RID texture_create(const TextureDesc& desc) = 0;

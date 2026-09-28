@@ -1,5 +1,8 @@
+#include "TestRenderDevice.h"
+
 #include "core/math/Math.h"
-#include "render/mesh/MeshManager.h"
+#include "render/mesh/Mesh.h"
+#include "render/mesh/MeshBuilder.h"
 #include "render/scene/RenderScene.h"
 #include "scene/components/CameraComponent.h"
 #include "scene/components/LightComponent.h"
@@ -37,10 +40,24 @@ bool near(const engine::math::Vec3& left, const engine::math::Vec3& right) {
     return engine::math::distance(left, right) < 0.0001F;
 }
 
+// Mesh 现为 GPU 资源持有者，构造需 active device。用 MeshBuilder 产出一个最小图元
+// MeshAsset 再 instantiate（缓冲落在 MockDevice 的假 RID 上）作为场景测试的占位网格。
+engine::Ref<engine::Mesh> makeStubMesh() {
+    engine::MeshBuildRecipe recipe;
+    recipe.name = "Stub";
+    recipe.parts.push_back({engine::PlaneGeometry{}});
+    const engine::Ref<engine::MeshAsset> asset = engine::MeshBuilder::buildAsset(recipe);
+    return asset ? asset->instantiate() : engine::Ref<engine::Mesh>{};
+}
+
 } // namespace
 
 int main() {
     using namespace engine;
+
+    // Mesh 构造需 active device；MockDevice 注册为进程级 active 设备，使 headless 场景
+    // 测试能创建 Mesh。须先于任何 Mesh 声明，以保证其生命周期长于所有 Mesh。
+    MockDevice device;
 
     Scene scene{"Test Scene"};
     const RID sceneRootHandle = scene.rootHandle();
@@ -104,7 +121,7 @@ int main() {
 
     MeshComponent* mesh = child->addComponent<MeshComponent>();
     MaterialComponent* material = child->addComponent<MaterialComponent>();
-    const Ref<Mesh> testMesh = makeRef<Mesh>();
+    const Ref<Mesh> testMesh = makeStubMesh();
     mesh->setAssetMesh(testMesh);
     const Ref<Material> testMaterialA = makeRef<Material>();
     const Ref<Material> testMaterialB = makeRef<Material>();
@@ -167,7 +184,6 @@ int main() {
         return 16;
     }
 
-    MESH_RESOURCE_MANAGER.clear();
     Scene primitiveScene{"Primitive Scene"};
     const RID primitiveNodeHandle = primitiveScene.createNode("Sphere");
     MeshComponent* primitiveMesh =
@@ -175,14 +191,12 @@ int main() {
     primitiveMesh->setPrimitive(UvSphereGeometry{1.0F, 16, 8});
     primitiveScene.update(0.0F);
     Ref<Mesh> primitiveHandle = primitiveMesh->mesh();
-    const RID primitiveId = primitiveHandle ? primitiveHandle->resourceId() : RID{};
     const Mesh* firstPrimitive = primitiveHandle.get();
-    if (!primitiveHandle || !firstPrimitive ||
+    if (!primitiveHandle || !firstPrimitive || !firstPrimitive->isValid() ||
         primitiveMesh->sourceType() != MeshComponentSourceType::Primitive ||
         !primitiveMesh->primitiveRecipe()) {
         return 20;
     }
-    const std::uint64_t firstVersion = firstPrimitive->version();
     MeshBuildRecipe* editedRecipe = primitiveMesh->editPrimitiveRecipe();
     if (!editedRecipe)
         return 21;
@@ -191,14 +205,10 @@ int main() {
     std::get<UvSphereGeometry>(editedRecipe->parts[0].primitive.value).longitudeSegments = 24;
     primitiveScene.update(0.0F);
     const Mesh* rebuiltPrimitive = primitiveMesh->mesh().get();
-    if (!rebuiltPrimitive || primitiveMesh->mesh() != primitiveHandle ||
-        rebuiltPrimitive->version() != firstVersion + 1 ||
-        !primitiveScene.destroyNode(primitiveNodeHandle) ||
-        MESH_RESOURCE_MANAGER.find(primitiveId) != primitiveHandle) {
+    // 重建即替换：得到一个新的 Mesh 对象（旧对象仍被 primitiveHandle 持有），且新对象有效。
+    if (!rebuiltPrimitive || rebuiltPrimitive == firstPrimitive || !rebuiltPrimitive->isValid() ||
+        !primitiveScene.destroyNode(primitiveNodeHandle)) {
         return 21;
     }
-    primitiveHandle.reset();
-    if (MESH_RESOURCE_MANAGER.find(primitiveId)) {
-        return 21;
-    }
+    primitiveHandle.reset(); // 旧 Mesh 最后一个 Ref 归零 → ~Mesh 释放其 GPU 缓冲
 }

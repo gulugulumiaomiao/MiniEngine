@@ -1,15 +1,18 @@
 #include "render/mesh/Mesh.h"
 
-#include "core/math/hash.h"
+#include "asset/manager/AssetManager.h"
+#include "core/filesystem/VirtualPath.h"
 #include "core/logging/Log.h"
+#include "core/math/hash.h"
 #include "core/serialization/Transfer.h"
-#include "render/mesh/MeshManager.h"
+#include "rhi/api/Device.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <limits>
 #include <set>
+#include <string>
 #include <utility>
 
 namespace engine {
@@ -42,6 +45,12 @@ bool valid(MeshUsage value) {
 
 bool valid(MeshTopology value) {
     return value == MeshTopology::TriangleList || value == MeshTopology::LineList;
+}
+
+// MeshUsage 决定 GPU 内存策略：Static 走设备本地显存（上传经 staging 拷贝），
+// Dynamic/Stream 走 host-visible 内存（上传直接 memcpy）。
+[[nodiscard]] rhi::MemoryUsage toRhiMemoryUsage(MeshUsage usage) {
+    return usage == MeshUsage::Static ? rhi::MemoryUsage::DeviceLocal : rhi::MemoryUsage::Upload;
 }
 
 } // namespace
@@ -250,19 +259,6 @@ MeshBounds calculateBounds(std::span<const math::Vec3> positions) {
     return {{minimum, maximum}, {center, std::sqrt(radiusSquared)}};
 }
 
-Mesh::Mesh(MeshDesc desc, MeshData data, std::optional<MeshBuildRecipe> buildRecipe)
-    : desc_(std::move(desc)), data_(std::move(data)), buildRecipe_(std::move(buildRecipe)) {
-    if (!validateMesh(desc_, data_)) {
-        desc_ = {};
-        data_ = {};
-    }
-    cacheVertexLayoutHash();
-}
-
-Mesh::~Mesh() {
-    MESH_RESOURCE_MANAGER.unregister(this);
-}
-
 bool validateMesh(const MeshDesc& desc, const MeshData& data) {
     if (!desc.vertexLayout.validate())
         return false;
@@ -335,40 +331,162 @@ bool validateMesh(const MeshDesc& desc, const MeshData& data) {
     return true;
 }
 
-Ref<Mesh> Mesh::clone() const {
-    Ref<Mesh> copy = makeRef<Mesh>();
-    copy->assetPath_ = assetPath_;
-    copy->desc_ = desc_;
-    copy->data_ = data_;
-    copy->buildRecipe_ = buildRecipe_;
-    copy->vertexLayoutHash_ = vertexLayoutHash_;
-    copy->version_ = version_;
-    copy->dirty_ = true;
-    // assetId_ stays empty: a clone is detached from its source asset.
-    return copy;
-}
+// ---- Mesh ----
 
-void Mesh::rebuildFromAsset(const MeshAsset& asset) {
-    if (!validateMesh(asset.desc, asset.meshData))
+Mesh::Mesh(const MeshDesc& desc, const MeshData& data)
+    : indexFormat_(desc.indexType == IndexType::UInt16 ? rhi::IndexFormat::UInt16
+                                                       : rhi::IndexFormat::UInt32),
+      topology_(desc.topology), subMeshes_(desc.subMeshes), vertexLayout_(desc.vertexLayout),
+      bounds_(desc.bounds), usage_(desc.usage) {
+    rhi::IDevice* device = rhi::IDevice::active();
+    if (!device) {
+        Log::error("Mesh", "No active device for mesh creation");
         return;
-    desc_ = asset.desc;
-    data_ = asset.meshData;
-    buildRecipe_ = asset.buildRecipe;
-    cacheVertexLayoutHash();
-    ++version_;
-    dirty_ = true;
+    }
+    // Stream：瞬态缓冲在每次 upload 时获取（orphan），构造仅记录属性，不分配持久缓冲。
+    if (desc.usage == MeshUsage::Stream) {
+        constructed_ = true;
+        return;
+    }
+    const rhi::MemoryUsage memory = toRhiMemoryUsage(desc.usage);
+
+    // 步1：为每个 vertex stream 与 index buffer 分配 RID（仅句柄，暂不分配 GPU 内存）。
+    vertexBuffers_.reserve(data.vertexStreams.size());
+    for (const VertexStream& stream : data.vertexStreams) {
+        const rhi::RID rid = device->buffer_allocate_rid(
+            {.size = stream.bytes.size(),
+             .usage = rhi::BufferUsage::Vertex | rhi::BufferUsage::TransferDestination,
+             .memoryUsage = memory,
+             .debugName = desc.debugName + ".vertex." + std::to_string(stream.binding)});
+        if (!rid) {
+            Log::error("Mesh", "Failed to allocate a vertex buffer RID");
+            releaseGpuResources();
+            return;
+        }
+        vertexBuffers_.push_back({stream.binding, rid});
+    }
+    indexBuffer_ = device->buffer_allocate_rid(
+        {.size = data.indices.size(),
+         .usage = rhi::BufferUsage::Index | rhi::BufferUsage::TransferDestination,
+         .memoryUsage = memory,
+         .debugName = desc.debugName + ".index"});
+    if (!indexBuffer_) {
+        Log::error("Mesh", "Failed to allocate the index buffer RID");
+        releaseGpuResources();
+        return;
+    }
+
+    // 步2：为每个已分配句柄分配 GPU 内存。
+    for (const MeshVertexBuffer& vertexBuffer : vertexBuffers_)
+        device->buffer_allocate_memory(vertexBuffer.buffer);
+    device->buffer_allocate_memory(indexBuffer_);
+    constructed_ = true;
 }
 
-Ref<Mesh> MeshAsset::instantiate() const {
-    if (!validateMesh(desc, meshData))
+Mesh::~Mesh() {
+    // 双向观察者：若本实例是 asset 的唯一实例，先清除 asset 的回指，避免 ~MeshAsset 悬垂。
+    if (asset_ && asset_->instance_ == this)
+        asset_->instance_ = nullptr;
+    releaseGpuResources();
+}
+
+void Mesh::releaseGpuResources() {
+    // Stream 的瞬态缓冲由设备 fence 池拥有，仅弃置引用；Static/Dynamic 两步销毁（先销毁 GPU
+    // 内存，再回收 RID）。设备已亡（active 为空）时仅弃置句柄。
+    if (usage_ != MeshUsage::Stream) {
+        if (rhi::IDevice* device = rhi::IDevice::active()) {
+            for (const MeshVertexBuffer& vertexBuffer : vertexBuffers_) {
+                if (vertexBuffer.buffer) {
+                    device->buffer_free_memory(vertexBuffer.buffer);
+                    device->buffer_release_rid(vertexBuffer.buffer);
+                }
+            }
+            if (indexBuffer_) {
+                device->buffer_free_memory(indexBuffer_);
+                device->buffer_release_rid(indexBuffer_);
+            }
+        }
+    }
+    vertexBuffers_.clear();
+    indexBuffer_ = {};
+}
+
+void Mesh::upload(const MeshData& data) {
+    rhi::IDevice* device = rhi::IDevice::active();
+    if (!device || !constructed_) {
+        Log::error("Mesh", "Cannot upload to an unconstructed mesh");
+        return;
+    }
+    if (usage_ == MeshUsage::Stream) {
+        // 瞬态 orphan：本帧获取全新 host-visible 缓冲；上一帧的瞬态缓冲由设备 fence 池回收，
+        // 故此处不释放旧的（直接替换引用）。要求每帧重新 upload。
+        vertexBuffers_.clear();
+        vertexBuffers_.reserve(data.vertexStreams.size());
+        for (const VertexStream& stream : data.vertexStreams) {
+            const rhi::RID rid = device->buffer_acquire_transient(
+                {.size = stream.bytes.size(),
+                 .usage = rhi::BufferUsage::Vertex,
+                 .memoryUsage = rhi::MemoryUsage::Upload,
+                 .debugName = "mesh.stream.vertex"});
+            if (!rid) {
+                Log::error("Mesh", "Failed to acquire a transient vertex buffer");
+                return;
+            }
+            device->buffer_upload(rid, stream.bytes);
+            vertexBuffers_.push_back({stream.binding, rid});
+        }
+        indexBuffer_ = device->buffer_acquire_transient(
+            {.size = data.indices.size(),
+             .usage = rhi::BufferUsage::Index,
+             .memoryUsage = rhi::MemoryUsage::Upload,
+             .debugName = "mesh.stream.index"});
+        if (!indexBuffer_) {
+            Log::error("Mesh", "Failed to acquire the transient index buffer");
+            return;
+        }
+        device->buffer_upload(indexBuffer_, data.indices);
+        return;
+    }
+    // Static/Dynamic：写入构造期分配的持久缓冲（按 binding 匹配 vertex stream）。
+    if (!isValid()) {
+        Log::error("Mesh", "Cannot upload to an invalid mesh");
+        return;
+    }
+    for (const MeshVertexBuffer& vertexBuffer : vertexBuffers_) {
+        const VertexStream* stream = data.findVertexStream(vertexBuffer.binding);
+        if (!stream) {
+            Log::error("Mesh", "Missing vertex stream for binding %u", vertexBuffer.binding);
+            continue;
+        }
+        device->buffer_upload(vertexBuffer.buffer, stream->bytes);
+    }
+    device->buffer_upload(indexBuffer_, data.indices);
+}
+
+const VirtualPath& Mesh::assetPath() const {
+    static const VirtualPath kEmpty;
+    return asset_ ? asset_->assetPath() : kEmpty;
+}
+
+AssetId Mesh::assetId() const {
+    return asset_ ? asset_->assetId() : AssetId{};
+}
+
+Ref<Mesh> Mesh::clone() const {
+    if (!asset_) {
+        Log::error("Mesh", "clone() requires an asset-backed mesh");
         return {};
-    Ref<Mesh> result = makeRef<Mesh>();
-    result->assetPath_ = assetPath();
-    result->desc_ = desc;
-    result->data_ = meshData;
-    result->buildRecipe_ = buildRecipe;
-    result->cacheVertexLayoutHash();
-    return result;
+    }
+    return asset_->clone();
+}
+
+// ---- MeshAsset ----
+
+MeshAsset::~MeshAsset() {
+    // 双向观察者：若 asset 先于其唯一实例销毁，必须清除实例的回指指针，否则 ~Mesh 会
+    // 解引用悬垂的 asset_（UAF）。
+    if (instance_)
+        instance_->asset_ = nullptr;
 }
 
 bool MeshAsset::transfer(Transfer& archive) {
@@ -383,58 +501,73 @@ bool MeshAsset::transfer(Transfer& archive) {
         desc = std::move(decoded.desc);
         meshData = std::move(decoded.meshData);
         buildRecipe = std::move(decoded.buildRecipe);
+        // 就地重传（热重载）后把新数据推送给唯一实例，保持活链接。
+        syncInstance();
     }
     return true;
 }
 
-bool Mesh::updateVertexData(std::uint32_t binding,
-                            std::uint32_t firstVertex,
-                            std::span<const std::byte> source) {
-    if (desc_.usage == MeshUsage::Static) {
-        return fail("Cannot update a Static Mesh");
+Ref<Mesh> MeshAsset::instantiate() {
+    if (instance_)
+        return Ref<Mesh>(instance_); // 复用唯一实例（addRef）
+    if (!validateMesh(desc, meshData))
+        return {};
+    Ref<Mesh> mesh(new Mesh(desc, meshData));
+    if (!mesh->constructed_) {
+        Log::error(
+            "MeshAsset", "Failed to instantiate mesh for %s", assetPath().string().c_str());
+        return {};
     }
-    const VertexStreamLayout* layout = desc_.vertexLayout.find(binding);
-    VertexStream* stream = data_.findVertexStream(binding);
-    if (!layout || !stream || source.empty()) {
-        return fail("Invalid vertex update");
+    mesh->bindAsset(this);
+    mesh->upload(meshData);
+    if (!mesh->isValid()) {
+        Log::error(
+            "MeshAsset", "Mesh upload left an invalid mesh for %s", assetPath().string().c_str());
+        return {};
     }
-    const std::uint32_t formatSize = vertexFormatSize(layout->format);
-    if (formatSize == 0 || source.size() % formatSize != 0) {
-        return fail("Invalid vertex update");
-    }
-    const std::size_t offset = static_cast<std::size_t>(firstVertex) * formatSize;
-    if (offset > stream->bytes.size() || source.size() > stream->bytes.size() - offset) {
-        return fail("Vertex update exceeds the stream");
-    }
-    std::ranges::copy(source, stream->bytes.begin() + static_cast<std::ptrdiff_t>(offset));
-    markChanged();
-    return true;
+    instance_ = mesh.get();
+    return mesh;
 }
 
-bool Mesh::updateIndexData(std::uint32_t firstIndex, std::span<const std::byte> source) {
-    if (desc_.usage == MeshUsage::Static) {
-        return fail("Cannot update a Static Mesh");
+Ref<Mesh> MeshAsset::clone() {
+    if (!validateMesh(desc, meshData))
+        return {};
+    Ref<Mesh> mesh(new Mesh(desc, meshData));
+    if (!mesh->constructed_) {
+        Log::error("MeshAsset", "Failed to clone mesh for %s", assetPath().string().c_str());
+        return {};
     }
-    const std::uint32_t stride = indexTypeSize(desc_.indexType);
-    if (stride == 0 || source.empty() || source.size() % stride != 0) {
-        return fail("Invalid index update");
+    mesh->upload(meshData); // 脱离实例：不登记、不链接 asset
+    if (!mesh->isValid()) {
+        Log::error(
+            "MeshAsset", "Mesh upload left an invalid clone for %s", assetPath().string().c_str());
+        return {};
     }
-    const std::size_t offset = static_cast<std::size_t>(firstIndex) * stride;
-    if (offset > data_.indices.size() || source.size() > data_.indices.size() - offset) {
-        return fail("Index update exceeds the index buffer");
-    }
-    std::ranges::copy(source, data_.indices.begin() + static_cast<std::ptrdiff_t>(offset));
-    markChanged();
-    return true;
+    return mesh;
 }
 
-void Mesh::markChanged() {
-    if (version_ == std::numeric_limits<std::uint64_t>::max()) {
-        Log::error("Mesh", "Mesh version overflow");
-        return;
+void MeshAsset::syncInstance() {
+    if (instance_)
+        instance_->upload(meshData);
+}
+
+Ref<Mesh> resolveMeshReference(std::string_view reference) {
+    if (reference.empty())
+        return {};
+    VirtualPath path{reference};
+    if (!path.valid())
+        path = VirtualPath{"assets://" + std::string{reference}};
+    if (path.valid() && path.scheme() == "assets") {
+        if (const Ref<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(path)) {
+            if (Ref<Mesh> mesh = asset->instantiate())
+                return mesh;
+        }
     }
-    ++version_;
-    dirty_ = true;
+    Log::warn("Mesh",
+              "Cannot resolve mesh reference: %.*s",
+              static_cast<int>(reference.size()),
+              reference.data());
+    return {};
 }
 
 } // namespace engine

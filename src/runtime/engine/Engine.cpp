@@ -9,13 +9,11 @@
 #include "render/pipeline/MiniForwardPipeline.h"
 #include "render/pipeline/RenderPipeline.h"
 #include "render/gpu/material/MaterialStorage.h"
-#include "render/gpu/mesh/MeshStorage.h"
 #include "render/gpu/pipeline/GraphicsPipelineStorage.h"
 #include "render/gpu/shader/ShaderStorage.h"
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
-#include "render/mesh/MeshManager.h"
 #include "render/renderer/Renderer.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderManager.h"
@@ -244,7 +242,6 @@ bool Engine::initializeGpuManagers(const rhi::IContextFactory& contextFactory,
     renderer_->setPipeline(pipelineRegistry.create(config_.render.pipeline));
 
     if (!FRAME_GPU_MANAGER.initialize(renderer_->device()) ||
-        !MESH_STORAGE.initialize(renderer_->device()) ||
         !MATERIAL_STORAGE.initialize(renderer_->device(),
                                          FRAME_GPU_MANAGER.materialLayout(),
                                          FrameGpuManager::kFramesInFlight) ||
@@ -270,10 +267,8 @@ void Engine::teardownProjectSubsystems() {
     GRAPHICS_PIPELINE_STORAGE.shutdown();
     GLOBAL_UNIFORM_GPU_MANAGER.shutdown();
     SHADER_STORAGE.shutdown();
-    MESH_STORAGE.shutdown();
     FRAME_GPU_MANAGER.shutdown();
     renderer_.reset();
-    MESH_RESOURCE_MANAGER.clear();
     MATERIAL_RESOURCE_MANAGER.clear();
     SHADER_RESOURCE_MANAGER.clear();
     ASSET_MANAGER.shutdown();
@@ -351,7 +346,7 @@ bool Engine::loadScene(const VirtualPath& scenePath) {
         return false;
 
     const SceneInstantiationContext context{
-        .loadMesh = [](const VirtualPath& path) { return MESH_RESOURCE_MANAGER.load(path); },
+        .loadMesh = [](const VirtualPath& path) { return resolveMeshReference(path.string()); },
         .loadMaterial = [](const VirtualPath& path) { return MATERIAL_RESOURCE_MANAGER.load(path); },
     };
     Ref<Scene> loaded = asset->instantiate(context);

@@ -3,7 +3,6 @@
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
-#include "render/mesh/MeshManager.h"
 #include "render/scene/Lighting.h"
 #include "scene/components/CameraComponent.h"
 #include "scene/components/LightComponent.h"
@@ -182,7 +181,7 @@ void InspectorPanel::drawMesh(Node& node) {
         const VirtualPath currentPath = current != nullptr ? current->assetPath() : VirtualPath{};
         VirtualPath chosen;
         if (assetCombo("Mesh Asset", meshes, currentPath, chosen)) {
-            const Ref<Mesh> loaded = MESH_RESOURCE_MANAGER.load(chosen);
+            const Ref<Mesh> loaded = resolveMeshReference(chosen.string());
             if (loaded) {
                 mesh->setAssetMesh(loaded);
                 document_.markDirty();

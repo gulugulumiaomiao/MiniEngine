@@ -56,8 +56,7 @@ GraphicsPipelineStorage::makeCacheKey(const ShaderProgram& program,
     hashAppend(key, depthFormat);
     // Cull/frontFace/depthTest/depthWrite/blend/colorMask/topology/fill are dynamic states
     // and do not contribute to the pipeline key.
-    // The Mesh caches its layout hash, so the vertex layout costs one mix instead of a
-    // full walk over every binding and attribute on each resolve.
+    // The vertex layout hash is computed on demand from the Mesh's retained VertexLayout.
     hashAppend(key, vertexLayoutHash);
     return key;
 }
@@ -113,14 +112,14 @@ rhi::RID GraphicsPipelineStorage::resolve(const Shader& shader,
 
     const ShaderProgram& program = SHADER_STORAGE.resolveProgram(programHandle);
     const GraphicsPipelineStorageCacheKey key =
-        makeCacheKey(program, mesh.vertexLayoutHash(), colorFormat, depthFormat);
+        makeCacheKey(program, mesh.vertexLayout().hash(), colorFormat, depthFormat);
     if (const GraphicsPipelineStorageEntry* cached = cache_.find(key))
         return cached->pipeline;
 
     const CompiledShader& vertex = SHADER_STORAGE.resolveCompiled(program.vertex);
     const CompiledShader& fragment = SHADER_STORAGE.resolveCompiled(program.fragment);
     GraphicsPipelineStorageEntry created;
-    if (!factory_->create(makeDescription(mesh.desc().vertexLayout,
+    if (!factory_->create(makeDescription(mesh.vertexLayout(),
                                           colorFormat,
                                           depthFormat,
                                           SHADER_STORAGE.resolve(program.vertex),

@@ -67,18 +67,18 @@ assets:// 路径
 
 ## 资产与运行时资源
 
-AssetManager 返回可序列化的 CPU 资产描述；领域 Manager 将其转换为运行时资源：
+AssetManager 返回可序列化的 CPU 资产描述；Texture/Mesh 经 `XxxAsset::instantiate()` 直接产出唯一运行时实例（无领域 Manager），Material/Shader 则经领域 Manager 转换：
 
 ```text
-assets://meshes/example.mesh.json
-  -> AssetManager::loadAsset<MeshAsset>
-  -> MeshManager::load
-  -> MeshAsset::instantiate
-  -> MeshManager 内部 KeyedHandleRegistry / HandlePool
-  -> MeshHandle
+assets://materials/example.material.json
+  -> AssetManager::loadAsset<MaterialAsset>
+  -> MaterialResourceManager::load
+  -> MaterialAsset::instantiate
+  -> MaterialResourceManager 内部 KeyedHandleRegistry / HandlePool
+  -> Ref<Material>
 ```
 
-Shader、Material、Texture 使用相同模式。`Handle<Tag>` 是 index + generation
+Shader、Material 使用相同模式（Texture/Mesh 已改为 `Asset::instantiate()` 唯一实例模型，无领域 Manager）。`Handle<Tag>` 是 index + generation
 句柄：销毁 Slot 时 generation 递增，旧 Handle 无法解析，复用 Slot 不会造成
 use-after-free。同一路径在对应 Manager 中只映射到一个有效 Handle
 （`KeyedHandleRegistry` 的 Key → Handle 索引）。`ShaderAsset::instantiate()` 只

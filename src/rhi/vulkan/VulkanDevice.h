@@ -72,11 +72,16 @@ public:
     VulkanDevice& operator=(const VulkanDevice&) = delete;
 
     // ---- IDevice resource lifecycle (RID-based, backend-agnostic) ----
+    [[nodiscard]] RID buffer_allocate_rid(const BufferDesc& desc) override;
+    void buffer_allocate_memory(RID handle) override;
+    void buffer_free_memory(RID handle) override;
+    void buffer_release_rid(RID handle) override;
     [[nodiscard]] RID buffer_create(const BufferDesc& desc) override;
     void buffer_destroy(RID handle) override;
     void buffer_upload(RID destination,
                        std::span<const std::byte> data,
                        std::uint64_t offset = 0) override;
+    [[nodiscard]] RID buffer_acquire_transient(const BufferDesc& desc) override;
 
     [[nodiscard]] RID texture_create(const TextureDesc& desc) override;
     void texture_destroy(RID handle) override;
@@ -140,13 +145,14 @@ public:
     [[nodiscard]] RID
     texture_view_allocate_rid(RID texture, VkImageView view, const TextureViewDesc& desc);
 
-    // ---- Command buffer staging support ----
-    // update* commands run while a command buffer is being recorded, so scratch buffers must
-    // outlive the recording itself. The device owns them: submit tags them with the submitting
-    // frame's fence and they are destroyed once that fence has been signaled.
+    // ---- Transient buffer support (staging + MeshUsage::Stream) ----
+    // Transient buffers must outlive the recording that references them, so the device owns
+    // them: buffer_acquire_transient registers each one here, submit tags it with the submitting
+    // frame's fence, and it is destroyed once that fence has been signaled. acquireStagingBuffer
+    // is the TransferSource specialization used by command-buffer update* commands.
     [[nodiscard]] RID acquireStagingBuffer(std::uint64_t size);
     void tagPendingStagingBuffers(VkFence fence);
-    // Destroys staging buffers whose fence has been signaled. Called at frame boundaries.
+    // Destroys transient buffers whose fence has been signaled. Called at frame boundaries.
     void collectStagingBuffers();
 
 private:
@@ -161,8 +167,8 @@ private:
     // Per-family pool primitives. allocate_rid emplaces a concrete instance and returns its RID;
     // release_rid destroys it in place. create/destroy wrap these with validation and native
     // teardown (dedup tables, descriptor frees, view cascades). Bind groups are plain
-    // VkDescriptorSet values, so their pool needs no wrapper type.
-    void buffer_release_rid(RID handle) { (void)buffers_.release(handle); }
+    // VkDescriptorSet values, so their pool needs no wrapper type. buffer_release_rid is a public
+    // IDevice override (the split buffer lifecycle), so it is not repeated here.
     void texture_release_rid(RID handle) { (void)textures_.release(handle); }
     void texture_view_release_rid(RID handle) { (void)textureViews_.release(handle); }
     void sampler_release_rid(RID handle) { (void)samplers_.release(handle); }

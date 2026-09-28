@@ -87,8 +87,8 @@ tests/CMakeLists.txt       测试目标和测试专用配置
 
 这样处理有三个直接结果：
 
-- 每个类的成员函数都留在自己的实现文件，例如 `MeshManager` 的全部方法都在
-  `render/mesh/MeshManager.cpp`。
+- 每个类的成员函数都留在自己的实现文件，例如 `MaterialResourceManager` 的全部方法都在
+  `render/material/MaterialManager.cpp`。
 - 工具、运行时和测试只链接 `MiniEngine`，不再重复列出 AssetManager、Shader、
   Material 等实现源文件。
 - 新增 `src/**/*.cpp` 时由 `src/CMakeLists.txt` 自动纳入，程序入口

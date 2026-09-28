@@ -6,19 +6,21 @@
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
-#include "render/mesh/MeshManager.h"
 #include "render/scene/RenderScene.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderManager.h"
 #include "scene/scene/Scene.h"
 #include "scene/scene/SceneAsset.h"
 #include "TestAssetEnvironment.h"
+#include "TestRenderDevice.h"
 
 #include <algorithm>
 #include <filesystem>
 
 int main() {
     using namespace engine;
+    // Mesh 构造需 active device；MockDevice 注册为进程级 active 设备（须先于任何 Mesh）。
+    MockDevice device;
     if (!test::initializeAssetEnvironment(
             MINI_TEST_COOKED_ASSET_DIR, true, AssetManagerMode::Packaged)) {
         return 5;
@@ -46,7 +48,7 @@ int main() {
     if (!showcase || showcase->nodes.size() != 7)
         return 6;
     const SceneInstantiationContext context{
-        .loadMesh = [](const VirtualPath& path) { return MESH_RESOURCE_MANAGER.load(path); },
+        .loadMesh = [](const VirtualPath& path) { return resolveMeshReference(path.string()); },
         .loadMaterial = [](const VirtualPath& path) { return MATERIAL_RESOURCE_MANAGER.load(path); },
     };
     Ref<Scene> scene = showcase->instantiate(context);
@@ -62,7 +64,6 @@ int main() {
         return 6;
     }
     scene.reset();
-    MESH_RESOURCE_MANAGER.clear();
     MATERIAL_RESOURCE_MANAGER.clear();
     SHADER_MANAGER.clear();
     test::shutdownAssetEnvironment();
