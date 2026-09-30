@@ -50,7 +50,7 @@ private:
     GraphicsPipelineStorage();
 
     [[nodiscard]] static GraphicsPipelineStorageCacheKey
-    makeCacheKey(const ShaderProgram& program,
+    makeCacheKey(const CompiledProgram& program,
                  std::uint64_t vertexLayoutHash,
                  rhi::PixelFormat colorFormat,
                  rhi::PixelFormat depthFormat);

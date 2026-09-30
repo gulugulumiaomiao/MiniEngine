@@ -42,7 +42,7 @@ struct ShaderProgramLayout {
     std::vector<ShaderStageVariable> fragmentOutputs;
 };
 
-struct ShaderProgram {
+struct CompiledProgram {
     ShaderProgramId id{};
     ShaderVariantKey variant;
     RID vertex;
@@ -65,7 +65,7 @@ public:
     explicit ShaderCompilePipeline(ShaderCompilePipelineConfig config = {});
     [[nodiscard]] RID
     getOrCreate(const Shader& shader, const ShaderPass& pass, const ShaderVariantKey& variant = {});
-    [[nodiscard]] const ShaderProgram& resolveProgram(RID handle) const;
+    [[nodiscard]] const CompiledProgram& resolveProgram(RID handle) const;
     [[nodiscard]] const CompiledShader& resolveCompiled(RID handle) const;
     [[nodiscard]] std::vector<CompiledShaderId> invalidate(const VirtualPath& changedFile);
     [[nodiscard]] std::vector<CompiledShaderId> invalidateChanged();
@@ -97,14 +97,14 @@ private:
         std::unordered_map<ShaderHash, RID> pathEntries_;
     };
     class ShaderProgramCache final
-        : public KeyedHandleRegistry<ShaderProgram, RID, ShaderProgramId> {
+        : public KeyedHandleRegistry<CompiledProgram, RID, ShaderProgramId> {
     public:
-        [[nodiscard]] const ShaderProgram& resolve(RID handle) const;
+        [[nodiscard]] const CompiledProgram& resolve(RID handle) const;
         void invalidate(std::span<const CompiledShaderId> shaders);
         void clear() override;
 
     private:
-        [[nodiscard]] ShaderProgramId keyOf(const ShaderProgram& program) const override {
+        [[nodiscard]] ShaderProgramId keyOf(const CompiledProgram& program) const override {
             return program.id;
         }
     };

@@ -81,7 +81,7 @@ int main() {
     const ShaderPass& pass = runtimeShader.defaultSubShader().requirePass(ShaderPassType::Forward);
     ShaderCompilePipeline pipeline;
     const RID programHandle = pipeline.getOrCreate(runtimeShader, pass);
-    const ShaderProgram& program = pipeline.resolveProgram(programHandle);
+    const CompiledProgram& program = pipeline.resolveProgram(programHandle);
     const CompiledShader& vertex = pipeline.resolveCompiled(program.vertex);
     const CompiledShader& fragment = pipeline.resolveCompiled(program.fragment);
     if (vertex.stage != ShaderStage::Vertex || fragment.stage != ShaderStage::Fragment ||

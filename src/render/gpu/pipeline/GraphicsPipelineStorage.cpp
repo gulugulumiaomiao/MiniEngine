@@ -46,7 +46,7 @@ bool GraphicsPipelineStorage::initialize(rhi::IDevice& device,
 }
 
 GraphicsPipelineStorageCacheKey
-GraphicsPipelineStorage::makeCacheKey(const ShaderProgram& program,
+GraphicsPipelineStorage::makeCacheKey(const CompiledProgram& program,
                                       std::uint64_t vertexLayoutHash,
                                       rhi::PixelFormat colorFormat,
                                       rhi::PixelFormat depthFormat) {
@@ -110,7 +110,7 @@ rhi::RID GraphicsPipelineStorage::resolve(const Shader& shader,
         return {};
     }
 
-    const ShaderProgram& program = SHADER_STORAGE.resolveProgram(programHandle);
+    const CompiledProgram& program = SHADER_STORAGE.resolveProgram(programHandle);
     const GraphicsPipelineStorageCacheKey key =
         makeCacheKey(program, mesh.vertexLayout().hash(), colorFormat, depthFormat);
     if (const GraphicsPipelineStorageEntry* cached = cache_.find(key))

@@ -492,9 +492,9 @@ void ShaderCompilePipeline::CompiledShaderCache::clear() {
     KeyedHandleRegistry::clear();
 }
 
-const ShaderProgram&
+const CompiledProgram&
 ShaderCompilePipeline::ShaderProgramCache::resolve(RID handle) const {
-    const ShaderProgram* program = find(handle);
+    const CompiledProgram* program = find(handle);
     if (!program)
         Log::fatal("ShaderProgramCache", "Invalid or stale shader program handle");
     return *program;
@@ -503,7 +503,7 @@ ShaderCompilePipeline::ShaderProgramCache::resolve(RID handle) const {
 void ShaderCompilePipeline::ShaderProgramCache::invalidate(
     std::span<const CompiledShaderId> shaders) {
     std::vector<ShaderProgramId> affected;
-    forEach([&](const ShaderProgram& program) {
+    forEach([&](const CompiledProgram& program) {
         if (std::ranges::any_of(shaders, [&program](auto id) {
                 return program.vertexId == id || program.fragmentId == id;
             })) {
@@ -711,7 +711,7 @@ RID ShaderCompilePipeline::getOrCreate(const Shader& shader,
                                   std::move(*layout)});
 }
 
-const ShaderProgram& ShaderCompilePipeline::resolveProgram(RID handle) const {
+const CompiledProgram& ShaderCompilePipeline::resolveProgram(RID handle) const {
     return programsCache_.resolve(handle);
 }
 

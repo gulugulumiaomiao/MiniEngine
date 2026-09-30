@@ -48,7 +48,7 @@ RID ShaderStorage::getOrCreateProgram(const Shader& shader,
     return initialized() ? compilePipeline_->getOrCreate(shader, pass, variant) : RID{};
 }
 
-const ShaderProgram& ShaderStorage::resolveProgram(RID handle) const {
+const CompiledProgram& ShaderStorage::resolveProgram(RID handle) const {
     return compilePipeline_->resolveProgram(handle);
 }
 

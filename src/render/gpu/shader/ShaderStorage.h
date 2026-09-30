@@ -27,7 +27,7 @@ public:
     [[nodiscard]] RID getOrCreateProgram(const Shader& shader,
                                          const ShaderPass& pass,
                                          const ShaderVariantKey& variant);
-    [[nodiscard]] const ShaderProgram& resolveProgram(RID handle) const;
+    [[nodiscard]] const CompiledProgram& resolveProgram(RID handle) const;
     [[nodiscard]] const CompiledShader& resolveCompiled(RID handle) const;
     [[nodiscard]] rhi::RID resolve(RID handle);
     [[nodiscard]] std::vector<CompiledShaderId> invalidateChanged(std::uint64_t retireSerial);
