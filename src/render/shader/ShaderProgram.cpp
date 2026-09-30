@@ -27,8 +27,7 @@ namespace {
 }
 
 [[nodiscard]] bool isBufferType(ShaderDescriptorType type) {
-    return type == ShaderDescriptorType::UniformBuffer ||
-           type == ShaderDescriptorType::StorageBuffer;
+    return type == ShaderDescriptorType::UniformBuffer;
 }
 
 // Builds a UboLayout from a reflected uniform/storage block's members (already typed + std140-sized

@@ -31,9 +31,8 @@ UniformSet::UniformSet(rhi::IDevice& device,
     for (std::size_t i = 0; i < bindings.size(); ++i) {
         const ResourceBinding& binding = bindings[i];
         const std::uint32_t pos = static_cast<std::uint32_t>(i);
-        const bool isBuffer = binding.type == rhi::ResourceType::UniformBuffer ||
-                              binding.type == rhi::ResourceType::StorageBuffer;
-        if (isBuffer) {
+        const bool isUniformBuffer = binding.type == rhi::ResourceType::UniformBuffer;
+        if (isUniformBuffer) {
             if (uboIndex < uboLayouts.size() && uboLayouts[uboIndex]) {
                 Ref<Ubo> ubo = makeRef<Ubo>(device, uboLayouts[uboIndex]);
                 ubo->create();
@@ -44,7 +43,8 @@ UniformSet::UniformSet(rhi::IDevice& device,
             }
             ++uboIndex;
         } else {
-            // Texture/sampler binding: keyed by its reflected name, resource assigned later.
+            // Storage buffer / texture / sampler binding: keyed by its reflected name, filled later
+            // via setResource (a raw SSBO has no reflected member layout, so it is not a Ubo).
             resourceMap_.emplace(binding.name, pos);
         }
     }
@@ -80,8 +80,8 @@ bool UniformSet::setResource(std::string_view name, Ref<UniformResource> resourc
     const rhi::ResourceType declared = layout_->bindings()[pos].type;
     UniformResourceType expected;
     switch (declared) {
-    case rhi::ResourceType::UniformBuffer:
-    case rhi::ResourceType::StorageBuffer: expected = UniformResourceType::Ubo; break;
+    case rhi::ResourceType::UniformBuffer: expected = UniformResourceType::Ubo; break;
+    case rhi::ResourceType::StorageBuffer: expected = UniformResourceType::StorageBuffer; break;
     case rhi::ResourceType::CombinedImageSampler:
     case rhi::ResourceType::SampledImage:
     case rhi::ResourceType::StorageImage: expected = UniformResourceType::Texture; break;
@@ -112,6 +112,13 @@ void UniformSet::upload() {
                 write.offset = 0;
                 write.size = 0; // whole buffer
                 break;
+            case UniformResourceType::StorageBuffer: {
+                const auto* ssbo = static_cast<const StorageBufferResource*>(resource.get());
+                write.buffer = ssbo->buffer();
+                write.offset = 0;
+                write.size = ssbo->size();
+                break;
+            }
             case UniformResourceType::Texture: {
                 const rhi::TextureBinding binding =
                     static_cast<const Texture*>(resource.get())->binding();
