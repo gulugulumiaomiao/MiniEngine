@@ -1,0 +1,138 @@
+#include "render/uniform/UniformSet.h"
+
+#include "core/logging/Log.h"
+#include "render/texture/Sampler.h"
+#include "render/texture/Texture.h"
+#include "rhi/api/Device.h"
+
+#include <utility>
+
+namespace engine {
+
+UniformSet::UniformSet(rhi::IDevice& device,
+                       Ref<UniformSetLayout> layout,
+                       std::vector<Ref<UboLayout>> uboLayouts)
+    : device_(&device), deviceUid_(device.uid()), layout_(std::move(layout)) {
+    if (!layout_)
+        Log::fatal("UniformSet", "Cannot build a uniform set without a layout");
+    const std::vector<ResourceBinding>& bindings = layout_->bindings();
+
+    // Allocate the descriptor set from the pool bucketed by the layout's unordered hash.
+    std::vector<rhi::ResourceBindingDesc> descs;
+    descs.reserve(bindings.size());
+    for (const ResourceBinding& binding : bindings)
+        descs.push_back({binding.binding, binding.name, binding.type});
+    descriptorSet_ = device_->descriptor_set_allocate(
+        rhi::DescriptorSetAllocateInfo{layout_->rid(), layout_->unorderedHash(), descs, 1});
+
+    // One resource slot per binding; create a Ubo for each uniform/storage-buffer binding.
+    resources_.assign(bindings.size(), {});
+    std::size_t uboIndex = 0;
+    for (std::size_t i = 0; i < bindings.size(); ++i) {
+        const ResourceBinding& binding = bindings[i];
+        const std::uint32_t pos = static_cast<std::uint32_t>(i);
+        const bool isBuffer = binding.type == rhi::ResourceType::UniformBuffer ||
+                              binding.type == rhi::ResourceType::StorageBuffer;
+        if (isBuffer) {
+            if (uboIndex < uboLayouts.size() && uboLayouts[uboIndex]) {
+                Ref<Ubo> ubo = makeRef<Ubo>(device, uboLayouts[uboIndex]);
+                ubo->create();
+                // Every member name of this block resolves to this slot.
+                for (const UboUniform& member : uboLayouts[uboIndex]->uniforms())
+                    resourceMap_.emplace(member.name, pos);
+                resources_[i] = Ref<UniformResource>(std::move(ubo));
+            }
+            ++uboIndex;
+        } else {
+            // Texture/sampler binding: keyed by its reflected name, resource assigned later.
+            resourceMap_.emplace(binding.name, pos);
+        }
+    }
+}
+
+UniformSet::~UniformSet() {
+    // Cross-device safety: only free the descriptor set if the creating device is still active.
+    if (descriptorSet_ && device_ && rhi::IDevice::active() &&
+        rhi::IDevice::active()->uid() == deviceUid_) {
+        device_->descriptor_set_destroy(descriptorSet_);
+    }
+    descriptorSet_ = {};
+}
+
+bool UniformSet::setUniform(std::string_view name, const ShaderValue& value) {
+    const auto found = resourceMap_.find(std::string(name));
+    if (found == resourceMap_.end())
+        return false;
+    const Ref<UniformResource>& resource = resources_[found->second];
+    if (!resource || resource->resourceType() != UniformResourceType::Ubo)
+        return false;
+    return static_cast<Ubo*>(resource.get())->setUniform(name, value);
+}
+
+bool UniformSet::setResource(std::string_view name, Ref<UniformResource> resource) {
+    if (!resource)
+        return false;
+    const auto found = resourceMap_.find(std::string(name));
+    if (found == resourceMap_.end())
+        return false;
+    const std::uint32_t pos = found->second;
+    // The accepted kind is dictated by the layout-declared descriptor type for this slot.
+    const rhi::ResourceType declared = layout_->bindings()[pos].type;
+    UniformResourceType expected;
+    switch (declared) {
+    case rhi::ResourceType::UniformBuffer:
+    case rhi::ResourceType::StorageBuffer: expected = UniformResourceType::Ubo; break;
+    case rhi::ResourceType::CombinedImageSampler:
+    case rhi::ResourceType::SampledImage:
+    case rhi::ResourceType::StorageImage: expected = UniformResourceType::Texture; break;
+    case rhi::ResourceType::Sampler: expected = UniformResourceType::Sampler; break;
+    }
+    if (resource->resourceType() != expected)
+        return false;
+    resources_[pos] = std::move(resource);
+    dirty_ = true;
+    return true;
+}
+
+void UniformSet::upload() {
+    if (dirty_ && descriptorSet_) {
+        const std::vector<ResourceBinding>& bindings = layout_->bindings();
+        std::vector<rhi::DescriptorWrite> writes;
+        writes.reserve(resources_.size());
+        for (std::size_t i = 0; i < resources_.size(); ++i) {
+            const Ref<UniformResource>& resource = resources_[i];
+            if (!resource)
+                continue; // unpopulated texture/sampler slot: skip (partial writes are allowed)
+            rhi::DescriptorWrite write;
+            write.binding = bindings[i].binding;
+            write.type = bindings[i].type;
+            switch (resource->resourceType()) {
+            case UniformResourceType::Ubo:
+                write.buffer = static_cast<const Ubo*>(resource.get())->buffer();
+                write.offset = 0;
+                write.size = 0; // whole buffer
+                break;
+            case UniformResourceType::Texture: {
+                const rhi::TextureBinding binding =
+                    static_cast<const Texture*>(resource.get())->binding();
+                write.textureView = binding.view;
+                write.sampler = binding.sampler;
+                break;
+            }
+            case UniformResourceType::Sampler:
+                write.sampler = static_cast<const Sampler*>(resource.get())->rhiHandle();
+                break;
+            }
+            writes.push_back(write);
+        }
+        if (!writes.empty())
+            device_->descriptor_set_update(descriptorSet_, writes);
+        dirty_ = false;
+    }
+    // Push UBO contents; each Ubo decides whether it actually needs a buffer upload.
+    for (const Ref<UniformResource>& resource : resources_)
+        if (resource && resource->resourceType() == UniformResourceType::Ubo)
+            static_cast<Ubo*>(resource.get())->upload();
+}
+
+} // namespace engine
