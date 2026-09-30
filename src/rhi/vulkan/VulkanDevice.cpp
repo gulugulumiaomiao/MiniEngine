@@ -583,11 +583,15 @@ RID VulkanDevice::pipeline_create(const GraphicsPipelineDesc& desc) {
         Log::fatal("VulkanDevice", "Invalid graphics pipeline description");
     }
     const PipelineLayoutKey key(desc.bindGroupLayouts.begin(), desc.bindGroupLayouts.end());
+    // New path: a ready pipeline-layout RID (from pipeline_layout_create). Legacy path: derive and
+    // dedup a VkPipelineLayout from the bind-group-layout RID vector. Both coexist during migration.
+    const VkPipelineLayout layout = desc.pipelineLayout ? resolvePipelineLayout(desc.pipelineLayout)
+                                                        : acquirePipelineLayout(key);
     return pipelines_.emplace(device_,
                               desc,
                               resolveShader(desc.vertexShader),
                               resolveShader(desc.fragmentShader),
-                              acquirePipelineLayout(key),
+                              layout,
                               pipelineCache_);
 }
 
@@ -662,6 +666,265 @@ void VulkanDevice::bind_group_destroy(RID handle) {
         return;
     descriptorAllocator_->free(*descriptor);
     bind_group_release_rid(handle);
+}
+
+// ---------------------------------------------------------------------------
+// New uniform-binding system: shader RID primitives, descriptor set layouts,
+// pipeline layouts and bucketed descriptor sets.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Per-type descriptor counts for a single set, sorted by VkDescriptorType so two profiles can be
+// compared for equality regardless of the binding order they were reflected in.
+[[nodiscard]] std::vector<VkDescriptorPoolSize>
+descriptorProfile(std::span<const ResourceBindingDesc> bindings) {
+    std::vector<VkDescriptorPoolSize> profile;
+    for (const ResourceBindingDesc& binding : bindings) {
+        const VkDescriptorType type = toVulkan(binding.type);
+        const auto found = std::ranges::find_if(profile, [type](const VkDescriptorPoolSize& size) {
+            return size.type == type;
+        });
+        if (found != profile.end())
+            ++found->descriptorCount;
+        else
+            profile.push_back({type, 1});
+    }
+    std::ranges::sort(profile, [](const VkDescriptorPoolSize& a, const VkDescriptorPoolSize& b) {
+        return a.type < b.type;
+    });
+    return profile;
+}
+
+[[nodiscard]] bool sameDescriptorProfile(const std::vector<VkDescriptorPoolSize>& a,
+                                         const std::vector<VkDescriptorPoolSize>& b) {
+    if (a.size() != b.size())
+        return false;
+    for (std::size_t i = 0; i < a.size(); ++i)
+        if (a[i].type != b[i].type || a[i].descriptorCount != b[i].descriptorCount)
+            return false;
+    return true;
+}
+
+} // namespace
+
+RID VulkanDevice::shader_allocate_rid() {
+    return shaders_.emplace();
+}
+
+void VulkanDevice::shader_release_rid(RID handle) {
+    (void)shaders_.release(handle);
+}
+
+RID VulkanDevice::descriptor_set_layout_allocate_rid() {
+    return setLayouts_.emplace();
+}
+
+void VulkanDevice::descriptor_set_layout_build(RID handle, const DescriptorSetLayoutDesc& desc) {
+    VulkanDescriptorSetLayout* layout = setLayouts_.find(handle);
+    if (!layout)
+        Log::fatal("VulkanDevice", "Invalid descriptor set layout handle");
+    std::vector<VkDescriptorSetLayoutBinding> bindings;
+    bindings.reserve(desc.bindings.size());
+    for (const ResourceBindingDesc& binding : desc.bindings) {
+        bindings.push_back({binding.binding,
+                            toVulkan(binding.type),
+                            1,
+                            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                            nullptr});
+    }
+    layout->initialize(device_, bindings);
+}
+
+void VulkanDevice::descriptor_set_layout_destroy(RID handle) {
+    set_layout_release_rid(handle);
+}
+
+RID VulkanDevice::pipeline_layout_create(const PipelineLayoutDesc& desc) {
+    std::vector<VkDescriptorSetLayout> layouts;
+    layouts.reserve(desc.setLayouts.size());
+    for (RID handle : desc.setLayouts)
+        layouts.push_back(resolveDescriptorSetLayout(handle));
+    VkPipelineLayoutCreateInfo info{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    info.setLayoutCount = static_cast<std::uint32_t>(layouts.size());
+    info.pSetLayouts = layouts.data();
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    if (vkCreatePipelineLayout(device_, &info, nullptr, &layout) != VK_SUCCESS)
+        Log::fatal("VulkanDevice", "vkCreatePipelineLayout failed");
+    return pipelineLayoutPool_.emplace(layout);
+}
+
+void VulkanDevice::pipeline_layout_destroy(RID handle) {
+    VkPipelineLayout* layout = pipelineLayoutPool_.find(handle);
+    if (!layout)
+        return;
+    vkDestroyPipelineLayout(device_, *layout, nullptr);
+    (void)pipelineLayoutPool_.release(handle);
+}
+
+RID VulkanDevice::descriptor_set_allocate(const DescriptorSetAllocateInfo& info) {
+    if (info.setCount != 1)
+        Log::fatal("VulkanDevice", "descriptor_set_allocate supports exactly one set");
+    const VkDescriptorSetLayout vkLayout = resolveDescriptorSetLayout(info.layout);
+    const std::vector<VkDescriptorPoolSize> profile = descriptorProfile(info.bindings);
+
+    // Pick the first pool in this hash bucket whose profile matches and that still has room; the
+    // profile match guarantees per-type capacity (sized as profile * maxSets) is never exceeded.
+    DescriptorPoolBucket& bucket = descriptorPools_[info.unorderedHash];
+    VulkanDescriptorPool* pool = nullptr;
+    for (VulkanDescriptorPool& candidate : bucket.pools) {
+        if (candidate.allocatedSets < candidate.maxSets &&
+            sameDescriptorProfile(candidate.perSetProfile, profile)) {
+            pool = &candidate;
+            break;
+        }
+    }
+    if (!pool) {
+        VulkanDescriptorPool fresh;
+        fresh.id = bucket.nextId++;
+        fresh.maxSets = kDescriptorSetsPerPool;
+        fresh.perSetProfile = profile;
+        std::vector<VkDescriptorPoolSize> sizes;
+        sizes.reserve(profile.size());
+        for (const VkDescriptorPoolSize& entry : profile)
+            sizes.push_back({entry.type, entry.descriptorCount * fresh.maxSets});
+        VkDescriptorPoolCreateInfo createInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+        createInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+        createInfo.maxSets = fresh.maxSets;
+        createInfo.poolSizeCount = static_cast<std::uint32_t>(sizes.size());
+        createInfo.pPoolSizes = sizes.data();
+        if (vkCreateDescriptorPool(device_, &createInfo, nullptr, &fresh.pool) != VK_SUCCESS)
+            Log::fatal("VulkanDevice", "vkCreateDescriptorPool failed");
+        bucket.pools.push_back(std::move(fresh));
+        pool = &bucket.pools.back();
+    }
+
+    VkDescriptorSetAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    allocateInfo.descriptorPool = pool->pool;
+    allocateInfo.descriptorSetCount = 1;
+    allocateInfo.pSetLayouts = &vkLayout;
+    VkDescriptorSet set = VK_NULL_HANDLE;
+    if (vkAllocateDescriptorSets(device_, &allocateInfo, &set) != VK_SUCCESS)
+        Log::fatal("VulkanDevice", "vkAllocateDescriptorSets failed");
+    ++pool->allocatedSets;
+    return descriptorSets_.emplace(VulkanDescriptorSet{set, info.unorderedHash, pool->id});
+}
+
+void VulkanDevice::descriptor_set_update(RID handle, std::span<const DescriptorWrite> writes) {
+    const VulkanDescriptorSet* entry = descriptorSets_.find(handle);
+    if (!entry)
+        Log::fatal("VulkanDevice", "Invalid descriptor set handle");
+    // Reserve up front so the info vectors never reallocate and invalidate the p*Info pointers
+    // stored in each VkWriteDescriptorSet below.
+    std::vector<VkDescriptorBufferInfo> bufferInfos;
+    std::vector<VkDescriptorImageInfo> imageInfos;
+    std::vector<VkWriteDescriptorSet> vkWrites;
+    bufferInfos.reserve(writes.size());
+    imageInfos.reserve(writes.size());
+    vkWrites.reserve(writes.size());
+    for (const DescriptorWrite& write : writes) {
+        VkWriteDescriptorSet vkWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        vkWrite.dstSet = entry->set;
+        vkWrite.dstBinding = write.binding;
+        vkWrite.descriptorCount = 1;
+        vkWrite.descriptorType = toVulkan(write.type);
+        switch (write.type) {
+        case ResourceType::UniformBuffer:
+        case ResourceType::StorageBuffer: {
+            const VulkanBuffer& buffer = requireBuffer(write.buffer);
+            const std::uint64_t size = write.size == 0 ? buffer.size() - write.offset : write.size;
+            bufferInfos.push_back({buffer.handle(), write.offset, size});
+            vkWrite.pBufferInfo = &bufferInfos.back();
+            break;
+        }
+        case ResourceType::CombinedImageSampler:
+            imageInfos.push_back({resolveSampler(write.sampler),
+                                  resolveTextureView(write.textureView),
+                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+            vkWrite.pImageInfo = &imageInfos.back();
+            break;
+        case ResourceType::SampledImage:
+            imageInfos.push_back({VK_NULL_HANDLE,
+                                  resolveTextureView(write.textureView),
+                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+            vkWrite.pImageInfo = &imageInfos.back();
+            break;
+        case ResourceType::Sampler:
+            imageInfos.push_back(
+                {resolveSampler(write.sampler), VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED});
+            vkWrite.pImageInfo = &imageInfos.back();
+            break;
+        case ResourceType::StorageImage:
+            imageInfos.push_back(
+                {VK_NULL_HANDLE, resolveTextureView(write.textureView), VK_IMAGE_LAYOUT_GENERAL});
+            vkWrite.pImageInfo = &imageInfos.back();
+            break;
+        }
+        vkWrites.push_back(vkWrite);
+    }
+    vkUpdateDescriptorSets(
+        device_, static_cast<std::uint32_t>(vkWrites.size()), vkWrites.data(), 0, nullptr);
+}
+
+void VulkanDevice::descriptor_set_destroy(RID handle) {
+    const VulkanDescriptorSet* entry = descriptorSets_.find(handle);
+    if (!entry)
+        return;
+    // Copy the locator fields out before release() recycles the slot.
+    const VkDescriptorSet set = entry->set;
+    const std::uint64_t hash = entry->unorderedHash;
+    const std::uint32_t poolId = entry->poolId;
+    if (const auto bucketIt = descriptorPools_.find(hash); bucketIt != descriptorPools_.end()) {
+        DescriptorPoolBucket& bucket = bucketIt->second;
+        const auto poolIt =
+            std::ranges::find_if(bucket.pools,
+                                 [poolId](const VulkanDescriptorPool& candidate) {
+                                     return candidate.id == poolId;
+                                 });
+        if (poolIt != bucket.pools.end()) {
+            vkFreeDescriptorSets(device_, poolIt->pool, 1, &set);
+            if (poolIt->allocatedSets > 0)
+                --poolIt->allocatedSets;
+            // A pool with no live sets is destroyed and dropped from the bucket.
+            if (poolIt->allocatedSets == 0) {
+                vkDestroyDescriptorPool(device_, poolIt->pool, nullptr);
+                bucket.pools.erase(poolIt);
+            }
+        }
+        // An emptied bucket is removed from the map entirely.
+        if (bucket.pools.empty())
+            descriptorPools_.erase(bucketIt);
+    }
+    (void)descriptorSets_.release(handle);
+}
+
+VkDescriptorSetLayout VulkanDevice::resolveDescriptorSetLayout(RID handle) const {
+    const VulkanDescriptorSetLayout* resource = setLayouts_.find(handle);
+    if (!resource)
+        Log::fatal("VulkanDevice", "Invalid or stale RHI descriptor set layout handle");
+    return resource->handle();
+}
+
+VkPipelineLayout VulkanDevice::resolvePipelineLayout(RID handle) const {
+    const VkPipelineLayout* layout = pipelineLayoutPool_.find(handle);
+    if (!layout)
+        Log::fatal("VulkanDevice", "Invalid or stale RHI pipeline layout handle");
+    return *layout;
+}
+
+VkDescriptorSet VulkanDevice::resolveDescriptorSet(RID handle) const {
+    const VulkanDescriptorSet* entry = descriptorSets_.find(handle);
+    if (!entry)
+        Log::fatal("VulkanDevice", "Invalid or stale RHI descriptor set handle");
+    return entry->set;
+}
+
+void VulkanDevice::destroyDescriptorPools() {
+    for (auto& [hash, bucket] : descriptorPools_)
+        for (VulkanDescriptorPool& pool : bucket.pools)
+            if (pool.pool != VK_NULL_HANDLE)
+                vkDestroyDescriptorPool(device_, pool.pool, nullptr);
+    descriptorPools_.clear();
 }
 
 RID VulkanDevice::command_buffer_create() {
@@ -953,6 +1216,14 @@ void VulkanDevice::clear() {
     // clear them first; owned wrappers free their VkCommandBuffer back to the pool.
     commandBuffers_.clear();
     pipelines_.clear();
+    // New uniform-binding system: descriptor sets are freed implicitly when their pools are
+    // destroyed; pipeline layouts must be destroyed before the set layouts they reference.
+    descriptorSets_.clear();
+    destroyDescriptorPools();
+    pipelineLayoutPool_.forEach(
+        [this](VkPipelineLayout layout) { vkDestroyPipelineLayout(device_, layout, nullptr); });
+    pipelineLayoutPool_.clear();
+    setLayouts_.clear();
     for (auto& [key, layout] : pipelineLayouts_)
         vkDestroyPipelineLayout(device_, layout, nullptr);
     pipelineLayouts_.clear();

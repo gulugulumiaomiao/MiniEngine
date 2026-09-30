@@ -70,8 +70,12 @@ public:
     [[nodiscard]] virtual RID sampler_create(const SamplerDesc& desc) = 0;
     virtual void sampler_destroy(RID handle) = 0;
 
-    // Shader modules.
+    // Shader modules. allocate_rid / release_rid are the pool primitives (reserve a RID with a
+    // null module, recycle a RID); create / destroy compose them with the VkShaderModule build and
+    // teardown for the common one-shot case.
+    [[nodiscard]] virtual RID shader_allocate_rid() = 0;
     [[nodiscard]] virtual RID shader_create(const ShaderDesc& desc) = 0;
+    virtual void shader_release_rid(RID handle) = 0;
     virtual void shader_destroy(RID handle) = 0;
 
     // Graphics pipelines.
@@ -83,6 +87,25 @@ public:
     virtual void bind_group_layout_destroy(RID handle) = 0;
     [[nodiscard]] virtual RID bind_group_create(const BindGroupDesc& desc) = 0;
     virtual void bind_group_destroy(RID handle) = 0;
+
+    // Descriptor set layouts, pipeline layouts and descriptor sets: the reflection-driven
+    // uniform-binding system (engine layer UniformSetLayout / PipelineLayout / UniformSet). This
+    // coexists with the BindGroup* family above during the migration and replaces it once every
+    // caller has moved over.
+    //
+    // Set layouts use the two-step lifecycle (mirroring buffers): allocate_rid reserves a RID with
+    // a null VkDescriptorSetLayout, build fills that reserved slot once the bindings are known
+    // (UniformSetLayout records bindings between begin() and end()), destroy tears down and
+    // recycles. Descriptor sets are pooled: allocate picks a pool bucketed by info.unorderedHash,
+    // update writes descriptors, destroy frees the set back to its pool (destroying an emptied pool).
+    [[nodiscard]] virtual RID descriptor_set_layout_allocate_rid() = 0;
+    virtual void descriptor_set_layout_build(RID handle, const DescriptorSetLayoutDesc& desc) = 0;
+    virtual void descriptor_set_layout_destroy(RID handle) = 0;
+    [[nodiscard]] virtual RID pipeline_layout_create(const PipelineLayoutDesc& desc) = 0;
+    virtual void pipeline_layout_destroy(RID handle) = 0;
+    [[nodiscard]] virtual RID descriptor_set_allocate(const DescriptorSetAllocateInfo& info) = 0;
+    virtual void descriptor_set_update(RID handle, std::span<const DescriptorWrite> writes) = 0;
+    virtual void descriptor_set_destroy(RID handle) = 0;
 
     virtual void waitIdle() = 0;
 

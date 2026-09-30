@@ -28,7 +28,8 @@ VulkanShaderModule::VulkanShaderModule(VkDevice device,
 }
 
 VulkanShaderModule::~VulkanShaderModule() {
-    vkDestroyShaderModule(device_, module_, nullptr);
+    if (module_ != VK_NULL_HANDLE)
+        vkDestroyShaderModule(device_, module_, nullptr);
 }
 
 } // namespace engine::rhi::vulkan

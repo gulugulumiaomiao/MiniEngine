@@ -12,6 +12,9 @@ namespace engine::rhi::vulkan {
 
 class VulkanDescriptorSetLayout final {
 public:
+    // Reserved-slot constructor: leaves layout_ null so the device can mint a RID before the
+    // bindings are known (descriptor_set_layout_allocate_rid); initialize() builds it later.
+    VulkanDescriptorSetLayout() = default;
     VulkanDescriptorSetLayout(VkDevice device,
                               std::span<const VkDescriptorSetLayoutBinding> bindings);
     ~VulkanDescriptorSetLayout();
@@ -20,6 +23,9 @@ public:
     VulkanDescriptorSetLayout& operator=(const VulkanDescriptorSetLayout&) = delete;
     VulkanDescriptorSetLayout(VulkanDescriptorSetLayout&&) = delete;
     VulkanDescriptorSetLayout& operator=(VulkanDescriptorSetLayout&&) = delete;
+
+    // Build the VkDescriptorSetLayout into a reserved (default-constructed) slot.
+    void initialize(VkDevice device, std::span<const VkDescriptorSetLayoutBinding> bindings);
 
     [[nodiscard]] VkDescriptorSetLayout handle() const { return layout_; }
 

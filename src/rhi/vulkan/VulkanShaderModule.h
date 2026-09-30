@@ -16,6 +16,9 @@ namespace engine::rhi::vulkan {
 // debug name stays with the ShaderDesc the caller already holds.
 class VulkanShaderModule final {
 public:
+    // Reserved-slot constructor: leaves module_ null so the device can mint a RID before the
+    // bytecode is known (shader_allocate_rid). The 3-argument constructor builds immediately.
+    VulkanShaderModule() = default;
     VulkanShaderModule(VkDevice device, std::span<const std::byte> bytecode, std::string_view debugName);
     ~VulkanShaderModule();
 

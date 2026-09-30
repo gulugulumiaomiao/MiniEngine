@@ -87,6 +87,21 @@ public:
     }
     void bind_group_destroy(rhi::RID) override { ++destroyedBindGroups; }
 
+    rhi::RID shader_allocate_rid() override { return {++shaderRids, 1}; }
+    void shader_release_rid(rhi::RID) override {}
+    rhi::RID descriptor_set_layout_allocate_rid() override { return {++setLayouts, 1}; }
+    void descriptor_set_layout_build(rhi::RID, const rhi::DescriptorSetLayoutDesc&) override {}
+    void descriptor_set_layout_destroy(rhi::RID) override { ++destroyedSetLayouts; }
+    rhi::RID pipeline_layout_create(const rhi::PipelineLayoutDesc&) override {
+        return {++pipelineLayouts, 1};
+    }
+    void pipeline_layout_destroy(rhi::RID) override { ++destroyedPipelineLayouts; }
+    rhi::RID descriptor_set_allocate(const rhi::DescriptorSetAllocateInfo&) override {
+        return {++descriptorSets, 1};
+    }
+    void descriptor_set_update(rhi::RID, std::span<const rhi::DescriptorWrite>) override {}
+    void descriptor_set_destroy(rhi::RID) override { ++destroyedDescriptorSets; }
+
     void waitIdle() override {}
 
     std::vector<rhi::BufferDesc> buffers;
@@ -111,6 +126,13 @@ public:
     int destroyedPipelines{};
     int destroyedLayouts{};
     int destroyedBindGroups{};
+    std::uint32_t shaderRids{};
+    std::uint32_t setLayouts{};
+    std::uint32_t pipelineLayouts{};
+    std::uint32_t descriptorSets{};
+    int destroyedSetLayouts{};
+    int destroyedPipelineLayouts{};
+    int destroyedDescriptorSets{};
 };
 
 } // namespace

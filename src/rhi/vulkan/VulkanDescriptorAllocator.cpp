@@ -7,8 +7,13 @@
 namespace engine::rhi::vulkan {
 
 VulkanDescriptorSetLayout::VulkanDescriptorSetLayout(
-    VkDevice device, std::span<const VkDescriptorSetLayoutBinding> bindings)
-    : device_(device) {
+    VkDevice device, std::span<const VkDescriptorSetLayoutBinding> bindings) {
+    initialize(device, bindings);
+}
+
+void VulkanDescriptorSetLayout::initialize(
+    VkDevice device, std::span<const VkDescriptorSetLayoutBinding> bindings) {
+    device_ = device;
     VkDescriptorSetLayoutCreateInfo createInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     createInfo.bindingCount = static_cast<std::uint32_t>(bindings.size());
     createInfo.pBindings = bindings.data();
@@ -18,7 +23,8 @@ VulkanDescriptorSetLayout::VulkanDescriptorSetLayout(
 }
 
 VulkanDescriptorSetLayout::~VulkanDescriptorSetLayout() {
-    vkDestroyDescriptorSetLayout(device_, layout_, nullptr);
+    if (layout_ != VK_NULL_HANDLE)
+        vkDestroyDescriptorSetLayout(device_, layout_, nullptr);
 }
 
 VulkanDescriptorAllocator::VulkanDescriptorAllocator(VkDevice device, std::uint32_t maxSets)

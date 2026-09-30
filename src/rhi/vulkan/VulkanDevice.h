@@ -6,6 +6,7 @@
 #include "rhi/vulkan/VulkanBuffer.h"
 #include "rhi/vulkan/VulkanCommandBuffer.h"
 #include "rhi/vulkan/VulkanDescriptorAllocator.h"
+#include "rhi/vulkan/VulkanDescriptorSet.h"
 #include "rhi/vulkan/VulkanGraphicsPipeline.h"
 #include "rhi/vulkan/VulkanSampler.h"
 #include "rhi/vulkan/VulkanShaderModule.h"
@@ -92,7 +93,9 @@ public:
     [[nodiscard]] RID sampler_create(const SamplerDesc& desc) override;
     void sampler_destroy(RID handle) override;
 
+    [[nodiscard]] RID shader_allocate_rid() override;
     [[nodiscard]] RID shader_create(const ShaderDesc& desc) override;
+    void shader_release_rid(RID handle) override;
     void shader_destroy(RID handle) override;
 
     [[nodiscard]] RID pipeline_create(const GraphicsPipelineDesc& desc) override;
@@ -102,6 +105,16 @@ public:
     void bind_group_layout_destroy(RID handle) override;
     [[nodiscard]] RID bind_group_create(const BindGroupDesc& desc) override;
     void bind_group_destroy(RID handle) override;
+
+    // ---- New uniform-binding system (descriptor set layouts / pipeline layouts / descriptor sets)
+    [[nodiscard]] RID descriptor_set_layout_allocate_rid() override;
+    void descriptor_set_layout_build(RID handle, const DescriptorSetLayoutDesc& desc) override;
+    void descriptor_set_layout_destroy(RID handle) override;
+    [[nodiscard]] RID pipeline_layout_create(const PipelineLayoutDesc& desc) override;
+    void pipeline_layout_destroy(RID handle) override;
+    [[nodiscard]] RID descriptor_set_allocate(const DescriptorSetAllocateInfo& info) override;
+    void descriptor_set_update(RID handle, std::span<const DescriptorWrite> writes) override;
+    void descriptor_set_destroy(RID handle) override;
 
     void waitIdle() override;
 
@@ -126,8 +139,11 @@ public:
     [[nodiscard]] VkSampler resolveSampler(RID handle) const;
     [[nodiscard]] VkShaderModule resolveShader(RID handle) const;
     [[nodiscard]] VkDescriptorSetLayout resolveBindGroupLayout(RID handle) const;
+    [[nodiscard]] VkDescriptorSetLayout resolveDescriptorSetLayout(RID handle) const;
     [[nodiscard]] ResolvedPipeline resolvePipeline(RID handle) const;
     [[nodiscard]] VkDescriptorSet resolveBindGroup(RID handle) const;
+    [[nodiscard]] VkPipelineLayout resolvePipelineLayout(RID handle) const;
+    [[nodiscard]] VkDescriptorSet resolveDescriptorSet(RID handle) const;
 
     // ---- Command buffers ----
     // Created/registered here, recorded through the rhi:: command free functions (which resolve
@@ -172,10 +188,10 @@ private:
     void texture_release_rid(RID handle) { (void)textures_.release(handle); }
     void texture_view_release_rid(RID handle) { (void)textureViews_.release(handle); }
     void sampler_release_rid(RID handle) { (void)samplers_.release(handle); }
-    void shader_release_rid(RID handle) { (void)shaders_.release(handle); }
     void pipeline_release_rid(RID handle) { (void)pipelines_.release(handle); }
     void bind_group_layout_release_rid(RID handle) { (void)bindGroupLayouts_.release(handle); }
     void bind_group_release_rid(RID handle) { (void)bindGroups_.release(handle); }
+    void set_layout_release_rid(RID handle) { (void)setLayouts_.release(handle); }
 
     [[nodiscard]] VulkanBuffer& requireBuffer(RID handle);
     [[nodiscard]] const VulkanBuffer& requireBuffer(RID handle) const;
@@ -192,6 +208,7 @@ private:
     void savePipelineCache();
     [[nodiscard]] VkPipelineLayout acquirePipelineLayout(const std::vector<RID>& key);
     void destroyPipelineLayoutsReferencing(RID handle);
+    void destroyDescriptorPools();
     void clear();
 
     // Scratch buffer created for a command buffer staging upload; retired once the frame
@@ -225,6 +242,12 @@ private:
     HandlePool<VulkanDescriptorSetLayout, RID> bindGroupLayouts_;
     HandlePool<VkDescriptorSet, RID> bindGroups_;
     HandlePool<VulkanCommandBuffer, RID> commandBuffers_;
+    // New uniform-binding system pools (coexist with the bind-group pools during the migration;
+    // the bind-group pools are removed once every caller has moved to descriptor sets).
+    HandlePool<VulkanDescriptorSetLayout, RID> setLayouts_;
+    HandlePool<VkPipelineLayout, RID> pipelineLayoutPool_;
+    HandlePool<VulkanDescriptorSet, RID> descriptorSets_;
+    std::unordered_map<std::uint64_t, DescriptorPoolBucket> descriptorPools_;
 
     std::vector<StagingBuffer> pendingStagingBuffers_;
     // Samplers are pure value objects, so this map preserves identical-SamplerDesc sharing

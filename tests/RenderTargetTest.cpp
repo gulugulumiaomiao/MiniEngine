@@ -80,6 +80,22 @@ public:
     void bind_group_layout_destroy(engine::rhi::RID) override {}
     engine::rhi::RID bind_group_create(const engine::rhi::BindGroupDesc&) override { return {}; }
     void bind_group_destroy(engine::rhi::RID) override {}
+    engine::rhi::RID shader_allocate_rid() override { return {}; }
+    void shader_release_rid(engine::rhi::RID) override {}
+    engine::rhi::RID descriptor_set_layout_allocate_rid() override { return {}; }
+    void descriptor_set_layout_build(engine::rhi::RID,
+                                     const engine::rhi::DescriptorSetLayoutDesc&) override {}
+    void descriptor_set_layout_destroy(engine::rhi::RID) override {}
+    engine::rhi::RID pipeline_layout_create(const engine::rhi::PipelineLayoutDesc&) override {
+        return {};
+    }
+    void pipeline_layout_destroy(engine::rhi::RID) override {}
+    engine::rhi::RID descriptor_set_allocate(const engine::rhi::DescriptorSetAllocateInfo&) override {
+        return {};
+    }
+    void descriptor_set_update(engine::rhi::RID,
+                               std::span<const engine::rhi::DescriptorWrite>) override {}
+    void descriptor_set_destroy(engine::rhi::RID) override {}
     void waitIdle() override {}
 
     std::vector<engine::rhi::TextureDesc> textures;
