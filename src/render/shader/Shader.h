@@ -35,6 +35,33 @@ enum class BlendMode { Off, Alpha, Additive, PremultipliedAlpha };
 enum class ShaderValueType { Float, Vec2, Vec3, Vec4 };
 enum class ShaderInterpolation { Smooth, Flat, NoPerspective };
 
+// Full GLSL scalar/vector/matrix type set for a uniform-block member (a superset of
+// ShaderValueType). SPIR-V reflection tags each UBO field with one of these so the CPU-side Ubo
+// can validate writes and derive std140 sizes. Deliberately RHI-free and declared here (layer 1)
+// so render/shader/Shader.h keeps its "no rhi/ include" invariant while the layer-2 uniform code
+// (which already includes this header for ShaderValue) reuses the same enum.
+enum class UboUniformType {
+    Bool,
+    Int,
+    UInt,
+    Float,
+    BVec2,
+    IVec2,
+    UVec2,
+    Vec2,
+    BVec3,
+    IVec3,
+    UVec3,
+    Vec3,
+    BVec4,
+    IVec4,
+    UVec4,
+    Vec4,
+    Mat2,
+    Mat3,
+    Mat4,
+};
+
 struct ShaderVariantKey {
     std::uint64_t keywordBits{};
     std::uint32_t meshFeatureBits{};
