@@ -154,6 +154,18 @@ VkDescriptorType toVulkan(BindingType type) {
     Log::fatal(kLogSource, "Unsupported RHI binding type");
 }
 
+VkDescriptorType toVulkan(ResourceType type) {
+    switch (type) {
+    case ResourceType::UniformBuffer: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    case ResourceType::StorageBuffer: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    case ResourceType::SampledImage: return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    case ResourceType::CombinedImageSampler: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    case ResourceType::Sampler: return VK_DESCRIPTOR_TYPE_SAMPLER;
+    case ResourceType::StorageImage: return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    }
+    Log::fatal(kLogSource, "Unsupported RHI resource type");
+}
+
 VkShaderStageFlags toVulkan(ShaderVisibility visibility) {
     VkShaderStageFlags result{};
     if (hasFlag(visibility, ShaderVisibility::Vertex))

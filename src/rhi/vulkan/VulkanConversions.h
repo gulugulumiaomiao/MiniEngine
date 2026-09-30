@@ -36,6 +36,7 @@ namespace engine::rhi::vulkan {
 
 // Bindings.
 [[nodiscard]] VkDescriptorType toVulkan(BindingType type);
+[[nodiscard]] VkDescriptorType toVulkan(ResourceType type);
 [[nodiscard]] VkShaderStageFlags toVulkan(ShaderVisibility visibility);
 
 // Dynamic pipeline states.

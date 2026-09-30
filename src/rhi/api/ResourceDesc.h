@@ -22,19 +22,17 @@ namespace engine::rhi {
 // name as rhi::RID so namespace-qualified call sites keep compiling.
 using RID = ::engine::RID;
 
-// Discriminator for the kinds of GPU object the device owns. RIDs are not self-typing
-// (a handle's kind is implied by the API that produced it), so this enum names the object
-// families for the device's per-type handle pools, logging and assertions.
+// Descriptor resource types, mirroring the VK_DESCRIPTOR_TYPE family. A binding's type in a
+// descriptor set layout / uniform set is one of these; the Vulkan backend maps it 1:1 onto the
+// corresponding VkDescriptorType. It lives in the backend-agnostic api header so both the engine
+// (uniform layer) and the RHI can name binding types with no Vulkan dependency.
 enum class ResourceType {
-    Buffer,
-    Texture,
-    TextureView,
-    Sampler,
-    Shader,
-    GraphicsPipeline,
-    BindGroupLayout,
-    BindGroup,
-    CommandBuffer,
+    UniformBuffer,          // VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+    StorageBuffer,          // VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
+    SampledImage,           // VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
+    CombinedImageSampler,   // VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
+    Sampler,                // VK_DESCRIPTOR_TYPE_SAMPLER
+    StorageImage,           // VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
 };
 
 // ---------------------------------------------------------------------------
@@ -153,6 +151,10 @@ struct GraphicsPipelineDesc {
     RID fragmentShader;
     std::string fragmentEntry{"main"};
     std::vector<RID> bindGroupLayouts;
+    // New uniform-binding path: a single pipeline-layout RID (minted by pipeline_layout_create)
+    // that already bundles the per-set descriptor layouts. During the migration this coexists
+    // with bindGroupLayouts; once every caller sets pipelineLayout the vector field is removed.
+    RID pipelineLayout;
     std::vector<VertexStreamDesc> vertexStreams;
     std::vector<PixelFormat> colorFormats;
     PixelFormat depthFormat{PixelFormat::Undefined};
@@ -416,6 +418,55 @@ struct BindGroupDesc {
     RID layout;
     std::span<const BindGroupEntry> entries;
     std::string debugName;
+};
+
+// ---------------------------------------------------------------------------
+// Descriptor set layouts, pipeline layouts and descriptor sets.
+//
+// The reflection-driven uniform-binding system (engine layer UniformSetLayout / UniformSet /
+// PipelineLayout) is expressed through these backend-agnostic descriptors. They replace the
+// BindGroup* family above; both coexist during the migration and the BindGroup* types are
+// removed once every caller has moved over.
+// ---------------------------------------------------------------------------
+
+// One binding slot of a descriptor set layout: its index, reflected name and resource type.
+struct ResourceBindingDesc {
+    std::uint32_t binding{};
+    std::string name;
+    ResourceType type{ResourceType::UniformBuffer};
+};
+
+struct DescriptorSetLayoutDesc {
+    std::span<const ResourceBindingDesc> bindings;   // ascending by binding index
+    std::string debugName;
+};
+
+struct PipelineLayoutDesc {
+    std::span<const RID> setLayouts;                 // descriptor_set_layout RIDs, set 0..N
+    std::string debugName;
+};
+
+// A single descriptor write (the backend-agnostic form of one VkWriteDescriptorSet). Which of
+// buffer / textureView / sampler is read depends on `type`.
+struct DescriptorWrite {
+    std::uint32_t binding{};
+    ResourceType type{ResourceType::UniformBuffer};
+    RID buffer;
+    std::uint64_t offset{};
+    std::uint64_t size{};
+    RID textureView;
+    RID sampler;
+};
+
+// Descriptor-set allocation request. `unorderedHash` (computed by the engine-layer
+// UniformSetLayout, order-independent, keyed only on per-type descriptor counts) selects the
+// device-side descriptor pool bucket; `bindings` lets the device derive the per-type counts it
+// must reserve.
+struct DescriptorSetAllocateInfo {
+    RID layout{};
+    std::uint64_t unorderedHash{};
+    std::span<const ResourceBindingDesc> bindings;
+    std::uint32_t setCount{1};
 };
 
 // ---------------------------------------------------------------------------
