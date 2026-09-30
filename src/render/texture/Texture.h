@@ -6,6 +6,7 @@
 #include "core/base/Ref.h"
 #include "core/base/RefCounted.h"
 #include "render/texture/Sampler.h" // engine::SamplerDesc / TextureFilterMode / toRhi
+#include "render/uniform/UniformResource.h"
 #include "rhi/api/ResourceDesc.h" // rhi::RID / rhi::TextureBinding
 
 #include <cstddef>
@@ -105,13 +106,22 @@ struct TextureDesc : public Transferable {
 /// 记录创建时的 active device：设备切换后旧实例析构不会误伤新设备。
 ///
 /// 由 `TextureAsset::instantiate()`/`clone()` 或静态默认纹理方法创建。
-class Texture final : public RefCounted {
+class Texture final : public UniformResource {
 public:
     ~Texture() override;
     Texture(const Texture&) = delete;
     Texture& operator=(const Texture&) = delete;
     Texture(Texture&&) = delete;
     Texture& operator=(Texture&&) = delete;
+
+    // UniformResource 接口：Texture 绑定到组合图像采样器槽
+    // （VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER），写入取 binding() 的 view+sampler。
+    [[nodiscard]] UniformResourceType resourceType() const override {
+        return UniformResourceType::Texture;
+    }
+    [[nodiscard]] rhi::ResourceType bindingType() const override {
+        return rhi::ResourceType::CombinedImageSampler;
+    }
 
     // 资产身份委托给所链接的 TextureAsset（定义在 .cpp，因 TextureAsset 此处尚不完整）；
     // 内建/克隆纹理无 asset，返回空路径 / 无效 id。
@@ -150,11 +160,17 @@ public:
     [[nodiscard]] static Ref<Texture> defaultNormal();
     [[nodiscard]] static Ref<Texture> errorTexture();
 
+    /// 采纳外部 view+sampler 作为 CombinedImageSampler 绑定资源（非拥有）：用于阴影贴图/RT 等
+    /// 渲染图产出、非 asset-backed 的绑定；~Texture 不销毁外部句柄（ownsGpu_ = false）。
+    [[nodiscard]] static Ref<Texture> adoptBinding(rhi::RID view, rhi::RID sampler);
+
 private:
     friend class TextureAsset;
 
     /// 构造：按 desc 分配三个 RID（不上传数据）。
     explicit Texture(const TextureDesc& desc);
+    /// 采纳外部绑定构造（非拥有）：只记录 view+sampler，ownsGpu_ = false。
+    Texture(rhi::RID view, rhi::RID sampler);
     /// 建立与 asset 的活链接（仅 instantiate 实例调用）。asset 为非拥有裸指针：
     /// TextureAsset 由 AssetManager 强缓存常驻，实例不延长其生命周期。
     void bindAsset(TextureAsset* asset);
@@ -180,6 +196,7 @@ private:
     rhi::RID texture_;
     rhi::RID view_;
     rhi::RID sampler_;
+    bool ownsGpu_{true}; // false = 采纳的外部 view/sampler，~Texture 不销毁
 
     TextureAsset* asset_{}; // 非拥有活链接（asset 由 AssetManager 常驻）；仅 instantiate 实例设置
 };

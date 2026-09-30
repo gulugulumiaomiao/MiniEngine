@@ -191,6 +191,10 @@ Texture::Texture(const TextureDesc& desc)
 Texture::~Texture() {
     if (asset_ && asset_->instance_ == this)
         asset_->instance_ = nullptr;
+    // 采纳的外部绑定（阴影贴图/RT）：view/sampler 归产出方（RenderGraph/RgTexturePool）所有，
+    // 此处不销毁。
+    if (!ownsGpu_)
+        return;
     // 层2 拥有默认 view：先毁 view 再毁 texture；默认 sampler 由设备去重持有、不在此销毁。
     // 跨设备安全：asset-backed 纹理在其设备仍 active 时销毁（工程 teardown 顺序保证）；内建纹理
     // 在设备切换时由静态方法先 detachFromDeadDevice() 置空句柄，故此处 view_/texture_ 为空即跳过。
@@ -201,6 +205,13 @@ Texture::~Texture() {
             device->texture_destroy(texture_);
     }
 }
+
+Ref<Texture> Texture::adoptBinding(rhi::RID view, rhi::RID sampler) {
+    return Ref<Texture>(new Texture(view, sampler));
+}
+
+Texture::Texture(rhi::RID view, rhi::RID sampler)
+    : view_(view), sampler_(sampler), ownsGpu_(false) {}
 
 void Texture::bindAsset(TextureAsset* asset) {
     asset_ = asset;

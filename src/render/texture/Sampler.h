@@ -3,6 +3,7 @@
 #include "core/base/Ref.h"
 #include "core/base/RefCounted.h"
 #include "core/serialization/Transferable.h"
+#include "render/uniform/UniformResource.h"
 #include "rhi/api/ResourceDesc.h" // rhi::RID / rhi::SamplerDesc（toRhi 翻译目标）
 
 namespace engine {
@@ -35,10 +36,18 @@ struct SamplerDesc : public Transferable {
 ///
 /// 由层2 `SamplerDesc`（语义）经 `toRhi` 翻译成 `rhi::SamplerDesc` 后交 `IDevice::createSampler`
 /// 创建（设备按 desc 去重）。不拥有层3 sampler：设备持有并随设备释放，故析构不 destroy。
-class Sampler final : public RefCounted {
+class Sampler final : public UniformResource {
 public:
     /// 经当前 active 设备按语义 desc 创建（去重）层3 sampler，包装为层2 Sampler。
     [[nodiscard]] static Ref<Sampler> resolve(const SamplerDesc& desc);
+
+    // UniformResource 接口：Sampler 绑定到独立采样器槽（VK_DESCRIPTOR_TYPE_SAMPLER）。
+    [[nodiscard]] UniformResourceType resourceType() const override {
+        return UniformResourceType::Sampler;
+    }
+    [[nodiscard]] rhi::ResourceType bindingType() const override {
+        return rhi::ResourceType::Sampler;
+    }
 
     [[nodiscard]] TextureFilterMode filterMode() const { return filterMode_; }
     [[nodiscard]] TextureAddressMode addressModeU() const { return addressModeU_; }
