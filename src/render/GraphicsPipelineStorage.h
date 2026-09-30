@@ -2,8 +2,8 @@
 
 #include "core/base/Ref.h"
 #include "core/base/Singleton.h"
-#include "render/gpu/pipeline/GraphicsPipelineStorageCache.h"
-#include "render/gpu/pipeline/GraphicsPipelineStorageEntry.h"
+#include "render/GraphicsPipelineStorageCache.h"
+#include "render/GraphicsPipelineStorageEntry.h"
 #include "render/mesh/Mesh.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderCompilePipeline.h"

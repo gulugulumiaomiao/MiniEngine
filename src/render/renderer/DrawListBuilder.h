@@ -16,7 +16,7 @@ class RenderScene;
 //
 // For every visible object and each sub-mesh, the builder tries to resolve a shader pass for the
 // three built-in phases (ShadowCaster, DepthOnly, Forward). It applies the error-material fallback
-// for Forward passes and leaves materialBindGroup empty so the pipeline can resolve it later.
+// for Forward passes and leaves materialSet empty so the pipeline can resolve it later.
 class DrawListBuilder final {
 public:
     explicit DrawListBuilder(std::string_view renderPipeline = "MiniForward");

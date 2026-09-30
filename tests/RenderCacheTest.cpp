@@ -1,7 +1,6 @@
 #include "render/gpu/common/IGpuResourceFactory.h"
 #include "render/gpu/material/MaterialStorageCache.h"
-#include "render/gpu/pipeline/GraphicsPipelineStorageCache.h"
-#include "render/gpu/shader/ShaderStorageCache.h"
+#include "render/GraphicsPipelineStorageCache.h"
 
 #include <type_traits>
 
@@ -23,7 +22,6 @@ int main() {
     using namespace engine;
 
     GraphicsPipelineStorageCache simpleCache;
-    ShaderStorageCache shaders;
     GraphicsPipelineStorageCache pipelines;
     MaterialStorageCache materials;
     if (!materials.initialize(2, 4))
@@ -71,7 +69,7 @@ int main() {
         return 11;
     materials.reset();
 
-    if (shaders.size() != 0 || pipelines.size() != 0)
+    if (pipelines.size() != 0)
         return 12;
     return 0;
 }

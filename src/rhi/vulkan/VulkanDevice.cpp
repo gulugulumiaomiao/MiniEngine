@@ -5,7 +5,6 @@
 #include "core/logging/Log.h"
 #include "rhi/vulkan/VulkanBuffer.h"
 #include "rhi/vulkan/VulkanConversions.h"
-#include "rhi/vulkan/VulkanDescriptorAllocator.h"
 #include "rhi/vulkan/VulkanGraphicsPipeline.h"
 #include "rhi/vulkan/VulkanTexture.h"
 #include "rhi/vulkan/VulkanTextureView.h"
@@ -92,7 +91,6 @@ VulkanDevice::VulkanDevice(const SurfaceSource& surface, bool enablePipelineCach
     selectPhysicalDevice();
     createLogicalDevice();
     createAllocator();
-    descriptorAllocator_ = std::make_unique<VulkanDescriptorAllocator>(device_, 256);
     createCommandPool();
     if (enablePipelineCache)
         createPipelineCache();
@@ -582,11 +580,7 @@ RID VulkanDevice::pipeline_create(const GraphicsPipelineDesc& desc) {
         (desc.depthFormat != PixelFormat::Undefined && !isDepthFormat(desc.depthFormat))) {
         Log::fatal("VulkanDevice", "Invalid graphics pipeline description");
     }
-    const PipelineLayoutKey key(desc.bindGroupLayouts.begin(), desc.bindGroupLayouts.end());
-    // New path: a ready pipeline-layout RID (from pipeline_layout_create). Legacy path: derive and
-    // dedup a VkPipelineLayout from the bind-group-layout RID vector. Both coexist during migration.
-    const VkPipelineLayout layout = desc.pipelineLayout ? resolvePipelineLayout(desc.pipelineLayout)
-                                                        : acquirePipelineLayout(key);
+    const VkPipelineLayout layout = resolvePipelineLayout(desc.pipelineLayout);
     return pipelines_.emplace(device_,
                               desc,
                               resolveShader(desc.vertexShader),
@@ -597,75 +591,6 @@ RID VulkanDevice::pipeline_create(const GraphicsPipelineDesc& desc) {
 
 void VulkanDevice::pipeline_destroy(RID handle) {
     pipeline_release_rid(handle);
-}
-
-RID VulkanDevice::bind_group_layout_create(const BindGroupLayoutDesc& desc) {
-    if (desc.entries.empty()) {
-        Log::fatal("VulkanDevice", "Cannot create an empty bind group layout");
-    }
-    std::vector<VkDescriptorSetLayoutBinding> bindings;
-    bindings.reserve(desc.entries.size());
-    for (const BindGroupLayoutEntry& entry : desc.entries) {
-        if (entry.visibility == ShaderVisibility::None) {
-            Log::fatal("VulkanDevice", "Bind group layout entry has no shader visibility");
-        }
-        bindings.push_back(
-            {entry.binding, toVulkan(entry.type), 1, toVulkan(entry.visibility), nullptr});
-    }
-    return bindGroupLayouts_.emplace(device_,
-                                     std::span<const VkDescriptorSetLayoutBinding>{bindings});
-}
-
-void VulkanDevice::bind_group_layout_destroy(RID handle) {
-    // Pipelines must be destroyed before the layouts they reference; drop the
-    // cached pipeline layouts that still point at this descriptor set layout.
-    destroyPipelineLayoutsReferencing(handle);
-    bind_group_layout_release_rid(handle);
-}
-
-RID VulkanDevice::bind_group_create(const BindGroupDesc& desc) {
-    const VkDescriptorSet descriptor =
-        descriptorAllocator_->allocate(resolveBindGroupLayout(desc.layout));
-    std::vector<VkDescriptorBufferInfo> bufferInfos;
-    std::vector<VkDescriptorImageInfo> imageInfos;
-    std::vector<VkWriteDescriptorSet> writes;
-    bufferInfos.reserve(desc.entries.size());
-    imageInfos.reserve(desc.entries.size());
-    writes.reserve(desc.entries.size());
-    for (const BindGroupEntry& entry : desc.entries) {
-        VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-        write.dstSet = descriptor;
-        write.dstBinding = entry.binding;
-        write.descriptorCount = 1;
-        write.descriptorType = toVulkan(entry.type);
-        if (entry.type == BindingType::SampledTexture) {
-            imageInfos.push_back({resolveSampler(entry.sampler),
-                                  resolveTextureView(entry.textureView),
-                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
-            write.pImageInfo = &imageInfos.back();
-            writes.push_back(write);
-            continue;
-        }
-        const VulkanBuffer& buffer = requireBuffer(entry.buffer);
-        const std::uint64_t size = entry.size == 0 ? buffer.size() - entry.offset : entry.size;
-        if (entry.offset > buffer.size() || size > buffer.size() - entry.offset) {
-            Log::fatal("VulkanDevice", "Invalid bind group buffer range");
-        }
-        bufferInfos.push_back({buffer.handle(), entry.offset, size});
-        write.pBufferInfo = &bufferInfos.back();
-        writes.push_back(write);
-    }
-    vkUpdateDescriptorSets(
-        device_, static_cast<std::uint32_t>(writes.size()), writes.data(), 0, nullptr);
-    return bindGroups_.emplace(descriptor);
-}
-
-void VulkanDevice::bind_group_destroy(RID handle) {
-    VkDescriptorSet* descriptor = bindGroups_.find(handle);
-    if (!descriptor)
-        return;
-    descriptorAllocator_->free(*descriptor);
-    bind_group_release_rid(handle);
 }
 
 // ---------------------------------------------------------------------------
@@ -1083,28 +1008,12 @@ VkShaderModule VulkanDevice::resolveShader(RID handle) const {
     return resource->handle();
 }
 
-VkDescriptorSetLayout VulkanDevice::resolveBindGroupLayout(RID handle) const {
-    const VulkanDescriptorSetLayout* resource = bindGroupLayouts_.find(handle);
-    if (!resource) {
-        Log::fatal("VulkanDevice", "Invalid or stale RHI bind group layout handle");
-    }
-    return resource->handle();
-}
-
 ResolvedPipeline VulkanDevice::resolvePipeline(RID handle) const {
     const VulkanGraphicsPipeline* resource = pipelines_.find(handle);
     if (!resource) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI graphics pipeline handle");
     }
     return {resource->handle(), resource->layout()};
-}
-
-VkDescriptorSet VulkanDevice::resolveBindGroup(RID handle) const {
-    const VkDescriptorSet* descriptor = bindGroups_.find(handle);
-    if (!descriptor) {
-        Log::fatal("VulkanDevice", "Invalid or stale RHI bind group handle");
-    }
-    return *descriptor;
 }
 
 RID VulkanDevice::texture_allocate_rid(VkImage image, const TextureDesc& desc) {
@@ -1182,35 +1091,6 @@ void VulkanDevice::savePipelineCache() {
     pipelineCache_ = VK_NULL_HANDLE;
 }
 
-VkPipelineLayout VulkanDevice::acquirePipelineLayout(const PipelineLayoutKey& key) {
-    if (const auto found = pipelineLayouts_.find(key); found != pipelineLayouts_.end())
-        return found->second;
-    std::vector<VkDescriptorSetLayout> layouts;
-    layouts.reserve(key.size());
-    for (RID handle : key)
-        layouts.push_back(resolveBindGroupLayout(handle));
-    VkPipelineLayoutCreateInfo info{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-    info.setLayoutCount = static_cast<std::uint32_t>(layouts.size());
-    info.pSetLayouts = layouts.data();
-    VkPipelineLayout layout = VK_NULL_HANDLE;
-    if (vkCreatePipelineLayout(device_, &info, nullptr, &layout) != VK_SUCCESS) {
-        Log::fatal("VulkanDevice", "vkCreatePipelineLayout failed");
-    }
-    pipelineLayouts_.emplace(key, layout);
-    return layout;
-}
-
-void VulkanDevice::destroyPipelineLayoutsReferencing(RID handle) {
-    for (auto entry = pipelineLayouts_.begin(); entry != pipelineLayouts_.end();) {
-        if (std::find(entry->first.begin(), entry->first.end(), handle) != entry->first.end()) {
-            vkDestroyPipelineLayout(device_, entry->second, nullptr);
-            entry = pipelineLayouts_.erase(entry);
-        } else {
-            ++entry;
-        }
-    }
-}
-
 void VulkanDevice::clear() {
     // Command buffers only reference the device and command pool (both still alive here), so
     // clear them first; owned wrappers free their VkCommandBuffer back to the pool.
@@ -1224,15 +1104,6 @@ void VulkanDevice::clear() {
         [this](VkPipelineLayout layout) { vkDestroyPipelineLayout(device_, layout, nullptr); });
     pipelineLayoutPool_.clear();
     setLayouts_.clear();
-    for (auto& [key, layout] : pipelineLayouts_)
-        vkDestroyPipelineLayout(device_, layout, nullptr);
-    pipelineLayouts_.clear();
-    bindGroups_.forEach([this](VkDescriptorSet descriptor) {
-        descriptorAllocator_->free(descriptor);
-    });
-    bindGroups_.clear();
-    descriptorAllocator_.reset();
-    bindGroupLayouts_.clear();
     shaders_.clear();
     samplerDedup_.clear();
     samplers_.clear();

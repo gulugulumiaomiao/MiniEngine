@@ -1,7 +1,7 @@
 #pragma once
 
 #include "render/gpu/common/GpuCacheBase.h"
-#include "render/gpu/pipeline/GraphicsPipelineStorageEntry.h"
+#include "render/GraphicsPipelineStorageEntry.h"
 
 #include <cstdint>
 

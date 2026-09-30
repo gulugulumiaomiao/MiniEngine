@@ -82,16 +82,8 @@ public:
     [[nodiscard]] virtual RID pipeline_create(const GraphicsPipelineDesc& desc) = 0;
     virtual void pipeline_destroy(RID handle) = 0;
 
-    // Bind group layouts and bind groups.
-    [[nodiscard]] virtual RID bind_group_layout_create(const BindGroupLayoutDesc& desc) = 0;
-    virtual void bind_group_layout_destroy(RID handle) = 0;
-    [[nodiscard]] virtual RID bind_group_create(const BindGroupDesc& desc) = 0;
-    virtual void bind_group_destroy(RID handle) = 0;
-
     // Descriptor set layouts, pipeline layouts and descriptor sets: the reflection-driven
-    // uniform-binding system (engine layer UniformSetLayout / PipelineLayout / UniformSet). This
-    // coexists with the BindGroup* family above during the migration and replaces it once every
-    // caller has moved over.
+    // uniform-binding system (engine layer UniformSetLayout / PipelineLayout / UniformSet).
     //
     // Set layouts use the two-step lifecycle (mirroring buffers): allocate_rid reserves a RID with
     // a null VkDescriptorSetLayout, build fills that reserved slot once the bindings are known

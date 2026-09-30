@@ -1,6 +1,7 @@
 #include "tools/editor/backend/ImGuiRenderer.h"
 
 #include "core/logging/Log.h"
+#include "render/texture/Texture.h"
 #include "rhi/api/Command.h"
 #include "rhi/api/Device.h"
 
@@ -8,6 +9,8 @@
 #include <array>
 #include <cstddef>
 #include <span>
+#include <utility>
+#include <vector>
 
 namespace engine::editor {
 namespace {
@@ -63,8 +66,8 @@ constexpr std::uint32_t kVertexSpirv[] = {
     0x0000000d, 0x00000021, 0x0000001f, 0x00000020, 0x0000001d, 0x0000001e, 0x00050041, 0x0000000e,
     0x00000022, 0x00000018, 0x0000001a, 0x0003003e, 0x00000022, 0x00000021, 0x000100fd, 0x00010038};
 //
-// Fragment shader. The RHI maps BindingType::SampledTexture to a combined image sampler,
-// so the font atlas (and any future ImGui::Image texture) is a single sampler2D.
+// Fragment shader. The font atlas (and any future ImGui::Image texture) is a single sampler2D
+// bound as a combined image sampler at set 0 binding 0.
 //
 //   #version 450
 //   layout(location = 0) in vec2 inUv;
@@ -149,15 +152,15 @@ static_assert(sizeof(ImDrawIdx) == 2, "The UI pipeline binds indices as IndexFor
 // Extra headroom so a slowly growing UI does not reallocate its buffers every frame.
 constexpr std::uint32_t kGeometrySlack = 4096;
 
-// ImTextureID is a 64 bit integer in this ImGui version, which fits a whole RHI bind
-// group handle. Encoding it directly means ImGui::Image works as soon as a caller
-// registers a bind group, without a side table. Live handles always carry a non-zero
-// generation, so a zeroed ImDrawCmd::TextureId can never collide with a real handle.
-[[nodiscard]] ImTextureID toTextureId(rhi::RID group) {
-    return static_cast<ImTextureID>(group.value());
+// ImTextureID is a 64 bit integer in this ImGui version, which fits a whole RHI descriptor-set
+// handle. Encoding it directly means ImGui::Image works as soon as a caller registers a descriptor
+// set, without a side table. Live handles always carry a non-zero generation, so a zeroed
+// ImDrawCmd::TextureId can never collide with a real handle.
+[[nodiscard]] ImTextureID toTextureId(rhi::RID descriptorSet) {
+    return static_cast<ImTextureID>(descriptorSet.value());
 }
 
-[[nodiscard]] rhi::RID toBindGroup(ImTextureID id) {
+[[nodiscard]] rhi::RID toDescriptorSet(ImTextureID id) {
     return {static_cast<std::uint32_t>(id & 0xFFFFFFFFU), static_cast<std::uint32_t>(id >> 32U)};
 }
 
@@ -181,17 +184,19 @@ bool ImGuiRenderer::initialize(rhi::IDevice& device, rhi::PixelFormat colorForma
     device_ = &device;
     colorFormat_ = colorFormat;
 
-    const rhi::BindGroupLayoutEntry textureEntry{
-        .binding = 0,
-        .type = rhi::BindingType::SampledTexture,
-        .visibility = rhi::ShaderVisibility::Fragment,
-    };
-    textureLayout_ = device_->bind_group_layout_create({
-        .entries = std::span{&textureEntry, 1},
-        .debugName = "ImGuiTextureLayout",
-    });
+    // The UI samples one combined image sampler (the font atlas, or a scene/ImGui::Image texture)
+    // at set 0 binding 0. acquire() dedups the layout against the engine's shared pool, and the
+    // pipeline layout wraps that single set.
+    const ResourceBinding textureBinding{0, "uTexture", rhi::ResourceType::CombinedImageSampler};
+    textureLayout_ = UniformSetLayout::acquire(device, std::span{&textureBinding, 1});
     if (!textureLayout_) {
-        Log::error("ImGuiRenderer", "Cannot create the UI bind group layout");
+        Log::error("ImGuiRenderer", "Cannot create the UI descriptor set layout");
+        shutdown();
+        return false;
+    }
+    pipelineLayout_ = PipelineLayout::acquire(device, {textureLayout_});
+    if (!pipelineLayout_) {
+        Log::error("ImGuiRenderer", "Cannot create the UI pipeline layout");
         shutdown();
         return false;
     }
@@ -214,24 +219,19 @@ void ImGuiRenderer::shutdown() {
         return;
     for (Geometry& geometry : geometry_)
         releaseGeometry(geometry);
-    for (SceneTexture& texture : sceneTextures_) {
-        if (texture.group)
-            device_->bind_group_destroy(texture.group);
+    for (SceneTexture& texture : sceneTextures_)
         texture = {};
-    }
     destroyPipeline();
-    if (fontBindGroup_)
-        device_->bind_group_destroy(fontBindGroup_);
+    // Release the descriptor sets before the layouts they were allocated against.
+    fontSet_.reset();
     if (fontTexture_)
         device_->texture_destroy(fontTexture_);
-    // The layout outlives the pipelines that reference it, so it goes last.
-    if (textureLayout_)
-        device_->bind_group_layout_destroy(textureLayout_);
-    fontBindGroup_ = {};
+    // The layouts outlive the pipeline that references them, so they go last.
+    pipelineLayout_.reset();
+    textureLayout_.reset();
     sampler_ = {};
     fontView_ = {};
     fontTexture_ = {};
-    textureLayout_ = {};
     colorFormat_ = rhi::PixelFormat::Undefined;
     device_ = nullptr;
     if (ImGui::GetCurrentContext())
@@ -286,25 +286,20 @@ bool ImGuiRenderer::createFontTexture() {
         .data = std::span{reinterpret_cast<const std::byte*>(pixels), byteCount},
     };
     // uploadTexture leaves the image in the shader read state, which is what the
-    // bind group below declares.
+    // descriptor set below declares.
     device_->texture_upload(fontTexture_, std::span{&region, 1});
 
-    const rhi::BindGroupEntry entry{
-        .binding = 0,
-        .type = rhi::BindingType::SampledTexture,
-        .textureView = fontView_,
-        .sampler = sampler_,
-    };
-    fontBindGroup_ = device_->bind_group_create({
-        .layout = textureLayout_,
-        .entries = std::span{&entry, 1},
-        .debugName = "ImGuiFontAtlas",
-    });
-    if (!fontBindGroup_) {
-        Log::error("ImGuiRenderer", "Cannot create the ImGui font bind group");
+    fontSet_ = makeRef<UniformSet>(*device_, textureLayout_, std::vector<Ref<UboLayout>>{});
+    if (!fontSet_->setResourceAt(0, Texture::adoptBinding(fontView_, sampler_))) {
+        Log::error("ImGuiRenderer", "Cannot bind the ImGui font atlas texture");
         return false;
     }
-    ImGui::GetIO().Fonts->SetTexID(toTextureId(fontBindGroup_));
+    fontSet_->upload();
+    if (!fontSet_->descriptorSet()) {
+        Log::error("ImGuiRenderer", "Cannot create the ImGui font descriptor set");
+        return false;
+    }
+    ImGui::GetIO().Fonts->SetTexID(toTextureId(fontSet_->descriptorSet()));
     // The pixels now live on the GPU, so release ImGui's CPU side copy of the atlas.
     ImGui::GetIO().Fonts->ClearTexData();
     return true;
@@ -336,7 +331,7 @@ bool ImGuiRenderer::createPipeline() {
     rhi::GraphicsPipelineDesc desc;
     desc.vertexShader = vertexShader_;
     desc.fragmentShader = fragmentShader_;
-    desc.bindGroupLayouts = {textureLayout_};
+    desc.pipelineLayout = pipelineLayout_->rid();
     // One semantic per buffer: position, uv and color each have their own binding.
     desc.vertexStreams = {
         {0, 0, rhi::VertexFormat::Vec2Float32, sizeof(math::Vec2), rhi::VertexInputRate::Vertex},
@@ -431,26 +426,19 @@ bool ImGuiRenderer::setSceneTexture(std::uint32_t frameIndex, rhi::RID view) {
     if (!device_ || frameIndex >= sceneTextures_.size())
         return false;
     SceneTexture& texture = sceneTextures_[frameIndex];
-    if (texture.view == view && texture.group)
+    if (texture.view == view && texture.set)
         return true;
-    if (texture.group)
-        device_->bind_group_destroy(texture.group);
     texture = {};
     if (!view)
         return false;
-    const rhi::BindGroupEntry entry{
-        .binding = 0,
-        .type = rhi::BindingType::SampledTexture,
-        .textureView = view,
-        .sampler = sampler_,
-    };
-    texture.group = device_->bind_group_create({
-        .layout = textureLayout_,
-        .entries = std::span{&entry, 1},
-        .debugName = "ImGuiSceneTexture",
-    });
-    if (!texture.group)
+    Ref<UniformSet> set =
+        makeRef<UniformSet>(*device_, textureLayout_, std::vector<Ref<UboLayout>>{});
+    if (!set->setResourceAt(0, Texture::adoptBinding(view, sampler_)))
         return false;
+    set->upload();
+    if (!set->descriptorSet())
+        return false;
+    texture.set = std::move(set);
     texture.view = view;
     return true;
 }
@@ -570,12 +558,14 @@ void ImGuiRenderer::render(rhi::RID commandBuffer,
                 .width = static_cast<std::uint32_t>(maxX - minX),
                 .height = static_cast<std::uint32_t>(maxY - minY),
             });
-            const rhi::RID group = command.GetTexID() == kSceneTextureId
-                                                   ? sceneTextures_[frameIndex].group
-                                                   : toBindGroup(command.GetTexID());
-            if (!group)
+            const SceneTexture& sceneTexture = sceneTextures_[frameIndex];
+            const rhi::RID descriptorSet =
+                command.GetTexID() == kSceneTextureId
+                    ? (sceneTexture.set ? sceneTexture.set->descriptorSet() : rhi::RID{})
+                    : toDescriptorSet(command.GetTexID());
+            if (!descriptorSet)
                 continue;
-            rhi::bindGroup(commandBuffer, 0, group);
+            rhi::bindDescriptorSet(commandBuffer, 0, descriptorSet);
             rhi::drawIndexed(commandBuffer, {
                 .indexCount = command.ElemCount,
                 .firstIndex = command.IdxOffset + indexBase,

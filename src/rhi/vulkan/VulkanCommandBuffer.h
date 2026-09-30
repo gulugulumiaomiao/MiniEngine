@@ -61,8 +61,6 @@ public:
     void bindVertexBuffer(std::uint32_t slot, RID buffer, std::uint64_t offset = 0);
     void bindIndexBuffer(RID buffer, std::uint64_t offset, IndexFormat format);
     void bindDescriptorSet(std::uint32_t set, RID descriptorSet);
-    void
-    bindGroup(std::uint32_t set, RID group, std::span<const std::uint32_t> dynamicOffsets = {});
     void draw(const DrawArguments& arguments);
     void drawIndexed(const DrawIndexedArguments& arguments);
     void beginDebugLabel(std::string_view name, const math::Vec4& color);

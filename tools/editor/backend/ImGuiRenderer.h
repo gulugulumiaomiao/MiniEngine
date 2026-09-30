@@ -1,7 +1,11 @@
 #pragma once
 
+#include "core/base/Ref.h"
 #include "core/math/Math.h"
 #include "render/gpu/frame/FrameGpuManager.h"
+#include "render/uniform/PipelineLayout.h"
+#include "render/uniform/UniformSet.h"
+#include "render/uniform/UniformSetLayout.h"
 #include "rhi/api/ResourceDesc.h"
 
 #include "imgui.h"
@@ -77,15 +81,16 @@ private:
     rhi::PixelFormat colorFormat_{rhi::PixelFormat::Undefined};
     rhi::RID vertexShader_;
     rhi::RID fragmentShader_;
-    rhi::RID textureLayout_;
+    Ref<UniformSetLayout> textureLayout_;
+    Ref<PipelineLayout> pipelineLayout_;
     rhi::RID pipeline_;
     rhi::RID fontTexture_;
     rhi::RID fontView_;
     rhi::RID sampler_;
-    rhi::RID fontBindGroup_;
+    Ref<UniformSet> fontSet_;
     struct SceneTexture {
         rhi::RID view;
-        rhi::RID group;
+        Ref<UniformSet> set;
     };
     std::array<SceneTexture, FrameGpuManager::kFramesInFlight> sceneTextures_{};
     std::array<Geometry, FrameGpuManager::kFramesInFlight> geometry_;

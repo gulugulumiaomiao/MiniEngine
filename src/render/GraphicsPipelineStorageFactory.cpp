@@ -1,4 +1,4 @@
-#include "render/gpu/pipeline/GraphicsPipelineStorageFactory.h"
+#include "render/GraphicsPipelineStorageFactory.h"
 
 #include "rhi/api/Device.h"
 

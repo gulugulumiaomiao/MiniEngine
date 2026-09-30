@@ -6,7 +6,7 @@
 #include "render/mesh/Mesh.h"
 #include "render/pipeline/RenderContext.h"
 #include "render/gpu/material/MaterialStorage.h"
-#include "render/gpu/pipeline/GraphicsPipelineStorage.h"
+#include "render/GraphicsPipelineStorage.h"
 #include "render/render_target/RenderTarget.h"
 #include "render/scene/RenderScene.h"
 #include "render/shader/Shader.h"

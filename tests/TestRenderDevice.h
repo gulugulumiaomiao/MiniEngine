@@ -76,16 +76,6 @@ public:
         return {static_cast<std::uint32_t>(pipelines.size()), 1};
     }
     void pipeline_destroy(rhi::RID) override { ++destroyedPipelines; }
-    rhi::RID bind_group_layout_create(const rhi::BindGroupLayoutDesc& desc) override {
-        layoutEntries.assign(desc.entries.begin(), desc.entries.end());
-        return {++layouts, 1};
-    }
-    void bind_group_layout_destroy(rhi::RID) override { ++destroyedLayouts; }
-    rhi::RID bind_group_create(const rhi::BindGroupDesc& desc) override {
-        bindGroupEntries.assign(desc.entries.begin(), desc.entries.end());
-        return {++bindGroups, 1};
-    }
-    void bind_group_destroy(rhi::RID) override { ++destroyedBindGroups; }
 
     rhi::RID shader_allocate_rid() override { return {++shaderRids, 1}; }
     void shader_release_rid(rhi::RID) override {}
@@ -111,12 +101,8 @@ public:
     std::vector<rhi::ShaderStage> shaders;
     std::vector<std::vector<std::byte>> shaderBytecode;
     std::vector<rhi::GraphicsPipelineDesc> pipelines;
-    std::vector<rhi::BindGroupLayoutEntry> layoutEntries;
-    std::vector<rhi::BindGroupEntry> bindGroupEntries;
     std::vector<std::size_t> uploadedBytes;
     std::uint32_t views{};
-    std::uint32_t layouts{};
-    std::uint32_t bindGroups{};
     std::uint32_t textureUploads{};
     int destroyedBuffers{};
     int destroyedTextures{};
@@ -124,8 +110,6 @@ public:
     int destroyedSamplers{};
     int destroyedShaders{};
     int destroyedPipelines{};
-    int destroyedLayouts{};
-    int destroyedBindGroups{};
     std::uint32_t shaderRids{};
     std::uint32_t setLayouts{};
     std::uint32_t pipelineLayouts{};

@@ -1,9 +1,9 @@
-#include "render/gpu/pipeline/GraphicsPipelineStorage.h"
+#include "render/GraphicsPipelineStorage.h"
 
 #include "core/base/BuildConfig.h"
 #include "core/logging/Log.h"
 #include "core/math/hash.h"
-#include "render/gpu/pipeline/GraphicsPipelineStorageFactory.h"
+#include "render/GraphicsPipelineStorageFactory.h"
 #include "render/uniform/PipelineLayout.h"
 #include "rhi/api/Device.h"
 

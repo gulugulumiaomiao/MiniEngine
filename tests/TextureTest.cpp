@@ -124,15 +124,6 @@ public:
         return {};
     }
     void pipeline_destroy(engine::rhi::RID) override {}
-    engine::rhi::RID
-    bind_group_layout_create(const engine::rhi::BindGroupLayoutDesc&) override {
-        return {};
-    }
-    void bind_group_layout_destroy(engine::rhi::RID) override {}
-    engine::rhi::RID bind_group_create(const engine::rhi::BindGroupDesc&) override {
-        return {};
-    }
-    void bind_group_destroy(engine::rhi::RID) override {}
     engine::rhi::RID shader_allocate_rid() override { return {}; }
     void shader_release_rid(engine::rhi::RID) override {}
     engine::rhi::RID descriptor_set_layout_allocate_rid() override { return {}; }

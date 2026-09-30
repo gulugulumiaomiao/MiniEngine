@@ -35,9 +35,7 @@ namespace engine::rhi::vulkan {
 [[nodiscard]] VkCompareOp toVulkan(CompareOp compare);
 
 // Bindings.
-[[nodiscard]] VkDescriptorType toVulkan(BindingType type);
 [[nodiscard]] VkDescriptorType toVulkan(ResourceType type);
-[[nodiscard]] VkShaderStageFlags toVulkan(ShaderVisibility visibility);
 
 // Dynamic pipeline states.
 [[nodiscard]] VkCullModeFlags toVulkan(CullMode mode);

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "render/gpu/common/IGpuResourceFactory.h"
-#include "render/gpu/pipeline/GraphicsPipelineStorageEntry.h"
+#include "render/GraphicsPipelineStorageEntry.h"
 #include "rhi/api/ResourceDesc.h"
 
 namespace engine {

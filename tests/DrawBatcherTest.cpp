@@ -16,7 +16,7 @@ namespace {
 engine::Ref<engine::UniformSet> g_materialSets[3];
 
 engine::DrawItem makeItem(std::uint32_t pipelineIndex,
-                          std::uint32_t materialBindGroupIndex,
+                          std::uint32_t materialSetIndex,
                           std::uint32_t indexCount,
                           std::uint32_t firstIndex,
                           std::int32_t vertexOffset,
@@ -25,7 +25,7 @@ engine::DrawItem makeItem(std::uint32_t pipelineIndex,
                           engine::rhi::IndexFormat indexFormat = engine::rhi::IndexFormat::UInt32) {
     engine::DrawItem item;
     item.pipeline = engine::rhi::RID{pipelineIndex, 1};
-    item.materialSet = g_materialSets[materialBindGroupIndex];
+    item.materialSet = g_materialSets[materialSetIndex];
     item.indexBuffer = engine::rhi::RID{indexBufferIndex, 1};
     item.indexFormat = indexFormat;
     item.arguments = {.indexCount = indexCount,

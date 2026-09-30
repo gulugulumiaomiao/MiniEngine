@@ -2,7 +2,7 @@
 
 #include "core/logging/Log.h"
 #include "render/gpu/common/GpuResourceKey.h"
-#include "render/gpu/pipeline/GraphicsPipelineStorage.h"
+#include "render/GraphicsPipelineStorage.h"
 #include "render/material/MaterialManager.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderProgram.h"

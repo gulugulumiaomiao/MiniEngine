@@ -5,8 +5,8 @@
 #include "rhi/api/Device.h"
 #include "rhi/vulkan/VulkanBuffer.h"
 #include "rhi/vulkan/VulkanCommandBuffer.h"
-#include "rhi/vulkan/VulkanDescriptorAllocator.h"
 #include "rhi/vulkan/VulkanDescriptorSet.h"
+#include "rhi/vulkan/VulkanDescriptorSetLayout.h"
 #include "rhi/vulkan/VulkanGraphicsPipeline.h"
 #include "rhi/vulkan/VulkanSampler.h"
 #include "rhi/vulkan/VulkanShaderModule.h"
@@ -29,20 +29,6 @@ namespace engine::rhi::vulkan {
 struct ResolvedPipeline {
     VkPipeline pipeline{VK_NULL_HANDLE};
     VkPipelineLayout layout{VK_NULL_HANDLE};
-};
-
-// A pipeline layout is keyed by the ordered set of bind group layout RIDs it references.
-using PipelineLayoutKey = std::vector<RID>;
-
-struct PipelineLayoutKeyHash final {
-    [[nodiscard]] std::size_t operator()(const std::vector<RID>& key) const noexcept {
-        std::size_t seed = key.size();
-        for (const RID& handle : key) {
-            seed ^= static_cast<std::size_t>(handle.value());
-            seed *= 0x9E3779B97F4A7C15ULL;
-        }
-        return seed;
-    }
 };
 
 // Synchronization primitives attached to a submission. Null handles disable the corresponding
@@ -101,11 +87,6 @@ public:
     [[nodiscard]] RID pipeline_create(const GraphicsPipelineDesc& desc) override;
     void pipeline_destroy(RID handle) override;
 
-    [[nodiscard]] RID bind_group_layout_create(const BindGroupLayoutDesc& desc) override;
-    void bind_group_layout_destroy(RID handle) override;
-    [[nodiscard]] RID bind_group_create(const BindGroupDesc& desc) override;
-    void bind_group_destroy(RID handle) override;
-
     // ---- New uniform-binding system (descriptor set layouts / pipeline layouts / descriptor sets)
     [[nodiscard]] RID descriptor_set_layout_allocate_rid() override;
     void descriptor_set_layout_build(RID handle, const DescriptorSetLayoutDesc& desc) override;
@@ -138,10 +119,8 @@ public:
     [[nodiscard]] VkImageView resolveTextureView(RID handle) const;
     [[nodiscard]] VkSampler resolveSampler(RID handle) const;
     [[nodiscard]] VkShaderModule resolveShader(RID handle) const;
-    [[nodiscard]] VkDescriptorSetLayout resolveBindGroupLayout(RID handle) const;
     [[nodiscard]] VkDescriptorSetLayout resolveDescriptorSetLayout(RID handle) const;
     [[nodiscard]] ResolvedPipeline resolvePipeline(RID handle) const;
-    [[nodiscard]] VkDescriptorSet resolveBindGroup(RID handle) const;
     [[nodiscard]] VkPipelineLayout resolvePipelineLayout(RID handle) const;
     [[nodiscard]] VkDescriptorSet resolveDescriptorSet(RID handle) const;
 
@@ -189,8 +168,6 @@ private:
     void texture_view_release_rid(RID handle) { (void)textureViews_.release(handle); }
     void sampler_release_rid(RID handle) { (void)samplers_.release(handle); }
     void pipeline_release_rid(RID handle) { (void)pipelines_.release(handle); }
-    void bind_group_layout_release_rid(RID handle) { (void)bindGroupLayouts_.release(handle); }
-    void bind_group_release_rid(RID handle) { (void)bindGroups_.release(handle); }
     void set_layout_release_rid(RID handle) { (void)setLayouts_.release(handle); }
 
     [[nodiscard]] VulkanBuffer& requireBuffer(RID handle);
@@ -206,8 +183,6 @@ private:
     void createCommandPool();
     void createPipelineCache();
     void savePipelineCache();
-    [[nodiscard]] VkPipelineLayout acquirePipelineLayout(const std::vector<RID>& key);
-    void destroyPipelineLayoutsReferencing(RID handle);
     void destroyDescriptorPools();
     void clear();
 
@@ -239,11 +214,8 @@ private:
     HandlePool<VulkanSampler, RID> samplers_;
     HandlePool<VulkanShaderModule, RID> shaders_;
     HandlePool<VulkanGraphicsPipeline, RID> pipelines_;
-    HandlePool<VulkanDescriptorSetLayout, RID> bindGroupLayouts_;
-    HandlePool<VkDescriptorSet, RID> bindGroups_;
     HandlePool<VulkanCommandBuffer, RID> commandBuffers_;
-    // New uniform-binding system pools (coexist with the bind-group pools during the migration;
-    // the bind-group pools are removed once every caller has moved to descriptor sets).
+    // Uniform-binding system pools.
     HandlePool<VulkanDescriptorSetLayout, RID> setLayouts_;
     HandlePool<VkPipelineLayout, RID> pipelineLayoutPool_;
     HandlePool<VulkanDescriptorSet, RID> descriptorSets_;
@@ -257,9 +229,7 @@ private:
     std::unordered_map<std::uint64_t,
                        std::unordered_map<TextureViewDesc, RID, TextureViewDescHash>>
         viewDedup_;
-    std::unique_ptr<VulkanDescriptorAllocator> descriptorAllocator_;
     VkPipelineCache pipelineCache_{VK_NULL_HANDLE};
-    std::unordered_map<PipelineLayoutKey, VkPipelineLayout, PipelineLayoutKeyHash> pipelineLayouts_;
 };
 
 } // namespace engine::rhi::vulkan

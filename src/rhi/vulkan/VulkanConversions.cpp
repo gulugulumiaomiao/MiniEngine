@@ -145,15 +145,6 @@ VkCompareOp toVulkan(CompareOp compare) {
     Log::fatal(kLogSource, "Unsupported RHI compare operation");
 }
 
-VkDescriptorType toVulkan(BindingType type) {
-    switch (type) {
-    case BindingType::UniformBuffer: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    case BindingType::StorageBuffer: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    case BindingType::SampledTexture: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    }
-    Log::fatal(kLogSource, "Unsupported RHI binding type");
-}
-
 VkDescriptorType toVulkan(ResourceType type) {
     switch (type) {
     case ResourceType::UniformBuffer: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -164,15 +155,6 @@ VkDescriptorType toVulkan(ResourceType type) {
     case ResourceType::StorageImage: return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     }
     Log::fatal(kLogSource, "Unsupported RHI resource type");
-}
-
-VkShaderStageFlags toVulkan(ShaderVisibility visibility) {
-    VkShaderStageFlags result{};
-    if (hasFlag(visibility, ShaderVisibility::Vertex))
-        result |= VK_SHADER_STAGE_VERTEX_BIT;
-    if (hasFlag(visibility, ShaderVisibility::Fragment))
-        result |= VK_SHADER_STAGE_FRAGMENT_BIT;
-    return result;
 }
 
 VkCullModeFlags toVulkan(CullMode mode) {

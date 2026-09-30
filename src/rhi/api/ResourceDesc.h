@@ -150,10 +150,8 @@ struct GraphicsPipelineDesc {
     std::string vertexEntry{"main"};
     RID fragmentShader;
     std::string fragmentEntry{"main"};
-    std::vector<RID> bindGroupLayouts;
-    // New uniform-binding path: a single pipeline-layout RID (minted by pipeline_layout_create)
-    // that already bundles the per-set descriptor layouts. During the migration this coexists
-    // with bindGroupLayouts; once every caller sets pipelineLayout the vector field is removed.
+    // A single pipeline-layout RID (minted by pipeline_layout_create) that bundles the per-set
+    // descriptor set layouts this pipeline binds against.
     RID pipelineLayout;
     std::vector<VertexStreamDesc> vertexStreams;
     std::vector<PixelFormat> colorFormats;
@@ -369,64 +367,10 @@ struct ShaderDesc {
 };
 
 // ---------------------------------------------------------------------------
-// Bind group layouts and bind groups.
-// ---------------------------------------------------------------------------
-
-enum class ShaderVisibility : std::uint32_t {
-    None = 0,
-    Vertex = 1U << 0U,
-    Fragment = 1U << 1U,
-};
-
-constexpr ShaderVisibility operator|(ShaderVisibility left, ShaderVisibility right) {
-    return static_cast<ShaderVisibility>(static_cast<std::uint32_t>(left) |
-                                         static_cast<std::uint32_t>(right));
-}
-
-constexpr bool hasFlag(ShaderVisibility value, ShaderVisibility flag) {
-    return (static_cast<std::uint32_t>(value) & static_cast<std::uint32_t>(flag)) != 0;
-}
-
-enum class BindingType {
-    UniformBuffer,
-    StorageBuffer,
-    SampledTexture,
-};
-
-struct BindGroupLayoutEntry {
-    std::uint32_t binding{};
-    BindingType type{BindingType::UniformBuffer};
-    ShaderVisibility visibility{ShaderVisibility::None};
-};
-
-struct BindGroupLayoutDesc {
-    std::span<const BindGroupLayoutEntry> entries;
-    std::string debugName;
-};
-
-struct BindGroupEntry {
-    std::uint32_t binding{};
-    BindingType type{BindingType::UniformBuffer};
-    RID buffer;
-    std::uint64_t offset{};
-    std::uint64_t size{};
-    RID textureView;
-    RID sampler;
-};
-
-struct BindGroupDesc {
-    RID layout;
-    std::span<const BindGroupEntry> entries;
-    std::string debugName;
-};
-
-// ---------------------------------------------------------------------------
 // Descriptor set layouts, pipeline layouts and descriptor sets.
 //
 // The reflection-driven uniform-binding system (engine layer UniformSetLayout / UniformSet /
-// PipelineLayout) is expressed through these backend-agnostic descriptors. They replace the
-// BindGroup* family above; both coexist during the migration and the BindGroup* types are
-// removed once every caller has moved over.
+// PipelineLayout) is expressed through these backend-agnostic descriptors.
 // ---------------------------------------------------------------------------
 
 // One binding slot of a descriptor set layout: its index, reflected name and resource type.

@@ -5,7 +5,7 @@
 #include "render/pipeline/RenderContext.h"
 #include "render/render_target/RenderTarget.h"
 #include "render/gpu/frame/FrameGpuManager.h"
-#include "render/gpu/pipeline/GraphicsPipelineStorage.h"
+#include "render/GraphicsPipelineStorage.h"
 #include "rhi/api/Command.h"
 #include "runtime/window/Window.h"
 

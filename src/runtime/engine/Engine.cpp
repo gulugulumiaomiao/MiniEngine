@@ -9,7 +9,7 @@
 #include "render/pipeline/MiniForwardPipeline.h"
 #include "render/pipeline/RenderPipeline.h"
 #include "render/gpu/material/MaterialStorage.h"
-#include "render/gpu/pipeline/GraphicsPipelineStorage.h"
+#include "render/GraphicsPipelineStorage.h"
 #include "render/uniform/PipelineLayout.h"
 #include "render/uniform/Ubo.h"
 #include "render/uniform/UniformSetLayout.h"

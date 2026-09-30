@@ -380,24 +380,6 @@ void VulkanCommandBuffer::bindDescriptorSet(std::uint32_t set, RID descriptorSet
                             nullptr);
 }
 
-void VulkanCommandBuffer::bindGroup(std::uint32_t set,
-                                    RID group,
-                                    std::span<const std::uint32_t> dynamicOffsets) {
-    ensureRecording("bindGroup");
-    if (boundPipelineLayout_ == VK_NULL_HANDLE) {
-        Log::fatal("VulkanCommandBuffer", "bindGroup requires a bound graphics pipeline");
-    }
-    const VkDescriptorSet descriptor = device_.resolveBindGroup(group);
-    vkCmdBindDescriptorSets(commandBuffer_,
-                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            boundPipelineLayout_,
-                            set,
-                            1,
-                            &descriptor,
-                            static_cast<std::uint32_t>(dynamicOffsets.size()),
-                            dynamicOffsets.data());
-}
-
 void VulkanCommandBuffer::draw(const DrawArguments& arguments) {
     ensureRecording("draw");
     vkCmdDraw(commandBuffer_,

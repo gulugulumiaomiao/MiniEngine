@@ -2,18 +2,18 @@
 
 #include <vulkan/vulkan.h>
 
-#include <cstddef>
-#include <cstdint>
 #include <span>
-#include <unordered_map>
-#include <vector>
 
 namespace engine::rhi::vulkan {
 
+// Wrapper around a VkDescriptorSetLayout, owned by the device's set-layout handle pool. It supports
+// the two-step lifecycle the reflection-driven UniformSetLayout needs: default-construct to reserve
+// a RID before the bindings are known (descriptor_set_layout_allocate_rid), then initialize() to
+// build the VkDescriptorSetLayout once they are (descriptor_set_layout_build).
 class VulkanDescriptorSetLayout final {
 public:
     // Reserved-slot constructor: leaves layout_ null so the device can mint a RID before the
-    // bindings are known (descriptor_set_layout_allocate_rid); initialize() builds it later.
+    // bindings are known; initialize() builds it later.
     VulkanDescriptorSetLayout() = default;
     VulkanDescriptorSetLayout(VkDevice device,
                               std::span<const VkDescriptorSetLayoutBinding> bindings);
@@ -32,29 +32,6 @@ public:
 private:
     VkDevice device_{VK_NULL_HANDLE};
     VkDescriptorSetLayout layout_{VK_NULL_HANDLE};
-};
-
-class VulkanDescriptorAllocator final {
-public:
-    explicit VulkanDescriptorAllocator(VkDevice device, std::uint32_t maxSets = 32);
-    ~VulkanDescriptorAllocator();
-
-    VulkanDescriptorAllocator(const VulkanDescriptorAllocator&) = delete;
-    VulkanDescriptorAllocator& operator=(const VulkanDescriptorAllocator&) = delete;
-    VulkanDescriptorAllocator(VulkanDescriptorAllocator&&) = delete;
-    VulkanDescriptorAllocator& operator=(VulkanDescriptorAllocator&&) = delete;
-
-    [[nodiscard]] VkDescriptorSet allocate(VkDescriptorSetLayout layout);
-    void free(VkDescriptorSet descriptor);
-
-private:
-    [[nodiscard]] VkDescriptorPool createPool(std::uint32_t maxSets) const;
-
-    VkDevice device_{VK_NULL_HANDLE};
-    std::vector<VkDescriptorPool> pools_;
-    std::unordered_map<VkDescriptorSet, VkDescriptorPool> owners_;
-    std::size_t activePool_{};
-    std::uint32_t nextPoolSize_{};
 };
 
 } // namespace engine::rhi::vulkan

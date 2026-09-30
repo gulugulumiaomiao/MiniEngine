@@ -143,18 +143,18 @@ struct Fixture {
 };
 
 engine::rhi::RID createLayout(engine::rhi::vulkan::VulkanDevice& device,
-                                                std::uint32_t bindingCount) {
-    std::vector<engine::rhi::BindGroupLayoutEntry> entries(bindingCount);
+                              std::uint32_t bindingCount) {
+    std::vector<engine::rhi::ResourceBindingDesc> bindings(bindingCount);
     for (std::uint32_t index = 0; index < bindingCount; ++index) {
-        entries[index].binding = index;
-        entries[index].type = engine::rhi::BindingType::UniformBuffer;
-        entries[index].visibility =
-            engine::rhi::ShaderVisibility::Vertex | engine::rhi::ShaderVisibility::Fragment;
+        bindings[index].binding = index;
+        bindings[index].name = "testUniform";
+        bindings[index].type = engine::rhi::ResourceType::UniformBuffer;
     }
-    engine::rhi::BindGroupLayoutDesc desc;
-    desc.entries = entries;
-    desc.debugName = "TestLayout";
-    return device.bind_group_layout_create(desc);
+    const engine::rhi::RID setLayout = device.descriptor_set_layout_allocate_rid();
+    device.descriptor_set_layout_build(
+        setLayout, engine::rhi::DescriptorSetLayoutDesc{bindings, "TestSetLayout"});
+    return device.pipeline_layout_create(
+        engine::rhi::PipelineLayoutDesc{std::span{&setLayout, 1}, "TestPipelineLayout"});
 }
 
 Fixture createFixture(engine::rhi::vulkan::VulkanDevice& device) {
@@ -174,7 +174,7 @@ Fixture createFixture(engine::rhi::vulkan::VulkanDevice& device) {
 }
 
 void destroyFixture(engine::rhi::vulkan::VulkanDevice& device, const Fixture& fixture) {
-    device.bind_group_layout_destroy(fixture.layout);
+    device.pipeline_layout_destroy(fixture.layout);
     device.shader_destroy(fixture.vertex);
     device.shader_destroy(fixture.fragment);
 }
@@ -183,7 +183,7 @@ engine::rhi::GraphicsPipelineDesc basePipelineDesc(const Fixture& fixture) {
     engine::rhi::GraphicsPipelineDesc desc;
     desc.vertexShader = fixture.vertex;
     desc.fragmentShader = fixture.fragment;
-    desc.bindGroupLayouts = {fixture.layout};
+    desc.pipelineLayout = fixture.layout;
     desc.colorFormats = {engine::rhi::PixelFormat::Rgba8Unorm};
     desc.depthFormat = engine::rhi::PixelFormat::Depth32Float;
     return desc;
@@ -277,31 +277,30 @@ int main() {
             return 2;
         }
 
-        // A different bind group layout gets a different pipeline layout.
+        // A different pipeline layout gets a different VkPipelineLayout.
         const engine::rhi::RID other = createLayout(device, 2);
-        desc.bindGroupLayouts = {other};
+        desc.pipelineLayout = other;
         const engine::rhi::RID fourth = device.pipeline_create(desc);
         if (device.resolvePipeline(fourth).layout == VK_NULL_HANDLE ||
             device.resolvePipeline(fourth).layout == device.resolvePipeline(second).layout) {
             return 3;
         }
 
-        // Destroying a bind group layout invalidates cached pipeline layouts;
-        // rebuilding an equivalent layout yields a usable pipeline again.
+        // Destroying the pipeline layouts and recreating one yields a usable pipeline again.
         device.pipeline_destroy(second);
         device.pipeline_destroy(third);
         device.pipeline_destroy(fourth);
-        device.bind_group_layout_destroy(fixture.layout);
-        device.bind_group_layout_destroy(other);
+        device.pipeline_layout_destroy(fixture.layout);
+        device.pipeline_layout_destroy(other);
         const engine::rhi::RID recreated = createLayout(device, 1);
-        desc.bindGroupLayouts = {recreated};
+        desc.pipelineLayout = recreated;
         const engine::rhi::RID fifth = device.pipeline_create(desc);
         if (device.resolvePipeline(fifth).layout == VK_NULL_HANDLE ||
             device.resolvePipeline(fifth).pipeline == VK_NULL_HANDLE) {
             return 4;
         }
         device.pipeline_destroy(fifth);
-        device.bind_group_layout_destroy(recreated);
+        device.pipeline_layout_destroy(recreated);
         device.shader_destroy(fixture.vertex);
         device.shader_destroy(fixture.fragment);
     }
