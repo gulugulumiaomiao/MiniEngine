@@ -223,9 +223,61 @@ ShaderCompilePipeline::reflectSpirv(std::span<const std::byte> bytecode,
         result.inputs = reflectInterface(resources.stage_inputs);
         result.outputs = reflectInterface(resources.stage_outputs);
 
-        const auto reflectDescriptors = [&compiler, &result](const auto& shaderResources,
-                                                             ShaderDescriptorType descriptorType,
-                                                             bool reflectMembers = false) {
+        // Map a SPIR-V member type to the engine UBO type enum and its std140 footprint.
+        const auto reflectUboType = [](const spirv_cross::SPIRType& type) -> UboUniformType {
+            using BaseType = spirv_cross::SPIRType::BaseType;
+            if (type.columns > 1) {
+                switch (type.columns) {
+                case 2: return UboUniformType::Mat2;
+                case 3: return UboUniformType::Mat3;
+                default: return UboUniformType::Mat4;
+                }
+            }
+            switch (type.basetype) {
+            case BaseType::Boolean:
+                switch (type.vecsize) {
+                case 1: return UboUniformType::Bool;
+                case 2: return UboUniformType::BVec2;
+                case 3: return UboUniformType::BVec3;
+                default: return UboUniformType::BVec4;
+                }
+            case BaseType::Int:
+                switch (type.vecsize) {
+                case 1: return UboUniformType::Int;
+                case 2: return UboUniformType::IVec2;
+                case 3: return UboUniformType::IVec3;
+                default: return UboUniformType::IVec4;
+                }
+            case BaseType::UInt:
+                switch (type.vecsize) {
+                case 1: return UboUniformType::UInt;
+                case 2: return UboUniformType::UVec2;
+                case 3: return UboUniformType::UVec3;
+                default: return UboUniformType::UVec4;
+                }
+            default:
+                switch (type.vecsize) {
+                case 1: return UboUniformType::Float;
+                case 2: return UboUniformType::Vec2;
+                case 3: return UboUniformType::Vec3;
+                default: return UboUniformType::Vec4;
+                }
+            }
+        };
+        const auto reflectUboSize = [](const spirv_cross::SPIRType& type) -> std::uint32_t {
+            if (type.columns > 1)
+                return type.columns * 16U; // std140: each matrix column is vec4-aligned
+            switch (type.vecsize) {
+            case 1: return 4U;
+            case 2: return 8U;
+            default: return 16U; // vec3 occupies 16 under std140
+            }
+        };
+
+        const auto reflectDescriptors = [&compiler, &result, &reflectUboType,
+                                         &reflectUboSize](const auto& shaderResources,
+                                                          ShaderDescriptorType descriptorType,
+                                                          bool reflectMembers = false) {
             for (const spirv_cross::Resource& resource : shaderResources) {
                 if (!compiler.has_decoration(resource.id, spv::DecorationDescriptorSet) ||
                     !compiler.has_decoration(resource.id, spv::DecorationBinding)) {
@@ -242,9 +294,13 @@ ShaderCompilePipeline::reflectSpirv(std::span<const std::byte> bytecode,
                     descriptor.members.reserve(blockType.member_types.size());
                     for (std::uint32_t member = 0; member < blockType.member_types.size();
                          ++member) {
+                        const spirv_cross::SPIRType& memberType =
+                            compiler.get_type(blockType.member_types[member]);
                         descriptor.members.push_back(
                             {compiler.get_member_name(resource.base_type_id, member),
-                             compiler.type_struct_member_offset(blockType, member)});
+                             reflectUboType(memberType),
+                             compiler.type_struct_member_offset(blockType, member),
+                             reflectUboSize(memberType)});
                     }
                 }
                 result.descriptors.push_back(std::move(descriptor));

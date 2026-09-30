@@ -194,7 +194,9 @@ struct ShaderStageVariable {
 
 struct ShaderUniformMember {
     std::string name;
+    UboUniformType type{UboUniformType::Float};
     std::uint32_t offset{};
+    std::uint32_t size{};
 };
 
 struct ShaderDescriptorBinding {
