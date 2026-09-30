@@ -31,7 +31,7 @@ VkCommandBuffer / Vulkan 资源
 
 `src/rhi/api/RhiTypes.h` 定义：
 
-- 带 `index + generation` 的 Buffer、Texture、TextureView、GraphicsPipeline 和 BindGroup 句柄；
+- 带 `index + generation` 的 Buffer、Texture、TextureView、GraphicsPipeline、DescriptorSetLayout、PipelineLayout 和 DescriptorSet 句柄；
 - `Viewport`、`Rect`、`RenderingInfo` 和颜色/深度附件；
 - `DrawArguments`、`DrawIndexedArguments` 和 `BufferCopy`；
 - `ResourceState` 与 `TextureBarrier`。
@@ -42,7 +42,7 @@ VkCommandBuffer / Vulkan 资源
 
 `src/rhi/api/Command.h` 定义一组命令自由函数（不再有 `ICommandBuffer` 抽象接口），每个函数首参是 command buffer 的 `RID`，覆盖：
 
-- 屏障、动态渲染、viewport、scissor、pipeline、VB/IB、bind group、draw 和 debug label；
+- 屏障、动态渲染、viewport、scissor、pipeline、VB/IB、descriptor set、draw 和 debug label；
 - 传输命令：`copyBuffer`、`copyImage`、`copyBufferToImage`、`copyImageToBuffer`、`updateBuffer`、`updateImage`。
 
 这些函数只在 Vulkan 后端（`src/rhi/vulkan/VulkanCommand.cpp`）定义：函数体经 `IDevice::active()` 拿到设备单例，按 RID 解析出 `VulkanCommandBuffer` 实例后转发。`Command.h` 不含任何 Vulkan 类型，因此渲染层可以包含它而不违反“渲染层禁止依赖 Vulkan”的边界（`SubmitSync`/`CommandState` 含 Vk 类型，已下沉到 Vulkan 层；提交与命令缓冲分配是后端职责，不在 `IDevice` 上）。
@@ -58,13 +58,13 @@ VkCommandBuffer / Vulkan 资源
 
 - `ResourceState` 转换为 stage、access mask 和 image layout；
 - `RenderingInfo` 转换为 Vulkan 1.3 Dynamic Rendering；
-- RHI 句柄通过 `VulkanDevice::resolve*`（resolveBuffer/resolveTexture/resolveTextureView/resolveSampler/resolveShader/resolvePipeline/resolveBindGroup）转换为原生对象；
+- RHI 句柄通过 `VulkanDevice::resolve*`（resolveBuffer/resolveTexture/resolveTextureView/resolveSampler/resolveShader/resolvePipeline/resolvePipelineLayout/resolveDescriptorSet）转换为原生对象；
 - Debug 构建使用 `VK_EXT_debug_utils` 标记 Pass，Release 构建不编译这些调用；
 - command buffer 记住当前 pipeline layout，从而安全绑定 descriptor set。
 
 资源解析按职责拆分：`VulkanDevice` 创建并拥有 Vulkan instance、surface、physical/logical
 device、queue、allocator、descriptor pool 和 command pool，同时管理并校验 Buffer、Shader、
-GraphicsPipeline、BindGroupLayout 与 BindGroup 句柄；`VulkanSwapchain` 管理交换链图片、
+GraphicsPipeline、DescriptorSetLayout、PipelineLayout 与 DescriptorSet 句柄；`VulkanSwapchain` 管理交换链图片、
 命令缓冲、逐帧同步与提交，并为 command buffer 解析当前 back buffer。
 
 ### 4. 迁移绘制命令
@@ -115,7 +115,7 @@ Mesh 上传的 staging buffer 和 device-local buffer 都进入带 generation �
 ```text
 等待当前 FrameContext fence
   → acquire swapchain image
-  → 选择逐帧场景/材质 BindGroup
+  → 选择逐帧场景/材质 UniformSet（descriptor set）
   → 上传 Renderer 已提取到 DrawList 的对象数据快照
   → Renderer 已构建好的 DrawList 交给后端
   → begin command buffer
@@ -140,7 +140,7 @@ Mesh 上传的 staging buffer 和 device-local buffer 都进入带 generation �
 - RenderGraph 只处理导入纹理和图形 Pass，尚未创建临时纹理，也没有 buffer barrier；
 - 每个 Pass 当前最多一个深度附件，RenderTarget 已支持 `Depth32Float`；
 - Mesh 当前仍只有一个活动 VertexLayout；
-- BindGroup 已拆分为 Scene/Object（set 0）与 Material（set 1），Object 目前仍与 Scene 共用 set；
+- 反射驱动 UniformSet 按 set 划分：Scene/Object/实例表/阴影（set 0）、Material（set 1）、Global（set 2）；pipeline layout 由 `ShaderProgram` 反射产出，绘制只绑定 program 实际声明的 set（`DrawBatch::programSetCount`），因此 set 被 SPIR-V 剥离的 pass（如 depth-only shadow caster）不会越界绑定；
 - 未实现 compute encoder、indirect draw、push constants 和 secondary command buffer；
 - 资源销毁会等待 device idle，后续应加入按 frame/timeline 回收的 deferred deletion queue。
 

@@ -183,7 +183,7 @@ Engine 构建 RenderScene 时使用场景视口宽高比，Forward 与 DepthOnly
 隐藏、非当前 dock 标签页或零尺寸时不请求场景渲染；UI 和 present 仍继续运行。
 
 UI 构建早于 swapchain 获取帧，因此图像使用保留的逻辑纹理 ID，录制 overlay 时才
-解析成实际获取帧的 BindGroup。离屏颜色/深度目标按双帧分别管理，尺寸变化后在该帧
+解析成实际获取帧的场景 `UniformSet`（descriptor set）。离屏颜色/深度目标按双帧分别管理，尺寸变化后在该帧
 fence 完成时重建。空场景或没有相机仍清理颜色纹理，不显示上一帧的残留。
 
 ## StatisticsPanel（统计）

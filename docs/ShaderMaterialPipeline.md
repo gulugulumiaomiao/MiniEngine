@@ -21,7 +21,7 @@ Shader → SubShader → ShaderPass ───── ShaderProgram / ProgramLayou
                                                ▼
                               ShaderModule / GraphicsPipeline Cache
                                                │
-Material → MaterialBindingCache/Uploader → set 1 ┤
+Material → MaterialStorage(set-1 UniformSet) → set 1 ┤
 Scene/Object buffer → set 0 ───────────────────┘
 ```
 
@@ -89,8 +89,8 @@ Pipeline key 包含：
 
 场景 uniform buffer（`SceneDrawData`，std140，224 字节）布局：`viewProjection`(0)、`cameraPosition`(64)、`directionalLightDirection`(80)、`directionalLightColorIntensity`(96)、`pointLightPositionRange`(112)、`pointLightColorIntensity`(128)、`lightSpaceMatrix`(144)、`shadowParams`(208)；`shadowParams = {strength, depthBias, normalOffset, texelSize}`，shader 侧声明见 `builtin/core/shaders/include/scene.glsl`。
 
-每个 in-flight frame 有独立的材质 uniform buffer 和 BindGroup。`MaterialBindingCache` 让槽位跨帧常驻：`MaterialGpuFactory` 通过
-`rhi::IDevice` 创建 Buffer 和 BindGroup，不接触 Vulkan descriptor。`Material::version()`
+每个 in-flight frame 有独立的材质 set-1 `UniformSet`。`MaterialStorage` 的 LRU 缓存让槽位跨帧常驻：材质 UBO 走
+`Ubo::setRawBytes(uniformBytes)`、纹理走 `setResourceAt(binding, Ref<Texture>)`，经 `rhi::IDevice` 的 descriptor-set 接口创建，不接触 Vulkan descriptor。`Material::version()`
 负责标识 CPU 数据版本；resolve 按三级路径刷新（版本一致直接命中、仅 uniform 变化脏更新、纹理或缓冲变化全量重建），同一帧内相同 `MaterialHandle` 只处理一次。纹理 resolver 返回
 RHI TextureView/Sampler handle，未安装 resolver 或纹理未就绪时只输出 warn。
 
@@ -123,7 +123,7 @@ ShadowCaster → DepthOnly → Forward
 | ShaderProgramCache | vertex CompileID + fragment CompileID + Variant | ShaderProgram |
 | ShaderModuleCache | CompileID | RHI Shader handle |
 | GraphicsPipelineCache | ProgramID + LayoutID + VertexLayout + RenderState + RT format | RHI Pipeline handle |
-| MaterialBindingCache | frame + MaterialHandle | 常驻的 RHI uniform buffer + BindGroup slot（LRU 驱逐） |
+| MaterialStorage 缓存 | MaterialHandle | 常驻的材质 set-1 `UniformSet`（LRU 驱逐） |
 
 ## 生命周期和修改规则
 
@@ -143,7 +143,7 @@ ShadowCaster → DepthOnly → Forward
 - `src/render/gpu/shader/ShaderModuleCache.h/.cpp`：CompileID 到 RHI Shader handle 的纯缓存。
 - `src/render/gpu/pipeline/GraphicsPipelineCache.h/.cpp`：Pipeline key 到 RHI Pipeline handle 的纯缓存。
 - `src/rhi/vulkan/VulkanGraphicsPipeline.h/.cpp`：将 RHI Pipeline 描述转换为 Vulkan graphics pipeline。
-- `src/render/gpu/material/MaterialBindingCache.h/.cpp`：跨帧常驻的材质 GPU 资源槽位缓存。
+- `src/render/gpu/material/MaterialStorageCache.h/.cpp`：跨帧常驻的材质 set-1 `UniformSet` 槽位缓存。
 - `src/render/gpu/<domain>/*GpuFactory.h/.cpp`：RHI 资源创建、必要的数据上传和释放实现。
 - `src/render/gpu/<domain>/*GpuManager.h/.cpp`：各类 GPU 缓存命中、资源创建和退役流程编排。
 - `src/render/renderer/Renderer.cpp`：Variant 选择、多 Pass 场景提交和 DrawList 录制；缓存组装与热重载由对应 GPU Manager 负责。

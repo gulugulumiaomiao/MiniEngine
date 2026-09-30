@@ -55,8 +55,8 @@
 |---|---|---|---|
 | Texture | `TextureAsset`（无运行时管理器） | 无（层2 `Texture` 自持 RHI 句柄） | `VulkanDevice` 分类型句柄池（存实例）texture/view/sampler，对上只暴露 RID |
 | Mesh | `MeshAsset`（无运行时管理器） | 无（层2 `Mesh` 自持 vertex/index buffer 的 RHI RID） | `IDevice` buffer owner（拆分的 allocate_rid/allocate_memory/upload/free_memory/release_rid） |
-| Material | `MaterialResourceManager` | `MaterialStorage` | `IDevice` bindGroup / uniform owner |
-| Shader | `ShaderResourceManager` | `ShaderStorage` | `IDevice` shaderModule / pipeline owner |
+| Material | `MaterialResourceManager` | `MaterialStorage`（set-1 `UniformSet`） | `IDevice` descriptor set / uniform owner |
+| Shader | `ShaderResourceManager` | `GraphicsPipelineStorage`（产出并缓存 `ShaderProgram`） | `IDevice` shaderModule / pipeline / descriptor-set-layout / pipeline-layout owner |
 
 ## 4. 跨层引用规则（单向向下）
 
@@ -104,7 +104,7 @@
 
 ### 6.4 Shader
 - `ShaderAsset` 已拆到 `src/asset/types/ShaderAsset.h`；运行时 Shader 只保留用户/渲染语义。
-- `ShaderStorage` 管编译产物、ShaderModule 缓存与销毁；`IShaderModule` 通过 `ShaderModuleInfo` 暴露 stage/bytecodeSize/debugName，不泄漏 Vulkan 句柄。
+- `GraphicsPipelineStorage` 持有 `ShaderCompilePipeline`（吸收原 `ShaderStorage` 角色）管编译产物，`getOrCreateProgram` 产出并缓存 `Ref<ShaderProgram>`（vs/fs shader RID + 反射 set 布局 + pipeline layout），按 frame-serial 延迟退役；shader 句柄只以 RID 对上暴露，不泄漏 Vulkan 类型。
 - `GraphicsPipelineStorage` 是 Program→Pipeline 的显式映射与缓存边界。
 
 ## 7. 已确认的架构约定

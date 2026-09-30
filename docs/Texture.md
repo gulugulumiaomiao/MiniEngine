@@ -26,7 +26,7 @@ Texture 系统把资产数据、运行时 GPU 资源与采样状态拆成三层�
   -> 层2 Texture 构造：IDevice::active() 分配 texture/view/sampler 三个 RID
   -> initialize/upload(pixels)：按 computeTextureLayout 逐 mip 切片上传
   -> Material/Global binding { view, sampler }
-  -> BindGroupEntry -> Vulkan descriptor { VkImageView, VkSampler }
+  -> UniformSet::setResource(Ref<Texture>) -> upload 组装 DescriptorWrite -> Vulkan descriptor { VkImageView, VkSampler }
 ```
 
 `Texture` 构造经 `IDevice::active()` 取设备（没有管理器可注入）：`createTexture` 建纹理、`createTextureView`（翻译后的层2 `TextureViewDesc`）建**层2 拥有**的默认视图、`createSampler` 取去重采样器。white/black/normal/error 内建纹理由 `Texture::defaultWhite()` 等静态方法经同一构造路径自建（非 asset-backed）。纹理引用字符串（路径/内建名）由自由函数 `resolveTextureReference` 统一解析。
@@ -52,7 +52,7 @@ setTexture(name, Ref<Texture> texture);                      // 默认 view + �
 setTexture(name, Ref<Texture> texture, Ref<Sampler> sampler); // 默认 view + 指定 sampler
 ```
 
-`MaterialStorage::collectTextureBindings` 每次 resolve 重新解析签名：`resolveTexture(name)`（缺省经 `resolveTextureReference` 由 VirtualPath 解析并缓存 `Ref<Texture>`）+ `resolveSampler(name)`，组装 `sampler ? texture->binding(sampler) : texture->binding()`。签名变化触发 BindGroup 重建。只向 RHI 提交 view/sampler handle，禁止把 texture handle 直接作为 sampled texture 绑定。
+`MaterialStorage::collectTextureBindings` 每次 resolve 重新解析签名：`resolveTexture(name)`（缺省经 `resolveTextureReference` 由 VirtualPath 解析并缓存 `Ref<Texture>`）+ `resolveSampler(name)`，组装 `sampler ? texture->binding(sampler) : texture->binding()`。签名或 program 反射的 set-1 布局变化触发 set-1 `UniformSet` 重建。只向 RHI 提交 view/sampler handle，禁止把 texture handle 直接作为 sampled texture 绑定。
 
 ## 6. 热重载
 

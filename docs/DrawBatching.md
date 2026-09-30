@@ -2,7 +2,7 @@
 
 Stage E 落地两项渲染效率基础设施：
 
-1. **材质常驻**：材质 GPU 资源跨帧驻留，只有内容变化时才上传，消除每帧的 bindGroup 重建与 uniform 重传。
+1. **材质常驻**：材质 GPU 资源（set-1 `UniformSet`）跨帧驻留，只有内容变化时才上传，消除每帧的 descriptor set 重建与 uniform 重传。
 2. **合批**：`DrawBatcher` 把排序后状态连续的 DrawItem 合并为一次实例化 `drawIndexed`，配合每帧实例表（Instance Table）完成对象寻址。
 
 ## 合批（DrawBatcher）
@@ -12,7 +12,7 @@ Stage E 落地两项渲染效率基础设施：
 `DrawBatcher::build(items)` 只合并**相邻**且 GPU 状态完全一致的 DrawItem，判定字段：
 
 - `pipeline`
-- `materialBindGroup`
+- `materialSet`（`Ref<UniformSet>`，按指针身份比较）
 - `vertexBuffers`（数量与每个 binding 的 buffer）
 - `indexBuffer` 与 `indexFormat`
 - 索引区间：`indexCount` / `firstIndex` / `vertexOffset`
@@ -45,8 +45,8 @@ mat4 model = Objects.transforms[InstanceIndices.objectIndices[gl_InstanceIndex]]
 
 ```text
 MiniForwardPipeline::render
-  -> DrawListBuilder.build            剔除 + 生成 DrawItem（firstInstance = 对象行）
-  -> resolveMaterialBindGroups        材质常驻三级路径（见下文）
+  -> DrawListBuilder.build            剔除 + 生成 DrawItem（含 materialSet，firstInstance = 对象行）
+                                      resolveMaterialPass 内解析材质常驻三级路径（见下文）
   -> FRAME_GPU_MANAGER.beginFrame     重置当前帧实例表计数
   -> FRAME_GPU_MANAGER.upload         上传 scene / objects 数据
   -> 各 pass execute（回调内）
@@ -63,20 +63,20 @@ MiniForwardPipeline::render
 
 ### 三级 resolve 路径
 
-`MaterialGpuManager::resolve(handle)`：
+`MaterialStorage::resolve(material, program)`：
 
-1. **快路径**：槽位命中且 `Material::version()` 与已上传版本一致 → 直接返回 bindGroup，零 GPU 操作。
-2. **脏更新**：仅 uniform 内容变化（纹理签名与绑定大小未变）→ `MaterialGpuFactory::updateUniforms` 只重传 uniform 字节，保留 bindGroup。
-3. **全量重建**：槽位被驱逐、纹理引用变化或缓冲几何变化 → 重建 bindGroup 并记录簿记。
+1. **快路径**：槽位命中且 `Material::version()` 与已上传版本一致 → 直接返回 set-1 `UniformSet`，零 GPU 操作。
+2. **脏更新**：仅 uniform 内容变化（纹理签名未变）→ `Ubo::setRawBytes(uniformBytes)` 只重传 uniform 字节，保留 `UniformSet`。
+3. **全量重建**：槽位被驱逐、纹理引用变化或 program 的 set-1 布局变化 → 重建 `UniformSet` 并记录簿记。
 
 `Material` 的任何属性修改（含 `setTexture`、`setShader`、shader 热重载）都会递增 `version_`，因此三级路径自动覆盖所有失效场景。
 
-### MaterialBindingCache 常驻策略
+### MaterialStorage 缓存常驻策略
 
 - `beginFrame` 不再清空查找表；槽位与其 GPU 资源跨帧驻留。
 - 每个 in-flight frame 各持有一份槽位池（同帧内相同材质只上传一次，帧间写入互不冲突）。
-- 容量上限 `kMaxResidentMaterials = 512`；超限时驱逐 LRU 槽位：查找表移除旧占用者，槽位标记 `pendingRelease`，下次被新材质全量重建前由 Factory 释放旧句柄。
-- `MaterialGpuResource` 新增簿记字段：`uniformVersion`、`boundSize`、`ownerKey`、`lastUsed`、`textureBindings`、`pendingRelease`。
+- 容量上限 `kMaxResidentMaterials = 512`；超限时驱逐 LRU 槽位：查找表移除旧占用者，槽位标记 `pendingRelease`，下次被新材质全量重建前释放旧 `UniformSet`。
+- `MaterialStorageEntry` 簿记字段：`materialSet`(`Ref<UniformSet>`)、`setLayout`、`uniformVersion`、`textureBindings`、`pendingRelease`。
 
 ## 排序与合批的关系
 

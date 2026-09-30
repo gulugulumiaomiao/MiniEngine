@@ -119,9 +119,12 @@ overlay 是 present 之前的最后写入者，必须把获取到的 backbuffer 
 
 - **字体图集**：上传为 `Rgba8Unorm` 纹理 + `ClampToEdge` 采样器（nearest wrap 会让
   图集边缘字形互相渗色），随后 `ClearTexData()` 释放 CPU 侧副本。
-- **ImTextureID**：是 64 位整数，直接编码 RHI 的 `BindGroupHandle`
-  （`generation << 32 | index`）。Scene View 使用 generation 为零的保留 ID `1`，
-  在录制时解析到实际获取帧的场景 BindGroup。活句柄的 generation 恒非零，所以被清零的
+- **ImTextureID**：是 64 位整数，直接编码 RHI 的 descriptor-set 句柄
+  （`generation << 32 | index`）。字体图集与每张 Scene View 纹理都经 layer-2 `UniformSet`
+  （`UniformSetLayout::acquire({0:CombinedImageSampler})` + `Texture::adoptBinding(view,sampler)`
+  非拥有）产出 descriptor set；UI 管线布局经 `PipelineLayout::acquire` 由 `desc.pipelineLayout`
+  提供，绘制处用 `rhi::bindDescriptorSet`。Scene View 使用 generation 为零的保留 ID `1`，
+  在录制时解析到实际获取帧的场景 `UniformSet`。活句柄的 generation 恒非零，所以被清零的
   `ImDrawCmd::TextureId` 不会与真实句柄冲突，普通纹理无需旁路映射表即可用。
 - **UI 管线**：无深度测试与写入、`CullMode::None`（ImGui 两种绕序都会发）、Alpha
   混合、`colorFormats = {swapchain 格式}`。
@@ -164,7 +167,7 @@ Alpha 不动）、相对字体路径按文件目录解析、单项颜色覆盖�
 ## 场景离屏输出与帧序
 
 编辑器 attach 后启用离屏场景模式，beginFrame 把请求尺寸归零，由可见的
-SceneViewPanel 提交本帧尺寸。detach 在 GPU idle 后释放 UI BindGroup，并恢复默认
+SceneViewPanel 提交本帧尺寸。detach 在 GPU idle 后释放 UI `UniformSet`，并恢复默认
 swapchain 输出；项目切换继续遵循先 detach、再 open/close、再 attach 的顺序。
 
 ```text
@@ -181,6 +184,6 @@ Application::onUpdate：生成 UI，提交 Scene View 的像素尺寸
 采样时由硬件解码，随后主窗口附件编码，保持原来的场景色彩。场景目标不会设置
 backBufferWritten；该标记仍只描述真正的主窗口写入。
 
-ImGuiRenderer 按双帧缓存场景纹理 BindGroup，比较包含 generation 的完整 view 句柄，
+ImGuiRenderer 按双帧缓存场景纹理 `UniformSet`，比较包含 generation 的完整 view 句柄，
 重建仅发生于相应 fence 完成后，shutdown 释放全部绑定。零尺寸时跳过场景管线，
 overlay 继续保证合法的主窗口清屏与 Present。ImGuiRendererTest 已迁移为 GoogleTest。

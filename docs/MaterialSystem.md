@@ -57,11 +57,11 @@ setTexture(name, Ref<Texture> texture, Ref<Sampler> sampler); // 默认 view + �
 
 `Texture` 持有 texture/默认 view/默认 sampler 三个 RID；`binding()` 给默认绑定，`binding(sampler)` 用指定 sampler 搭配同一默认 view。`Sampler` 与纹理默认 sampler 都非拥有（设备按 `SamplerDesc` 去重）。
 
-`MaterialStorage::collectTextureBindings` 每次 resolve 收集最终 binding：`resolveTexture(name)`（缺省经 `resolveTextureReference` 由 VirtualPath 解析并 `instantiate`）+ `resolveSampler(name)`，组装 `sampler ? texture->binding(sampler) : texture->binding()`。绑定签名变化会重建 BindGroup；只向 RHI 提交 view/sampler handle，texture handle 从不直接写入 sampled descriptor。
+`MaterialStorage::collectTextureBindings` 每次 resolve 收集最终 binding：`resolveTexture(name)`（缺省经 `resolveTextureReference` 由 VirtualPath 解析并 `instantiate`）+ `resolveSampler(name)`，组装 `sampler ? texture->binding(sampler) : texture->binding()`。绑定签名或 program 反射的 set-1 布局变化会重建 set-1 `UniformSet`；只向 RHI 提交 view/sampler handle，texture handle 从不直接写入 sampled descriptor。
 
 ## Renderer 与 GPU 资源
 
-Renderer 每帧从 Material 选择 `Shader -> SubShader -> ShaderPass`，生成 DrawItem 并按 RenderQueue 排序。`MaterialGpuManager` 管理每帧 Material BindGroup，`GraphicsPipelineManager` 提供对应的 RHI Pipeline；Render 层不接触 Vulkan 类型。
+Renderer 每帧从 Material 选择 `Shader -> SubShader -> ShaderPass`，生成 DrawItem 并按 RenderQueue 排序。`MaterialStorage` 管理材质 set-1 `UniformSet`，`GraphicsPipelineStorage` 产出 `ShaderProgram` 并提供对应的 RHI Pipeline；Render 层不接触 Vulkan 类型。
 
 ## 内置错误材质
 
@@ -73,7 +73,7 @@ Renderer 每帧从 Material 选择 `Shader -> SubShader -> ShaderPass`，生成 
 
 - Material 资产或其 Shader 加载失败时，`MaterialManager::load()` 返回 Error Material Handle。
 - Shader 编译或 Graphics Pipeline 创建失败时，Renderer 的 Forward Pass 改用 Error Material。
-- Material BindGroup 准备失败时，提交前切换为 Error Material 的 Pipeline 和 BindGroup。
+- Material set-1 `UniformSet` 准备失败时，提交前切换为 Error Material 的 Pipeline 和 `UniformSet`。
 - Error Material 自身不可用时才跳过 DrawItem，避免递归回退。
 
 完整资产导入和热重载流程见 [asset/Pipeline.md](asset/Pipeline.md)。

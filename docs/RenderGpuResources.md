@@ -1,12 +1,15 @@
 # Render GPU 资源分层
 
-Render 层不要求所有资源都经过同一种 Manager/Cache/Factory 模板。资源根据身份和生命周期选择最小抽象：Mesh/Shader/Pipeline/Material 继续使用层2 Storage 家族；**Texture 不再有独立 Manager 或 gpu 层 Storage**——层2 `Texture` 自身持有 RHI 句柄，经全局活动设备直接创建/上传/销毁。
+Render 层不要求所有资源都经过同一种 Manager/Cache/Factory 模板。资源根据身份和生命周期选择最小抽象：Mesh/Pipeline/Material 继续使用层2 Storage 家族（Shader 程序不再是独立 Storage——由 `GraphicsPipelineStorage` 经 `ShaderCompilePipeline` 产出并缓存为 `Ref<ShaderProgram>`）；**Texture 不再有独立 Manager 或 gpu 层 Storage**——层2 `Texture` 自身持有 RHI 句柄，经全局活动设备直接创建/上传/销毁。
 
 ## 1. 当前资源路径
 
 ```text
-Mesh/Shader/Pipeline/Material
+Mesh/Pipeline/Material
   -> *Storage -> *StorageFactory / *StorageCache -> IDevice
+
+Shader（ShaderProgram：vs/fs 模块 + 反射 set 布局 + pipeline layout）
+  -> GraphicsPipelineStorage.getOrCreateProgram -> ShaderCompilePipeline -> IDevice
 
 TextureAsset (层1，序列化源)
   -> instantiate() 唯一实例 / clone() 脱离实例 / Texture::defaultWhite() 等静态默认
@@ -14,8 +17,8 @@ TextureAsset (层1，序列化源)
   -> initialize/upload(pixels) 上传
 
 Material
-  -> MaterialStorage -> rhi::TextureBinding { view, sampler }
-  -> BindGroup
+  -> MaterialStorage -> set-1 UniformSet（材质 UBO + 纹理 setResourceAt(Ref<Texture>)）
+  -> rhi::descriptor_set（VkDescriptorSet）
 ```
 
 句柄池按对象类型分开、直接存 `Vulkan*` 实例（不存指针、不经抽象接口），全部内嵌在具体 `VulkanDevice`；`rhi::IDevice` 只声明 RID 生命周期虚函数（`<type>_create/_destroy/_upload`），不含任何后端原生类型，也不再内嵌句柄池。`IRHITexture`/`IRHITextureView`/`IRHISampler` 抽象接口已删除。IDevice 是全局单例：后端构造时把自己注册为 `IDevice::active()`、析构时让位，未构造时 `active()` 返回 `nullptr`。层2 `Texture`/`Sampler` 与静态默认纹理都经 `IDevice::active()` 取设备（没有纹理管理器可注入）。
@@ -24,11 +27,10 @@ Material
 
 > Mesh 不再有自己的层2 Storage：它已对齐 Texture，成为自持 RHI 句柄的层2 运行时对象（见第 3 节）。
 
-- `MaterialStorage`：材质 BindGroup 与 uniform buffer 跨帧常驻；每次 resolve 经 `collectTextureBindings` 重新解析 `rhi::TextureBinding` 签名，签名变化触发 BindGroup 重建。
-- `ShaderStorage`：管理编译结果、ShaderModule 缓存和延迟退役。
-- `GraphicsPipelineStorage`：管理 Pipeline 描述、缓存和 shader 变化失效。
-- `FrameGpuManager`：管理场景/对象/实例表 Buffer、固定 BindGroupLayout 和每帧 BindGroup。
-- `GlobalUniformGpuManager`：按帧保存 global BindGroup，比较 `rhi::TextureBinding` 签名以处理纹理热替换。
+- `MaterialStorage`：材质 set-1 `UniformSet` 跨帧常驻（LRU）；`resolve(material, program)` 用 program 反射出的 set-1 `UniformSetLayout`/`UboLayout` 建集，材质 UBO 走 `Ubo::setRawBytes(uniformBytes)`、纹理走 `setResourceAt(binding, Ref<Texture>)`；`collectTextureBindings` 解析 `rhi::TextureBinding` 签名，program 的 set-1 布局或签名变化触发重建。set-1 被 SPIR-V 剥离（如 depth-only shadow caster）时返回空集，合法不绑。
+- `GraphicsPipelineStorage`（位于 `src/render/`）：持有引擎的 `ShaderCompilePipeline`（吸收原 `ShaderStorage` 角色），`getOrCreateProgram` 产出并缓存 `Ref<ShaderProgram>`（vs/fs 模块 + 反射 set 布局 + pipeline layout），并按 (program, 顶点布局, RT 格式) 缓存 VkPipeline、处理 shader 变化失效。图形管线创建落在这里而非 `ShaderProgram`，因为它需要绘制期状态（mesh 顶点布局、RT 格式）。
+- `FrameGpuManager`：管理场景/对象/实例表 Buffer 与 set-0 `UniformSet`（硬编码约定经 `UniformSetLayout::acquire` 去重命中反射布局）；场景 UBO 走 `Ubo::setRawBytes(SceneDrawData)`，objects/instanceTable 用 `StorageBufferResource`，阴影贴图用 `Texture::adoptBinding`。
+- `GlobalUniformGpuManager`：按帧保存 set-2 `UniformSet`（layout={0:UB?,1..M:CIS}，M=实际全局纹理数），处理纹理热替换。
 
 ## 3. Texture / Mesh 生命周期与去重
 

@@ -225,7 +225,7 @@ Debug 模式下 `FileWatcher` 的事件由 `AssetImportPipeline` 处理。Mesh �
 - `src/scene/components/MeshComponent.cpp`：Asset/Primitive 两种来源，运行时图元经 `buildAsset + instantiate` 创建与重建。
 - `src/scene/scene/SceneAsset.cpp`、`Scene.cpp`：Mesh 引用加载（`loadMesh` 回调）和渲染场景提取（`bounds()` 算包围半径）。
 - `src/render/renderer/DrawListBuilder.cpp`：直接读 `Mesh` 访问器生成 DrawItem。
-- `src/render/gpu/pipeline/GraphicsPipelineStorage.cpp`：以 `mesh.vertexLayout()` 构建管线顶点输入态。
+- `src/render/GraphicsPipelineStorage.cpp`：以 `mesh.vertexLayout()` 构建管线顶点输入态。
 - `src/rhi/api/Device.h`：设备接口（`IDevice` + `ISwapchain`）；后端无关的资源描述统一在 `src/rhi/api/ResourceDesc.h`（含拆分的 buffer 生命周期 `buffer_allocate_rid/allocate_memory/free_memory/release_rid` 与组合的 `buffer_create/destroy/upload`）。
 - `src/rhi/vulkan/VulkanBuffer.cpp`：两阶段缓冲（构造记录参数、`allocateMemory`/`freeMemory`），保留并暴露 `BufferUsage`。
 - `src/rhi/vulkan/VulkanDevice.cpp`：Buffer 资源表、拆分的 buffer 生命周期实现与 Vulkan staging 上传。
