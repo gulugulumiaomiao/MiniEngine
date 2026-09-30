@@ -49,6 +49,9 @@ void bindVertexBuffer(RID cmd, std::uint32_t slot, RID buffer, std::uint64_t off
 void bindIndexBuffer(RID cmd, RID buffer, std::uint64_t offset, IndexFormat format) {
     resolve(cmd).bindIndexBuffer(buffer, offset, format);
 }
+void bindDescriptorSet(RID cmd, std::uint32_t set, RID descriptorSet) {
+    resolve(cmd).bindDescriptorSet(set, descriptorSet);
+}
 void bindGroup(RID cmd, std::uint32_t set, RID group, std::span<const std::uint32_t> dynamicOffsets) {
     resolve(cmd).bindGroup(set, group, dynamicOffsets);
 }

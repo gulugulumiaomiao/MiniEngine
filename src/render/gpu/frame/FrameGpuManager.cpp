@@ -1,11 +1,13 @@
 #include "render/gpu/frame/FrameGpuManager.h"
 
 #include "core/logging/Log.h"
-#include "render/material/MaterialLimits.h"
+#include "render/texture/Texture.h"
 #include "rhi/api/Device.h"
 
 #include <array>
+#include <cstddef>
 #include <span>
+#include <vector>
 
 namespace engine {
 
@@ -23,25 +25,24 @@ bool FrameGpuManager::initialize(rhi::IDevice& device) {
         return false;
     }
     device_ = &device;
-    constexpr rhi::ShaderVisibility allGraphics =
-        rhi::ShaderVisibility::Vertex | rhi::ShaderVisibility::Fragment;
-    const std::array sceneBindings{
-        rhi::BindGroupLayoutEntry{0, rhi::BindingType::UniformBuffer, allGraphics},
-        rhi::BindGroupLayoutEntry{
-            1, rhi::BindingType::StorageBuffer, rhi::ShaderVisibility::Vertex},
-        rhi::BindGroupLayoutEntry{
-            2, rhi::BindingType::StorageBuffer, rhi::ShaderVisibility::Vertex},
-        rhi::BindGroupLayoutEntry{
-            3, rhi::BindingType::SampledTexture, rhi::ShaderVisibility::Fragment},
-    };
-    sceneLayout_ = device_->bind_group_layout_create({sceneBindings, "Scene bind group layout"});
 
-    std::array<rhi::BindGroupLayoutEntry, kMaxMaterialTextures + 1> materialBindings{};
-    materialBindings[0] = {0, rhi::BindingType::UniformBuffer, allGraphics};
-    for (std::uint32_t binding = 1; binding < materialBindings.size(); ++binding)
-        materialBindings[binding] = {binding, rhi::BindingType::SampledTexture, allGraphics};
-    materialLayout_ =
-        device_->bind_group_layout_create({materialBindings, "Material bind group layout"});
+    // Fixed engine convention for set 0. acquire() dedups on the (binding, type) ordered hash, so
+    // this is the same UniformSetLayout instance a program reflects for set 0 (shaders declare this
+    // convention), which keeps the shared scene set compatible with every pipeline layout.
+    const std::array<ResourceBinding, 4> sceneBindings{{
+        {0, "Scene", rhi::ResourceType::UniformBuffer},
+        {1, "objects", rhi::ResourceType::StorageBuffer},
+        {2, "instanceTable", rhi::ResourceType::StorageBuffer},
+        {3, "shadowMap", rhi::ResourceType::CombinedImageSampler},
+    }};
+    sceneLayout_ = UniformSetLayout::acquire(device, sceneBindings);
+
+    // Synthetic one-member block whose size matches the packed SceneDrawData blob; the scene UBO is
+    // written wholesale via Ubo::setRawBytes (the CPU struct already matches the std140 layout).
+    sceneUboLayout_ = makeRef<UboLayout>();
+    sceneUboLayout_->addUniform(
+        UboUniform{"SceneData", UboUniformType::Float, 0, static_cast<std::uint32_t>(sizeof(SceneDrawData))});
+    sceneUboLayout_->finish();
 
     shadowSampler_ = device_->sampler_create({
         .minFilter = rhi::SamplerFilter::Linear,
@@ -63,13 +64,8 @@ bool FrameGpuManager::initialize(rhi::IDevice& device) {
     if (!shadowSampler_ || !placeholderTexture_ || !placeholderView_) {
         Log::fatal("FrameGpuManager", "Cannot create shadow sampling resources");
     }
+
     for (FrameResources& frame : frames_) {
-        frame.sceneBuffer = device_->buffer_create({
-            .size = sizeof(SceneDrawData),
-            .usage = rhi::BufferUsage::Uniform,
-            .memoryUsage = rhi::MemoryUsage::Upload,
-            .debugName = "Scene uniforms",
-        });
         frame.objectBuffer = device_->buffer_create({
             .size = kObjectBufferSize,
             .usage = rhi::BufferUsage::Storage,
@@ -82,26 +78,13 @@ bool FrameGpuManager::initialize(rhi::IDevice& device) {
             .memoryUsage = rhi::MemoryUsage::Upload,
             .debugName = "Instance table",
         });
-        const std::array bindings{
-            rhi::BindGroupEntry{.binding = 0,
-                                .type = rhi::BindingType::UniformBuffer,
-                                .buffer = frame.sceneBuffer,
-                                .size = sizeof(SceneDrawData)},
-            rhi::BindGroupEntry{.binding = 1,
-                                .type = rhi::BindingType::StorageBuffer,
-                                .buffer = frame.objectBuffer,
-                                .size = kObjectBufferSize},
-            rhi::BindGroupEntry{.binding = 2,
-                                .type = rhi::BindingType::StorageBuffer,
-                                .buffer = frame.instanceTable,
-                                .size = kInstanceTableSize},
-            rhi::BindGroupEntry{.binding = 3,
-                                .type = rhi::BindingType::SampledTexture,
-                                .textureView = placeholderView_,
-                                .sampler = shadowSampler_},
-        };
-        frame.sceneBindGroup =
-            device_->bind_group_create({sceneLayout_, bindings, "Scene bind group"});
+        frame.sceneSet = makeRef<UniformSet>(
+            device, sceneLayout_, std::vector<Ref<UboLayout>>{sceneUboLayout_});
+        frame.sceneSet->setResourceAt(
+            1, makeRef<StorageBufferResource>(frame.objectBuffer, kObjectBufferSize));
+        frame.sceneSet->setResourceAt(
+            2, makeRef<StorageBufferResource>(frame.instanceTable, kInstanceTableSize));
+        frame.sceneSet->setResourceAt(3, Texture::adoptBinding(placeholderView_, shadowSampler_));
         frame.shadowView = placeholderView_;
     }
     return true;
@@ -114,9 +97,11 @@ void FrameGpuManager::upload(std::uint32_t frameIndex, const DrawList& drawList)
         Log::fatal("FrameGpuManager", "DrawList exceeds kMaxRenderObjects");
 
     FrameResources& frame = frames_[frameIndex];
-    device_->buffer_upload(frame.sceneBuffer, std::as_bytes(std::span{&drawList.scene, 1}));
+    if (Ubo* sceneUbo = frame.sceneSet->uboAt(0))
+        sceneUbo->setRawBytes(std::as_bytes(std::span{&drawList.scene, 1}));
     if (!drawList.objects.empty())
         device_->buffer_upload(frame.objectBuffer, std::as_bytes(std::span{drawList.objects}));
+    frame.sceneSet->upload();
 }
 
 void FrameGpuManager::bindShadowMap(std::uint32_t frameIndex, rhi::RID view) {
@@ -126,33 +111,13 @@ void FrameGpuManager::bindShadowMap(std::uint32_t frameIndex, rhi::RID view) {
     if (frame.shadowView == view)
         return;
     frame.shadowView = view;
-    if (frame.sceneBindGroup)
-        device_->bind_group_destroy(frame.sceneBindGroup);
-    const std::array bindings{
-        rhi::BindGroupEntry{.binding = 0,
-                            .type = rhi::BindingType::UniformBuffer,
-                            .buffer = frame.sceneBuffer,
-                            .size = sizeof(SceneDrawData)},
-        rhi::BindGroupEntry{.binding = 1,
-                            .type = rhi::BindingType::StorageBuffer,
-                            .buffer = frame.objectBuffer,
-                            .size = kObjectBufferSize},
-        rhi::BindGroupEntry{.binding = 2,
-                            .type = rhi::BindingType::StorageBuffer,
-                            .buffer = frame.instanceTable,
-                            .size = kInstanceTableSize},
-        rhi::BindGroupEntry{.binding = 3,
-                            .type = rhi::BindingType::SampledTexture,
-                            .textureView = view,
-                            .sampler = shadowSampler_},
-    };
-    frame.sceneBindGroup = device_->bind_group_create({sceneLayout_, bindings, "Scene bind group"});
+    frame.sceneSet->setResourceAt(3, Texture::adoptBinding(view, shadowSampler_));
+    frame.sceneSet->upload();
 }
 
-rhi::RID FrameGpuManager::sceneBindGroup(std::uint32_t frameIndex) const {
-    if (frameIndex >= frames_.size())
-        return {};
-    return frames_[frameIndex].sceneBindGroup;
+const Ref<UniformSet>& FrameGpuManager::sceneUniformSet(std::uint32_t frameIndex) const {
+    static const Ref<UniformSet> kEmpty;
+    return frameIndex < frames_.size() ? frames_[frameIndex].sceneSet : kEmpty;
 }
 
 void FrameGpuManager::beginFrame(std::uint32_t frameIndex) {
@@ -193,10 +158,7 @@ void FrameGpuManager::shutdown() {
     if (!initialized())
         return;
     for (FrameResources& frame : frames_) {
-        if (frame.sceneBindGroup)
-            device_->bind_group_destroy(frame.sceneBindGroup);
-        if (frame.sceneBuffer)
-            device_->buffer_destroy(frame.sceneBuffer);
+        frame.sceneSet.reset(); // frees the descriptor set + the scene UBO's buffer
         if (frame.objectBuffer)
             device_->buffer_destroy(frame.objectBuffer);
         if (frame.instanceTable)
@@ -205,15 +167,13 @@ void FrameGpuManager::shutdown() {
     }
     if (placeholderTexture_)
         device_->texture_destroy(placeholderTexture_);
-    if (sceneLayout_)
-        device_->bind_group_layout_destroy(sceneLayout_);
-    if (materialLayout_)
-        device_->bind_group_layout_destroy(materialLayout_);
+    // The set-0 layout instance lives in the UniformSetLayout cache; it is torn down by
+    // UniformSetLayout::clearCache() during engine shutdown (before the device is destroyed).
+    sceneLayout_.reset();
+    sceneUboLayout_.reset();
     placeholderView_ = {};
     placeholderTexture_ = {};
     shadowSampler_ = {};
-    sceneLayout_ = {};
-    materialLayout_ = {};
     device_ = nullptr;
 }
 

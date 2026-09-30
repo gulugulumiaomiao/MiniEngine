@@ -1,6 +1,7 @@
 #pragma once
 
 #include "render/material/Material.h"
+#include "render/uniform/UniformSet.h"
 #include "rhi/api/ResourceDesc.h"
 #include "render/base/RenderHandle.h"
 
@@ -44,7 +45,7 @@ struct DrawItem {
     rhi::RID pipeline;
     Ref<Material> material;
     RID materialKey;
-    rhi::RID materialBindGroup;
+    Ref<UniformSet> materialSet;
     rhi::RID fallbackPipeline;
     Ref<Material> fallbackMaterial;
     struct VertexBuffer {

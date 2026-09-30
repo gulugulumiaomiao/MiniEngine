@@ -1,9 +1,11 @@
 #include "render/gpu/pipeline/GraphicsPipelineStorage.h"
 
-#include "core/math/hash.h"
+#include "core/base/BuildConfig.h"
 #include "core/logging/Log.h"
+#include "core/math/hash.h"
 #include "render/gpu/pipeline/GraphicsPipelineStorageFactory.h"
-#include "render/gpu/shader/ShaderStorage.h"
+#include "render/uniform/PipelineLayout.h"
+#include "rhi/api/Device.h"
 
 #include <algorithm>
 #include <ranges>
@@ -29,34 +31,65 @@ rhi::VertexFormat toRhi(VertexFormat format) {
 GraphicsPipelineStorage::GraphicsPipelineStorage() = default;
 GraphicsPipelineStorage::~GraphicsPipelineStorage() = default;
 
-bool GraphicsPipelineStorage::initialize(rhi::IDevice& device,
-                                         rhi::RID sceneLayout,
-                                         rhi::RID materialLayout,
-                                         rhi::RID globalLayout) {
+bool GraphicsPipelineStorage::initialize(rhi::IDevice& device) {
     if (initialized()) {
         Log::error("GraphicsPipelineStorage", "Manager is already initialized");
         return false;
     }
-    sceneLayout_ = sceneLayout;
-    materialLayout_ = materialLayout;
-    globalLayout_ = globalLayout;
+    ShaderCompilePipelineConfig config;
+#if defined(MINI_PUBLISH)
+    config.mode = ShaderCompileMode::PackagedRuntime;
+#else
+    config.mode = ShaderCompileMode::DevelopmentRuntime;
+#endif
+    config.preprocessorConfig.includeSearchPaths = {VirtualPath{"assets://shaders/include"}};
+    config.compilerOptions.compilerVersion = MINI_GLSLC_EXECUTABLE;
+#if !defined(NDEBUG)
+    config.compilerOptions.optimization = ShaderOptimization::Debug;
+#else
+    config.compilerOptions.optimization = ShaderOptimization::Release;
+#endif
+    compilePipeline_ = std::make_unique<ShaderCompilePipeline>(std::move(config));
+    device_ = &device;
     factory_ = std::make_unique<GraphicsPipelineStorageFactory>(device);
     lastShaderPollSerial_ = ~std::uint64_t{};
     return true;
 }
 
+Ref<ShaderProgram> GraphicsPipelineStorage::getOrCreateProgram(const Shader& shader,
+                                                               const ShaderPass& pass,
+                                                               const ShaderVariantKey& variant) {
+    if (!initialized())
+        return {};
+    const RID programHandle = compilePipeline_->getOrCreate(shader, pass, variant);
+    if (!programHandle) {
+        Log::error("GraphicsPipelineStorage",
+                   "Shader program is unavailable for pass: %s",
+                   pass.name().c_str());
+        return {};
+    }
+    const CompiledProgram& compiled = compilePipeline_->resolveProgram(programHandle);
+    if (const auto found = programs_.find(compiled.id); found != programs_.end())
+        return found->second;
+    const CompiledShader& vertex = compilePipeline_->resolveCompiled(compiled.vertex);
+    const CompiledShader& fragment = compilePipeline_->resolveCompiled(compiled.fragment);
+    Ref<ShaderProgram> program = ShaderProgram::create(*device_, vertex, fragment, compiled.id);
+    if (!program)
+        return {};
+    programs_.emplace(compiled.id, program);
+    return program;
+}
+
 GraphicsPipelineStorageCacheKey
-GraphicsPipelineStorage::makeCacheKey(const CompiledProgram& program,
+GraphicsPipelineStorage::makeCacheKey(const ShaderProgram& program,
                                       std::uint64_t vertexLayoutHash,
                                       rhi::PixelFormat colorFormat,
                                       rhi::PixelFormat depthFormat) {
-    ShaderHash key = program.id;
-    hashAppend(key, program.layout.id);
+    ShaderHash key = program.id();
     hashAppend(key, colorFormat);
     hashAppend(key, depthFormat);
-    // Cull/frontFace/depthTest/depthWrite/blend/colorMask/topology/fill are dynamic states
-    // and do not contribute to the pipeline key.
-    // The vertex layout hash is computed on demand from the Mesh's retained VertexLayout.
+    // Cull/frontFace/depthTest/depthWrite/blend/colorMask/topology/fill are dynamic states and do
+    // not contribute to the pipeline key. The vertex layout hash comes from the Mesh's layout.
     hashAppend(key, vertexLayoutHash);
     return key;
 }
@@ -65,18 +98,15 @@ rhi::GraphicsPipelineDesc
 GraphicsPipelineStorage::makeDescription(const VertexLayout& vertexLayout,
                                          rhi::PixelFormat colorFormat,
                                          rhi::PixelFormat depthFormat,
-                                         rhi::RID vertexShader,
-                                         std::string vertexEntry,
-                                         rhi::RID fragmentShader,
-                                         std::string fragmentEntry) const {
+                                         const ShaderProgram& program) const {
     rhi::GraphicsPipelineDesc desc;
-    desc.vertexShader = vertexShader;
-    desc.vertexEntry = std::move(vertexEntry);
-    desc.fragmentShader = fragmentShader;
-    desc.fragmentEntry = std::move(fragmentEntry);
-    desc.bindGroupLayouts = {sceneLayout_, materialLayout_, globalLayout_};
-    // Depth-only passes (ShadowCaster) pass Undefined as the color format and render without
-    // any color attachment; toVulkan(Undefined) is not a valid attachment format.
+    desc.vertexShader = program.vertexShader();
+    desc.vertexEntry = program.vertexEntry();
+    desc.fragmentShader = program.fragmentShader();
+    desc.fragmentEntry = program.fragmentEntry();
+    desc.pipelineLayout = program.pipelineLayout()->rid();
+    // Depth-only passes (ShadowCaster) pass Undefined as the color format and render without any
+    // color attachment; toVulkan(Undefined) is not a valid attachment format.
     if (colorFormat != rhi::PixelFormat::Undefined)
         desc.colorFormats = {colorFormat};
     desc.depthFormat = depthFormat;
@@ -89,49 +119,26 @@ GraphicsPipelineStorage::makeDescription(const VertexLayout& vertexLayout,
                                           ? rhi::VertexInputRate::Vertex
                                           : rhi::VertexInputRate::Instance});
     }
-    // cull/frontFace/depth/blend/colorMask/topology/fill are dynamic and are set by the
-    // command buffer before each batch. Use benign defaults for pipeline creation.
     return desc;
 }
 
-rhi::RID GraphicsPipelineStorage::resolve(const Shader& shader,
-                                          const ShaderPass& pass,
-                                          const ShaderVariantKey& variant,
+rhi::RID GraphicsPipelineStorage::resolve(const ShaderProgram& program,
                                           const Mesh& mesh,
                                           rhi::PixelFormat colorFormat,
                                           rhi::PixelFormat depthFormat) {
     if (!initialized())
         return {};
-    const RID programHandle = SHADER_STORAGE.getOrCreateProgram(shader, pass, variant);
-    if (!programHandle) {
-        Log::error("GraphicsPipelineStorage",
-                   "Shader program is unavailable for pass: %s",
-                   pass.name().c_str());
-        return {};
-    }
-
-    const CompiledProgram& program = SHADER_STORAGE.resolveProgram(programHandle);
     const GraphicsPipelineStorageCacheKey key =
         makeCacheKey(program, mesh.vertexLayout().hash(), colorFormat, depthFormat);
     if (const GraphicsPipelineStorageEntry* cached = cache_.find(key))
         return cached->pipeline;
 
-    const CompiledShader& vertex = SHADER_STORAGE.resolveCompiled(program.vertex);
-    const CompiledShader& fragment = SHADER_STORAGE.resolveCompiled(program.fragment);
     GraphicsPipelineStorageEntry created;
-    if (!factory_->create(makeDescription(mesh.vertexLayout(),
-                                          colorFormat,
-                                          depthFormat,
-                                          SHADER_STORAGE.resolve(program.vertex),
-                                          vertex.entryPoint,
-                                          SHADER_STORAGE.resolve(program.fragment),
-                                          fragment.entryPoint),
-                          created)) {
+    if (!factory_->create(
+            makeDescription(mesh.vertexLayout(), colorFormat, depthFormat, program), created)) {
         return {};
     }
-    created.program = program.id;
-    created.vertex = program.vertexId;
-    created.fragment = program.fragmentId;
+    created.program = program.id();
     auto stored = cache_.store(key, std::move(created));
     if (stored.replaced)
         factory_->release(*stored.replaced);
@@ -143,23 +150,17 @@ void GraphicsPipelineStorage::refreshShaders(std::uint64_t frameSerial,
     if (!initialized() || lastShaderPollSerial_ == frameSerial)
         return;
     lastShaderPollSerial_ = frameSerial;
-    const std::vector<CompiledShaderId> changed =
-        SHADER_STORAGE.invalidateChanged(retireSerial);
+    const std::vector<CompiledShaderId> changed = compilePipeline_->invalidateChanged();
     if (changed.empty())
         return;
-    invalidate(changed, retireSerial);
-    Log::info("GraphicsPipelineStorage", "Reloaded %zu changed shader stages", changed.size());
-}
-
-void GraphicsPipelineStorage::invalidate(std::span<const CompiledShaderId> shaders,
-                                         std::uint64_t retireSerial) {
-    auto pipelines = cache_.extractIf(
-        [&](GraphicsPipelineStorageCacheKey, const GraphicsPipelineStorageEntry& resource) {
-            return std::ranges::find(shaders, resource.vertex) != shaders.end() ||
-                   std::ranges::find(shaders, resource.fragment) != shaders.end();
-        });
-    for (auto& entry : pipelines)
+    // Coarse invalidation: any shader change retires every pipeline and program; they are rebuilt
+    // on demand. Fine-grained matching is unnecessary because reloads are rare.
+    for (auto& entry : cache_.extractAll())
         retired_.push_back({std::move(entry.second), retireSerial});
+    for (auto& [id, program] : programs_)
+        retiredPrograms_.push_back({std::move(program), retireSerial});
+    programs_.clear();
+    Log::info("GraphicsPipelineStorage", "Reloaded %zu changed shader stages", changed.size());
 }
 
 void GraphicsPipelineStorage::collect(std::uint64_t completedSerial) {
@@ -171,7 +172,9 @@ void GraphicsPipelineStorage::collect(std::uint64_t completedSerial) {
         factory_->release(retired.resource);
         return true;
     });
-    SHADER_STORAGE.collect(completedSerial);
+    std::erase_if(retiredPrograms_, [completedSerial](const RetiredProgram& retired) {
+        return retired.serial <= completedSerial;
+    });
 }
 
 void GraphicsPipelineStorage::clear() {
@@ -188,10 +191,12 @@ void GraphicsPipelineStorage::shutdown() {
     if (!initialized())
         return;
     clear();
+    retiredPrograms_.clear();
+    programs_.clear();
     factory_.reset();
-    sceneLayout_ = {};
-    materialLayout_ = {};
-    globalLayout_ = {};
+    compilePipeline_->clear();
+    compilePipeline_.reset();
+    device_ = nullptr;
     lastShaderPollSerial_ = ~std::uint64_t{};
 }
 

@@ -65,7 +65,7 @@ void DepthOnlyPass::execute(RenderContext& context,
                                               {0, 0, context.sceneWidth(), context.sceneHeight()});
                               drawFilteredItems(context.frameIndex(),
                                                 items,
-                                                FRAME_GPU_MANAGER.sceneBindGroup(context.frameIndex()),
+                                                FRAME_GPU_MANAGER.sceneUniformSet(context.frameIndex()),
                                                 GLOBAL_UNIFORM_GPU_MANAGER.resolve(context.frameIndex()),
                                                 commandBuffer);
                           });

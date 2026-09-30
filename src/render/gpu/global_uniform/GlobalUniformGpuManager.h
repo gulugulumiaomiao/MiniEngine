@@ -1,10 +1,13 @@
 #pragma once
 
+#include "core/base/Ref.h"
 #include "core/base/Singleton.h"
+#include "render/uniform/Ubo.h"
+#include "render/uniform/UniformSet.h"
+#include "render/uniform/UniformSetLayout.h"
 #include "rhi/api/ResourceDesc.h"
 
 #include <cstdint>
-#include <memory>
 #include <vector>
 
 namespace engine {
@@ -15,10 +18,12 @@ class IDevice;
 
 // GPU-side manager for the shared global uniform descriptor set (set 2).
 //
-// The bind group layout is fixed: binding 0 is a uniform buffer and bindings 1..N
-// are sampled textures. The actual uniform buffer size and texture bindings are
-// updated each frame from GlobalUniformManager. Double buffering keeps the in-flight
-// frame from observing CPU writes intended for the next frame.
+// The set-2 layout follows the reflected convention: an optional uniform block at binding 0 (only
+// when there are non-texture globals) plus combined-image-samplers at bindings 1..M, where M is the
+// current global-texture count. It is built via UniformSetLayout::acquire so it dedups to the same
+// instance programs reflect for set 2. When there are no globals at all the manager hands back an
+// empty set and the renderer skips binding set 2 (matching the generator, which emits no set-2
+// declarations when there are no globals).
 class GlobalUniformGpuManager final : public Singleton<GlobalUniformGpuManager> {
 public:
     static constexpr std::uint32_t kMaxGlobalTextures = 8;
@@ -29,8 +34,7 @@ public:
     void beginFrame(std::uint32_t frameIndex);
     void shutdown();
 
-    [[nodiscard]] rhi::RID resolve(std::uint32_t frameIndex) const;
-    [[nodiscard]] rhi::RID bindGroupLayout() const { return layout_; }
+    [[nodiscard]] const Ref<UniformSet>& resolve(std::uint32_t frameIndex) const;
     [[nodiscard]] bool initialized() const { return device_ != nullptr; }
 
 private:
@@ -38,19 +42,21 @@ private:
     GlobalUniformGpuManager();
 
     struct FrameResources {
-        rhi::RID uniformBuffer;
-        rhi::RID bindGroup;
-        std::uint64_t uniformVersion{};
-        std::uint64_t uniformSize{};
-        std::vector<rhi::TextureBinding> textureBindings;
+        Ref<UniformSet> set;
     };
 
+    // (Re)builds the shared set-2 layout + UBO layout when the global property set changes; resets
+    // the per-frame sets so they are rebuilt against the new layout.
+    void ensureLayout();
     void updateFrame(std::uint32_t frameIndex);
 
     rhi::IDevice* device_{};
-    rhi::RID layout_;
+    Ref<UniformSetLayout> layout_;
+    Ref<UboLayout> uboLayout_;
+    bool layoutHasUbo_{};
+    std::uint32_t layoutTextureCount_{};
+    std::uint64_t layoutUboSize_{};
     std::vector<FrameResources> frames_;
-    std::uint64_t lastLayoutVersion_{};
 };
 
 } // namespace engine

@@ -1,7 +1,11 @@
 #pragma once
 
+#include "core/base/Ref.h"
 #include "core/base/Singleton.h"
 #include "render/renderer/DrawList.h"
+#include "render/uniform/Ubo.h"
+#include "render/uniform/UniformSet.h"
+#include "render/uniform/UniformSetLayout.h"
 
 #include <array>
 #include <cstdint>
@@ -13,6 +17,14 @@ namespace rhi {
 class IDevice;
 }
 
+// Owns the per-frame scene resources: the scene uniform block, the object-transform SSBO, the
+// per-frame instance table and the shared set-0 UniformSet that binds them (plus the shadow map).
+//
+// The set-0 layout is built from the fixed engine convention {0: uniform, 1: object SSBO,
+// 2: instance SSBO, 3: shadow combined-image-sampler} via UniformSetLayout::acquire. Because acquire
+// dedups on the (binding, type) ordered hash, this resolves to the very same layout instance a
+// compiled program reflects for set 0 (the user shaders declare this convention), so the shared
+// scene set is compatible with every program's pipeline layout.
 class FrameGpuManager final : public Singleton<FrameGpuManager> {
 public:
     static constexpr std::uint32_t kFramesInFlight = 2;
@@ -23,9 +35,9 @@ public:
     void upload(std::uint32_t frameIndex, const DrawList& drawList);
     void shutdown();
 
-    // Binds the frame's shadow map view to scene binding 3; rebuilds only on view change.
+    // Rebinds the frame's shadow map view (scene binding 3); no-op when unchanged.
     void bindShadowMap(std::uint32_t frameIndex, rhi::RID view);
-    [[nodiscard]] rhi::RID sceneBindGroup(std::uint32_t frameIndex) const;
+    [[nodiscard]] const Ref<UniformSet>& sceneUniformSet(std::uint32_t frameIndex) const;
 
     // Per-frame instance table management. Batches draw multiple instances per
     // drawIndexed call; the table maps each instance slot to an object row.
@@ -37,16 +49,13 @@ public:
                               std::uint32_t baseSlot,
                               std::span<const std::uint32_t> objectRows);
 
-    [[nodiscard]] rhi::RID sceneLayout() const { return sceneLayout_; }
-    [[nodiscard]] rhi::RID materialLayout() const { return materialLayout_; }
     [[nodiscard]] bool initialized() const { return device_ != nullptr; }
 
 private:
     struct FrameResources {
-        rhi::RID sceneBuffer;
+        Ref<UniformSet> sceneSet; // set 0: scene UBO(0) + object SSBO(1) + instance SSBO(2) + shadow(3)
         rhi::RID objectBuffer;
         rhi::RID instanceTable;
-        rhi::RID sceneBindGroup;
         rhi::RID shadowView;
         std::uint32_t instancesUsed{};
     };
@@ -55,8 +64,8 @@ private:
     FrameGpuManager() = default;
 
     rhi::IDevice* device_{};
-    rhi::RID sceneLayout_;
-    rhi::RID materialLayout_;
+    Ref<UniformSetLayout> sceneLayout_; // shared set-0 layout (deduped against reflected set 0)
+    Ref<UboLayout> sceneUboLayout_;     // synthetic scene block layout (sizeof(SceneDrawData))
     rhi::RID shadowSampler_;
     rhi::RID placeholderTexture_;
     rhi::RID placeholderView_;

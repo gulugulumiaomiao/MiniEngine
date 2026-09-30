@@ -57,7 +57,7 @@ DrawListBuilder::resolveMaterialPass(const RenderContext& context,
                                                                  renderPipeline_,
                                                                  colorFormat,
                                                                  depthFormat);
-    return {materialRef, state.pass, state.pipeline};
+    return {materialRef, state.pass, state.pipeline, state.materialSet};
 }
 
 DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& context) {
@@ -158,7 +158,7 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
                 if (renderPhase == RenderPhase::Forward) {
                     fallback = resolveMaterialPass(
                         context, errorMaterial, *meshInstance, renderPhase);
-                    if (!resolved) {
+                    if (!resolved || !resolved.materialSet) {
                         Log::error("DrawListBuilder",
                                    "Using Error Material for an unavailable material");
                         resolved = fallback;
@@ -174,6 +174,7 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
                     .pipeline = resolved.pipeline,
                     .material = resolved.material,
                     .materialKey = resolved.material->resourceId(),
+                    .materialSet = resolved.materialSet,
                     .fallbackPipeline = fallback.pipeline,
                     .fallbackMaterial = fallback.material,
                     .vertexBuffers = drawVertexBuffers,

@@ -364,6 +364,22 @@ void VulkanCommandBuffer::bindIndexBuffer(RID buffer,
                                                        : VK_INDEX_TYPE_UINT32);
 }
 
+void VulkanCommandBuffer::bindDescriptorSet(std::uint32_t set, RID descriptorSet) {
+    ensureRecording("bindDescriptorSet");
+    if (boundPipelineLayout_ == VK_NULL_HANDLE) {
+        Log::fatal("VulkanCommandBuffer", "bindDescriptorSet requires a bound graphics pipeline");
+    }
+    const VkDescriptorSet descriptor = device_.resolveDescriptorSet(descriptorSet);
+    vkCmdBindDescriptorSets(commandBuffer_,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            boundPipelineLayout_,
+                            set,
+                            1,
+                            &descriptor,
+                            0,
+                            nullptr);
+}
+
 void VulkanCommandBuffer::bindGroup(std::uint32_t set,
                                     RID group,
                                     std::span<const std::uint32_t> dynamicOffsets) {

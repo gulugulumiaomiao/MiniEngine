@@ -38,6 +38,9 @@ void setFillMode(RID cmd, FillMode mode);
 void bindPipeline(RID cmd, RID pipeline);
 void bindVertexBuffer(RID cmd, std::uint32_t slot, RID buffer, std::uint64_t offset = 0);
 void bindIndexBuffer(RID cmd, RID buffer, std::uint64_t offset, IndexFormat format);
+void bindDescriptorSet(RID cmd, std::uint32_t set, RID descriptorSet);
+// Legacy bind-group path, still used by the editor ImGui overlay (which allocates its descriptors
+// through bind_group_create). Removed together with the BindGroup family once ImGui migrates.
 void bindGroup(RID cmd,
                std::uint32_t set,
                RID group,

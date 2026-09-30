@@ -26,10 +26,8 @@ public:
     [[nodiscard]] const std::vector<std::unique_ptr<IRenderPass>>& passes() const { return passes_; }
 
 private:
-    void resolveMaterialBindGroups(DrawList& drawList, std::uint32_t frameIndex);
-
     // Filled by ShadowCasterPass during recording; consumed by ForwardPass and by render()
-    // when binding the resolved shadow map view into the scene bind group.
+    // when binding the resolved shadow map view into the scene uniform set.
     ShadowCasterOutput shadowOutput_;
     std::vector<std::unique_ptr<IRenderPass>> passes_;
 };

@@ -46,6 +46,10 @@ public:
     // dictated by the UniformSetLayout-declared descriptor type; a mismatch returns false. Marks the
     // set dirty (descriptors are rewritten on the next upload) on success.
     [[nodiscard]] bool setResource(std::string_view name, Ref<UniformResource> resource);
+    // Positional variant (binding slot index). For owners that address slots by index rather than
+    // by reflected name — robust against layout dedup returning an instance whose binding names
+    // came from a different acquirer.
+    [[nodiscard]] bool setResourceAt(std::uint32_t binding, Ref<UniformResource> resource);
     // Rewrites descriptors when dirty, then uploads every UBO's buffer (each Ubo tracks its own
     // dirty flag, so UBO value changes need no descriptor rewrite — the buffer RID is stable).
     void upload();
@@ -53,6 +57,9 @@ public:
     [[nodiscard]] rhi::RID descriptorSet() const { return descriptorSet_; }
     [[nodiscard]] const Ref<UniformSetLayout>& layout() const { return layout_; }
     [[nodiscard]] const std::vector<Ref<UniformResource>>& resources() const { return resources_; }
+    // The Ubo occupying a binding slot (by position in layout()->bindings()), or nullptr when the
+    // slot is empty or is not a uniform buffer. Lets an owner bulk-write a pre-packed block blob.
+    [[nodiscard]] Ubo* uboAt(std::uint32_t binding) const;
 
 private:
     rhi::IDevice* device_{};

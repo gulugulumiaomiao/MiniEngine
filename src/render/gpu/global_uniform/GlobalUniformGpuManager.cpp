@@ -6,7 +6,9 @@
 #include "rhi/api/Device.h"
 
 #include <algorithm>
-#include <array>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace engine {
 
@@ -19,21 +21,56 @@ bool GlobalUniformGpuManager::initialize(rhi::IDevice& device, std::uint32_t fra
         return false;
     }
     device_ = &device;
-
-    constexpr rhi::ShaderVisibility allGraphics =
-        rhi::ShaderVisibility::Vertex | rhi::ShaderVisibility::Fragment;
-    std::array<rhi::BindGroupLayoutEntry, kMaxGlobalTextures + 1> entries{};
-    entries[0] = {0, rhi::BindingType::UniformBuffer, allGraphics};
-    for (std::uint32_t binding = 1; binding < entries.size(); ++binding)
-        entries[binding] = {binding, rhi::BindingType::SampledTexture, allGraphics};
-    layout_ = device_->bind_group_layout_create({entries, "Global uniform bind group layout"});
-    if (!layout_) {
-        shutdown();
-        return false;
-    }
-
     frames_.resize(frameCount);
     return true;
+}
+
+void GlobalUniformGpuManager::ensureLayout() {
+    const GlobalUniformManager& globals = GLOBAL_UNIFORM_MANAGER;
+    const std::uint32_t textureCount = static_cast<std::uint32_t>(
+        std::min<std::size_t>(globals.textureProperties().size(), kMaxGlobalTextures));
+    const bool hasUbo = !globals.uniformBlockLayout().members.empty();
+    const std::uint64_t uboSize = globals.uniformBytes().size();
+
+    if (!hasUbo && textureCount == 0) {
+        layout_.reset();
+        uboLayout_.reset();
+        layoutHasUbo_ = false;
+        layoutTextureCount_ = 0;
+        layoutUboSize_ = 0;
+        for (FrameResources& frame : frames_)
+            frame.set.reset();
+        return;
+    }
+    if (layout_ && layoutHasUbo_ == hasUbo && layoutTextureCount_ == textureCount &&
+        layoutUboSize_ == uboSize) {
+        return; // unchanged
+    }
+
+    // Mirrors ShaderGenerator::generateGlobalDeclarations: an optional UBO at binding 0 then
+    // combined-image-samplers at 1..M. acquire() dedups against the reflected set-2 layout.
+    std::vector<ResourceBinding> bindings;
+    bindings.reserve(textureCount + 1);
+    if (hasUbo)
+        bindings.push_back({0, "Global", rhi::ResourceType::UniformBuffer});
+    for (std::uint32_t i = 0; i < textureCount; ++i)
+        bindings.push_back(
+            {i + 1, "globalTexture" + std::to_string(i), rhi::ResourceType::CombinedImageSampler});
+    layout_ = UniformSetLayout::acquire(*device_, bindings);
+
+    if (hasUbo) {
+        uboLayout_ = makeRef<UboLayout>();
+        uboLayout_->addUniform(UboUniform{
+            "GlobalData", UboUniformType::Float, 0, static_cast<std::uint32_t>(uboSize)});
+        uboLayout_->finish();
+    } else {
+        uboLayout_.reset();
+    }
+    layoutHasUbo_ = hasUbo;
+    layoutTextureCount_ = textureCount;
+    layoutUboSize_ = uboSize;
+    for (FrameResources& frame : frames_)
+        frame.set.reset(); // rebuild against the new layout
 }
 
 void GlobalUniformGpuManager::beginFrame(std::uint32_t frameIndex) {
@@ -42,115 +79,60 @@ void GlobalUniformGpuManager::beginFrame(std::uint32_t frameIndex) {
     updateFrame(frameIndex);
 }
 
-rhi::RID GlobalUniformGpuManager::resolve(std::uint32_t frameIndex) const {
-    if (frameIndex >= frames_.size())
-        return {};
-    return frames_[frameIndex].bindGroup;
+const Ref<UniformSet>& GlobalUniformGpuManager::resolve(std::uint32_t frameIndex) const {
+    static const Ref<UniformSet> kEmpty;
+    return frameIndex < frames_.size() ? frames_[frameIndex].set : kEmpty;
 }
 
 void GlobalUniformGpuManager::updateFrame(std::uint32_t frameIndex) {
+    ensureLayout();
     FrameResources& frame = frames_[frameIndex];
-    const GlobalUniformManager& globals = GLOBAL_UNIFORM_MANAGER;
-    const std::uint64_t byteSize = std::max<std::uint64_t>(16, globals.uniformBytes().size());
+    if (!layout_) {
+        frame.set.reset();
+        return;
+    }
+    if (!frame.set) {
+        std::vector<Ref<UboLayout>> uboLayouts;
+        if (uboLayout_)
+            uboLayouts.push_back(uboLayout_);
+        frame.set = makeRef<UniformSet>(*device_, layout_, std::move(uboLayouts));
+    }
 
-    const auto resolveTextureBinding = [](std::string_view reference) {
-        const Ref<Texture> texture = resolveTextureReference(reference);
-        return texture ? texture->binding() : rhi::TextureBinding{};
-    };
-    std::vector<rhi::TextureBinding> resolvedTextures;
-    resolvedTextures.reserve(kMaxGlobalTextures);
+    const GlobalUniformManager& globals = GLOBAL_UNIFORM_MANAGER;
+    if (layoutHasUbo_) {
+        if (Ubo* ubo = frame.set->uboAt(0))
+            ubo->setRawBytes(globals.uniformBytes());
+    }
+    // Textures occupy positions [hasUbo ? 1 : 0] .. in the sorted-binding resource array.
+    std::uint32_t pos = layoutHasUbo_ ? 1U : 0U;
+    std::uint32_t filled = 0;
     for (const ShaderPropertyDesc& property : globals.textureProperties()) {
-        if (resolvedTextures.size() >= kMaxGlobalTextures)
+        if (filled >= layoutTextureCount_)
             break;
         const std::string* reference = globals.findTexture(property.name);
-        rhi::TextureBinding texture = resolveTextureBinding(reference ? *reference : "");
-        if (!texture.view || !texture.sampler) {
-            Log::error("GlobalUniformGpuManager",
-                       "Global texture is unavailable: %s",
-                       property.name.c_str());
-            texture = resolveTextureBinding("");
-        }
-        resolvedTextures.push_back(texture);
+        Ref<Texture> texture = resolveTextureReference(reference ? *reference : "");
+        if (!texture)
+            texture = resolveTextureReference("");
+        if (texture)
+            frame.set->setResourceAt(pos, texture);
+        ++pos;
+        ++filled;
     }
-    const rhi::TextureBinding defaultTexture = resolveTextureBinding("");
-    while (resolvedTextures.size() < kMaxGlobalTextures)
-        resolvedTextures.push_back(defaultTexture);
-
-    const bool layoutChanged = lastLayoutVersion_ != globals.version();
-    const bool textureBindingsChanged = frame.textureBindings != resolvedTextures;
-    const bool bufferTooSmall = frame.uniformSize < byteSize;
-    const bool needsRebuild = layoutChanged || textureBindingsChanged || bufferTooSmall ||
-                              !frame.uniformBuffer || !frame.bindGroup;
-
-    if (needsRebuild) {
-        if (frame.bindGroup) {
-            device_->bind_group_destroy(frame.bindGroup);
-            frame.bindGroup = {};
-        }
-        if (bufferTooSmall && frame.uniformBuffer) {
-            device_->buffer_destroy(frame.uniformBuffer);
-            frame.uniformBuffer = {};
-            frame.uniformSize = 0;
-        }
-        if (!frame.uniformBuffer) {
-            frame.uniformBuffer = device_->buffer_create({
-                .size = byteSize,
-                .usage = rhi::BufferUsage::Uniform,
-                .memoryUsage = rhi::MemoryUsage::Upload,
-                .debugName = "Global uniforms",
-            });
-            frame.uniformSize = byteSize;
-        }
-    }
-
-    if (frame.uniformVersion != globals.version() || needsRebuild) {
-        if (!globals.uniformBytes().empty())
-            device_->buffer_upload(frame.uniformBuffer, globals.uniformBytes());
-        frame.uniformVersion = globals.version();
-    }
-
-    if (needsRebuild) {
-        std::vector<rhi::BindGroupEntry> bindings;
-        bindings.reserve(kMaxGlobalTextures + 1);
-        bindings.push_back({
-            .binding = 0,
-            .type = rhi::BindingType::UniformBuffer,
-            .buffer = frame.uniformBuffer,
-            .size = byteSize,
-        });
-
-        std::uint32_t binding = 1;
-        for (const rhi::TextureBinding& resolved : resolvedTextures) {
-            bindings.push_back({
-                .binding = binding++,
-                .type = rhi::BindingType::SampledTexture,
-                .textureView = resolved.view,
-                .sampler = resolved.sampler,
-            });
-        }
-
-        frame.bindGroup =
-            device_->bind_group_create({layout_, bindings, "Global uniform bind group"});
-        frame.textureBindings = std::move(resolvedTextures);
-        lastLayoutVersion_ = globals.version();
-    }
+    frame.set->upload();
 }
 
 void GlobalUniformGpuManager::shutdown() {
     if (!initialized())
         return;
-    for (FrameResources& frame : frames_) {
-        if (frame.bindGroup)
-            device_->bind_group_destroy(frame.bindGroup);
-        if (frame.uniformBuffer)
-            device_->buffer_destroy(frame.uniformBuffer);
-        frame = {};
-    }
-    if (layout_)
-        device_->bind_group_layout_destroy(layout_);
-    layout_ = {};
+    for (FrameResources& frame : frames_)
+        frame.set.reset();
+    frames_.clear();
+    layout_.reset();
+    uboLayout_.reset();
+    layoutHasUbo_ = false;
+    layoutTextureCount_ = 0;
+    layoutUboSize_ = 0;
     device_ = nullptr;
-    lastLayoutVersion_ = 0;
 }
 
 } // namespace engine

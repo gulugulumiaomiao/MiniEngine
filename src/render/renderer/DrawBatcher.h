@@ -13,7 +13,7 @@ namespace engine {
 // single drawIndexed invocation.
 struct DrawBatch {
     rhi::RID pipeline;
-    rhi::RID materialBindGroup;
+    Ref<UniformSet> materialSet;
     const ShaderPass* shaderPass{};
     std::vector<DrawItem::VertexBuffer> vertexBuffers;
     rhi::RID indexBuffer;

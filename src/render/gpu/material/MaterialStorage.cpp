@@ -2,11 +2,12 @@
 
 #include "core/logging/Log.h"
 #include "render/gpu/common/GpuResourceKey.h"
-#include "render/gpu/material/MaterialStorageFactory.h"
 #include "render/gpu/pipeline/GraphicsPipelineStorage.h"
 #include "render/material/MaterialManager.h"
-#include "render/texture/Sampler.h"
 #include "render/shader/Shader.h"
+#include "render/shader/ShaderProgram.h"
+#include "render/texture/Sampler.h"
+#include "render/uniform/Ubo.h"
 #include "rhi/api/Device.h"
 
 #include <span>
@@ -18,9 +19,7 @@ namespace engine {
 MaterialStorage::MaterialStorage() = default;
 MaterialStorage::~MaterialStorage() = default;
 
-bool MaterialStorage::initialize(rhi::IDevice& device,
-                                 rhi::RID materialLayout,
-                                 std::uint32_t frameCount) {
+bool MaterialStorage::initialize(rhi::IDevice& device, std::uint32_t frameCount) {
     if (initialized()) {
         Log::error("MaterialStorage", "Manager is already initialized");
         return false;
@@ -30,7 +29,6 @@ bool MaterialStorage::initialize(rhi::IDevice& device,
         return false;
     }
     device_ = &device;
-    factory_ = std::make_unique<MaterialStorageFactory>(device, materialLayout);
     MATERIAL_RESOURCE_MANAGER.setDestroyObserver([this](RID handle) { invalidate(handle); });
     return true;
 }
@@ -67,46 +65,65 @@ MaterialPassState MaterialStorage::resolvePass(const Material& material,
     if (!pass)
         return {};
     const ShaderVariantKey variant = pass->variantKey(material.keywords);
-    return {pass,
-            GRAPHICS_PIPELINE_STORAGE.resolve(
-                material.shader(), *pass, variant, mesh, colorFormat, depthFormat)};
+    const Ref<ShaderProgram> program =
+        GRAPHICS_PIPELINE_STORAGE.getOrCreateProgram(material.shader(), *pass, variant);
+    if (!program)
+        return {};
+    const rhi::RID pipeline =
+        GRAPHICS_PIPELINE_STORAGE.resolve(*program, mesh, colorFormat, depthFormat);
+    if (!pipeline)
+        return {};
+    return {pass, pipeline, resolve(material, *program)};
 }
 
-rhi::RID MaterialStorage::resolve(Material& material) {
-    if (!initialized() || !material.resourceId())
+Ref<UniformSet> MaterialStorage::resolve(const Material& material, const ShaderProgram& program) {
+    // A pass whose SPIR-V stripped the material block (e.g. depth-only shadow caster) has no set 1;
+    // such draws legitimately bind no material set.
+    if (!initialized() || !material.resourceId() || program.setCount() < 2)
         return {};
-    const RID handle = material.resourceId();
-
-    // Texture hot reload keeps the CPU RID stable while replacing its RHI view.
-    // Resolve the bindings before the cache fast path so a changed view invalidates the bind group.
+    const Ref<UniformSetLayout> setLayout = program.setLayout(1);
+    if (!setLayout)
+        return {};
     if (!collectTextureBindings(material))
         return {};
 
-    MaterialStorageCacheSlot slot = cache_.acquire(cacheKey(handle));
-    if (slot.cacheHit) {
-        MaterialStorageEntry& resource = *slot.resource;
-        // Fast path: both material data and the resolved TextureView+Sampler signature are stable.
-        if (!resource.pendingRelease && resource.bindGroup &&
-            resource.uniformVersion == material.version() &&
-            sameTextureBindings(resource.textureBindings, textureScratch_)) {
-            return resource.bindGroup;
-        }
+    const std::uint64_t key = cacheKey(material.resourceId());
+    MaterialStorageCacheSlot slot = cache_.acquire(key);
+    MaterialStorageEntry& entry = *slot.resource;
 
-        // Dirty path: only the uniform payload changed, keep the bind group.
-        if (!resource.pendingRelease && resource.bindGroup && resource.uniformBuffer &&
-            sameTextureBindings(resource.textureBindings, textureScratch_) &&
-            resource.boundSize >= material.uniformBytes().size()) {
-            return factory_->updateUniforms(material, resource) ? resource.bindGroup
-                                                                 : rhi::RID{};
-        }
-
-        // Full rebuild: textures or buffer geometry changed, or the slot was evicted.
-        return factory_->create({material, textureScratch_}, resource) ? resource.bindGroup
-                                                                        : rhi::RID{};
+    // Rebuild when the slot is fresh/evicted or the material's shader changed its set-1 layout.
+    if (entry.pendingRelease || !entry.materialSet || entry.setLayout.get() != setLayout.get()) {
+        entry.materialSet = makeRef<UniformSet>(*device_, setLayout, program.uboLayouts(1));
+        entry.setLayout = setLayout;
+        entry.uniformVersion = 0; // force the uniform write below
+        entry.textureBindings.clear();
+        entry.pendingRelease = false;
     }
 
-    return factory_->create({material, textureScratch_}, *slot.resource) ? slot.resource->bindGroup
-                                                                          : rhi::RID{};
+    if (entry.uniformVersion != material.version()) {
+        if (Ubo* ubo = entry.materialSet->uboAt(0))
+            ubo->setRawBytes(material.uniformBytes());
+        entry.uniformVersion = material.version();
+    }
+
+    if (!sameTextureBindings(entry.textureBindings, textureScratch_)) {
+        // Material textures occupy set-1 bindings 1..N in property-declaration order (binding 0 is
+        // the material uniform block). Positions match binding indices here (contiguous from 0).
+        std::uint32_t binding = 1;
+        for (const ShaderPropertyDesc& property : material.shader().properties()) {
+            if (property.type != ShaderPropertyType::Texture2D)
+                continue;
+            const Ref<Texture> texture = material.resolveTexture(property.name);
+            if (texture)
+                entry.materialSet->setResourceAt(binding, texture);
+            ++binding;
+        }
+        entry.textureBindings = textureScratch_;
+    }
+
+    entry.materialSet->upload();
+    entry.ownerKey = key;
+    return entry.materialSet;
 }
 
 bool MaterialStorage::collectTextureBindings(const Material& material) {
@@ -132,12 +149,12 @@ bool MaterialStorage::collectTextureBindings(const Material& material) {
 void MaterialStorage::invalidate(RID handle) {
     if (!initialized())
         return;
+    // Extracted entries hold Ref<UniformSet>; wait for the GPU then let them drop (freeing the
+    // descriptor set + material UBO automatically).
     std::vector<MaterialStorageEntry> resources = cache_.extract(cacheKey(handle));
     if (resources.empty())
         return;
     device_->waitIdle();
-    for (MaterialStorageEntry& resource : resources)
-        factory_->release(resource);
 }
 
 void MaterialStorage::beginFrame(std::uint32_t frameIndex) {
@@ -149,10 +166,7 @@ void MaterialStorage::shutdown() {
     MATERIAL_RESOURCE_MANAGER.setDestroyObserver({});
     if (!initialized())
         return;
-    for (MaterialStorageEntry& resource : cache_.extractAll())
-        factory_->release(resource);
-    cache_.reset();
-    factory_.reset();
+    cache_.reset(); // drops every entry -> releases each Ref<UniformSet>
     device_ = nullptr;
 }
 

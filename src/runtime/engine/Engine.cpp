@@ -10,7 +10,9 @@
 #include "render/pipeline/RenderPipeline.h"
 #include "render/gpu/material/MaterialStorage.h"
 #include "render/gpu/pipeline/GraphicsPipelineStorage.h"
-#include "render/gpu/shader/ShaderStorage.h"
+#include "render/uniform/PipelineLayout.h"
+#include "render/uniform/Ubo.h"
+#include "render/uniform/UniformSetLayout.h"
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
@@ -241,17 +243,11 @@ bool Engine::initializeGpuManagers(const rhi::IContextFactory& contextFactory,
                                       []() { return std::make_unique<MiniForwardPipeline>(); });
     renderer_->setPipeline(pipelineRegistry.create(config_.render.pipeline));
 
-    if (!FRAME_GPU_MANAGER.initialize(renderer_->device()) ||
-        !MATERIAL_STORAGE.initialize(renderer_->device(),
-                                         FRAME_GPU_MANAGER.materialLayout(),
-                                         FrameGpuManager::kFramesInFlight) ||
+    if (!GRAPHICS_PIPELINE_STORAGE.initialize(renderer_->device()) ||
+        !FRAME_GPU_MANAGER.initialize(renderer_->device()) ||
+        !MATERIAL_STORAGE.initialize(renderer_->device(), FrameGpuManager::kFramesInFlight) ||
         !GLOBAL_UNIFORM_GPU_MANAGER.initialize(renderer_->device(),
-                                               FrameGpuManager::kFramesInFlight) ||
-        !SHADER_STORAGE.initialize(renderer_->device()) ||
-        !GRAPHICS_PIPELINE_STORAGE.initialize(renderer_->device(),
-                                              FRAME_GPU_MANAGER.sceneLayout(),
-                                              FRAME_GPU_MANAGER.materialLayout(),
-                                              GLOBAL_UNIFORM_GPU_MANAGER.bindGroupLayout())) {
+                                               FrameGpuManager::kFramesInFlight)) {
         Log::error("Engine", "Cannot initialize GPU resource managers");
         return false;
     }
@@ -266,8 +262,12 @@ void Engine::teardownProjectSubsystems() {
     MATERIAL_STORAGE.shutdown();
     GRAPHICS_PIPELINE_STORAGE.shutdown();
     GLOBAL_UNIFORM_GPU_MANAGER.shutdown();
-    SHADER_STORAGE.shutdown();
     FRAME_GPU_MANAGER.shutdown();
+    // Drop the shared uniform-binding caches while the device is still alive (they hold RIDs into
+    // it); this must precede renderer_.reset(), which destroys the device.
+    UniformSetLayout::clearCache();
+    PipelineLayout::clearCache();
+    Ubo::clearSharedCache();
     renderer_.reset();
     MATERIAL_RESOURCE_MANAGER.clear();
     SHADER_RESOURCE_MANAGER.clear();

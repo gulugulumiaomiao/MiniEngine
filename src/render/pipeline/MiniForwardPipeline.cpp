@@ -23,12 +23,13 @@ MiniForwardPipeline::MiniForwardPipeline() {
 }
 
 void MiniForwardPipeline::render(RenderContext& context) {
+    // Material GPU sets are resolved while building the draw list (resolvePass needs the frame's
+    // LRU slot ready), so begin the material frame first.
+    MATERIAL_STORAGE.beginFrame(context.frameIndex());
     DrawListBuilder builder;
     DrawList drawList = builder.build(context.scene(), context);
 
-    resolveMaterialBindGroups(drawList, context.frameIndex());
-    std::erase_if(drawList.items,
-                  [](const DrawItem& item) { return !item.pipeline || !item.materialBindGroup; });
+    std::erase_if(drawList.items, [](const DrawItem& item) { return !item.pipeline; });
 
     GLOBAL_UNIFORM_GPU_MANAGER.beginFrame(context.frameIndex());
     FRAME_GPU_MANAGER.beginFrame(context.frameIndex());
@@ -46,20 +47,6 @@ void MiniForwardPipeline::render(RenderContext& context) {
     }
     graph.execute(context.commandBuffer());
     graph.reset();
-}
-
-void MiniForwardPipeline::resolveMaterialBindGroups(DrawList& drawList, std::uint32_t frameIndex) {
-    MATERIAL_STORAGE.beginFrame(frameIndex);
-    for (DrawItem& item : drawList.items) {
-        item.materialBindGroup = item.material ? MATERIAL_STORAGE.resolve(*item.material) : rhi::RID{};
-        if (!item.materialBindGroup && item.fallbackPipeline && item.fallbackMaterial) {
-            Log::error("MiniForwardPipeline",
-                       "Using Error Material after material GPU preparation failed");
-            item.pipeline = item.fallbackPipeline;
-            item.material = item.fallbackMaterial;
-            item.materialBindGroup = MATERIAL_STORAGE.resolve(*item.fallbackMaterial);
-        }
-    }
 }
 
 void MiniForwardPipeline::addPass(std::unique_ptr<IRenderPass> pass) {

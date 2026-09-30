@@ -28,6 +28,7 @@ private:
         Ref<Material> material;
         const ShaderPass* pass{};
         rhi::RID pipeline;
+        Ref<UniformSet> materialSet;
 
         [[nodiscard]] explicit operator bool() const { return static_cast<bool>(pipeline); }
     };

@@ -70,14 +70,17 @@ bool UniformSet::setUniform(std::string_view name, const ShaderValue& value) {
 }
 
 bool UniformSet::setResource(std::string_view name, Ref<UniformResource> resource) {
-    if (!resource)
-        return false;
     const auto found = resourceMap_.find(std::string(name));
     if (found == resourceMap_.end())
         return false;
-    const std::uint32_t pos = found->second;
+    return setResourceAt(found->second, std::move(resource));
+}
+
+bool UniformSet::setResourceAt(std::uint32_t binding, Ref<UniformResource> resource) {
+    if (!resource || binding >= resources_.size())
+        return false;
     // The accepted kind is dictated by the layout-declared descriptor type for this slot.
-    const rhi::ResourceType declared = layout_->bindings()[pos].type;
+    const rhi::ResourceType declared = layout_->bindings()[binding].type;
     UniformResourceType expected;
     switch (declared) {
     case rhi::ResourceType::UniformBuffer: expected = UniformResourceType::Ubo; break;
@@ -89,9 +92,18 @@ bool UniformSet::setResource(std::string_view name, Ref<UniformResource> resourc
     }
     if (resource->resourceType() != expected)
         return false;
-    resources_[pos] = std::move(resource);
+    resources_[binding] = std::move(resource);
     dirty_ = true;
     return true;
+}
+
+Ubo* UniformSet::uboAt(std::uint32_t binding) const {
+    if (binding >= resources_.size())
+        return nullptr;
+    const Ref<UniformResource>& resource = resources_[binding];
+    if (!resource || resource->resourceType() != UniformResourceType::Ubo)
+        return nullptr;
+    return static_cast<Ubo*>(resource.get());
 }
 
 void UniformSet::upload() {

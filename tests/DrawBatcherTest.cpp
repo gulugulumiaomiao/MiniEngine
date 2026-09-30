@@ -1,10 +1,19 @@
 #include "render/renderer/DrawBatcher.h"
 
+#include "TestRenderDevice.h"
+#include "render/uniform/Ubo.h"
+#include "render/uniform/UniformSet.h"
+#include "render/uniform/UniformSetLayout.h"
+
 #include <cassert>
 #include <cstdint>
 #include <vector>
 
 namespace {
+
+// Distinct dummy material sets so the batcher distinguishes materials by pointer identity. They are
+// created against a MockDevice in main() before any batching runs.
+engine::Ref<engine::UniformSet> g_materialSets[3];
 
 engine::DrawItem makeItem(std::uint32_t pipelineIndex,
                           std::uint32_t materialBindGroupIndex,
@@ -16,7 +25,7 @@ engine::DrawItem makeItem(std::uint32_t pipelineIndex,
                           engine::rhi::IndexFormat indexFormat = engine::rhi::IndexFormat::UInt32) {
     engine::DrawItem item;
     item.pipeline = engine::rhi::RID{pipelineIndex, 1};
-    item.materialBindGroup = engine::rhi::RID{materialBindGroupIndex, 1};
+    item.materialSet = g_materialSets[materialBindGroupIndex];
     item.indexBuffer = engine::rhi::RID{indexBufferIndex, 1};
     item.indexFormat = indexFormat;
     item.arguments = {.indexCount = indexCount,
@@ -31,6 +40,12 @@ engine::DrawItem makeItem(std::uint32_t pipelineIndex,
 
 int main() {
     using namespace engine;
+
+    MockDevice device;
+    const Ref<UniformSetLayout> emptyLayout =
+        UniformSetLayout::acquire(device, std::span<const ResourceBinding>{});
+    g_materialSets[1] = makeRef<UniformSet>(device, emptyLayout, std::vector<Ref<UboLayout>>{});
+    g_materialSets[2] = makeRef<UniformSet>(device, emptyLayout, std::vector<Ref<UboLayout>>{});
 
     // Consecutive items with identical state merge into a single batch.
     {

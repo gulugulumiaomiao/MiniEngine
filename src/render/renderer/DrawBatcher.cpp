@@ -3,7 +3,7 @@
 namespace engine {
 
 bool DrawBatcher::sameBatchState(const DrawItem& lhs, const DrawItem& rhs) {
-    if (lhs.pipeline != rhs.pipeline || lhs.materialBindGroup != rhs.materialBindGroup ||
+    if (lhs.pipeline != rhs.pipeline || lhs.materialSet.get() != rhs.materialSet.get() ||
         lhs.indexBuffer != rhs.indexBuffer || lhs.indexFormat != rhs.indexFormat ||
         lhs.vertexBuffers.size() != rhs.vertexBuffers.size() ||
         lhs.shaderPass != rhs.shaderPass) {
@@ -37,7 +37,7 @@ BatchedDrawList DrawBatcher::build(std::span<const DrawItem> items) {
         } else {
             result.batches.push_back({
                 .pipeline = item.pipeline,
-                .materialBindGroup = item.materialBindGroup,
+                .materialSet = item.materialSet,
                 .shaderPass = item.shaderPass,
                 .vertexBuffers = item.vertexBuffers,
                 .indexBuffer = item.indexBuffer,

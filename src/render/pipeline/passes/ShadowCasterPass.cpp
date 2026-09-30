@@ -76,15 +76,15 @@ void ShadowCasterPass::execute(RenderContext& context,
         [items = std::move(items),
          size = shadowMapSize_,
          frameIndex = context.frameIndex(),
-         globalBindGroup = GLOBAL_UNIFORM_GPU_MANAGER.resolve(context.frameIndex())](
+         globalSet = GLOBAL_UNIFORM_GPU_MANAGER.resolve(context.frameIndex())](
             rhi::RID commandBuffer) mutable {
             rhi::setViewport(commandBuffer,
                 {0.0F, 0.0F, static_cast<float>(size), static_cast<float>(size), 0.0F, 1.0F});
             rhi::setScissor(commandBuffer, {0, 0, size, size});
             drawFilteredItems(frameIndex,
                               items,
-                              FRAME_GPU_MANAGER.sceneBindGroup(frameIndex),
-                              globalBindGroup,
+                              FRAME_GPU_MANAGER.sceneUniformSet(frameIndex),
+                              globalSet,
                               commandBuffer);
         });
 }

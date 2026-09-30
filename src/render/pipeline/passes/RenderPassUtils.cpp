@@ -83,8 +83,8 @@ void applyRenderState(rhi::RID commandBuffer, const RenderStateDesc& state) {
 
 void drawFilteredItems(std::uint32_t frameIndex,
                        std::span<const DrawItem> items,
-                       rhi::RID sceneBindGroup,
-                       rhi::RID globalBindGroup,
+                       const Ref<UniformSet>& scene,
+                       const Ref<UniformSet>& global,
                        rhi::RID commandBuffer) {
     DrawBatcher batcher;
     BatchedDrawList batched = batcher.build(items);
@@ -101,6 +101,8 @@ void drawFilteredItems(std::uint32_t frameIndex,
                                                     batched.instanceRows.size()));
     FRAME_GPU_MANAGER.uploadInstanceRegion(frameIndex, baseSlot, batched.instanceRows);
 
+    const rhi::RID sceneSet = scene ? scene->descriptorSet() : rhi::RID{};
+    const rhi::RID globalSet = global ? global->descriptorSet() : rhi::RID{};
     rhi::RID boundPipeline;
     rhi::RID boundMaterial;
     rhi::RID boundGlobal;
@@ -108,7 +110,8 @@ void drawFilteredItems(std::uint32_t frameIndex,
     for (const DrawBatch& batch : batched.batches) {
         if (batch.pipeline != boundPipeline) {
             rhi::bindPipeline(commandBuffer, batch.pipeline);
-            rhi::bindGroup(commandBuffer, 0, sceneBindGroup);
+            if (sceneSet)
+                rhi::bindDescriptorSet(commandBuffer, 0, sceneSet);
             boundPipeline = batch.pipeline;
             boundGlobal = {}; // Pipeline change may require set 2 rebind.
         }
@@ -116,13 +119,15 @@ void drawFilteredItems(std::uint32_t frameIndex,
             applyRenderState(commandBuffer, batch.shaderPass->renderState());
             boundShaderPass = batch.shaderPass;
         }
-        if (batch.materialBindGroup != boundMaterial) {
-            rhi::bindGroup(commandBuffer, 1, batch.materialBindGroup);
-            boundMaterial = batch.materialBindGroup;
+        const rhi::RID materialSet =
+            batch.materialSet ? batch.materialSet->descriptorSet() : rhi::RID{};
+        if (materialSet && materialSet != boundMaterial) {
+            rhi::bindDescriptorSet(commandBuffer, 1, materialSet);
+            boundMaterial = materialSet;
         }
-        if (globalBindGroup && globalBindGroup != boundGlobal) {
-            rhi::bindGroup(commandBuffer, 2, globalBindGroup);
-            boundGlobal = globalBindGroup;
+        if (globalSet && globalSet != boundGlobal) {
+            rhi::bindDescriptorSet(commandBuffer, 2, globalSet);
+            boundGlobal = globalSet;
         }
         for (const DrawItem::VertexBuffer& vertex : batch.vertexBuffers) {
             rhi::bindVertexBuffer(commandBuffer, vertex.binding, vertex.buffer);
