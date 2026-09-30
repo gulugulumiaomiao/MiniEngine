@@ -121,6 +121,14 @@ bool Ubo::setUniform(std::string_view name, const ShaderValue& value) {
     return ok;
 }
 
+void Ubo::setRawBytes(std::span<const std::byte> data) {
+    if (!created_ || cpu_.empty())
+        return;
+    const std::size_t count = std::min(data.size(), cpu_.size());
+    std::memcpy(cpu_.data(), data.data(), count);
+    dirty_ = true;
+}
+
 void Ubo::upload() {
     if (!dirty_ || !created_ || !buffer_ || cpu_.empty())
         return;

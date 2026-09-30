@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -79,6 +80,10 @@ public:
     // unknown, the buffer is not created yet, or the value's variant does not match the member's
     // UboUniformType; marks dirty on success.
     bool setUniform(std::string_view name, const ShaderValue& value);
+    // Bulk-writes a pre-packed std140 blob (e.g. SceneDrawData / a material's uniformBytes) into the
+    // CPU buffer, truncating to the buffer size; marks dirty. For blocks whose payload the owner
+    // already lays out to match the reflected UboLayout byte-for-byte.
+    void setRawBytes(std::span<const std::byte> data);
     // Pushes the CPU buffer to the GPU when dirty (and created); clears the dirty flag.
     void upload();
 

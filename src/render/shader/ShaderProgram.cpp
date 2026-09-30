@@ -72,7 +72,7 @@ Ref<ShaderProgram> ShaderProgram::create(rhi::IDevice& device,
 
     std::vector<Ref<UniformSetLayout>> setLayouts;
     setLayouts.reserve(setCount);
-    program->uniformSets_.assign(setCount, {});
+    program->setUboLayouts_.assign(setCount, {});
     for (std::uint32_t set = 0; set < setCount; ++set) {
         std::vector<ResourceBinding> bindings;
         std::vector<Ref<UboLayout>> uboLayouts;
@@ -84,16 +84,15 @@ Ref<ShaderProgram> ShaderProgram::create(rhi::IDevice& device,
             if (isBufferType(binding->type))
                 uboLayouts.push_back(buildUboLayout(*binding));
         }
-        Ref<UniformSetLayout> layout = UniformSetLayout::acquire(device, bindings);
-        setLayouts.push_back(layout);
-        program->uniformSets_[set] = makeRef<UniformSet>(device, layout, std::move(uboLayouts));
+        setLayouts.push_back(UniformSetLayout::acquire(device, bindings));
+        program->setUboLayouts_[set] = std::move(uboLayouts);
     }
     program->pipelineLayout_ = PipelineLayout::acquire(device, std::move(setLayouts));
     return program;
 }
 
 ShaderProgram::~ShaderProgram() {
-    // uniformSets_ / pipelineLayout_ release through their Ref members (cached layouts persist in
+    // setUboLayouts_ / pipelineLayout_ release through their Ref members (cached layouts persist in
     // their pools). Only the vs/fs shader modules are owned outright; skip teardown if the creating
     // device is no longer active (its pools are already gone).
     if (device_ && rhi::IDevice::active() && rhi::IDevice::active()->uid() == deviceUid_) {
@@ -104,12 +103,6 @@ ShaderProgram::~ShaderProgram() {
     }
     vertex_ = {};
     fragment_ = {};
-}
-
-void ShaderProgram::upload() {
-    for (const Ref<UniformSet>& set : uniformSets_)
-        if (set)
-            set->upload();
 }
 
 } // namespace engine
