@@ -43,6 +43,9 @@ struct DrawItem {
     const ShaderPass* shaderPass{};
     RenderPhase renderPhase{RenderPhase::Forward};
     rhi::RID pipeline;
+    // Descriptor-set count declared by the pipeline's layout. The renderer binds set i only when
+    // i < programSetCount, so passes whose SPIR-V stripped set 1/set 2 stay within their layout.
+    std::uint32_t programSetCount{};
     Ref<Material> material;
     RID materialKey;
     Ref<UniformSet> materialSet;

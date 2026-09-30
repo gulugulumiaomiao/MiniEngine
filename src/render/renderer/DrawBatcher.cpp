@@ -37,6 +37,7 @@ BatchedDrawList DrawBatcher::build(std::span<const DrawItem> items) {
         } else {
             result.batches.push_back({
                 .pipeline = item.pipeline,
+                .programSetCount = item.programSetCount,
                 .materialSet = item.materialSet,
                 .shaderPass = item.shaderPass,
                 .vertexBuffers = item.vertexBuffers,

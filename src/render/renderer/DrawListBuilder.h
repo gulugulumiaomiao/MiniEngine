@@ -29,6 +29,7 @@ private:
         const ShaderPass* pass{};
         rhi::RID pipeline;
         Ref<UniformSet> materialSet;
+        std::uint32_t setCount{};
 
         [[nodiscard]] explicit operator bool() const { return static_cast<bool>(pipeline); }
     };

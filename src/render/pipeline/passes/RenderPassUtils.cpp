@@ -110,7 +110,7 @@ void drawFilteredItems(std::uint32_t frameIndex,
     for (const DrawBatch& batch : batched.batches) {
         if (batch.pipeline != boundPipeline) {
             rhi::bindPipeline(commandBuffer, batch.pipeline);
-            if (sceneSet)
+            if (sceneSet && batch.programSetCount > 0)
                 rhi::bindDescriptorSet(commandBuffer, 0, sceneSet);
             boundPipeline = batch.pipeline;
             boundGlobal = {}; // Pipeline change may require set 2 rebind.
@@ -121,11 +121,11 @@ void drawFilteredItems(std::uint32_t frameIndex,
         }
         const rhi::RID materialSet =
             batch.materialSet ? batch.materialSet->descriptorSet() : rhi::RID{};
-        if (materialSet && materialSet != boundMaterial) {
+        if (materialSet && batch.programSetCount > 1 && materialSet != boundMaterial) {
             rhi::bindDescriptorSet(commandBuffer, 1, materialSet);
             boundMaterial = materialSet;
         }
-        if (globalSet && globalSet != boundGlobal) {
+        if (globalSet && batch.programSetCount > 2 && globalSet != boundGlobal) {
             rhi::bindDescriptorSet(commandBuffer, 2, globalSet);
             boundGlobal = globalSet;
         }

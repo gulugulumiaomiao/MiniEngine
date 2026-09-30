@@ -57,7 +57,7 @@ DrawListBuilder::resolveMaterialPass(const RenderContext& context,
                                                                  renderPipeline_,
                                                                  colorFormat,
                                                                  depthFormat);
-    return {materialRef, state.pass, state.pipeline, state.materialSet};
+    return {materialRef, state.pass, state.pipeline, state.materialSet, state.setCount};
 }
 
 DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& context) {
@@ -172,6 +172,7 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
                     .shaderPass = resolved.pass,
                     .renderPhase = renderPhase,
                     .pipeline = resolved.pipeline,
+                    .programSetCount = resolved.setCount,
                     .material = resolved.material,
                     .materialKey = resolved.material->resourceId(),
                     .materialSet = resolved.materialSet,

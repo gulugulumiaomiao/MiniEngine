@@ -24,6 +24,10 @@ struct MaterialPassState {
     const ShaderPass* pass{};
     rhi::RID pipeline;
     Ref<UniformSet> materialSet;
+    // Number of descriptor sets the resolved program's pipeline layout declares. The renderer binds
+    // set i only when i < setCount, so a pass whose SPIR-V stripped set 1/set 2 (e.g. a depth-only
+    // shadow caster) never gets a descriptor set bound beyond its layout.
+    std::uint32_t setCount{};
 
     [[nodiscard]] explicit operator bool() const { return static_cast<bool>(pipeline); }
 };

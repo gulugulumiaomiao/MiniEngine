@@ -73,7 +73,7 @@ MaterialPassState MaterialStorage::resolvePass(const Material& material,
         GRAPHICS_PIPELINE_STORAGE.resolve(*program, mesh, colorFormat, depthFormat);
     if (!pipeline)
         return {};
-    return {pass, pipeline, resolve(material, *program)};
+    return {pass, pipeline, resolve(material, *program), program->setCount()};
 }
 
 Ref<UniformSet> MaterialStorage::resolve(const Material& material, const ShaderProgram& program) {
