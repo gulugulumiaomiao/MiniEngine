@@ -6,7 +6,7 @@
 #include "asset/base/AssetId.h"
 #include "core/filesystem/VirtualPath.h"
 #include "core/math/Math.h"
-#include "render/base/RenderHandle.h"
+#include "core/base/RID.h"
 
 #include <cstdint>
 #include <memory>

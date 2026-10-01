@@ -3,7 +3,7 @@
 #include "asset/base/Asset.h"
 #include "render/material/Material.h"
 #include "render/mesh/Mesh.h"
-#include "render/base/RenderHandle.h"
+#include "core/base/RID.h"
 #include "scene/node/Node.h"
 
 #include <functional>

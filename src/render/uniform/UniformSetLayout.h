@@ -60,11 +60,6 @@ public:
     [[nodiscard]] Hash64 orderedHash() const { return orderedHash_; }
     [[nodiscard]] Hash64 unorderedHash() const { return unorderedHash_; }
     [[nodiscard]] const std::vector<ResourceBinding>& bindings() const { return bindings_; }
-    // Descriptor type declared for a binding index (UniformSet slot validation).
-    [[nodiscard]] rhi::ResourceType bindingTypeAt(std::uint32_t binding) const;
-    // Position of the named binding within bindings() (== the resources_ index in a UniformSet),
-    // or -1 when absent.
-    [[nodiscard]] int bindingIndexOf(std::string_view name) const;
 
 private:
     rhi::IDevice* device_{};

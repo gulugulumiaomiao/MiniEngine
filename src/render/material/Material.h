@@ -2,7 +2,7 @@
 
 #include "asset/base/AssetId.h"
 #include "core/base/Ref.h"
-#include "render/base/RenderHandle.h"
+#include "core/base/RID.h"
 #include "render/shader/Shader.h"
 #include "render/texture/Sampler.h"
 #include "render/texture/Texture.h"

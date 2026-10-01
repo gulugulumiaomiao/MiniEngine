@@ -3,7 +3,7 @@
 #include "render/material/Material.h"
 #include "render/uniform/UniformSet.h"
 #include "rhi/api/ResourceDesc.h"
-#include "render/base/RenderHandle.h"
+#include "core/base/RID.h"
 
 #include <cstddef>
 #include <vector>

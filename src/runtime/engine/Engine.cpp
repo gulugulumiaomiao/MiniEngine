@@ -11,7 +11,6 @@
 #include "render/gpu/material/MaterialStorage.h"
 #include "render/GraphicsPipelineStorage.h"
 #include "render/uniform/PipelineLayout.h"
-#include "render/uniform/Ubo.h"
 #include "render/uniform/UniformSetLayout.h"
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
@@ -266,7 +265,6 @@ void Engine::teardownProjectSubsystems() {
     // it); this must precede renderer_.reset(), which destroys the device.
     UniformSetLayout::clearCache();
     PipelineLayout::clearCache();
-    Ubo::clearSharedCache();
     renderer_.reset();
     MATERIAL_RESOURCE_MANAGER.clear();
     ASSET_MANAGER.shutdown();

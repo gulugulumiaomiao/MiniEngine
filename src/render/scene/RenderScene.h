@@ -3,7 +3,7 @@
 #include "core/math/Math.h"
 #include "render/material/Material.h"
 #include "render/mesh/Mesh.h"
-#include "render/base/RenderHandle.h"
+#include "core/base/RID.h"
 #include "render/scene/Lighting.h"
 
 #include <cstdint>

@@ -2,7 +2,7 @@
 
 #include "core/serialization/Transferable.h"
 #include "core/filesystem/VirtualPath.h"
-#include "render/base/RenderHandle.h"
+#include "core/base/RID.h"
 #include "render/mesh/Mesh.h"
 #include "scene/components/Component.h"
 

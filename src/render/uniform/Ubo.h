@@ -91,12 +91,6 @@ public:
     [[nodiscard]] rhi::RID buffer() const { return buffer_; }
     [[nodiscard]] bool dirty() const { return dirty_; }
 
-    // Shared-instance cache (layout hash -> Ubo) for engine-wide single-instance blocks (scene /
-    // global uniforms). Per-set material UBOs are constructed directly (never cached) so distinct
-    // materials cannot cross-contaminate. Keyed by device uid: a device change drops the cache.
-    [[nodiscard]] static Ref<Ubo> acquireShared(rhi::IDevice& device, const Ref<UboLayout>& layout);
-    static void clearSharedCache();
-
 private:
     rhi::IDevice* device_{};
     std::uint64_t deviceUid_{};
@@ -105,9 +99,6 @@ private:
     std::vector<std::byte> cpu_;
     bool dirty_{true};
     bool created_{};
-
-    static std::unordered_map<Hash64, Ref<Ubo>> sharedCache_;
-    static std::uint64_t sharedCacheDeviceUid_;
 };
 
 } // namespace engine

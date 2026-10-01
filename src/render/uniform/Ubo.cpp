@@ -55,9 +55,6 @@ const UboUniform* UboLayout::findUniform(std::string_view name) const {
 
 // ---- Ubo ----
 
-std::unordered_map<Hash64, Ref<Ubo>> Ubo::sharedCache_;
-std::uint64_t Ubo::sharedCacheDeviceUid_ = 0;
-
 Ubo::Ubo(rhi::IDevice& device, Ref<UboLayout> layout)
     : device_(&device), deviceUid_(device.uid()), layout_(std::move(layout)) {
     const std::uint32_t byteSize = layout_ ? layout_->byteSize() : 0;
@@ -134,27 +131,6 @@ void Ubo::upload() {
         return;
     device_->buffer_upload(buffer_, cpu_);
     dirty_ = false;
-}
-
-Ref<Ubo> Ubo::acquireShared(rhi::IDevice& device, const Ref<UboLayout>& layout) {
-    if (!layout)
-        return {};
-    if (sharedCacheDeviceUid_ != device.uid()) {
-        sharedCache_.clear();
-        sharedCacheDeviceUid_ = device.uid();
-    }
-    const auto found = sharedCache_.find(layout->hash());
-    if (found != sharedCache_.end())
-        return found->second;
-    Ref<Ubo> ubo = makeRef<Ubo>(device, layout);
-    ubo->create();
-    sharedCache_.emplace(layout->hash(), ubo);
-    return ubo;
-}
-
-void Ubo::clearSharedCache() {
-    sharedCache_.clear();
-    sharedCacheDeviceUid_ = 0;
 }
 
 } // namespace engine

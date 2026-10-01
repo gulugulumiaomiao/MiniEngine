@@ -113,18 +113,4 @@ void UniformSetLayout::end() {
     device_->descriptor_set_layout_build(rid_, rhi::DescriptorSetLayoutDesc{descs, "UniformSetLayout"});
 }
 
-rhi::ResourceType UniformSetLayout::bindingTypeAt(std::uint32_t binding) const {
-    for (const ResourceBinding& entry : bindings_)
-        if (entry.binding == binding)
-            return entry.type;
-    Log::fatal("UniformSetLayout", "bindingTypeAt: unknown binding index");
-}
-
-int UniformSetLayout::bindingIndexOf(std::string_view name) const {
-    for (std::size_t i = 0; i < bindings_.size(); ++i)
-        if (bindings_[i].name == name)
-            return static_cast<int>(i);
-    return -1;
-}
-
 } // namespace engine
