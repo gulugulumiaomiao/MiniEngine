@@ -107,8 +107,8 @@ Mesh/Texture），写回无意义。
 
 `exportMaterialToAsset` 提取规则：
 
-- `shader` = `SHADER_MANAGER.find(material.shaderHandle())` 取
-  `Shader::assetPath()`；句柄失效或路径无效即失败。
+- `shader` = `material.shaderRef()->assetPath()`（Material 直接持有 `Ref<Shader>`）；
+  shader 缺失或路径无效即失败。
 - `properties` 按 `Shader::properties()` 声明遍历，按类型读值：
   Float/Range→`getFloat`、Boolean→`getBool`、Vec2/3→`getVec2/3`、
   Vec4/Color→`getVec4`、Texture2D→纹理槽查找（**空纹理槽省略该属性**，

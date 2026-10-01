@@ -96,8 +96,8 @@ Meta，沿用源树的 Meta 会把项目绑到外来的资产身份上。
 | `core/` | 引擎硬编码依赖的 6 个文件：`error.material.json`、`builtin_color` 的 shader 三件套、`include/scene.glsl`、`include/objects.glsl` | 创建时 + **每次打开** | 覆盖已存在文件 |
 | `samples/` | 19 个演示资产：blinn_phong 与 vertex_color 全套、示例材质、两个场景、`procedural_showcase.mesh.json`、`checker.png` | **仅创建时** | 跳过已存在文件 |
 
-这样分层是因为两类资产的归属不同。`core/` 是引擎契约：`MaterialManager` 与
-`ShaderManager` 用硬编码路径找它们（`assets://materials/error.material.json`、
+这样分层是因为两类资产的归属不同。`core/` 是引擎契约：`MaterialManager`（error material）与
+`resolveShaderReference`（builtin_color）用硬编码路径找它们（`assets://materials/error.material.json`、
 `assets://shaders/builtin_color.shader.json`），少一个就渲染不出东西而不是加载失败，
 所以每次打开都无条件覆盖修复，代价是对它们的本地修改不被保留——这是有意的。
 `samples/` 播种一次之后就**归项目所有**，用户可以自由修改、重命名或删除，

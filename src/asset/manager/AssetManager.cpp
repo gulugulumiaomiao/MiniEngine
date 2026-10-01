@@ -16,7 +16,6 @@
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
 #include "render/shader/Shader.h"
-#include "render/shader/ShaderManager.h"
 #include "render/texture/Texture.h"
 #include "scene/scene/SceneAsset.h"
 
@@ -63,20 +62,20 @@ bool AssetManager::initialize(AssetManagerMode mode) {
     ASSET_IMPORT_PIPELINE.setListener([this](const AssetImportNotification& notification) {
         if (!notification.success)
             return;
-        if ((notification.type == AssetType::Texture || notification.type == AssetType::Mesh) &&
+        if ((notification.type == AssetType::Texture || notification.type == AssetType::Mesh ||
+             notification.type == AssetType::Shader) &&
             !notification.removed) {
-            // 纹理/网格就地重传：同一缓存 asset 重新 transfer → syncInstance 推送唯一实例，
+            // 纹理/网格/shader 就地重传：同一缓存 asset 重新 transfer → syncInstance 推送唯一实例，
             // 保持活链接（若 invalidate+新建 asset，则持有旧 asset 的实例会失联）。
             reloadInPlace(notification.path);
+            if (notification.type == AssetType::Shader) {
+                // shader 内容变化后刷新引用它的材质（按 shader asset guid 匹配，revision 变化触发重建）。
+                const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(notification.path);
+                if (assetId)
+                    MATERIAL_RESOURCE_MANAGER.refreshShader(*assetId);
+            }
         } else {
             invalidate(notification.path);
-            if (notification.type == AssetType::Shader && !notification.removed) {
-                const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(notification.path);
-                if (assetId && SHADER_RESOURCE_MANAGER.find(*assetId) &&
-                    SHADER_RESOURCE_MANAGER.replace(notification.path)) {
-                    MATERIAL_RESOURCE_MANAGER.refreshShader(*assetId);
-                }
-            }
         }
         if (changeListener_) {
             changeListener_(notification.path, notification.type, notification.removed);
@@ -185,7 +184,8 @@ void AssetManager::reloadInPlace(const VirtualPath& path) {
             "AssetManager", "Cannot re-deserialize Asset in place: %s", path.string().c_str());
         return;
     }
-    // TextureAsset/MeshAsset::transfer 的读取分支已调用 syncInstance()，唯一实例已重上传新数据。
+    // TextureAsset/MeshAsset/ShaderAsset::transfer 的读取分支已调用 syncInstance()，唯一实例已
+    // 重上传/重建为新数据。
 }
 
 void AssetManager::clear() {

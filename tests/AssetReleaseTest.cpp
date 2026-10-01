@@ -8,7 +8,6 @@
 #include "render/mesh/Mesh.h"
 #include "render/scene/RenderScene.h"
 #include "render/shader/Shader.h"
-#include "render/shader/ShaderManager.h"
 #include "scene/scene/Scene.h"
 #include "scene/scene/SceneAsset.h"
 #include "TestAssetEnvironment.h"
@@ -65,6 +64,5 @@ int main() {
     }
     scene.reset();
     MATERIAL_RESOURCE_MANAGER.clear();
-    SHADER_MANAGER.clear();
     test::shutdownAssetEnvironment();
 }

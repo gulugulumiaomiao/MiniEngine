@@ -18,7 +18,6 @@
 #include "render/mesh/Mesh.h"
 #include "render/renderer/Renderer.h"
 #include "render/shader/Shader.h"
-#include "render/shader/ShaderManager.h"
 #include "rhi/RhiFactory.h"
 #include "runtime/window/Window.h"
 #include "scene/scene/SceneAsset.h"
@@ -270,7 +269,6 @@ void Engine::teardownProjectSubsystems() {
     Ubo::clearSharedCache();
     renderer_.reset();
     MATERIAL_RESOURCE_MANAGER.clear();
-    SHADER_RESOURCE_MANAGER.clear();
     ASSET_MANAGER.shutdown();
     activeScenePath_ = {};
     sceneReloadPending_ = false;

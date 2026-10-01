@@ -8,7 +8,7 @@
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
-#include "render/shader/ShaderManager.h"
+#include "render/shader/Shader.h"
 #include "scene/components/CameraComponent.h"
 #include "scene/components/LightComponent.h"
 #include "scene/components/MaterialComponent.h"
@@ -119,7 +119,8 @@ int main() {
     MaterialAsset materialAsset;
     materialAsset.setAssetPath(VirtualPath{"assets://materials/test_export.material.json"});
     materialAsset.name = "Export Material";
-    const Ref<Shader> builtinShader = SHADER_RESOURCE_MANAGER.builtinColor();
+    const Ref<Shader> builtinShader =
+        resolveShaderReference("assets://shaders/builtin_color.shader.json");
     if (!builtinShader)
         return 32;
     const Ref<Material> materialHandle =

@@ -5,7 +5,7 @@
 #include "asset/database/AssetDatabase.h"
 #include "asset/manager/AssetManager.h"
 #include "core/logging/Log.h"
-#include "render/shader/ShaderManager.h"
+#include "render/shader/Shader.h"
 
 #include <vector>
 
@@ -59,7 +59,7 @@ Ref<Material> MaterialResourceManager::loadFromPath(const VirtualPath& materialP
         ASSET_MANAGER.loadAsset<MaterialAsset>(materialPath);
     if (!asset)
         return materialPath == kErrorMaterialPath ? Ref<Material>{} : errorMaterial();
-    Ref<Shader> shader = SHADER_RESOURCE_MANAGER.load(asset->shader);
+    Ref<Shader> shader = resolveShaderReference(asset->shader.string());
     if (!shader)
         return materialPath == kErrorMaterialPath ? Ref<Material>{} : errorMaterial();
     Ref<Material> material = asset->instantiate(shader);
@@ -111,7 +111,7 @@ void MaterialResourceManager::refreshAsset(const AssetId& assetId) {
                    path->string().c_str());
         return;
     }
-    Ref<Shader> shader = SHADER_RESOURCE_MANAGER.load(asset->shader);
+    Ref<Shader> shader = resolveShaderReference(asset->shader.string());
     if (!shader) {
         Log::error("MaterialResourceManager",
                    "Failed to reload shader for material: %s",
@@ -133,7 +133,7 @@ void MaterialResourceManager::setShader(const Ref<Material>& material,
         Log::error("MaterialResourceManager", "Cannot set Shader on an invalid Material");
         return;
     }
-    Ref<Shader> shader = SHADER_RESOURCE_MANAGER.load(shaderPath);
+    Ref<Shader> shader = resolveShaderReference(shaderPath.string());
     if (!shader) {
         Log::error("MaterialResourceManager",
                    "Shader failed to load: %s",

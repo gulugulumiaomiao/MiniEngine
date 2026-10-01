@@ -31,7 +31,7 @@ Scene/Object buffer → set 0 ────────────────�
 
 - `ShaderAsset`、`MaterialAsset` 只表示磁盘资产和导入结果，由 `AssetManager` 按路径加载与缓存。
 - `Shader`、`SubShader`、`ShaderPass` 是运行时对象。最终参与绘制的是 `ShaderPass`。
-- `Material` 只持有 `ShaderHandle`，不持有 `ShaderAsset` 或 Shader 智能指针；它通过 ShaderManager 解析运行时 Shader，并可在切换时迁移同名兼容属性。
+- `Material` 持有运行时 `Ref<Shader>`（不持有 `ShaderAsset`）；Shader 由 `resolveShaderReference` 经 `ShaderAsset::instantiate` 的唯一实例解析，切换时迁移同名兼容属性。
 - `SubShader` 和 `ShaderPass` 不保留对应的 Desc。
 
 ### 2. 明确编译输入、预处理结果和编译产物
@@ -128,7 +128,7 @@ ShadowCaster → DepthOnly → Forward
 ## 生命周期和修改规则
 
 1. Debug 下编辑 JSON/GLSL 后，FileWatcher 将事件交给主线程的 AssetImportPipeline，并按反向依赖重新导入。
-2. ShaderManager 在原 Handle 上替换成功导入的 Shader；SPIR-V 仍在下一次 Pipeline 请求时按需生成。
+2. `reloadInPlace` 让缓存的 `ShaderAsset` 重新 transfer → `syncInstance` 在原唯一实例上 `rebuildFromAsset`（revision + 1）；SPIR-V 仍在下一次 Pipeline 请求时按需生成。
 3. 材质属性变化只使材质 GPU 数据变脏，不重新创建 Pipeline。
 4. Keyword、VertexLayout、RenderState 或 RenderTarget 格式变化会选择或创建另一条 Pipeline。
 5. Shader 切换时材质保留名称和类型兼容的属性，布局变化由新的 Material GPU buffer 承接；导入或编译失败时继续保留上一条有效 Shader/Pipeline。

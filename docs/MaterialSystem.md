@@ -1,12 +1,12 @@
 # 运行时 Material 系统
 
-Material 是纯运行时对象，不直接依赖 RHI。它保存属性、Keyword、RenderQueue 和 `ShaderHandle`；Vulkan Buffer、Descriptor 和 Pipeline 由 GPU 资源层管理。
+Material 是纯运行时对象，不直接依赖 RHI。它保存属性、Keyword、RenderQueue 和 `Ref<Shader>`；Vulkan Buffer、Descriptor 和 Pipeline 由 GPU 资源层管理。
 
 ## 数据结构
 
 ```cpp
 class Material {
-    ShaderHandle shaderHandle_;
+    Ref<Shader> shader_;
     UniformBlockLayout uniformLayout;
     std::vector<std::byte> uniformData;
     // Asset/reference representation (serialized): property -> VirtualPath string.
@@ -16,7 +16,7 @@ class Material {
 };
 ```
 
-`Material::shader()` 通过 `SHADER_MANAGER` 解析 Handle。数值属性以 `UniformBlockLayout + uniformData` 作为唯一运行时数据源。Texture2D 的资产表示保存规范化虚拟路径；运行时可以覆盖为 `TextureBinding { TextureView, Sampler }`，但不会把 GPU handle 写回资产。成功修改属性会设置 dirty 并增加 version。
+`Material::shader()` 直接返回持有的 `Ref<Shader>`（运行时 Shader 由 `resolveShaderReference` 经 ShaderAsset 的唯一 `instantiate` 实例解析，无 ShaderManager）。数值属性以 `UniformBlockLayout + uniformData` 作为唯一运行时数据源。Texture2D 的资产表示保存规范化虚拟路径；运行时可以覆盖为 `TextureBinding { TextureView, Sampler }`，但不会把 GPU handle 写回资产。成功修改属性会设置 dirty 并增加 version。
 
 ## 加载流程
 
@@ -24,8 +24,8 @@ class Material {
 Material 资产路径
   -> MATERIAL_MANAGER.load
   -> ASSET_MANAGER.loadAsset<MaterialAsset>
-  -> SHADER_MANAGER.load(materialAsset.shader)
-  -> MaterialAsset::instantiate(ShaderHandle)
+  -> resolveShaderReference(materialAsset.shader)
+  -> MaterialAsset::instantiate(Ref<Shader>)
   -> KeyedHandleRegistry::insert(Material)
   -> MaterialHandle(index, generation)
 ```

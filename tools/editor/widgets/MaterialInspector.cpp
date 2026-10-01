@@ -9,7 +9,6 @@
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
 #include "render/shader/Shader.h"
-#include "render/shader/ShaderManager.h"
 #include "tools/editor/widgets/EditorWidgets.h"
 
 #include "imgui.h"

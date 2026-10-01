@@ -1,6 +1,5 @@
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
-#include "render/shader/ShaderManager.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/manager/AssetManager.h"
 #include "core/filesystem/FileWatcher.h"
@@ -20,7 +19,6 @@ protected:
 
     void TearDown() override {
         MATERIAL_MANAGER.clear();
-        SHADER_MANAGER.clear();
         engine::test::shutdownAssetEnvironment();
     }
 };

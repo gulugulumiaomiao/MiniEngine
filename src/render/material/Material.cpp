@@ -6,7 +6,6 @@
 #include "core/logging/Log.h"
 #include "core/serialization/Transfer.h"
 #include "render/material/MaterialManager.h"
-#include "render/shader/ShaderManager.h"
 #include "render/texture/Sampler.h"
 
 #include <algorithm>

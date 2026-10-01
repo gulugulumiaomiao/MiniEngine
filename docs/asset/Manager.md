@@ -92,10 +92,10 @@ AssetManager 订阅 `AssetImportPipeline` 的导入通知，成功导入后：
 
 ```text
 通知（成功且未 Removed）
-  -> invalidate(path)：从 Ref 缓存移除（释放该资产的强引用）
-  -> Shader：SHADER_MANAGER.replace（原 Handle 上替换，revision + 1）
-            -> MATERIAL_MANAGER.refreshShader：引用该 Shader 的材质重建布局
-  -> Mesh / Texture：对应 Manager 在原 Handle 上 replace
+  -> Texture / Mesh / Shader：reloadInPlace(path)——同一缓存 asset 重新 transfer，其读取分支
+     调用 syncInstance() 把新数据推送给唯一实例（保持活链接，不 invalidate）
+     -> Shader 额外：MATERIAL_MANAGER.refreshShader——引用该 Shader 的材质按 revision 变化重建布局
+  -> 其它类型：invalidate(path)——从 Ref 缓存移除（释放强引用），下次 loadAsset 取新数据
   -> changeListener_：通用变更通知（编辑器等订阅方）
 ```
 

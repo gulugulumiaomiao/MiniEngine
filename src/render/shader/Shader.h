@@ -22,7 +22,6 @@ namespace engine {
 
 class ShaderAsset;
 class Shader;
-class ShaderResourceManager;
 
 enum class ShaderPropertyType { Float, Range, Vec2, Vec3, Vec4, Color, Texture2D, Boolean, Matrix };
 enum class ShaderPassType { Forward, DepthOnly, ShadowCaster };
@@ -273,7 +272,7 @@ public:
     Shader(Shader&&) = delete;
     Shader& operator=(Shader&&) = delete;
 
-    [[nodiscard]] const VirtualPath& assetPath() const { return assetPath_; }
+    [[nodiscard]] const VirtualPath& assetPath() const;
     [[nodiscard]] const std::string& name() const { return name_; }
     [[nodiscard]] const std::vector<ShaderPropertyDesc>& properties() const { return properties_; }
     [[nodiscard]] const std::vector<ShaderPropertyDesc>& globalProperties() const {
@@ -292,9 +291,8 @@ public:
     [[nodiscard]] bool declaresKeyword(std::string_view keyword) const;
     [[nodiscard]] std::uint64_t revision() const { return revision_; }
 
-    [[nodiscard]] AssetId assetId() const { return assetId_; }
-    [[nodiscard]] bool isAssetBacked() const { return assetId_.valid(); }
-    [[nodiscard]] RID resourceId() const { return resourceId_; }
+    [[nodiscard]] AssetId assetId() const;
+    [[nodiscard]] bool isAssetBacked() const { return asset_ != nullptr; }
     [[nodiscard]] Ref<Shader> clone() const;
     void rebuildFromAsset(const ShaderAsset& asset);
 
@@ -309,10 +307,12 @@ public:
     static void setGlobalTexture(std::string_view name, std::string_view texturePath);
 
 private:
-    friend class ShaderResourceManager;
+    friend class ShaderAsset;
     Shader() = default;
-    VirtualPath assetPath_;
-    AssetId assetId_;
+    /// 建立与 asset 的活链接（仅 instantiate 唯一实例调用）。asset 为非拥有裸指针：
+    /// ShaderAsset 由 AssetManager 强缓存常驻，实例不延长其生命周期。
+    void bindAsset(ShaderAsset* asset) { asset_ = asset; }
+
     std::string name_;
     std::vector<ShaderPropertyDesc> properties_;
     std::vector<ShaderPropertyDesc> globalProperties_;
@@ -320,7 +320,13 @@ private:
     UniformBlockLayout globalUniformBlockLayout_;
     std::vector<SubShader> subShaders_;
     std::uint64_t revision_{1};
-    RID resourceId_;
+
+    ShaderAsset* asset_{}; // 非拥有活链接（asset 由 AssetManager 常驻）；仅 instantiate 实例设置
 };
+
+/// 解析 shader 引用为运行时 Shader：空→{}；`assets://` 或裸路径→经 AssetManager 加载
+/// `ShaderAsset` 并 `instantiate`（按 asset 天然去重，每 asset 唯一实例）；失败→{}（调用方回退
+/// Error Material）。取代已删除的 `ShaderResourceManager::load`。
+[[nodiscard]] Ref<Shader> resolveShaderReference(std::string_view reference);
 
 } // namespace engine

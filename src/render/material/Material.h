@@ -45,7 +45,6 @@ public:
     [[nodiscard]] bool isAssetBacked() const { return assetId_.valid(); }
     [[nodiscard]] const Shader& shader() const;
     [[nodiscard]] const Ref<Shader>& shaderRef() const { return shader_; }
-    [[nodiscard]] RID shaderHandle() const { return shader_ ? shader_->resourceId() : RID{}; }
     [[nodiscard]] RID resourceId() const { return resourceId_; }
     // 写回专用：只暴露 override（nullopt = 沿用 shader 默认），生效值 renderQueue
     // 字段是派生状态，写回时不得显式化。

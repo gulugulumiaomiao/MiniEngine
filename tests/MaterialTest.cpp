@@ -2,7 +2,6 @@
 #include "asset/types/ShaderAsset.h"
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
-#include "render/shader/ShaderManager.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/manager/AssetManager.h"
 #include "core/filesystem/FileWatcher.h"
@@ -55,7 +54,8 @@ int main() {
     const Ref<Material> failedMaterial =
         materials.load(VirtualPath{"assets://shaders/builtin_color.shader.json"});
     if (!errorData || failedMaterial != errorMaterial ||
-        errorData->shaderRef() != SHADER_RESOURCE_MANAGER.builtinColor() ||
+        errorData->shaderRef() !=
+            resolveShaderReference("assets://shaders/builtin_color.shader.json") ||
         errorData->shader().properties().size() != 1 ||
         errorData->shader().properties().front().name != "Color" ||
         errorData->getVec4("Color") != math::Vec4{1.0F, 0.0F, 1.0F, 1.0F}) {
@@ -219,6 +219,5 @@ int main() {
         return 9;
     }
     MATERIAL_RESOURCE_MANAGER.clear();
-    SHADER_RESOURCE_MANAGER.clear();
     test::shutdownAssetEnvironment();
 }

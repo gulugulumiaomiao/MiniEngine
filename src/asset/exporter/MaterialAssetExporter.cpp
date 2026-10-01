@@ -6,7 +6,6 @@
 #include "core/filesystem/FileSystem.h"
 #include "render/material/Material.h"
 #include "render/shader/Shader.h"
-#include "render/shader/ShaderManager.h"
 
 namespace engine {
 

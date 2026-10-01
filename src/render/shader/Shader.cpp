@@ -2,10 +2,10 @@
 
 #include "asset/types/ShaderAsset.h"
 
+#include "asset/manager/AssetManager.h"
 #include "core/logging/Log.h"
 #include "core/serialization/Transfer.h"
 #include "render/global_uniform/GlobalUniformManager.h"
-#include "render/shader/ShaderManager.h"
 
 #include <algorithm>
 #include <cassert>
@@ -97,6 +97,8 @@ bool ShaderAsset::transfer(Transfer& archive) {
         name = std::move(decoded.name);
         properties = std::move(decoded.properties);
         subShaders = std::move(decoded.subShaders);
+        // 就地重传（热重载）后把新内容重建到唯一实例，保持活链接（同 TextureAsset/MeshAsset）。
+        syncInstance();
     }
     return true;
 }
@@ -265,7 +267,7 @@ bool SubShader::supports(std::string_view renderPipeline) const {
 }
 
 Shader::Shader(const ShaderAsset& asset)
-    : assetPath_(asset.assetPath()), name_(asset.name), properties_(asset.properties),
+    : name_(asset.name), properties_(asset.properties),
       globalProperties_(asset.globalProperties),
       uniformBlockLayout_(buildUniformBlockLayout(properties_)),
       globalUniformBlockLayout_(buildUniformBlockLayout(globalProperties_)) {
@@ -277,29 +279,25 @@ Shader::Shader(const ShaderAsset& asset)
 }
 
 Shader::~Shader() {
-    SHADER_RESOURCE_MANAGER.unregister(this);
+    // 双向观察者：实例先于 asset 销毁时清除 asset 的回指，避免 ~ShaderAsset 解引用悬垂实例。
+    if (asset_ && asset_->instance_ == this)
+        asset_->instance_ = nullptr;
 }
 
 Ref<Shader> Shader::clone() const {
-    Ref<Shader> copy{new Shader()};
-    copy->assetPath_ = assetPath_;
-    copy->name_ = name_;
-    copy->properties_ = properties_;
-    copy->globalProperties_ = globalProperties_;
-    copy->uniformBlockLayout_ = uniformBlockLayout_;
-    copy->globalUniformBlockLayout_ = globalUniformBlockLayout_;
-    copy->subShaders_ = subShaders_;
-    copy->revision_ = revision_;
-    return copy;
+    if (!asset_) {
+        Log::error("Shader", "clone() requires an asset-backed shader");
+        return {};
+    }
+    return asset_->clone();
 }
 
 void Shader::rebuildFromAsset(const ShaderAsset& asset) {
     if (revision_ == std::numeric_limits<std::uint64_t>::max())
         Log::fatal("Shader", "Shader revision overflow");
-    Ref<Shader> replacement = asset.instantiate();
-    if (!replacement)
-        return;
-    assetPath_ = std::move(replacement->assetPath_);
+    // 直接构造一个脱离 asset 的临时 Shader（不能走 asset.instantiate()：那会返回唯一实例即 this，
+    // 造成自移动）；把临时对象的数据字段移入本实例，保留 asset_ 活链接与身份。
+    Ref<Shader> replacement{new Shader(asset)};
     name_ = std::move(replacement->name_);
     properties_ = std::move(replacement->properties_);
     globalProperties_ = std::move(replacement->globalProperties_);
@@ -309,8 +307,56 @@ void Shader::rebuildFromAsset(const ShaderAsset& asset) {
     ++revision_;
 }
 
-Ref<Shader> ShaderAsset::instantiate() const {
-    return Ref<Shader>{new Shader{*this}};
+const VirtualPath& Shader::assetPath() const {
+    static const VirtualPath kEmpty;
+    return asset_ ? asset_->assetPath() : kEmpty;
+}
+
+AssetId Shader::assetId() const {
+    return asset_ ? asset_->assetId() : AssetId{};
+}
+
+Ref<Shader> ShaderAsset::instantiate() {
+    if (instance_)
+        return Ref<Shader>(instance_); // 复用唯一实例（addRef）
+    Ref<Shader> shader{new Shader{*this}};
+    shader->bindAsset(this);
+    instance_ = shader.get();
+    return shader;
+}
+
+Ref<Shader> ShaderAsset::clone() {
+    return Ref<Shader>{new Shader{*this}}; // 脱离实例：不登记、不链接 asset
+}
+
+void ShaderAsset::syncInstance() {
+    if (instance_)
+        instance_->rebuildFromAsset(*this);
+}
+
+ShaderAsset::~ShaderAsset() {
+    // 双向观察者：asset 先于其唯一实例销毁时清除实例回指，避免 ~Shader 解引用悬垂 asset_。
+    if (instance_)
+        instance_->asset_ = nullptr;
+}
+
+Ref<Shader> resolveShaderReference(std::string_view reference) {
+    if (reference.empty())
+        return {};
+    VirtualPath path{reference};
+    if (!path.valid())
+        path = VirtualPath{"assets://" + std::string{reference}};
+    if (path.valid() && path.scheme() == "assets") {
+        if (const Ref<ShaderAsset> asset = ASSET_MANAGER.loadAsset<ShaderAsset>(path)) {
+            if (Ref<Shader> shader = asset->instantiate())
+                return shader;
+        }
+    }
+    Log::warn("Shader",
+              "Cannot resolve shader reference: %.*s",
+              static_cast<int>(reference.size()),
+              reference.data());
+    return {};
 }
 
 const SubShader* Shader::selectSubShader(std::string_view renderPipeline) const {

@@ -56,7 +56,7 @@
 | Texture | `TextureAsset`（无运行时管理器） | 无（层2 `Texture` 自持 RHI 句柄） | `VulkanDevice` 分类型句柄池（存实例）texture/view/sampler，对上只暴露 RID |
 | Mesh | `MeshAsset`（无运行时管理器） | 无（层2 `Mesh` 自持 vertex/index buffer 的 RHI RID） | `IDevice` buffer owner（拆分的 allocate_rid/allocate_memory/upload/free_memory/release_rid） |
 | Material | `MaterialResourceManager` | `MaterialStorage`（set-1 `UniformSet`） | `IDevice` descriptor set / uniform owner |
-| Shader | `ShaderResourceManager` | `GraphicsPipelineStorage`（产出并缓存 `ShaderProgram`） | `IDevice` shaderModule / pipeline / descriptor-set-layout / pipeline-layout owner |
+| Shader | 无（`ShaderAsset` 直接 `instantiate`/`clone`，`resolveShaderReference` 按 asset 去重） | `GraphicsPipelineStorage`（产出并缓存 `ShaderProgram`） | `IDevice` shaderModule / pipeline / descriptor-set-layout / pipeline-layout owner |
 
 ## 4. 跨层引用规则（单向向下）
 

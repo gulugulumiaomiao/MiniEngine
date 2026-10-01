@@ -10,7 +10,6 @@
 #include "render/material/MaterialManager.h"
 #include "render/mesh/Mesh.h"
 #include "render/shader/Shader.h"
-#include "render/shader/ShaderManager.h"
 #include "scene/scene/Scene.h"
 #include "scene/scene/SceneAsset.h"
 #include "TestAssetEnvironment.h"
@@ -38,7 +37,6 @@ static_assert(
     std::is_base_of_v<engine::Singleton<engine::AssetImportPipeline>, engine::AssetImportPipeline>);
 static_assert(std::is_base_of_v<engine::Singleton<engine::FileWatcher>, engine::FileWatcher>);
 static_assert(std::is_base_of_v<engine::Singleton<engine::AssetManager>, engine::AssetManager>);
-static_assert(std::is_base_of_v<engine::Singleton<engine::ShaderResourceManager>, engine::ShaderResourceManager>);
 static_assert(
     std::is_base_of_v<engine::Singleton<engine::MaterialResourceManager>, engine::MaterialResourceManager>);
 
@@ -58,7 +56,6 @@ struct TestWorkspace {
 
     ~TestWorkspace() {
         MATERIAL_MANAGER.clear();
-        SHADER_MANAGER.clear();
         engine::test::shutdownAssetEnvironment();
         std::error_code error;
         std::filesystem::remove_all(root, error);
@@ -277,8 +274,8 @@ int main() {
         return 4;
     }
 
-    Ref<Shader> firstHandleA = SHADER_MANAGER.load(firstPath);
-    Ref<Shader> firstHandleB = SHADER_MANAGER.load(firstPath);
+    Ref<Shader> firstHandleA = resolveShaderReference(firstPath.string());
+    Ref<Shader> firstHandleB = resolveShaderReference(firstPath.string());
     Ref<Material> materialHandle = MATERIAL_MANAGER.load(materialPath);
     if (!firstHandleA || firstHandleA != firstHandleB || !materialHandle)
         return 5;
@@ -306,7 +303,7 @@ int main() {
     FILE_WATCHER.scanNow();
     waitForEvents();
     ASSET_IMPORT_PIPELINE.processFileEvents();
-    if (SHADER_MANAGER.find(firstPath) != firstHandleA ||
+    if (resolveShaderReference(firstPath.string()) != firstHandleA ||
         firstHandleA->revision() != oldRevision + 1 ||
         firstHandleA->name() != "Tests/First Reloaded") {
         return 10;
@@ -370,13 +367,15 @@ int main() {
         return 24;
     }
 
-    const RID firstId = firstHandleA->resourceId();
+    // 新模型（无 Manager）：唯一实例由 ShaderAsset 以裸指针观察、不持强引用；释放全部 Ref 后
+    // 实例析构、asset 回指清空，再次 resolve 得到全新的 asset-backed 唯一实例（不再有 Manager
+    // 的 RID index 复用 / generation 递增语义）。
     firstHandleA.reset();
     firstHandleB.reset();
-    const Ref<Shader> reused = SHADER_MANAGER.insertUnkeyed(shaderAssetA->instantiate());
-    if (!reused || reused->resourceId().index() != firstId.index() ||
-        reused->resourceId().generation() == firstId.generation() ||
-        SHADER_MANAGER.find(firstId)) {
+    const Ref<Shader> recreated = resolveShaderReference(firstPath.string());
+    if (!recreated || !recreated->isAssetBacked() ||
+        recreated->name() != "Tests/First Reloaded" || recreated != shaderAssetA->instantiate()) {
         return 17;
     }
+    return 0;
 }

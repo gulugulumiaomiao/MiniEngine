@@ -15,7 +15,6 @@
 #include "core/filesystem/FileSystem.h"
 #include "render/material/Material.h"
 #include "render/shader/Shader.h"
-#include "render/shader/ShaderManager.h"
 #include "scene/scene/SceneAsset.h"
 #include "TestAssetEnvironment.h"
 
@@ -129,7 +128,7 @@ protected:
     [[nodiscard]] Ref<Material> loadRuntimeMaterial(const VirtualPath& path) {
         const auto source = ASSET_MANAGER.loadAsset<MaterialAsset>(path);
         EXPECT_TRUE(source);
-        const Ref<Shader> shader = SHADER_RESOURCE_MANAGER.load(source->shader);
+        const Ref<Shader> shader = resolveShaderReference(source->shader.string());
         EXPECT_TRUE(shader);
         return source->instantiate(shader);
     }
@@ -157,7 +156,8 @@ TEST_F(AssetExporterTest, MaterialRoundtripThroughRuntime) {
     const VirtualPath materialPath{"assets://materials/export_test.material.json"};
     const auto source = ASSET_MANAGER.loadAsset<MaterialAsset>(materialPath);
     ASSERT_TRUE(source);
-    Ref<Material> material = source->instantiate(SHADER_RESOURCE_MANAGER.load(source->shader));
+    Ref<Material> material =
+        source->instantiate(resolveShaderReference(source->shader.string()));
     material->setFloat("Shininess", 128.0F);
     material->setVec4("BaseColor", math::Vec4{0.9F, 0.8F, 0.7F, 0.6F});
     material->setBool("EnableFeature", false);
@@ -233,7 +233,7 @@ TEST_F(AssetExporterTest, MaterialPreservesRenderQueueOverride) {
     ASSERT_TRUE(queued);
     ASSERT_EQ(queued->renderQueue, std::optional<int>{2450});
 
-    Ref<Material> material = queued->instantiate(SHADER_RESOURCE_MANAGER.load(queued->shader));
+    Ref<Material> material = queued->instantiate(resolveShaderReference(queued->shader.string()));
     ASSERT_EQ(material->renderQueueOverride(), std::optional<int>{2450});
     const VirtualPath targetPath{"assets://materials/queued_out.material.json"};
     std::string error;
