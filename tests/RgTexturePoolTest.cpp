@@ -96,7 +96,7 @@ int main() {
     using namespace engine;
 
     FakeDevice device;
-    RgTexturePool pool{device, 2};
+    RgTexturePool pool{2};
 
     if (pool.framesInFlight() != 2 || pool.totalEntryCount() != 0 || pool.inUseCount() != 0) {
         return 1;

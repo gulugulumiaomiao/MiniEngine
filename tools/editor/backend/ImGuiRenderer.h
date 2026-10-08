@@ -39,7 +39,7 @@ public:
     // Builds the font atlas texture, the UI pipeline and the per-frame geometry
     // buffers. colorFormat must match the attachment the overlay renders into; an sRGB
     // format also selects the fragment shader variant that decodes ImGui's colors.
-    [[nodiscard]] bool initialize(rhi::IDevice& device, rhi::PixelFormat colorFormat);
+    [[nodiscard]] bool initialize(rhi::PixelFormat colorFormat);
     // Destroys every GPU resource; the caller must have made the device idle first.
     void shutdown();
 
@@ -77,7 +77,7 @@ private:
     reserveGeometry(Geometry& geometry, std::uint32_t vertexCount, std::uint32_t indexCount);
     void releaseGeometry(Geometry& geometry);
 
-    rhi::IDevice* device_{};
+    bool initialized_{};
     rhi::PixelFormat colorFormat_{rhi::PixelFormat::Undefined};
     rhi::RID vertexShader_;
     rhi::RID fragmentShader_;

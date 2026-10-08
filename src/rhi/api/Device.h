@@ -145,3 +145,10 @@ public:
 };
 
 } // namespace engine::rhi
+
+// Global device singleton accessor macro, mirroring the ENGINE / ASSET_MANAGER style. Expands to
+// the active IDevice* (nullptr when no device is live), so call sites use RHI_DEVICE->xxx() and
+// null-check on construction/teardown paths. IDevice is abstract, so it cannot use the CRTP
+// Singleton<T> base; the register-on-construct active() slot is its singleton form. No class other
+// than the Renderer (the device owner) may hold an IDevice member.
+#define RHI_DEVICE (::engine::rhi::IDevice::active())

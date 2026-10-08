@@ -9,12 +9,14 @@
 
 namespace engine {
 
-UniformSet::UniformSet(rhi::IDevice& device,
-                       Ref<UniformSetLayout> layout,
-                       std::vector<Ref<UboLayout>> uboLayouts)
-    : device_(&device), deviceUid_(device.uid()), layout_(std::move(layout)) {
+UniformSet::UniformSet(Ref<UniformSetLayout> layout, std::vector<Ref<UboLayout>> uboLayouts)
+    : layout_(std::move(layout)) {
     if (!layout_)
         Log::fatal("UniformSet", "Cannot build a uniform set without a layout");
+    rhi::IDevice* device = RHI_DEVICE;
+    if (!device)
+        Log::fatal("UniformSet", "No active device for uniform-set creation");
+    deviceUid_ = device->uid();
     const std::vector<ResourceBinding>& bindings = layout_->bindings();
 
     // Allocate the descriptor set from the pool bucketed by the layout's unordered hash.
@@ -22,7 +24,7 @@ UniformSet::UniformSet(rhi::IDevice& device,
     descs.reserve(bindings.size());
     for (const ResourceBinding& binding : bindings)
         descs.push_back({binding.binding, binding.name, binding.type});
-    descriptorSet_ = device_->descriptor_set_allocate(
+    descriptorSet_ = device->descriptor_set_allocate(
         rhi::DescriptorSetAllocateInfo{layout_->rid(), layout_->unorderedHash(), descs, 1});
 
     // One resource slot per binding; create a Ubo for each uniform/storage-buffer binding.
@@ -34,7 +36,7 @@ UniformSet::UniformSet(rhi::IDevice& device,
         const bool isUniformBuffer = binding.type == rhi::ResourceType::UniformBuffer;
         if (isUniformBuffer) {
             if (uboIndex < uboLayouts.size() && uboLayouts[uboIndex]) {
-                Ref<Ubo> ubo = makeRef<Ubo>(device, uboLayouts[uboIndex]);
+                Ref<Ubo> ubo = makeRef<Ubo>(uboLayouts[uboIndex]);
                 ubo->create();
                 // Every member name of this block resolves to this slot.
                 for (const UboUniform& member : uboLayouts[uboIndex]->uniforms())
@@ -52,9 +54,8 @@ UniformSet::UniformSet(rhi::IDevice& device,
 
 UniformSet::~UniformSet() {
     // Cross-device safety: only free the descriptor set if the creating device is still active.
-    if (descriptorSet_ && device_ && rhi::IDevice::active() &&
-        rhi::IDevice::active()->uid() == deviceUid_) {
-        device_->descriptor_set_destroy(descriptorSet_);
+    if (rhi::IDevice* device = RHI_DEVICE; descriptorSet_ && device && device->uid() == deviceUid_) {
+        device->descriptor_set_destroy(descriptorSet_);
     }
     descriptorSet_ = {};
 }
@@ -144,8 +145,8 @@ void UniformSet::upload() {
             }
             writes.push_back(write);
         }
-        if (!writes.empty())
-            device_->descriptor_set_update(descriptorSet_, writes);
+        if (rhi::IDevice* device = RHI_DEVICE; !writes.empty() && device)
+            device->descriptor_set_update(descriptorSet_, writes);
         dirty_ = false;
     }
     // Push UBO contents; each Ubo decides whether it actually needs a buffer upload.

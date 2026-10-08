@@ -31,7 +31,7 @@ rhi::VertexFormat toRhi(VertexFormat format) {
 GraphicsPipelineStorage::GraphicsPipelineStorage() = default;
 GraphicsPipelineStorage::~GraphicsPipelineStorage() = default;
 
-bool GraphicsPipelineStorage::initialize(rhi::IDevice& device) {
+bool GraphicsPipelineStorage::initialize() {
     if (initialized()) {
         Log::error("GraphicsPipelineStorage", "Manager is already initialized");
         return false;
@@ -50,8 +50,7 @@ bool GraphicsPipelineStorage::initialize(rhi::IDevice& device) {
     config.compilerOptions.optimization = ShaderOptimization::Release;
 #endif
     compilePipeline_ = std::make_unique<ShaderCompilePipeline>(std::move(config));
-    device_ = &device;
-    factory_ = std::make_unique<GraphicsPipelineStorageFactory>(device);
+    factory_ = std::make_unique<GraphicsPipelineStorageFactory>();
     lastShaderPollSerial_ = ~std::uint64_t{};
     return true;
 }
@@ -73,7 +72,7 @@ Ref<ShaderProgram> GraphicsPipelineStorage::getOrCreateProgram(const Shader& sha
         return found->second;
     const CompiledShader& vertex = compilePipeline_->resolveCompiled(compiled.vertex);
     const CompiledShader& fragment = compilePipeline_->resolveCompiled(compiled.fragment);
-    Ref<ShaderProgram> program = ShaderProgram::create(*device_, vertex, fragment, compiled.id);
+    Ref<ShaderProgram> program = ShaderProgram::create(vertex, fragment, compiled.id);
     if (!program)
         return {};
     programs_.emplace(compiled.id, program);
@@ -196,7 +195,6 @@ void GraphicsPipelineStorage::shutdown() {
     factory_.reset();
     compilePipeline_->clear();
     compilePipeline_.reset();
-    device_ = nullptr;
     lastShaderPollSerial_ = ~std::uint64_t{};
 }
 

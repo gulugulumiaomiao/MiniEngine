@@ -7,7 +7,7 @@
 
 namespace engine {
 
-RenderTarget::RenderTarget(rhi::IDevice& device) : device_(device) {}
+RenderTarget::RenderTarget() = default;
 
 RenderTarget::~RenderTarget() {
     release();
@@ -40,9 +40,14 @@ bool RenderTarget::createAttachment(rhi::PixelFormat format,
                                     rhi::TextureUsage usage,
                                     std::string debugName,
                                     Attachment& destination) {
+    rhi::IDevice* device = RHI_DEVICE;
+    if (!device) {
+        Log::error("RenderTarget", "No active device for render-target attachment");
+        return false;
+    }
     Attachment created;
     created.format = format;
-    created.texture = device_.texture_create({
+    created.texture = device->texture_create({
         .dimension = rhi::TextureType::Texture2D,
         .format = format,
         .width = desc_.width,
@@ -56,9 +61,9 @@ bool RenderTarget::createAttachment(rhi::PixelFormat format,
         Log::error("RenderTarget", "The RHI did not create a render-target texture");
         return false;
     }
-    created.view = device_.texture_default_view(created.texture);
+    created.view = device->texture_default_view(created.texture);
     if (!created.view) {
-        device_.texture_destroy(created.texture);
+        device->texture_destroy(created.texture);
         Log::error("RenderTarget", "The RHI did not create a render-target texture view");
         return false;
     }
@@ -129,8 +134,8 @@ bool RenderTarget::resize(std::uint32_t width, std::uint32_t height) {
 
 void RenderTarget::releaseAttachment(Attachment& attachment) {
     // The default view is owned by the RHI Texture and is released with it.
-    if (attachment.texture)
-        device_.texture_destroy(attachment.texture);
+    if (rhi::IDevice* device = RHI_DEVICE; attachment.texture && device)
+        device->texture_destroy(attachment.texture);
     attachment = {};
 }
 

@@ -105,7 +105,7 @@ int main() {
     using namespace engine;
 
     FakeDevice device;
-    RenderTarget target{device};
+    RenderTarget target;
     RenderTargetDesc desc;
     desc.width = 640;
     desc.height = 360;

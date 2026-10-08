@@ -32,9 +32,7 @@ class UniformSet final : public RefCounted {
 public:
     // `uboLayouts` supplies the block layout for each uniform-buffer binding, in ascending binding
     // order (non-UBO bindings are skipped, so it is indexed by the Nth UBO binding).
-    UniformSet(rhi::IDevice& device,
-               Ref<UniformSetLayout> layout,
-               std::vector<Ref<UboLayout>> uboLayouts);
+    UniformSet(Ref<UniformSetLayout> layout, std::vector<Ref<UboLayout>> uboLayouts);
     ~UniformSet() override;
     UniformSet(const UniformSet&) = delete;
     UniformSet& operator=(const UniformSet&) = delete;
@@ -62,7 +60,6 @@ public:
     [[nodiscard]] Ubo* uboAt(std::uint32_t binding) const;
 
 private:
-    rhi::IDevice* device_{};
     std::uint64_t deviceUid_{};
     Ref<UniformSetLayout> layout_;
     std::vector<Ref<UniformResource>> resources_; // parallel to layout_->bindings()

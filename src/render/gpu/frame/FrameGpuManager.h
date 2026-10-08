@@ -31,7 +31,7 @@ public:
     static constexpr std::uint32_t kMaxRenderObjects = 1024;
     static constexpr std::uint32_t kMaxInstances = 8192;
 
-    [[nodiscard]] bool initialize(rhi::IDevice& device);
+    [[nodiscard]] bool initialize();
     void upload(std::uint32_t frameIndex, const DrawList& drawList);
     void shutdown();
 
@@ -49,7 +49,7 @@ public:
                               std::uint32_t baseSlot,
                               std::span<const std::uint32_t> objectRows);
 
-    [[nodiscard]] bool initialized() const { return device_ != nullptr; }
+    [[nodiscard]] bool initialized() const { return initialized_; }
 
 private:
     struct FrameResources {
@@ -63,7 +63,7 @@ private:
     friend class Singleton<FrameGpuManager>;
     FrameGpuManager() = default;
 
-    rhi::IDevice* device_{};
+    bool initialized_{};
     Ref<UniformSetLayout> sceneLayout_; // shared set-0 layout (deduped against reflected set 0)
     Ref<UboLayout> sceneUboLayout_;     // synthetic scene block layout (sizeof(SceneDrawData))
     rhi::RID shadowSampler_;

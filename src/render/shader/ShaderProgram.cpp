@@ -1,5 +1,6 @@
 #include "render/shader/ShaderProgram.h"
 
+#include "core/logging/Log.h"
 #include "render/shader/Shader.h" // ShaderDescriptorBinding/Type, ShaderUniformMember
 #include "render/uniform/Ubo.h"
 #include "render/uniform/UniformSetLayout.h"
@@ -42,19 +43,22 @@ namespace {
 
 } // namespace
 
-Ref<ShaderProgram> ShaderProgram::create(rhi::IDevice& device,
-                                         const CompiledShader& vertex,
+Ref<ShaderProgram> ShaderProgram::create(const CompiledShader& vertex,
                                          const CompiledShader& fragment,
                                          ShaderProgramId id) {
+    rhi::IDevice* device = RHI_DEVICE;
+    if (!device) {
+        Log::error("ShaderProgram", "No active device for shader-program creation");
+        return {};
+    }
     Ref<ShaderProgram> program(new ShaderProgram());
     program->id_ = id;
-    program->device_ = &device;
-    program->deviceUid_ = device.uid();
+    program->deviceUid_ = device->uid();
     program->vertexEntry_ = vertex.entryPoint;
     program->fragmentEntry_ = fragment.entryPoint;
-    program->vertex_ = device.shader_create(
+    program->vertex_ = device->shader_create(
         rhi::ShaderDesc{rhi::ShaderStage::Vertex, vertex.bytecode, "ShaderProgram.vs"});
-    program->fragment_ = device.shader_create(
+    program->fragment_ = device->shader_create(
         rhi::ShaderDesc{rhi::ShaderStage::Fragment, fragment.bytecode, "ShaderProgram.fs"});
 
     // Merge vs+fs descriptors keyed by (set, binding). The two stages are validated upstream to
@@ -84,10 +88,10 @@ Ref<ShaderProgram> ShaderProgram::create(rhi::IDevice& device,
             if (isBufferType(binding->type))
                 uboLayouts.push_back(buildUboLayout(*binding));
         }
-        setLayouts.push_back(UniformSetLayout::acquire(device, bindings));
+        setLayouts.push_back(UniformSetLayout::acquire(bindings));
         program->setUboLayouts_[set] = std::move(uboLayouts);
     }
-    program->pipelineLayout_ = PipelineLayout::acquire(device, std::move(setLayouts));
+    program->pipelineLayout_ = PipelineLayout::acquire(std::move(setLayouts));
     return program;
 }
 
@@ -95,11 +99,11 @@ ShaderProgram::~ShaderProgram() {
     // setUboLayouts_ / pipelineLayout_ release through their Ref members (cached layouts persist in
     // their pools). Only the vs/fs shader modules are owned outright; skip teardown if the creating
     // device is no longer active (its pools are already gone).
-    if (device_ && rhi::IDevice::active() && rhi::IDevice::active()->uid() == deviceUid_) {
+    if (rhi::IDevice* device = RHI_DEVICE; device && device->uid() == deviceUid_) {
         if (vertex_)
-            device_->shader_destroy(vertex_);
+            device->shader_destroy(vertex_);
         if (fragment_)
-            device_->shader_destroy(fragment_);
+            device->shader_destroy(fragment_);
     }
     vertex_ = {};
     fragment_ = {};

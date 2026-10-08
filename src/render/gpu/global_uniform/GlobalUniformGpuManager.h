@@ -30,12 +30,12 @@ public:
 
     ~GlobalUniformGpuManager();
 
-    [[nodiscard]] bool initialize(rhi::IDevice& device, std::uint32_t frameCount);
+    [[nodiscard]] bool initialize(std::uint32_t frameCount);
     void beginFrame(std::uint32_t frameIndex);
     void shutdown();
 
     [[nodiscard]] const Ref<UniformSet>& resolve(std::uint32_t frameIndex) const;
-    [[nodiscard]] bool initialized() const { return device_ != nullptr; }
+    [[nodiscard]] bool initialized() const { return initialized_; }
 
 private:
     friend class Singleton<GlobalUniformGpuManager>;
@@ -50,7 +50,7 @@ private:
     void ensureLayout();
     void updateFrame(std::uint32_t frameIndex);
 
-    rhi::IDevice* device_{};
+    bool initialized_{};
     Ref<UniformSetLayout> layout_;
     Ref<UboLayout> uboLayout_;
     bool layoutHasUbo_{};

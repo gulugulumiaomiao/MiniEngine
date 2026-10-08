@@ -43,9 +43,9 @@ int main() {
 
     MockDevice device;
     const Ref<UniformSetLayout> emptyLayout =
-        UniformSetLayout::acquire(device, std::span<const ResourceBinding>{});
-    g_materialSets[1] = makeRef<UniformSet>(device, emptyLayout, std::vector<Ref<UboLayout>>{});
-    g_materialSets[2] = makeRef<UniformSet>(device, emptyLayout, std::vector<Ref<UboLayout>>{});
+        UniformSetLayout::acquire(std::span<const ResourceBinding>{});
+    g_materialSets[1] = makeRef<UniformSet>(emptyLayout, std::vector<Ref<UboLayout>>{});
+    g_materialSets[2] = makeRef<UniformSet>(emptyLayout, std::vector<Ref<UboLayout>>{});
 
     // Consecutive items with identical state merge into a single batch.
     {

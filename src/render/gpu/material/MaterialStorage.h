@@ -47,7 +47,7 @@ public:
 
     ~MaterialStorage();
 
-    [[nodiscard]] bool initialize(rhi::IDevice& device, std::uint32_t frameCount);
+    [[nodiscard]] bool initialize(std::uint32_t frameCount);
     // Builds/refreshes the material's set-1 UniformSet from the program's reflected set-1 layout.
     [[nodiscard]] Ref<UniformSet> resolve(const Material& material, const ShaderProgram& program);
     [[nodiscard]] MaterialPassState resolvePass(const Material& material,
@@ -59,7 +59,7 @@ public:
     void invalidate(RID handle);
     void beginFrame(std::uint32_t frameIndex);
     void shutdown();
-    [[nodiscard]] bool initialized() const { return device_ != nullptr; }
+    [[nodiscard]] bool initialized() const { return initialized_; }
 
 private:
     friend class Singleton<MaterialStorage>;
@@ -70,7 +70,7 @@ private:
     // one of them is available.
     [[nodiscard]] bool collectTextureBindings(const Material& material);
 
-    rhi::IDevice* device_{};
+    bool initialized_{};
     MaterialStorageCache cache_;
     // Reused across resolve() calls so rebuilding a material's texture signature does not
     // allocate every time.

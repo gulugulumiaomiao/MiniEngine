@@ -1,5 +1,6 @@
 #include "render/uniform/PipelineLayout.h"
 
+#include "core/logging/Log.h"
 #include "rhi/api/Device.h"
 
 #include <utility>
@@ -22,17 +23,21 @@ namespace {
 std::unordered_map<Hash64, Ref<PipelineLayout>> PipelineLayout::cache_;
 std::uint64_t PipelineLayout::cacheDeviceUid_ = 0;
 
-Ref<PipelineLayout> PipelineLayout::acquire(rhi::IDevice& device,
-                                            std::vector<Ref<UniformSetLayout>> setLayouts) {
+Ref<PipelineLayout> PipelineLayout::acquire(std::vector<Ref<UniformSetLayout>> setLayouts) {
+    rhi::IDevice* device = RHI_DEVICE;
+    if (!device) {
+        Log::error("PipelineLayout", "No active device to acquire a pipeline layout");
+        return {};
+    }
     const Hash64 key = pipelineLayoutHash(setLayouts);
-    if (cacheDeviceUid_ != device.uid()) {
+    if (cacheDeviceUid_ != device->uid()) {
         cache_.clear();
-        cacheDeviceUid_ = device.uid();
+        cacheDeviceUid_ = device->uid();
     }
     if (const auto found = cache_.find(key); found != cache_.end())
         return found->second;
 
-    Ref<PipelineLayout> layout = makeRef<PipelineLayout>(device, std::move(setLayouts));
+    Ref<PipelineLayout> layout = makeRef<PipelineLayout>(std::move(setLayouts));
     layout->create();
     cache_.emplace(key, layout);
     return layout;
@@ -43,17 +48,18 @@ void PipelineLayout::clearCache() {
     cacheDeviceUid_ = 0;
 }
 
-PipelineLayout::PipelineLayout(rhi::IDevice& device, std::vector<Ref<UniformSetLayout>> setLayouts)
-    : device_(&device), deviceUid_(device.uid()), setLayouts_(std::move(setLayouts)) {
+PipelineLayout::PipelineLayout(std::vector<Ref<UniformSetLayout>> setLayouts)
+    : setLayouts_(std::move(setLayouts)) {
+    if (rhi::IDevice* device = RHI_DEVICE)
+        deviceUid_ = device->uid();
     hash_ = pipelineLayoutHash(setLayouts_);
 }
 
 PipelineLayout::~PipelineLayout() {
     // Cross-device safety: only destroy the layout if the creating device is still the active one.
     // The referenced set layouts are released by their own Ref members (which guard likewise).
-    if (rid_ && device_ && rhi::IDevice::active() &&
-        rhi::IDevice::active()->uid() == deviceUid_) {
-        device_->pipeline_layout_destroy(rid_);
+    if (rhi::IDevice* device = RHI_DEVICE; rid_ && device && device->uid() == deviceUid_) {
+        device->pipeline_layout_destroy(rid_);
     }
     rid_ = {};
 }
@@ -65,7 +71,8 @@ void PipelineLayout::create() {
     setRids.reserve(setLayouts_.size());
     for (const Ref<UniformSetLayout>& layout : setLayouts_)
         setRids.push_back(layout ? layout->rid() : rhi::RID{});
-    rid_ = device_->pipeline_layout_create(rhi::PipelineLayoutDesc{setRids, "PipelineLayout"});
+    if (rhi::IDevice* device = RHI_DEVICE)
+        rid_ = device->pipeline_layout_create(rhi::PipelineLayoutDesc{setRids, "PipelineLayout"});
 }
 
 } // namespace engine

@@ -6,8 +6,11 @@ namespace engine {
 
 bool GraphicsPipelineStorageFactory::create(const rhi::GraphicsPipelineDesc& description,
                                             GraphicsPipelineStorageEntry& destination) {
+    rhi::IDevice* device = RHI_DEVICE;
+    if (!device)
+        return false;
     GraphicsPipelineStorageEntry created;
-    created.pipeline = device_.pipeline_create(description);
+    created.pipeline = device->pipeline_create(description);
     if (!created.pipeline)
         return false;
     release(destination);
@@ -16,8 +19,8 @@ bool GraphicsPipelineStorageFactory::create(const rhi::GraphicsPipelineDesc& des
 }
 
 void GraphicsPipelineStorageFactory::release(GraphicsPipelineStorageEntry& resource) {
-    if (resource.pipeline)
-        device_.pipeline_destroy(resource.pipeline);
+    if (rhi::IDevice* device = RHI_DEVICE; resource.pipeline && device)
+        device->pipeline_destroy(resource.pipeline);
     resource = {};
 }
 

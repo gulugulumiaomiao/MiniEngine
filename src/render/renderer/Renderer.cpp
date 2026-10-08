@@ -19,10 +19,10 @@ Renderer::Renderer(Window& window, rhi::Context context)
     if (!device_ || !swapchain_) {
         Log::fatal("Renderer", "RHI context is incomplete");
     }
-    rgTexturePool_.emplace(*device_);
+    rgTexturePool_.emplace();
     forwardTargets_.reserve(FrameGpuManager::kFramesInFlight);
     for (std::uint32_t frame = 0; frame < FrameGpuManager::kFramesInFlight; ++frame) {
-        auto target = std::make_unique<RenderTarget>(*device_);
+        auto target = std::make_unique<RenderTarget>();
         RenderTargetDesc targetDesc;
         targetDesc.width = swapchain_->width();
         targetDesc.height = swapchain_->height();

@@ -52,18 +52,22 @@ namespace {
 std::unordered_map<Hash64, Ref<UniformSetLayout>> UniformSetLayout::cache_;
 std::uint64_t UniformSetLayout::cacheDeviceUid_ = 0;
 
-Ref<UniformSetLayout> UniformSetLayout::acquire(rhi::IDevice& device,
-                                                std::span<const ResourceBinding> bindings) {
+Ref<UniformSetLayout> UniformSetLayout::acquire(std::span<const ResourceBinding> bindings) {
+    rhi::IDevice* device = RHI_DEVICE;
+    if (!device) {
+        Log::error("UniformSetLayout", "No active device to acquire a set layout");
+        return {};
+    }
     const std::vector<ResourceBinding> sorted = sortedCopy(bindings);
     const Hash64 ordered = orderedHashOf(sorted);
-    if (cacheDeviceUid_ != device.uid()) {
+    if (cacheDeviceUid_ != device->uid()) {
         cache_.clear();
-        cacheDeviceUid_ = device.uid();
+        cacheDeviceUid_ = device->uid();
     }
     if (const auto found = cache_.find(ordered); found != cache_.end())
         return found->second;
 
-    Ref<UniformSetLayout> layout = makeRef<UniformSetLayout>(device);
+    Ref<UniformSetLayout> layout = makeRef<UniformSetLayout>();
     layout->begin();
     for (const ResourceBinding& binding : sorted)
         layout->addBinding(binding);
@@ -77,16 +81,20 @@ void UniformSetLayout::clearCache() {
     cacheDeviceUid_ = 0;
 }
 
-UniformSetLayout::UniformSetLayout(rhi::IDevice& device)
-    : device_(&device), deviceUid_(device.uid()) {
-    rid_ = device_->descriptor_set_layout_allocate_rid();
+UniformSetLayout::UniformSetLayout() {
+    rhi::IDevice* device = RHI_DEVICE;
+    if (!device) {
+        Log::error("UniformSetLayout", "No active device for set-layout creation");
+        return;
+    }
+    deviceUid_ = device->uid();
+    rid_ = device->descriptor_set_layout_allocate_rid();
 }
 
 UniformSetLayout::~UniformSetLayout() {
     // Cross-device safety: only recycle the RID if the creating device is still the active one.
-    if (rid_ && device_ && rhi::IDevice::active() &&
-        rhi::IDevice::active()->uid() == deviceUid_) {
-        device_->descriptor_set_layout_destroy(rid_);
+    if (rhi::IDevice* device = RHI_DEVICE; rid_ && device && device->uid() == deviceUid_) {
+        device->descriptor_set_layout_destroy(rid_);
     }
     rid_ = {};
 }
@@ -110,7 +118,8 @@ void UniformSetLayout::end() {
     descs.reserve(bindings_.size());
     for (const ResourceBinding& binding : bindings_)
         descs.push_back({binding.binding, binding.name, binding.type});
-    device_->descriptor_set_layout_build(rid_, rhi::DescriptorSetLayoutDesc{descs, "UniformSetLayout"});
+    if (rhi::IDevice* device = RHI_DEVICE)
+        device->descriptor_set_layout_build(rid_, rhi::DescriptorSetLayoutDesc{descs, "UniformSetLayout"});
 }
 
 } // namespace engine

@@ -22,10 +22,6 @@ rhi::PixelFormat RenderContext::sceneColorFormat() const {
 RenderContext::RenderContext(Renderer& renderer, const RenderScene& scene)
     : renderer_(renderer), scene_(scene) {}
 
-rhi::IDevice& RenderContext::device() const {
-    return renderer_.device();
-}
-
 rhi::ISwapchain& RenderContext::swapchain() const {
     return renderer_.swapchain();
 }

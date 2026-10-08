@@ -32,8 +32,7 @@ public:
     // Builds the program from the two compiled stages: creates the vs/fs shader modules, merges
     // their reflected descriptors per set into deduped UniformSetLayouts + UboLayouts, and acquires
     // the shared PipelineLayout.
-    [[nodiscard]] static Ref<ShaderProgram> create(rhi::IDevice& device,
-                                                   const CompiledShader& vertex,
+    [[nodiscard]] static Ref<ShaderProgram> create(const CompiledShader& vertex,
                                                    const CompiledShader& fragment,
                                                    ShaderProgramId id);
     ~ShaderProgram() override;
@@ -66,7 +65,6 @@ private:
     ShaderProgram() = default;
 
     ShaderProgramId id_{};
-    rhi::IDevice* device_{};
     std::uint64_t deviceUid_{};
     rhi::RID vertex_;
     rhi::RID fragment_;

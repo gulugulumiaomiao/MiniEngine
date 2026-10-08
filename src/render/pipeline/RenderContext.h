@@ -12,7 +12,6 @@ class RenderTarget;
 class RgTexturePool;
 
 namespace rhi {
-class IDevice;
 class ISwapchain;
 } // namespace rhi
 
@@ -20,7 +19,6 @@ class RenderContext final {
 public:
     RenderContext(Renderer& renderer, const RenderScene& scene);
 
-    [[nodiscard]] rhi::IDevice& device() const;
     [[nodiscard]] rhi::ISwapchain& swapchain() const;
     [[nodiscard]] rhi::RID commandBuffer() const;
     [[nodiscard]] RenderTarget& currentForwardTarget() const;

@@ -15,12 +15,12 @@ namespace engine {
 GlobalUniformGpuManager::GlobalUniformGpuManager() = default;
 GlobalUniformGpuManager::~GlobalUniformGpuManager() = default;
 
-bool GlobalUniformGpuManager::initialize(rhi::IDevice& device, std::uint32_t frameCount) {
+bool GlobalUniformGpuManager::initialize(std::uint32_t frameCount) {
     if (initialized()) {
         Log::error("GlobalUniformGpuManager", "Manager is already initialized");
         return false;
     }
-    device_ = &device;
+    initialized_ = true;
     frames_.resize(frameCount);
     return true;
 }
@@ -56,7 +56,7 @@ void GlobalUniformGpuManager::ensureLayout() {
     for (std::uint32_t i = 0; i < textureCount; ++i)
         bindings.push_back(
             {i + 1, "globalTexture" + std::to_string(i), rhi::ResourceType::CombinedImageSampler});
-    layout_ = UniformSetLayout::acquire(*device_, bindings);
+    layout_ = UniformSetLayout::acquire(bindings);
 
     if (hasUbo) {
         uboLayout_ = makeRef<UboLayout>();
@@ -95,7 +95,7 @@ void GlobalUniformGpuManager::updateFrame(std::uint32_t frameIndex) {
         std::vector<Ref<UboLayout>> uboLayouts;
         if (uboLayout_)
             uboLayouts.push_back(uboLayout_);
-        frame.set = makeRef<UniformSet>(*device_, layout_, std::move(uboLayouts));
+        frame.set = makeRef<UniformSet>(layout_, std::move(uboLayouts));
     }
 
     const GlobalUniformManager& globals = GLOBAL_UNIFORM_MANAGER;
@@ -132,7 +132,7 @@ void GlobalUniformGpuManager::shutdown() {
     layoutHasUbo_ = false;
     layoutTextureCount_ = 0;
     layoutUboSize_ = 0;
-    device_ = nullptr;
+    initialized_ = false;
 }
 
 } // namespace engine

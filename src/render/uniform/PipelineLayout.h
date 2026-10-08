@@ -24,10 +24,10 @@ class PipelineLayout final : public RefCounted {
 public:
     // Dedup entry point: returns the shared instance for this set-layout sequence, creating on miss.
     [[nodiscard]] static Ref<PipelineLayout>
-    acquire(rhi::IDevice& device, std::vector<Ref<UniformSetLayout>> setLayouts);
+    acquire(std::vector<Ref<UniformSetLayout>> setLayouts);
     static void clearCache();
 
-    PipelineLayout(rhi::IDevice& device, std::vector<Ref<UniformSetLayout>> setLayouts);
+    explicit PipelineLayout(std::vector<Ref<UniformSetLayout>> setLayouts);
     ~PipelineLayout() override;
     PipelineLayout(const PipelineLayout&) = delete;
     PipelineLayout& operator=(const PipelineLayout&) = delete;
@@ -40,7 +40,6 @@ public:
     [[nodiscard]] const std::vector<Ref<UniformSetLayout>>& setLayouts() const { return setLayouts_; }
 
 private:
-    rhi::IDevice* device_{};
     std::uint64_t deviceUid_{};
     std::vector<Ref<UniformSetLayout>> setLayouts_;
     rhi::RID rid_;

@@ -7,14 +7,15 @@
 
 namespace engine {
 
-RgTexturePool::RgTexturePool(rhi::IDevice& device, std::uint32_t framesInFlight)
-    : device_(device), framesInFlight_(framesInFlight), buckets_(framesInFlight_) {}
+RgTexturePool::RgTexturePool(std::uint32_t framesInFlight)
+    : framesInFlight_(framesInFlight), buckets_(framesInFlight_) {}
 
 RgTexturePool::~RgTexturePool() {
+    rhi::IDevice* device = RHI_DEVICE;
     for (Bucket& bucket : buckets_) {
         for (const std::unique_ptr<PooledTexture>& entry : bucket.entries) {
-            if (entry->texture)
-                device_.texture_destroy(entry->texture);
+            if (entry->texture && device)
+                device->texture_destroy(entry->texture);
         }
     }
 }
@@ -92,6 +93,9 @@ bool RgTexturePool::matches(const PooledTexture& entry, const RgTextureDesc& des
 
 std::unique_ptr<RgTexturePool::PooledTexture>
 RgTexturePool::createEntry(const RgTextureDesc& desc) {
+    rhi::IDevice* device = RHI_DEVICE;
+    if (!device)
+        Log::fatal("RgTexturePool", "No active device for pooled texture creation");
     auto entry = std::make_unique<PooledTexture>();
 
     rhi::TextureDesc textureDesc;
@@ -105,14 +109,14 @@ RgTexturePool::createEntry(const RgTextureDesc& desc) {
     textureDesc.usage = desc.usage;
     textureDesc.debugName = desc.debugName;
 
-    entry->texture = device_.texture_create(textureDesc);
+    entry->texture = device->texture_create(textureDesc);
     if (!entry->texture) {
         Log::fatal("RgTexturePool", "Failed to create pooled texture");
     }
 
-    entry->view = device_.texture_default_view(entry->texture);
+    entry->view = device->texture_default_view(entry->texture);
     if (!entry->view) {
-        device_.texture_destroy(entry->texture);
+        device->texture_destroy(entry->texture);
         Log::fatal("RgTexturePool", "Failed to create pooled texture view");
     }
 

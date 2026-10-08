@@ -178,23 +178,27 @@ ImGuiRenderer::~ImGuiRenderer() {
     shutdown();
 }
 
-bool ImGuiRenderer::initialize(rhi::IDevice& device, rhi::PixelFormat colorFormat) {
-    if (device_)
+bool ImGuiRenderer::initialize(rhi::PixelFormat colorFormat) {
+    if (initialized_)
         return true;
-    device_ = &device;
+    if (!RHI_DEVICE) {
+        Log::error("ImGuiRenderer", "No active device for the ImGui renderer");
+        return false;
+    }
+    initialized_ = true;
     colorFormat_ = colorFormat;
 
     // The UI samples one combined image sampler (the font atlas, or a scene/ImGui::Image texture)
     // at set 0 binding 0. acquire() dedups the layout against the engine's shared pool, and the
     // pipeline layout wraps that single set.
     const ResourceBinding textureBinding{0, "uTexture", rhi::ResourceType::CombinedImageSampler};
-    textureLayout_ = UniformSetLayout::acquire(device, std::span{&textureBinding, 1});
+    textureLayout_ = UniformSetLayout::acquire(std::span{&textureBinding, 1});
     if (!textureLayout_) {
         Log::error("ImGuiRenderer", "Cannot create the UI descriptor set layout");
         shutdown();
         return false;
     }
-    pipelineLayout_ = PipelineLayout::acquire(device, {textureLayout_});
+    pipelineLayout_ = PipelineLayout::acquire({textureLayout_});
     if (!pipelineLayout_) {
         Log::error("ImGuiRenderer", "Cannot create the UI pipeline layout");
         shutdown();
@@ -215,7 +219,7 @@ bool ImGuiRenderer::initialize(rhi::IDevice& device, rhi::PixelFormat colorForma
 }
 
 void ImGuiRenderer::shutdown() {
-    if (!device_)
+    if (!initialized_)
         return;
     for (Geometry& geometry : geometry_)
         releaseGeometry(geometry);
@@ -225,7 +229,7 @@ void ImGuiRenderer::shutdown() {
     // Release the descriptor sets before the layouts they were allocated against.
     fontSet_.reset();
     if (fontTexture_)
-        device_->texture_destroy(fontTexture_);
+        RHI_DEVICE->texture_destroy(fontTexture_);
     // The layouts outlive the pipeline that references them, so they go last.
     pipelineLayout_.reset();
     textureLayout_.reset();
@@ -233,13 +237,13 @@ void ImGuiRenderer::shutdown() {
     fontView_ = {};
     fontTexture_ = {};
     colorFormat_ = rhi::PixelFormat::Undefined;
-    device_ = nullptr;
+    initialized_ = false;
     if (ImGui::GetCurrentContext())
         ImGui::GetIO().Fonts->SetTexID(0);
 }
 
 void ImGuiRenderer::onColorFormatChanged(rhi::PixelFormat colorFormat) {
-    if (!device_ || colorFormat == colorFormat_)
+    if (!initialized_ || colorFormat == colorFormat_)
         return;
     colorFormat_ = colorFormat;
     destroyPipeline();
@@ -260,17 +264,17 @@ bool ImGuiRenderer::createFontTexture() {
 
     const auto atlasWidth = static_cast<std::uint32_t>(width);
     const auto atlasHeight = static_cast<std::uint32_t>(height);
-    fontTexture_ = device_->texture_create({
+    fontTexture_ = RHI_DEVICE->texture_create({
         .format = rhi::PixelFormat::Rgba8Unorm,
         .width = atlasWidth,
         .height = atlasHeight,
         .usage = rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferDestination,
         .debugName = "ImGuiFontAtlas",
     });
-    fontView_ = device_->texture_default_view(fontTexture_);
+    fontView_ = RHI_DEVICE->texture_default_view(fontTexture_);
     // Nearest wrapping would bleed neighbouring glyphs into each other at the atlas
     // edges; ImGui always samples the atlas with clamped coordinates.
-    sampler_ = device_->sampler_create({
+    sampler_ = RHI_DEVICE->sampler_create({
         .addressU = rhi::SamplerAddressMode::ClampToEdge,
         .addressV = rhi::SamplerAddressMode::ClampToEdge,
     });
@@ -287,9 +291,9 @@ bool ImGuiRenderer::createFontTexture() {
     };
     // uploadTexture leaves the image in the shader read state, which is what the
     // descriptor set below declares.
-    device_->texture_upload(fontTexture_, std::span{&region, 1});
+    RHI_DEVICE->texture_upload(fontTexture_, std::span{&region, 1});
 
-    fontSet_ = makeRef<UniformSet>(*device_, textureLayout_, std::vector<Ref<UboLayout>>{});
+    fontSet_ = makeRef<UniformSet>(textureLayout_, std::vector<Ref<UboLayout>>{});
     if (!fontSet_->setResourceAt(0, Texture::adoptBinding(fontView_, sampler_))) {
         Log::error("ImGuiRenderer", "Cannot bind the ImGui font atlas texture");
         return false;
@@ -307,7 +311,7 @@ bool ImGuiRenderer::createFontTexture() {
 
 bool ImGuiRenderer::createPipeline() {
     if (!vertexShader_) {
-        vertexShader_ = device_->shader_create({
+        vertexShader_ = RHI_DEVICE->shader_create({
             .stage = rhi::ShaderStage::Vertex,
             .bytecode = std::as_bytes(std::span{kVertexSpirv}),
             .debugName = "ImGuiVertex",
@@ -317,7 +321,7 @@ bool ImGuiRenderer::createPipeline() {
         const std::span<const std::uint32_t> fragment =
             isSrgb(colorFormat_) ? std::span<const std::uint32_t>{kFragmentSrgbSpirv}
                                  : std::span<const std::uint32_t>{kFragmentSpirv};
-        fragmentShader_ = device_->shader_create({
+        fragmentShader_ = RHI_DEVICE->shader_create({
             .stage = rhi::ShaderStage::Fragment,
             .bytecode = std::as_bytes(fragment),
             .debugName = "ImGuiFragment",
@@ -346,7 +350,7 @@ bool ImGuiRenderer::createPipeline() {
     // draws on top of the finished frame without a depth buffer. These states are dynamic
     // and are configured on the encoder before each render pass.
     desc.colorFormats = {colorFormat_};
-    pipeline_ = device_->pipeline_create(desc);
+    pipeline_ = RHI_DEVICE->pipeline_create(desc);
     if (!pipeline_) {
         Log::error("ImGuiRenderer", "Cannot create the UI graphics pipeline");
         return false;
@@ -356,11 +360,11 @@ bool ImGuiRenderer::createPipeline() {
 
 void ImGuiRenderer::destroyPipeline() {
     if (pipeline_)
-        device_->pipeline_destroy(pipeline_);
+        RHI_DEVICE->pipeline_destroy(pipeline_);
     if (fragmentShader_)
-        device_->shader_destroy(fragmentShader_);
+        RHI_DEVICE->shader_destroy(fragmentShader_);
     if (vertexShader_)
-        device_->shader_destroy(vertexShader_);
+        RHI_DEVICE->shader_destroy(vertexShader_);
     pipeline_ = {};
     fragmentShader_ = {};
     vertexShader_ = {};
@@ -378,9 +382,9 @@ bool ImGuiRenderer::reserveGeometry(Geometry& geometry,
     for (std::size_t stream = 0; stream < geometry.vertexBuffers.size(); ++stream) {
         if (vertexCount > geometry.vertexCapacities[stream]) {
             if (geometry.vertexBuffers[stream])
-                device_->buffer_destroy(geometry.vertexBuffers[stream]);
+                RHI_DEVICE->buffer_destroy(geometry.vertexBuffers[stream]);
             geometry.vertexCapacities[stream] = vertexCount + kGeometrySlack;
-            geometry.vertexBuffers[stream] = device_->buffer_create({
+            geometry.vertexBuffers[stream] = RHI_DEVICE->buffer_create({
                 .size = std::uint64_t{geometry.vertexCapacities[stream]} * kVertexStrides[stream],
                 .usage = rhi::BufferUsage::Vertex,
                 .memoryUsage = rhi::MemoryUsage::Upload,
@@ -395,9 +399,9 @@ bool ImGuiRenderer::reserveGeometry(Geometry& geometry,
     }
     if (indexCount > geometry.indexCapacity) {
         if (geometry.indexBuffer)
-            device_->buffer_destroy(geometry.indexBuffer);
+            RHI_DEVICE->buffer_destroy(geometry.indexBuffer);
         geometry.indexCapacity = indexCount + kGeometrySlack;
-        geometry.indexBuffer = device_->buffer_create({
+        geometry.indexBuffer = RHI_DEVICE->buffer_create({
             .size = std::uint64_t{geometry.indexCapacity} * sizeof(ImDrawIdx),
             .usage = rhi::BufferUsage::Index,
             .memoryUsage = rhi::MemoryUsage::Upload,
@@ -415,15 +419,15 @@ bool ImGuiRenderer::reserveGeometry(Geometry& geometry,
 void ImGuiRenderer::releaseGeometry(Geometry& geometry) {
     for (rhi::RID buffer : geometry.vertexBuffers) {
         if (buffer)
-            device_->buffer_destroy(buffer);
+            RHI_DEVICE->buffer_destroy(buffer);
     }
     if (geometry.indexBuffer)
-        device_->buffer_destroy(geometry.indexBuffer);
+        RHI_DEVICE->buffer_destroy(geometry.indexBuffer);
     geometry = {};
 }
 
 bool ImGuiRenderer::setSceneTexture(std::uint32_t frameIndex, rhi::RID view) {
-    if (!device_ || frameIndex >= sceneTextures_.size())
+    if (!initialized_ || frameIndex >= sceneTextures_.size())
         return false;
     SceneTexture& texture = sceneTextures_[frameIndex];
     if (texture.view == view && texture.set)
@@ -432,7 +436,7 @@ bool ImGuiRenderer::setSceneTexture(std::uint32_t frameIndex, rhi::RID view) {
     if (!view)
         return false;
     Ref<UniformSet> set =
-        makeRef<UniformSet>(*device_, textureLayout_, std::vector<Ref<UboLayout>>{});
+        makeRef<UniformSet>(textureLayout_, std::vector<Ref<UboLayout>>{});
     if (!set->setResourceAt(0, Texture::adoptBinding(view, sampler_)))
         return false;
     set->upload();
@@ -446,7 +450,7 @@ bool ImGuiRenderer::setSceneTexture(std::uint32_t frameIndex, rhi::RID view) {
 void ImGuiRenderer::render(rhi::RID commandBuffer,
                            const ImDrawData& drawData,
                            std::uint32_t frameIndex) {
-    if (!device_ || !pipeline_ || drawData.TotalIdxCount <= 0)
+    if (!initialized_ || !pipeline_ || drawData.TotalIdxCount <= 0)
         return;
     const float framebufferWidth = drawData.DisplaySize.x * drawData.FramebufferScale.x;
     const float framebufferHeight = drawData.DisplaySize.y * drawData.FramebufferScale.y;
@@ -486,10 +490,10 @@ void ImGuiRenderer::render(rhi::RID commandBuffer,
         }
         indexStaging_.insert(indexStaging_.end(), list->IdxBuffer.begin(), list->IdxBuffer.end());
     }
-    device_->buffer_upload(geometry.vertexBuffers[0], asBytes(positionStaging_));
-    device_->buffer_upload(geometry.vertexBuffers[1], asBytes(uvStaging_));
-    device_->buffer_upload(geometry.vertexBuffers[2], asBytes(colorStaging_));
-    device_->buffer_upload(geometry.indexBuffer, asBytes(indexStaging_));
+    RHI_DEVICE->buffer_upload(geometry.vertexBuffers[0], asBytes(positionStaging_));
+    RHI_DEVICE->buffer_upload(geometry.vertexBuffers[1], asBytes(uvStaging_));
+    RHI_DEVICE->buffer_upload(geometry.vertexBuffers[2], asBytes(colorStaging_));
+    RHI_DEVICE->buffer_upload(geometry.indexBuffer, asBytes(indexStaging_));
 
     rhi::beginDebugLabel(commandBuffer, "ImGui", {0.4F, 0.7F, 1.0F, 1.0F});
     rhi::bindPipeline(commandBuffer, pipeline_);

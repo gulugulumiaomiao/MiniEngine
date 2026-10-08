@@ -1,5 +1,6 @@
 #include "render/uniform/Ubo.h"
 
+#include "core/logging/Log.h"
 #include "core/math/Math.h"
 #include "rhi/api/Device.h"
 
@@ -55,10 +56,15 @@ const UboUniform* UboLayout::findUniform(std::string_view name) const {
 
 // ---- Ubo ----
 
-Ubo::Ubo(rhi::IDevice& device, Ref<UboLayout> layout)
-    : device_(&device), deviceUid_(device.uid()), layout_(std::move(layout)) {
+Ubo::Ubo(Ref<UboLayout> layout) : layout_(std::move(layout)) {
+    rhi::IDevice* device = RHI_DEVICE;
+    if (!device) {
+        Log::error("Ubo", "No active device for UBO creation");
+        return;
+    }
+    deviceUid_ = device->uid();
     const std::uint32_t byteSize = layout_ ? layout_->byteSize() : 0;
-    buffer_ = device_->buffer_allocate_rid(rhi::BufferDesc{
+    buffer_ = device->buffer_allocate_rid(rhi::BufferDesc{
         .size = std::max<std::uint64_t>(16, byteSize),
         .usage = rhi::BufferUsage::Uniform | rhi::BufferUsage::TransferDestination,
         .memoryUsage = rhi::MemoryUsage::Upload,
@@ -69,9 +75,8 @@ Ubo::Ubo(rhi::IDevice& device, Ref<UboLayout> layout)
 Ubo::~Ubo() {
     // Cross-device safety: only touch the buffer if the device we were created on is still the
     // active one; a recreated device already tore down its pools, so the old RID is meaningless.
-    if (buffer_ && device_ && rhi::IDevice::active() &&
-        rhi::IDevice::active()->uid() == deviceUid_) {
-        device_->buffer_destroy(buffer_);
+    if (rhi::IDevice* device = RHI_DEVICE; buffer_ && device && device->uid() == deviceUid_) {
+        device->buffer_destroy(buffer_);
     }
     buffer_ = {};
     cpu_.clear();
@@ -81,7 +86,10 @@ Ubo::~Ubo() {
 void Ubo::create() {
     if (created_)
         return;
-    device_->buffer_allocate_memory(buffer_);
+    rhi::IDevice* device = RHI_DEVICE;
+    if (!device)
+        return;
+    device->buffer_allocate_memory(buffer_);
     const std::uint32_t byteSize = layout_ ? layout_->byteSize() : 0;
     cpu_.assign(std::max<std::uint32_t>(16, byteSize), std::byte{0});
     created_ = true;
@@ -129,7 +137,8 @@ void Ubo::setRawBytes(std::span<const std::byte> data) {
 void Ubo::upload() {
     if (!dirty_ || !created_ || !buffer_ || cpu_.empty())
         return;
-    device_->buffer_upload(buffer_, cpu_);
+    if (rhi::IDevice* device = RHI_DEVICE)
+        device->buffer_upload(buffer_, cpu_);
     dirty_ = false;
 }
 

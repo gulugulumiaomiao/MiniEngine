@@ -19,12 +19,17 @@ constexpr std::uint64_t kInstanceTableSize = sizeof(std::uint32_t) * FrameGpuMan
 
 } // namespace
 
-bool FrameGpuManager::initialize(rhi::IDevice& device) {
+bool FrameGpuManager::initialize() {
     if (initialized()) {
         Log::error("FrameGpuManager", "Manager is already initialized");
         return false;
     }
-    device_ = &device;
+    rhi::IDevice* device = RHI_DEVICE;
+    if (!device) {
+        Log::error("FrameGpuManager", "No active device for frame GPU initialization");
+        return false;
+    }
+    initialized_ = true;
 
     // Fixed engine convention for set 0. acquire() dedups on the (binding, type) ordered hash, so
     // this is the same UniformSetLayout instance a program reflects for set 0 (shaders declare this
@@ -35,7 +40,7 @@ bool FrameGpuManager::initialize(rhi::IDevice& device) {
         {2, "instanceTable", rhi::ResourceType::StorageBuffer},
         {3, "shadowMap", rhi::ResourceType::CombinedImageSampler},
     }};
-    sceneLayout_ = UniformSetLayout::acquire(device, sceneBindings);
+    sceneLayout_ = UniformSetLayout::acquire(sceneBindings);
 
     // Synthetic one-member block whose size matches the packed SceneDrawData blob; the scene UBO is
     // written wholesale via Ubo::setRawBytes (the CPU struct already matches the std140 layout).
@@ -44,14 +49,14 @@ bool FrameGpuManager::initialize(rhi::IDevice& device) {
         UboUniform{"SceneData", UboUniformType::Float, 0, static_cast<std::uint32_t>(sizeof(SceneDrawData))});
     sceneUboLayout_->finish();
 
-    shadowSampler_ = device_->sampler_create({
+    shadowSampler_ = device->sampler_create({
         .minFilter = rhi::SamplerFilter::Linear,
         .magFilter = rhi::SamplerFilter::Linear,
         .mipmapFilter = rhi::SamplerMipmapFilter::Nearest,
         .addressU = rhi::SamplerAddressMode::ClampToEdge,
         .addressV = rhi::SamplerAddressMode::ClampToEdge,
     });
-    placeholderTexture_ = device_->texture_create({
+    placeholderTexture_ = device->texture_create({
         .format = rhi::PixelFormat::Depth32Float,
         .width = 1,
         .height = 1,
@@ -60,26 +65,26 @@ bool FrameGpuManager::initialize(rhi::IDevice& device) {
         .usage = rhi::TextureUsage::Sampled | rhi::TextureUsage::DepthStencilAttachment,
         .debugName = "Shadow map placeholder",
     });
-    placeholderView_ = device_->texture_default_view(placeholderTexture_);
+    placeholderView_ = device->texture_default_view(placeholderTexture_);
     if (!shadowSampler_ || !placeholderTexture_ || !placeholderView_) {
         Log::fatal("FrameGpuManager", "Cannot create shadow sampling resources");
     }
 
     for (FrameResources& frame : frames_) {
-        frame.objectBuffer = device_->buffer_create({
+        frame.objectBuffer = device->buffer_create({
             .size = kObjectBufferSize,
             .usage = rhi::BufferUsage::Storage,
             .memoryUsage = rhi::MemoryUsage::Upload,
             .debugName = "Object draw data",
         });
-        frame.instanceTable = device_->buffer_create({
+        frame.instanceTable = device->buffer_create({
             .size = kInstanceTableSize,
             .usage = rhi::BufferUsage::Storage,
             .memoryUsage = rhi::MemoryUsage::Upload,
             .debugName = "Instance table",
         });
         frame.sceneSet = makeRef<UniformSet>(
-            device, sceneLayout_, std::vector<Ref<UboLayout>>{sceneUboLayout_});
+            sceneLayout_, std::vector<Ref<UboLayout>>{sceneUboLayout_});
         frame.sceneSet->setResourceAt(
             1, makeRef<StorageBufferResource>(frame.objectBuffer, kObjectBufferSize));
         frame.sceneSet->setResourceAt(
@@ -99,8 +104,8 @@ void FrameGpuManager::upload(std::uint32_t frameIndex, const DrawList& drawList)
     FrameResources& frame = frames_[frameIndex];
     if (Ubo* sceneUbo = frame.sceneSet->uboAt(0))
         sceneUbo->setRawBytes(std::as_bytes(std::span{&drawList.scene, 1}));
-    if (!drawList.objects.empty())
-        device_->buffer_upload(frame.objectBuffer, std::as_bytes(std::span{drawList.objects}));
+    if (rhi::IDevice* device = RHI_DEVICE; !drawList.objects.empty() && device)
+        device->buffer_upload(frame.objectBuffer, std::as_bytes(std::span{drawList.objects}));
     frame.sceneSet->upload();
 }
 
@@ -149,24 +154,26 @@ void FrameGpuManager::uploadInstanceRegion(std::uint32_t frameIndex,
         Log::fatal("FrameGpuManager", "Instance region out of range");
 
     FrameResources& frame = frames_[frameIndex];
-    device_->buffer_upload(frame.instanceTable,
-                          std::as_bytes(objectRows),
-                          static_cast<std::uint64_t>(baseSlot) * sizeof(std::uint32_t));
+    if (rhi::IDevice* device = RHI_DEVICE)
+        device->buffer_upload(frame.instanceTable,
+                              std::as_bytes(objectRows),
+                              static_cast<std::uint64_t>(baseSlot) * sizeof(std::uint32_t));
 }
 
 void FrameGpuManager::shutdown() {
     if (!initialized())
         return;
+    rhi::IDevice* device = RHI_DEVICE;
     for (FrameResources& frame : frames_) {
         frame.sceneSet.reset(); // frees the descriptor set + the scene UBO's buffer
-        if (frame.objectBuffer)
-            device_->buffer_destroy(frame.objectBuffer);
-        if (frame.instanceTable)
-            device_->buffer_destroy(frame.instanceTable);
+        if (frame.objectBuffer && device)
+            device->buffer_destroy(frame.objectBuffer);
+        if (frame.instanceTable && device)
+            device->buffer_destroy(frame.instanceTable);
         frame = {};
     }
-    if (placeholderTexture_)
-        device_->texture_destroy(placeholderTexture_);
+    if (placeholderTexture_ && device)
+        device->texture_destroy(placeholderTexture_);
     // The set-0 layout instance lives in the UniformSetLayout cache; it is torn down by
     // UniformSetLayout::clearCache() during engine shutdown (before the device is destroyed).
     sceneLayout_.reset();
@@ -174,7 +181,7 @@ void FrameGpuManager::shutdown() {
     placeholderView_ = {};
     placeholderTexture_ = {};
     shadowSampler_ = {};
-    device_ = nullptr;
+    initialized_ = false;
 }
 
 } // namespace engine

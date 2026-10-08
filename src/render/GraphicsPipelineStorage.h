@@ -32,7 +32,7 @@ class GraphicsPipelineStorage final : public Singleton<GraphicsPipelineStorage> 
 public:
     ~GraphicsPipelineStorage();
 
-    [[nodiscard]] bool initialize(rhi::IDevice& device);
+    [[nodiscard]] bool initialize();
     // Compiles (or reuses) the program for a shader pass + variant, building its vs/fs modules,
     // reflected uniform-set layouts and pipeline layout.
     [[nodiscard]] Ref<ShaderProgram> getOrCreateProgram(const Shader& shader,
@@ -71,7 +71,6 @@ private:
                                                             rhi::PixelFormat depthFormat,
                                                             const ShaderProgram& program) const;
 
-    rhi::IDevice* device_{};
     std::unique_ptr<ShaderCompilePipeline> compilePipeline_;
     std::unordered_map<ShaderProgramId, Ref<ShaderProgram>> programs_;
     GraphicsPipelineStorageCache cache_;

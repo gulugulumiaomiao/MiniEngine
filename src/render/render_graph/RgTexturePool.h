@@ -9,10 +9,6 @@
 
 namespace engine {
 
-namespace rhi {
-class IDevice;
-}
-
 // Frame-indexed texture pool for RenderGraph transient textures.
 //
 // The pool keeps one bucket per in-flight frame. At the beginning of each frame the bucket that
@@ -33,7 +29,7 @@ public:
         bool inUse{false};
     };
 
-    explicit RgTexturePool(rhi::IDevice& device, std::uint32_t framesInFlight = 2);
+    explicit RgTexturePool(std::uint32_t framesInFlight = 2);
     ~RgTexturePool();
 
     RgTexturePool(const RgTexturePool&) = delete;
@@ -68,7 +64,6 @@ private:
     [[nodiscard]] static bool matches(const PooledTexture& entry, const RgTextureDesc& desc);
     [[nodiscard]] std::unique_ptr<PooledTexture> createEntry(const RgTextureDesc& desc);
 
-    rhi::IDevice& device_;
     std::uint32_t framesInFlight_{2};
     std::uint32_t currentFrameIndex_{0};
     std::vector<Bucket> buckets_;

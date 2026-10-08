@@ -60,7 +60,7 @@ private:
 // RID, create() allocates GPU memory and sizes the CPU buffer.
 class Ubo final : public UniformResource {
 public:
-    Ubo(rhi::IDevice& device, Ref<UboLayout> layout);
+    explicit Ubo(Ref<UboLayout> layout);
     ~Ubo() override;
     Ubo(const Ubo&) = delete;
     Ubo& operator=(const Ubo&) = delete;
@@ -92,7 +92,6 @@ public:
     [[nodiscard]] bool dirty() const { return dirty_; }
 
 private:
-    rhi::IDevice* device_{};
     std::uint64_t deviceUid_{};
     Ref<UboLayout> layout_;
     rhi::RID buffer_;

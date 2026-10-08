@@ -19,7 +19,7 @@ namespace engine {
 MaterialStorage::MaterialStorage() = default;
 MaterialStorage::~MaterialStorage() = default;
 
-bool MaterialStorage::initialize(rhi::IDevice& device, std::uint32_t frameCount) {
+bool MaterialStorage::initialize(std::uint32_t frameCount) {
     if (initialized()) {
         Log::error("MaterialStorage", "Manager is already initialized");
         return false;
@@ -28,7 +28,7 @@ bool MaterialStorage::initialize(rhi::IDevice& device, std::uint32_t frameCount)
         Log::error("MaterialStorage", "Cannot initialize Material binding cache");
         return false;
     }
-    device_ = &device;
+    initialized_ = true;
     MATERIAL_RESOURCE_MANAGER.setDestroyObserver([this](RID handle) { invalidate(handle); });
     return true;
 }
@@ -93,7 +93,7 @@ Ref<UniformSet> MaterialStorage::resolve(const Material& material, const ShaderP
 
     // Rebuild when the slot is fresh/evicted or the material's shader changed its set-1 layout.
     if (entry.pendingRelease || !entry.materialSet || entry.setLayout.get() != setLayout.get()) {
-        entry.materialSet = makeRef<UniformSet>(*device_, setLayout, program.uboLayouts(1));
+        entry.materialSet = makeRef<UniformSet>(setLayout, program.uboLayouts(1));
         entry.setLayout = setLayout;
         entry.uniformVersion = 0; // force the uniform write below
         entry.textureBindings.clear();
@@ -154,7 +154,8 @@ void MaterialStorage::invalidate(RID handle) {
     std::vector<MaterialStorageEntry> resources = cache_.extract(cacheKey(handle));
     if (resources.empty())
         return;
-    device_->waitIdle();
+    if (rhi::IDevice* device = RHI_DEVICE)
+        device->waitIdle();
 }
 
 void MaterialStorage::beginFrame(std::uint32_t frameIndex) {
@@ -167,7 +168,7 @@ void MaterialStorage::shutdown() {
     if (!initialized())
         return;
     cache_.reset(); // drops every entry -> releases each Ref<UniformSet>
-    device_ = nullptr;
+    initialized_ = false;
 }
 
 } // namespace engine

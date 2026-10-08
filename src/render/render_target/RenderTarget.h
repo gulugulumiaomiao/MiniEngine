@@ -11,10 +11,6 @@
 
 namespace engine {
 
-namespace rhi {
-class IDevice;
-}
-
 struct RenderTargetColorAttachmentDesc {
     rhi::PixelFormat format{rhi::PixelFormat::Rgba8Unorm};
     rhi::TextureUsage additionalUsage{rhi::TextureUsage::None};
@@ -44,7 +40,7 @@ struct RenderTargetDesc {
 // persistent state of its images across graph instances.
 class RenderTarget final {
 public:
-    explicit RenderTarget(rhi::IDevice& device);
+    RenderTarget();
     ~RenderTarget();
 
     RenderTarget(const RenderTarget&) = delete;
@@ -103,7 +99,6 @@ private:
     [[nodiscard]] const Attachment& requireDepth() const;
     [[nodiscard]] Attachment& requireDepth();
 
-    rhi::IDevice& device_;
     RenderTargetDesc desc_;
     std::vector<Attachment> colors_;
     std::optional<Attachment> depth_;

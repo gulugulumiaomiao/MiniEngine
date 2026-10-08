@@ -241,11 +241,10 @@ bool Engine::initializeGpuManagers(const rhi::IContextFactory& contextFactory,
                                       []() { return std::make_unique<MiniForwardPipeline>(); });
     renderer_->setPipeline(pipelineRegistry.create(config_.render.pipeline));
 
-    if (!GRAPHICS_PIPELINE_STORAGE.initialize(renderer_->device()) ||
-        !FRAME_GPU_MANAGER.initialize(renderer_->device()) ||
-        !MATERIAL_STORAGE.initialize(renderer_->device(), FrameGpuManager::kFramesInFlight) ||
-        !GLOBAL_UNIFORM_GPU_MANAGER.initialize(renderer_->device(),
-                                               FrameGpuManager::kFramesInFlight)) {
+    if (!GRAPHICS_PIPELINE_STORAGE.initialize() ||
+        !FRAME_GPU_MANAGER.initialize() ||
+        !MATERIAL_STORAGE.initialize(FrameGpuManager::kFramesInFlight) ||
+        !GLOBAL_UNIFORM_GPU_MANAGER.initialize(FrameGpuManager::kFramesInFlight)) {
         Log::error("Engine", "Cannot initialize GPU resource managers");
         return false;
     }

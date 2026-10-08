@@ -43,11 +43,10 @@ struct ResourceBinding {
 class UniformSetLayout final : public RefCounted {
 public:
     // Dedup entry point: returns the shared instance for this binding set, creating it on a miss.
-    [[nodiscard]] static Ref<UniformSetLayout> acquire(rhi::IDevice& device,
-                                                       std::span<const ResourceBinding> bindings);
+    [[nodiscard]] static Ref<UniformSetLayout> acquire(std::span<const ResourceBinding> bindings);
     static void clearCache();
 
-    explicit UniformSetLayout(rhi::IDevice& device); // step 1: reserve the layout RID only
+    UniformSetLayout();      // step 1: reserve the layout RID only
     ~UniformSetLayout() override;                    // destroy the VkDescriptorSetLayout + recycle RID
     UniformSetLayout(const UniformSetLayout&) = delete;
     UniformSetLayout& operator=(const UniformSetLayout&) = delete;
@@ -62,7 +61,6 @@ public:
     [[nodiscard]] const std::vector<ResourceBinding>& bindings() const { return bindings_; }
 
 private:
-    rhi::IDevice* device_{};
     std::uint64_t deviceUid_{};
     rhi::RID rid_;
     std::vector<ResourceBinding> bindings_;

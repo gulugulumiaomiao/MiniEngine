@@ -47,7 +47,7 @@ void ImGuiLayer::attach(Renderer& renderer, Window& window) {
         return;
     }
 
-    if (!imguiRenderer_.initialize(renderer.device(), renderer.swapchain().format())) {
+    if (!imguiRenderer_.initialize(renderer.swapchain().format())) {
         Log::error("ImGuiLayer", "Cannot initialize the ImGui RHI renderer");
         ImGui_ImplWin32_Shutdown();
         ImGui::DestroyContext();
