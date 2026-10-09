@@ -1,5 +1,5 @@
 #include "render/material/Material.h"
-#include "render/material/MaterialManager.h"
+#include "asset/runtime/MaterialAssetResolver.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/manager/AssetManager.h"
 #include "core/filesystem/FileWatcher.h"
@@ -18,7 +18,7 @@ protected:
     }
 
     void TearDown() override {
-        MATERIAL_MANAGER.clear();
+        engine::Material::errorMaterial.reset();
         engine::test::shutdownAssetEnvironment();
     }
 };
@@ -26,24 +26,24 @@ protected:
 TEST_F(MaterialGuidIdentityTest, LoadByGuidReturnsSameHandle) {
     using namespace engine;
     const VirtualPath path{"assets://materials/warm_vertex_color.material.json"};
-    const Ref<Material> byPath = MATERIAL_MANAGER.load(path);
+    const Ref<Material> byPath = resolveMaterialReference(path);
     ASSERT_TRUE(byPath);
 
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const Ref<Material> byId = MATERIAL_MANAGER.load(*assetId);
+    const Ref<Material> byId = resolveMaterialReference(*assetId);
     EXPECT_EQ(byId, byPath);
-    EXPECT_EQ(MATERIAL_MANAGER.find(*assetId), byPath);
+    EXPECT_EQ(resolveMaterialReference(*assetId), byPath);
 }
 
 TEST_F(MaterialGuidIdentityTest, CloneReturnsDifferentHandleAndIsNotAssetBacked) {
     using namespace engine;
     const VirtualPath path{"assets://materials/warm_vertex_color.material.json"};
-    const Ref<Material> original = MATERIAL_MANAGER.load(path);
+    const Ref<Material> original = resolveMaterialReference(path);
     ASSERT_TRUE(original);
 
-    const Ref<Material> cloned = MATERIAL_MANAGER.clone(original);
+    const Ref<Material> cloned = original->clone();
     ASSERT_TRUE(cloned);
     EXPECT_NE(cloned, original);
 
@@ -52,18 +52,19 @@ TEST_F(MaterialGuidIdentityTest, CloneReturnsDifferentHandleAndIsNotAssetBacked)
     ASSERT_NE(originalData, nullptr);
     ASSERT_NE(clonedData, nullptr);
 
-    EXPECT_TRUE(originalData->isAssetBacked());
-    EXPECT_FALSE(clonedData->isAssetBacked());
-    EXPECT_EQ(clonedData->assetPath(), originalData->assetPath());
+    EXPECT_TRUE(static_cast<bool>(findMaterialAsset(*originalData)));
+    EXPECT_FALSE(static_cast<bool>(findMaterialAsset(*clonedData)));
+    EXPECT_FALSE(materialAssetPath(*clonedData).valid());
+    EXPECT_NE(clonedData->instanceId(), originalData->instanceId());
 }
 
 TEST_F(MaterialGuidIdentityTest, CloneDoesNotShareRuntimeState) {
     using namespace engine;
     const VirtualPath path{"assets://materials/warm_vertex_color.material.json"};
-    const Ref<Material> original = MATERIAL_MANAGER.load(path);
+    const Ref<Material> original = resolveMaterialReference(path);
     ASSERT_TRUE(original);
 
-    const Ref<Material> cloned = MATERIAL_MANAGER.clone(original);
+    const Ref<Material> cloned = original->clone();
     ASSERT_TRUE(cloned);
 
     Material* originalData = original.get();
@@ -84,9 +85,9 @@ TEST_F(MaterialGuidIdentityTest, RefreshAssetUpdatesOriginalButNotClone) {
     const auto assetId = ASSET_DATABASE.findGuid(path);
     ASSERT_TRUE(assetId);
 
-    const Ref<Material> original = MATERIAL_MANAGER.load(path);
+    const Ref<Material> original = resolveMaterialReference(path);
     ASSERT_TRUE(original);
-    const Ref<Material> cloned = MATERIAL_MANAGER.clone(original);
+    const Ref<Material> cloned = original->clone();
     ASSERT_TRUE(cloned);
 
     Material* originalData = original.get();
@@ -98,7 +99,7 @@ TEST_F(MaterialGuidIdentityTest, RefreshAssetUpdatesOriginalButNotClone) {
     originalData->setVec4("BaseColor", {0.9F, 0.8F, 0.7F, 1.0F});
     clonedData->setVec4("BaseColor", {0.1F, 0.2F, 0.3F, 1.0F});
 
-    MATERIAL_MANAGER.refreshAsset(*assetId);
+    ASSET_MANAGER.reloadInPlace(path);
 
     EXPECT_EQ(originalData->getVec4("BaseColor"), originalColor);
     EXPECT_EQ(clonedData->getVec4("BaseColor"), math::Vec4(0.1F, 0.2F, 0.3F, 1.0F));

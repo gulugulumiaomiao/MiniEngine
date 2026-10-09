@@ -1,15 +1,13 @@
 #include "render/material/Material.h"
 #include "render/GraphicsPipelineStorage.h"
 
-#include "asset/types/MaterialAsset.h"
-
-#include "asset/database/AssetDatabase.h"
 #include "core/logging/Log.h"
-#include "core/serialization/Transfer.h"
-#include "render/material/MaterialManager.h"
 #include "render/texture/Sampler.h"
 
 #include <algorithm>
+#include <atomic>
+#include "rhi/api/Device.h"
+#include "render/gpu/frame/FrameGpuManager.h"
 #include <cassert>
 #include <cstring>
 #include <iterator>
@@ -17,79 +15,6 @@
 #include <utility>
 
 namespace engine {
-
-namespace {
-
-constexpr std::uint32_t kMaterialAssetMagic = 0x4c54414dU;
-constexpr std::uint16_t kMaterialAssetVersion = 2;
-
-struct MaterialPropertyEntry : public Transferable {
-    std::string name;
-    ShaderAssetValue value;
-
-    MaterialPropertyEntry() = default;
-    MaterialPropertyEntry(std::string name, ShaderAssetValue value)
-        : name(std::move(name)), value(std::move(value)) {}
-
-    [[nodiscard]] bool transfer(Transfer& archive) override {
-        return archive.beginObject({}) && archive.transfer("name", name) &&
-               archive.transfer("value", value) && archive.endObject();
-    }
-};
-
-bool transferMaterialPayload(Transfer& archive, MaterialAsset& value) {
-    std::uint32_t magic = kMaterialAssetMagic;
-    std::uint16_t version = kMaterialAssetVersion;
-    if (!archive.transfer("magic", magic) || magic != kMaterialAssetMagic ||
-        !archive.transfer("version", version) || version != kMaterialAssetVersion ||
-        !archive.transfer("name", value.name) || !archive.transfer("shader", value.shader)) {
-        return false;
-    }
-
-    std::vector<MaterialPropertyEntry> entries;
-    if (archive.writing()) {
-        entries.reserve(value.properties.size());
-        for (const auto& [name, property] : value.properties) {
-            entries.push_back({name, property});
-        }
-        std::ranges::sort(entries, {}, &MaterialPropertyEntry::name);
-    }
-    if (!archive.transfer("properties", entries))
-        return false;
-    if (archive.reading()) {
-        value.properties.clear();
-        for (MaterialPropertyEntry& entry : entries) {
-            if (!value.properties.emplace(std::move(entry.name), std::move(entry.value)).second) {
-                return false;
-            }
-        }
-    }
-    return archive.transfer("keywords", value.keywords) &&
-           archive.transfer("render_queue", value.renderQueue);
-}
-
-} // namespace
-
-bool MaterialAsset::transfer(Transfer& archive) {
-    MaterialAsset decoded;
-    MaterialAsset& target = archive.reading() ? decoded : *this;
-    if (!archive.beginObject({}) || !transferMaterialPayload(archive, target) ||
-        !archive.endObject()) {
-        Log::error("MaterialAsset",
-                   "Invalid payload %s: %s",
-                   assetPath().string().c_str(),
-                   archive.error().empty() ? "validation failed" : archive.error().c_str());
-        return false;
-    }
-    if (archive.reading()) {
-        name = std::move(decoded.name);
-        shader = std::move(decoded.shader);
-        properties = std::move(decoded.properties);
-        keywords = std::move(decoded.keywords);
-        renderQueue = decoded.renderQueue;
-    }
-    return true;
-}
 
 namespace {
 
@@ -154,9 +79,8 @@ const Value* requireValue(const ShaderValue& value, std::string_view name) {
 
 } // namespace
 
-Material::~Material() {
-    MATERIAL_RESOURCE_MANAGER.unregister(this);
-}
+Ref<Material> Material::errorMaterial;
+Material::~Material() = default;
 
 const Shader& Material::shader() const {
     if (!shader_)
@@ -171,26 +95,64 @@ ShaderValue Material::propertyValue(const ShaderPropertyInfo& property) const {
     case ShaderPropertyType::Vec2: return getVec2(property.name);
     case ShaderPropertyType::Vec3: return getVec3(property.name);
     case ShaderPropertyType::Vec4: return getVec4(property.name);
-    case ShaderPropertyType::Texture2D: return getTexture(property.name);
-    case ShaderPropertyType::Matrix: return math::Mat44{1.0F};
+    case ShaderPropertyType::Texture2D: return std::string{};
+    case ShaderPropertyType::Matrix: return getMatrix(property.name);
     }
     assert(false && "Unsupported shader property type");
 }
 
-void Material::initialize(AssetId assetId,
-                          VirtualPath assetPath,
-                          std::string materialName,
-                          Ref<Shader> shader,
-                          std::optional<int> renderQueueOverride) {
-    assetId_ = assetId;
-    assetPath_ = std::move(assetPath);
-    name = std::move(materialName);
-    renderQueueOverride_ = renderQueueOverride;
-    if (!shader) {
-        Log::error("Material", "Shader reference must be valid");
-        return;
+Material::Material(MaterialCreateInfo info) {
+    static std::atomic<std::uint64_t> nextId{1};
+    instanceId_ = nextId.fetch_add(1, std::memory_order_relaxed);
+    if (!rebuild(std::move(info)))
+        Log::fatal("Material", "Invalid runtime material description");
+    version_ = 1;
+}
+
+void Material::ensureShaderCurrent() const {
+    if (!rebuilding_ && shader_ && shaderRevision_ != shader_->revision())
+        const_cast<Material*>(this)->rebuildForShader(shader_, true);
+}
+
+bool validateMaterialCreateInfo(const MaterialCreateInfo& info) {
+    if (!info.shader)
+        return false;
+    for (const auto& [name, value] : info.properties) {
+        const auto found =
+            std::ranges::find(info.shader->properties(), name, &ShaderPropertyInfo::name);
+        if (found == info.shader->properties().end() ||
+            found->type == ShaderPropertyType::Texture2D ||
+            found->defaultValue.index() != value.index())
+            return false;
     }
-    rebuildForShader(std::move(shader), false);
+    for (const auto& [name, binding] : info.textures) {
+        const auto found =
+            std::ranges::find(info.shader->properties(), name, &ShaderPropertyInfo::name);
+        if (found == info.shader->properties().end() ||
+            found->type != ShaderPropertyType::Texture2D)
+            return false;
+    }
+    return true;
+}
+
+bool Material::rebuild(MaterialCreateInfo info) {
+    if (!validateMaterialCreateInfo(info))
+        return false;
+    const auto previousVersion = version_;
+    name = std::move(info.name);
+    renderQueueOverride_ = info.renderQueue;
+    defaultTextureBinding_ = std::move(info.defaultTextureBinding);
+    rebuildForShader(std::move(info.shader), false);
+    suppressChanges_ = true;
+    for (const auto& [name, value] : info.properties)
+        setPropertyValue(name, value);
+    for (auto& [name, binding] : info.textures)
+        textures.insert_or_assign(name, std::move(binding));
+    keywords = std::move(info.keywords);
+    suppressChanges_ = false;
+    version_ = previousVersion;
+    markChanged();
+    return true;
 }
 
 void Material::setShader(Ref<Shader> shader) {
@@ -243,6 +205,11 @@ void Material::rebuildForShader(Ref<Shader> newShaderRef, bool preserveValues) {
         Log::error("Material", "Shader reference must be valid");
         return;
     }
+    rebuilding_ = true;
+    struct ResetFlag {
+        bool& flag;
+        ~ResetFlag() { flag = false; }
+    } reset{rebuilding_};
     const Shader& newShader = *newShaderRef;
 
     std::unordered_map<std::string, std::pair<ShaderPropertyType, ShaderValue>> oldValues;
@@ -251,10 +218,8 @@ void Material::rebuildForShader(Ref<Shader> newShaderRef, bool preserveValues) {
             ShaderPropertyInfo property{member.name, member.type};
             oldValues.emplace(member.name, std::pair{member.type, propertyValue(property)});
         }
-        for (const auto& [name, value] : textures)
-            oldValues.emplace(name, std::pair{ShaderPropertyType::Texture2D, ShaderValue{value}});
     }
-    const auto oldTextureRefs = std::move(textureRefs_);
+    auto oldTextures = std::move(textures);
     auto oldKeywords = std::move(keywords);
 
     shader_ = std::move(newShaderRef);
@@ -262,21 +227,25 @@ void Material::rebuildForShader(Ref<Shader> newShaderRef, bool preserveValues) {
     uniformLayout = newShader.uniformBlockLayout();
     uniformData.assign(uniformLayout.byteSize, std::byte{0});
     textures.clear();
-    textureRefs_.clear();
+    bindings_.clear();
     keywords.clear();
     renderQueue = renderQueueOverride_.value_or(newShader.defaultSubShader().renderQueue());
 
     suppressChanges_ = true;
-    for (const ShaderPropertyInfo& property : newShader.properties()) {
+    for (const auto& property : newShader.properties()) {
+        if (property.type == ShaderPropertyType::Texture2D) {
+            const auto old = oldTextures.find(property.name);
+            textures[property.name] =
+                preserveValues && old != oldTextures.end()
+                    ? std::move(old->second)
+                    : (defaultTextureBinding_ ? defaultTextureBinding_(property)
+                                              : MaterialTextureBinding{});
+            continue;
+        }
         setPropertyValue(property.name, property.defaultValue);
         const auto old = oldValues.find(property.name);
         if (old != oldValues.end() && compatiblePropertyTypes(old->second.first, property.type))
             setPropertyValue(property.name, old->second.second);
-        if (preserveValues && property.type == ShaderPropertyType::Texture2D) {
-            if (const auto texture = oldTextureRefs.find(property.name);
-                texture != oldTextureRefs.end())
-                textureRefs_.insert(*texture);
-        }
     }
     keywords = std::move(oldKeywords);
     suppressChanges_ = false;
@@ -288,24 +257,8 @@ void Material::rebuildForShader(Ref<Shader> newShaderRef, bool preserveValues) {
     }
 }
 
-Ref<Material> MaterialAsset::instantiate(const Ref<Shader>& shader) const {
-    Ref<Material> material = makeRef<Material>();
-    const AssetId assetId = ASSET_DATABASE.findGuid(assetPath()).value_or(AssetId{});
-    material->initialize(assetId, assetPath(), name, shader, renderQueue);
-    if (!shader)
-        return material;
-    material->keywords = keywords;
-    material->suppressChanges_ = true;
-    for (const auto& [propertyName, value] : properties)
-        material->setPropertyValue(
-            propertyName, std::visit([](const auto& item) -> ShaderValue { return item; }, value));
-    material->suppressChanges_ = false;
-    material->version_ = 1;
-    material->dirty_ = true;
-    return material;
-}
-
 float Material::getFloat(std::string_view name) const {
+    ensureShaderCurrent();
     const UniformMemberLayout* member = findMember(uniformLayout, name);
     return member && requireType(*member, ShaderPropertyType::Float, name)
                ? readUniformValue<float>(*this, *member)
@@ -313,6 +266,7 @@ float Material::getFloat(std::string_view name) const {
 }
 
 math::Vec2 Material::getVec2(std::string_view name) const {
+    ensureShaderCurrent();
     const UniformMemberLayout* member = findMember(uniformLayout, name);
     return member && requireType(*member, ShaderPropertyType::Vec2, name)
                ? readUniformValue<math::Vec2>(*this, *member)
@@ -320,6 +274,7 @@ math::Vec2 Material::getVec2(std::string_view name) const {
 }
 
 math::Vec3 Material::getVec3(std::string_view name) const {
+    ensureShaderCurrent();
     const UniformMemberLayout* member = findMember(uniformLayout, name);
     return member && requireType(*member, ShaderPropertyType::Vec3, name)
                ? readUniformValue<math::Vec3>(*this, *member)
@@ -327,51 +282,58 @@ math::Vec3 Material::getVec3(std::string_view name) const {
 }
 
 math::Vec4 Material::getVec4(std::string_view name) const {
+    ensureShaderCurrent();
     const UniformMemberLayout* member = findMember(uniformLayout, name);
     return member && requireType(*member, ShaderPropertyType::Vec4, name)
                ? readUniformValue<math::Vec4>(*this, *member)
                : math::Vec4{};
 }
 
+math::Mat44 Material::getMatrix(std::string_view name) const {
+    ensureShaderCurrent();
+    const auto* member = findMember(uniformLayout, name);
+    return member && requireType(*member, ShaderPropertyType::Matrix, name)
+               ? readUniformValue<math::Mat44>(*this, *member)
+               : math::Mat44{1.0F};
+}
+
+void Material::setMatrix(std::string_view name, const math::Mat44& value) {
+    ensureShaderCurrent();
+    const auto* member = findMember(uniformLayout, name);
+    if (!member || !requireType(*member, ShaderPropertyType::Matrix, name))
+        return;
+    writeUniformValue(*this, *member, value);
+    markChanged();
+}
+
 bool Material::getBool(std::string_view name) const {
+    ensureShaderCurrent();
     const UniformMemberLayout* member = findMember(uniformLayout, name);
     return member && requireType(*member, ShaderPropertyType::Boolean, name) &&
            readUniformValue<std::uint32_t>(*this, *member) != 0;
 }
 
-const std::string& Material::getTexture(std::string_view name) const {
-    const auto texture = textures.find(std::string{name});
-    if (texture == textures.end()) {
-        Log::warn("Material",
-                  "Texture property does not exist: %.*s",
-                  static_cast<int>(name.size()),
-                  name.data());
-        static const std::string empty;
-        return empty;
-    }
-    return texture->second;
+Ref<Texture> Material::getTexture(std::string_view name) const {
+    return resolveTexture(name);
 }
-
 Ref<Texture> Material::resolveTexture(std::string_view name) const {
-    const std::string key{name};
-    const auto existing = textureRefs_.find(key);
-    if (existing != textureRefs_.end())
-        return existing->second;
-    const auto path = textures.find(key);
-    if (path == textures.end())
+    ensureShaderCurrent();
+    const auto found = textures.find(std::string{name});
+    if (found == textures.end())
         return {};
-    Ref<Texture> texture = resolveTextureReference(path->second);
-    if (texture)
-        textureRefs_.insert_or_assign(key, texture);
-    return texture;
+    auto& binding = found->second;
+    if (!binding.texture && binding.resolve)
+        binding.texture = binding.resolve();
+    return binding.texture;
 }
-
 Ref<Sampler> Material::resolveSampler(std::string_view name) const {
-    const auto existing = textureSamplers_.find(std::string{name});
-    return existing != textureSamplers_.end() ? existing->second : Ref<Sampler>{};
+    ensureShaderCurrent();
+    const auto found = textures.find(std::string{name});
+    return found == textures.end() ? Ref<Sampler>{} : found->second.sampler;
 }
 
 void Material::setFloat(std::string_view name, float value) {
+    ensureShaderCurrent();
     const UniformMemberLayout* member = findMember(uniformLayout, name);
     if (!member || !requireType(*member, ShaderPropertyType::Float, name))
         return;
@@ -380,6 +342,7 @@ void Material::setFloat(std::string_view name, float value) {
 }
 
 void Material::setVec2(std::string_view name, const math::Vec2& value) {
+    ensureShaderCurrent();
     const UniformMemberLayout* member = findMember(uniformLayout, name);
     if (!member || !requireType(*member, ShaderPropertyType::Vec2, name))
         return;
@@ -388,6 +351,7 @@ void Material::setVec2(std::string_view name, const math::Vec2& value) {
 }
 
 void Material::setVec3(std::string_view name, const math::Vec3& value) {
+    ensureShaderCurrent();
     const UniformMemberLayout* member = findMember(uniformLayout, name);
     if (!member || !requireType(*member, ShaderPropertyType::Vec3, name))
         return;
@@ -396,6 +360,7 @@ void Material::setVec3(std::string_view name, const math::Vec3& value) {
 }
 
 void Material::setVec4(std::string_view name, const math::Vec4& value) {
+    ensureShaderCurrent();
     const UniformMemberLayout* member = findMember(uniformLayout, name);
     if (!member || !requireType(*member, ShaderPropertyType::Vec4, name))
         return;
@@ -404,6 +369,7 @@ void Material::setVec4(std::string_view name, const math::Vec4& value) {
 }
 
 void Material::setBool(std::string_view name, bool value) {
+    ensureShaderCurrent();
     const UniformMemberLayout* member = findMember(uniformLayout, name);
     if (!member || !requireType(*member, ShaderPropertyType::Boolean, name))
         return;
@@ -412,40 +378,21 @@ void Material::setBool(std::string_view name, bool value) {
     markChanged();
 }
 
-void Material::setTexture(std::string_view name, std::string value) {
-    const auto texture = textures.find(std::string{name});
-    if (texture == textures.end()) {
-        Log::warn("Material",
-                  "Texture property does not exist: %.*s",
-                  static_cast<int>(name.size()),
-                  name.data());
+void Material::setTexture(std::string_view name, MaterialTextureBinding binding) {
+    ensureShaderCurrent();
+    const auto found = textures.find(std::string{name});
+    if (found == textures.end())
         return;
-    }
-    texture->second = std::move(value);
-    textureRefs_.erase(std::string{name});
+    found->second = std::move(binding);
     markChanged();
 }
-
 void Material::setTexture(std::string_view name, Ref<Texture> texture) {
-    if (!textures.contains(std::string{name}) || !texture) {
-        Log::warn("Material",
-                  "Cannot bind an invalid Texture: %.*s",
-                  static_cast<int>(name.size()),
-                  name.data());
-        return;
-    }
-    const std::string key{name};
-    textures[key] = texture->isAssetBacked() ? texture->assetPath().string() : std::string{};
-    textureRefs_.insert_or_assign(key, std::move(texture));
-    markChanged();
+    setTexture(name, MaterialTextureBinding{std::move(texture)});
 }
-
 void Material::setTexture(std::string_view name,
                           Ref<Texture> texture,
                           const Ref<Sampler>& sampler) {
-    setTexture(name, std::move(texture));
-    if (sampler)
-        textureSamplers_.insert_or_assign(std::string{name}, sampler);
+    setTexture(name, MaterialTextureBinding{std::move(texture), sampler});
 }
 
 void Material::setPropertyValue(std::string_view name, const ShaderValue& value) {
@@ -482,13 +429,12 @@ void Material::setPropertyValue(std::string_view name, const ShaderValue& value)
             return;
         }
         case ShaderPropertyType::Texture2D: break;
-        case ShaderPropertyType::Matrix: break;
+        case ShaderPropertyType::Matrix:
+            if (const auto* typed = requireValue<math::Mat44>(value, name)) {
+                setMatrix(name, *typed);
+            }
+            return;
         }
-    }
-    if (const std::string* typed = requireValue<std::string>(value, name)) {
-        textureRefs_.erase(std::string{name});
-        textures.insert_or_assign(std::string{name}, *typed);
-        markChanged();
     }
 }
 
@@ -504,53 +450,128 @@ void Material::markChanged() {
 }
 
 Ref<Material> Material::clone() const {
-    Ref<Material> copy = makeRef<Material>();
-    copy->assetPath_ = assetPath_;
-    copy->name = name;
-    copy->uniformLayout = uniformLayout;
-    copy->uniformData = uniformData;
-    copy->textures = textures;
-    copy->textureRefs_ = textureRefs_;
-    copy->keywords = keywords;
-    copy->renderQueue = renderQueue;
-    copy->shader_ = shader_;
-    copy->shaderRevision_ = shaderRevision_;
-    copy->renderQueueOverride_ = renderQueueOverride_;
-    copy->dirty_ = true;
-    copy->version_ = version_;
-    return copy;
+    ensureShaderCurrent();
+    MaterialCreateInfo info;
+    info.name = name;
+    info.shader = shader_;
+    info.keywords = keywords;
+    info.renderQueue = renderQueueOverride_;
+    info.defaultTextureBinding = defaultTextureBinding_;
+    info.textures = textures;
+    for (const auto& property : shader_->properties()) {
+        if (property.type != ShaderPropertyType::Texture2D)
+            info.properties.emplace(property.name, propertyValue(property));
+    }
+    return makeRef<Material>(std::move(info));
 }
 
-void Material::rebuildFromAsset(const MaterialAsset& asset, Ref<Shader> newShader) {
-    if (!newShader) {
-        Log::error("Material", "Shader reference must be valid");
-        return;
+Ref<UniformSet> Material::uniformSet(const ShaderProgram& program, std::uint32_t frameIndex) const {
+    ensureShaderCurrent();
+    auto* device = RHI_DEVICE;
+    if (!device || program.deviceUid() != device->uid() || program.setCount() < 2 ||
+        program.bindings(1).empty())
+        return {};
+    if (deviceUid_ != device->uid()) {
+        bindings_.clear();
+        deviceUid_ = device->uid();
+        for (auto& [name, binding] : textures)
+            if (binding.resolve)
+                binding.texture.reset();
     }
-
-    // Keep identity in sync with the latest database record.
-    if (const auto resolvedId = ASSET_DATABASE.findGuid(asset.assetPath())) {
-        assetId_ = *resolvedId;
+    const auto& descriptions = program.bindings(1);
+    std::vector<rhi::TextureBinding> signature;
+    for (const auto& desc : descriptions) {
+        if (desc.type == rhi::ResourceType::CombinedImageSampler) {
+            const auto texture = resolveTexture(desc.name);
+            const auto sampler = resolveSampler(desc.name);
+            const auto binding = texture ? texture->binding(sampler) : rhi::TextureBinding{};
+            if (!binding.view || !binding.sampler)
+                return {};
+            signature.push_back(binding);
+        } else if (desc.type != rhi::ResourceType::UniformBuffer)
+            return {};
     }
-    assetPath_ = asset.assetPath();
-    name = asset.name;
-    renderQueueOverride_ = asset.renderQueue;
-
-    // Rebuild layout if the shader changed, preserving compatible overrides.
-    if (shader_ != newShader || shaderRevision_ != newShader->revision())
-        rebuildForShader(newShader, true);
-
-    // Apply authoritative asset values.
-    suppressChanges_ = true;
-    for (const auto& [propertyName, value] : asset.properties) {
-        setPropertyValue(propertyName,
-                         std::visit([](const auto& item) -> ShaderValue { return item; }, value));
+    auto& entry = bindings_[frameIndex][program.id()];
+    const auto sameTextures = [&] {
+        if (signature.size() != entry.textures.size())
+            return false;
+        for (std::size_t i = 0; i < signature.size(); ++i)
+            if (signature[i].view != entry.textures[i].view ||
+                signature[i].sampler != entry.textures[i].sampler)
+                return false;
+        return true;
+    };
+    const bool changed = entry.version != version_ || !sameTextures();
+    if (!entry.set || (changed && entry.set->refCount() > 1)) {
+        entry.set = makeRef<UniformSet>(program.setLayout(1), program.uboLayouts(1));
+        entry.version = 0;
     }
-
-    keywords = asset.keywords;
-    suppressChanges_ = false;
-
-    renderQueue = renderQueueOverride_.value_or(newShader->defaultSubShader().renderQueue());
-    markChanged();
+    if (entry.version != version_ || changed) {
+        std::size_t uboIndex = 0;
+        for (std::size_t position = 0; position < descriptions.size(); ++position) {
+            const auto& desc = descriptions[position];
+            if (desc.type == rhi::ResourceType::UniformBuffer) {
+                if (uboIndex >= program.uboLayouts(1).size())
+                    return {};
+                auto* ubo = entry.set->uboAt(static_cast<std::uint32_t>(position));
+                if (!ubo)
+                    return {};
+                const auto& layout = program.uboLayouts(1)[uboIndex++];
+                // Bulk-copy only when every reflected member matches the CPU layout.
+                const bool identical =
+                    layout->byteSize() == uniformLayout.byteSize &&
+                    layout->uniforms().size() == uniformLayout.members.size() &&
+                    std::ranges::all_of(layout->uniforms(), [&](const UboUniform& reflected) {
+                        const auto* member = uniformLayout.findMember(reflected.name);
+                        if (!member || member->offset != reflected.offset ||
+                            member->size != reflected.size)
+                            return false;
+                        switch (member->type) {
+                        case ShaderPropertyType::Float:
+                            return reflected.type == UboUniformType::Float;
+                        case ShaderPropertyType::Boolean:
+                            return reflected.type == UboUniformType::Bool ||
+                                   reflected.type == UboUniformType::UInt;
+                        case ShaderPropertyType::Vec2:
+                            return reflected.type == UboUniformType::Vec2;
+                        case ShaderPropertyType::Vec3:
+                            return reflected.type == UboUniformType::Vec3;
+                        case ShaderPropertyType::Vec4:
+                            return reflected.type == UboUniformType::Vec4;
+                        case ShaderPropertyType::Matrix:
+                            return reflected.type == UboUniformType::Mat4;
+                        case ShaderPropertyType::Texture2D: return false;
+                        }
+                        return false;
+                    });
+                if (identical) {
+                    ubo->setRawBytes(uniformData);
+                    continue;
+                }
+                for (const auto& member : layout->uniforms()) {
+                    const auto property = std::ranges::find(
+                        shader_->properties(), member.name, &ShaderPropertyInfo::name);
+                    if (property == shader_->properties().end() ||
+                        property->type == ShaderPropertyType::Texture2D ||
+                        !ubo->setUniform(member.name, propertyValue(*property))) {
+                        Log::error(
+                            "Material", "Incompatible reflected member: %s", member.name.c_str());
+                        return {};
+                    }
+                }
+            } else {
+                if (!entry.set->setResourceAt(static_cast<std::uint32_t>(position),
+                                              resolveTexture(desc.name)) ||
+                    !entry.set->setSamplerOverrideAt(static_cast<std::uint32_t>(position),
+                                                     resolveSampler(desc.name)))
+                    return {};
+            }
+        }
+        entry.version = version_;
+        entry.textures = std::move(signature);
+    }
+    entry.set->upload();
+    return entry.set;
 }
 
 } // namespace engine

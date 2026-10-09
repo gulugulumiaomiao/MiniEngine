@@ -2,7 +2,7 @@
 #include "asset/types/MaterialAsset.h"
 #include "asset/types/ShaderAsset.h"
 #include "render/material/Material.h"
-#include "render/material/MaterialManager.h"
+#include "asset/runtime/MaterialAssetResolver.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/manager/AssetManager.h"
 #include "core/filesystem/FileWatcher.h"
@@ -25,8 +25,7 @@ int main() {
     if (fixtureError)
         return 21;
     AssetManager& assets = ASSET_MANAGER;
-    MaterialResourceManager& materials = MATERIAL_RESOURCE_MANAGER;
-    materials.clear();
+    Material::errorMaterial.reset();
     if (!test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR))
         return 22;
     const auto cachedShaderA =
@@ -38,22 +37,22 @@ int main() {
     const auto cachedMaterialB = assets.loadAsset<MaterialAsset>(
         VirtualPath{"assets://materials/./warm_vertex_color.material.json"});
     if (cachedShaderA != cachedShaderB || cachedMaterialA != cachedMaterialB ||
-        cachedMaterialA->shader.string() != "assets://shaders/vertex_color.shader.json") {
+        cachedMaterialA->data.shader.string() != "assets://shaders/vertex_color.shader.json") {
         return 17;
     }
-    Ref<Material> warm = materials.load(cachedMaterialA->assetPath());
+    Ref<Material> warm = resolveMaterialReference(cachedMaterialA->assetPath());
     Ref<Material> coolShared =
-        materials.load(VirtualPath{"assets://materials/cool_vertex_color.material.json"});
+        resolveMaterialReference(VirtualPath{"assets://materials/cool_vertex_color.material.json"});
     Material& warmData = *warm;
     const auto warmAssetId = ASSET_DATABASE.findGuid(cachedMaterialA->assetPath());
-    if (!warmAssetId || materials.load(cachedMaterialA->assetPath()) != warm ||
-        materials.find(*warmAssetId) != warm || materials.size() != 2) {
+    if (!warmAssetId || resolveMaterialReference(cachedMaterialA->assetPath()) != warm ||
+        resolveMaterialReference(*warmAssetId) != warm) {
         return 24;
     }
-    const Ref<Material> errorMaterial = materials.errorMaterial();
+    const Ref<Material> errorMaterial = Material::errorMaterial;
     const Material* errorData = errorMaterial.get();
     const Ref<Material> failedMaterial =
-        materials.load(VirtualPath{"assets://shaders/builtin_color.shader.json"});
+        resolveMaterialReference(VirtualPath{"assets://shaders/builtin_color.shader.json"});
     if (!errorData || failedMaterial != errorMaterial ||
         errorData->shaderRef() !=
             resolveShaderReference("assets://shaders/builtin_color.shader.json") ||
@@ -111,7 +110,7 @@ int main() {
     // After switching to blinn_phong (declares RECEIVE_SHADOWS on Forward):
     // enabling the keyword changes the variant key, re-enabling is idempotent,
     // and disabling restores the original key.
-    materials.setShader(warm, VirtualPath{"assets://shaders/blinn_phong.shader.json"});
+    setMaterialShader(warm, VirtualPath{"assets://shaders/blinn_phong.shader.json"});
     const std::uint64_t keywordOffKey = warmData.variantKey(
         warmData.shader().defaultSubShader().requirePass(ShaderPassType::Forward));
     const std::uint64_t versionBeforeKeywords = warmData.version();
@@ -129,54 +128,40 @@ int main() {
             ShaderPassType::Forward)) != keywordOffKey) {
         return 32;
     }
-    const RID warmId = warm->resourceId();
-    const RID coolId = coolShared->resourceId();
-    warm.reset();
-    if (materials.find(warmId))
+    const Ref<Material> cloned = warm->clone();
+    if (!cloned || cloned->instanceId() == warm->instanceId() || findMaterialAsset(*cloned))
         return 19;
-    coolShared.reset();
-    Ref<Material> reused =
-        materials.load(VirtualPath{"assets://materials/cool_vertex_color.material.json"});
-    if (reused->resourceId().index() != coolId.index() ||
-        reused->resourceId().generation() == coolId.generation()) {
-        return 10;
-    }
-    if (!reused) {
+    cloned->setVec4("BaseColor", {0.9F, 0.8F, 0.7F, 1.0F});
+    if (warm->getVec4("BaseColor") == cloned->getVec4("BaseColor"))
         return 20;
-    }
-    materials.clear();
-    if (materials.find(*warmAssetId) || materials.size() != 0) {
-        return 25;
-    }
     FILE_WATCHER.stop();
     if (!test::initializeAssetEnvironment(fixtureCopy))
         return 23;
-    MaterialResourceManager& valueMaterials = MATERIAL_RESOURCE_MANAGER;
     // A Material that fails to import resolves to the built-in Error Material. That
     // fallback is always reachable because the Error Material and the built-in Shader
     // ship inside the fixture asset root (assets://), exactly as they ship in every
     // project's assets/ after the built-in content copy.
     Ref<Material> invalid =
-        valueMaterials.load(VirtualPath{"assets://material_invalid.material.json"});
-    if (!invalid || invalid != valueMaterials.errorMaterial()) {
+        resolveMaterialReference(VirtualPath{"assets://material_invalid.material.json"});
+    if (!invalid || invalid != Material::errorMaterial) {
         return 14;
     }
     Ref<Material> values =
-        valueMaterials.load(VirtualPath{"assets://material_values.material.json"});
+        resolveMaterialReference(VirtualPath{"assets://material_values.material.json"});
     Material& valueData = *values;
     if (valueData.getFloat("FloatValue") != 2.5F || valueData.getFloat("RangeValue") != 0.25F ||
         !valueData.getBool("Enabled") || valueData.getVec2("Uv") != math::Vec2{1.0F, 2.0F} ||
         valueData.getVec3("Direction") != math::Vec3{4.0F, 5.0F, 6.0F} ||
         valueData.getVec4("Params") != math::Vec4{1.0F, 2.0F, 3.0F, 4.0F} ||
         valueData.getVec4("Tint") != math::Vec4{0.25F, 0.5F, 0.75F, 1.0F} ||
-        valueData.getTexture("MainTexture") != "assets://textures/black.png") {
+        materialTextureReference(valueData, "MainTexture") != "assets://textures/black.png") {
         return 5;
     }
     valueData.markClean();
     const std::uint64_t versionBeforeRejectedSet = valueData.version();
     valueData.setFloat("Uv", 9.0F);
     valueData.setFloat("MissingProperty", 9.0F);
-    valueData.setTexture("MissingTexture", "invalid");
+    setMaterialTextureReference(*values, "MissingTexture", "invalid");
     if (valueData.dirty() || valueData.version() != versionBeforeRejectedSet ||
         valueData.getVec2("Uv") != math::Vec2{1.0F, 2.0F}) {
         return 15;
@@ -195,14 +180,14 @@ int main() {
     if (encodedBool != 1U) {
         return 7;
     }
-    valueData.setTexture("MainTexture", "gray");
+    setMaterialTextureReference(*values, "MainTexture", "gray");
     valueData.setBool("Enabled", false);
     valueData.setFloat("RangeValue", 0.75F);
     valueData.setVec2("Uv", {3.0F, 4.0F});
     valueData.setVec3("Direction", {7.0F, 8.0F, 9.0F});
     valueData.setVec4("Params", {5.0F, 6.0F, 7.0F, 8.0F});
-    if (valueData.getTexture("MainTexture") != "gray" || valueData.getBool("Enabled") ||
-        valueData.getFloat("RangeValue") != 0.75F ||
+    if (materialTextureReference(valueData, "MainTexture") != "gray" ||
+        valueData.getBool("Enabled") || valueData.getFloat("RangeValue") != 0.75F ||
         valueData.getVec2("Uv") != math::Vec2{3.0F, 4.0F} ||
         valueData.getVec3("Direction") != math::Vec3{7.0F, 8.0F, 9.0F} ||
         valueData.getVec4("Params") != math::Vec4{5.0F, 6.0F, 7.0F, 8.0F}) {
@@ -210,15 +195,15 @@ int main() {
     }
 
     const std::uint64_t versionBeforeShaderSwitch = valueData.version();
-    valueMaterials.setShader(values, VirtualPath{"assets://material_switch.shader.json"});
+    setMaterialShader(values, VirtualPath{"assets://material_switch.shader.json"});
     if (valueData.shader().name() != "Tests/MaterialSwitch" ||
         valueData.getFloat("RangeValue") != 0.75F ||
         valueData.getVec3("Direction") != math::Vec3{7.0F, 8.0F, 9.0F} ||
         valueData.getVec2("NewUv") != math::Vec2{0.5F, 0.5F} ||
-        valueData.getTexture("MainTexture") != "gray" ||
+        materialTextureReference(valueData, "MainTexture") != "gray" ||
         valueData.version() != versionBeforeShaderSwitch + 1 || !valueData.dirty()) {
         return 9;
     }
-    MATERIAL_RESOURCE_MANAGER.clear();
+    Material::errorMaterial.reset();
     test::shutdownAssetEnvironment();
 }

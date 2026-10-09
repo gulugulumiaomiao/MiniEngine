@@ -52,7 +52,7 @@ setTexture(name, Ref<Texture> texture);                      // 默认 view + �
 setTexture(name, Ref<Texture> texture, Ref<Sampler> sampler); // 默认 view + 指定 sampler
 ```
 
-`MaterialStorage::collectTextureBindings` 每次 resolve 重新解析签名：`resolveTexture(name)`（缺省经 `resolveTextureReference` 由 VirtualPath 解析并缓存 `Ref<Texture>`）+ `resolveSampler(name)`，组装 `sampler ? texture->binding(sampler) : texture->binding()`。签名或 program 反射的 set-1 布局变化触发 set-1 `UniformSet` 重建。只向 RHI 提交 view/sampler handle，禁止把 texture handle 直接作为 sampled texture 绑定。
+`Material::uniformSet` 按 Program 反射纹理名称重新解析签名：`resolveTexture(name)`（通过资产层注入的延迟回调缓存 Ref<Texture>）+ `resolveSampler(name)`，组装 `sampler ? texture->binding(sampler) : texture->binding()`。缓存按帧及 ProgramId 分开；仍被帧引用的旧 UniformSet 通过创建新集避免原地改写。只向 RHI 提交 view/sampler handle，禁止把 texture handle 直接作为 sampled texture 绑定。
 
 ## 6. 热重载
 

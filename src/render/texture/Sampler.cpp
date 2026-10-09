@@ -1,17 +1,9 @@
 #include "render/texture/Sampler.h"
 
 #include "core/logging/Log.h"
-#include "core/serialization/Transfer.h"
 #include "rhi/api/Device.h"
 
 namespace engine {
-
-bool SamplerDesc::transfer(Transfer& archive) {
-    return archive.beginObject({}) && archive.transfer("filter_mode", filterMode) &&
-           archive.transfer("address_mode_u", addressModeU) &&
-           archive.transfer("address_mode_v", addressModeV) &&
-           archive.transfer("max_anisotropy", maxAnisotropy) && archive.endObject();
-}
 
 rhi::SamplerDesc toRhi(const SamplerDesc& settings) {
     rhi::SamplerDesc desc;

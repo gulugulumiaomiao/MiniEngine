@@ -1,3 +1,5 @@
+#include "TestMaterial.h"
+#include "asset/runtime/MaterialAssetResolver.h"
 #include "asset/runtime/ShaderAssetResolver.h"
 #include <gtest/gtest.h>
 
@@ -129,9 +131,9 @@ protected:
     [[nodiscard]] Ref<Material> loadRuntimeMaterial(const VirtualPath& path) {
         const auto source = ASSET_MANAGER.loadAsset<MaterialAsset>(path);
         EXPECT_TRUE(source);
-        const Ref<Shader> shader = resolveShaderReference(source->shader.string());
+        const Ref<Shader> shader = resolveShaderReference(source->data.shader.string());
         EXPECT_TRUE(shader);
-        return source->instantiate(shader);
+        return source->instantiate();
     }
 
     std::filesystem::path root;
@@ -157,8 +159,7 @@ TEST_F(AssetExporterTest, MaterialRoundtripThroughRuntime) {
     const VirtualPath materialPath{"assets://materials/export_test.material.json"};
     const auto source = ASSET_MANAGER.loadAsset<MaterialAsset>(materialPath);
     ASSERT_TRUE(source);
-    Ref<Material> material =
-        source->instantiate(resolveShaderReference(source->shader.string()));
+    Ref<Material> material = source->instantiate();
     material->setFloat("Shininess", 128.0F);
     material->setVec4("BaseColor", math::Vec4{0.9F, 0.8F, 0.7F, 0.6F});
     material->setBool("EnableFeature", false);
@@ -169,23 +170,23 @@ TEST_F(AssetExporterTest, MaterialRoundtripThroughRuntime) {
 
     const auto reloaded = ASSET_MANAGER.loadAsset<MaterialAsset>(targetPath);
     ASSERT_TRUE(reloaded);
-    EXPECT_EQ(reloaded->name, "Export Test Material");
-    EXPECT_EQ(reloaded->shader, source->shader);
-    EXPECT_EQ(reloaded->keywords, source->keywords);
+    EXPECT_EQ(reloaded->data.name, "Export Test Material");
+    EXPECT_EQ(reloaded->data.shader, source->data.shader);
+    EXPECT_EQ(reloaded->data.keywords, source->data.keywords);
 
-    ASSERT_TRUE(reloaded->properties.contains("Shininess"));
-    EXPECT_FLOAT_EQ(std::get<float>(reloaded->properties.at("Shininess")), 128.0F);
-    ASSERT_TRUE(reloaded->properties.contains("BaseColor"));
-    const math::Vec4& baseColor = std::get<math::Vec4>(reloaded->properties.at("BaseColor"));
+    ASSERT_TRUE(reloaded->data.properties.contains("Shininess"));
+    EXPECT_FLOAT_EQ(std::get<float>(reloaded->data.properties.at("Shininess")), 128.0F);
+    ASSERT_TRUE(reloaded->data.properties.contains("BaseColor"));
+    const math::Vec4& baseColor = std::get<math::Vec4>(reloaded->data.properties.at("BaseColor"));
     EXPECT_FLOAT_EQ(baseColor.x, 0.9F);
     EXPECT_FLOAT_EQ(baseColor.y, 0.8F);
     EXPECT_FLOAT_EQ(baseColor.z, 0.7F);
     EXPECT_FLOAT_EQ(baseColor.w, 0.6F);
-    ASSERT_TRUE(reloaded->properties.contains("EnableFeature"));
-    EXPECT_FALSE(std::get<bool>(reloaded->properties.at("EnableFeature")));
-    ASSERT_TRUE(reloaded->properties.contains("MainTex"));
+    ASSERT_TRUE(reloaded->data.properties.contains("EnableFeature"));
+    EXPECT_FALSE(std::get<bool>(reloaded->data.properties.at("EnableFeature")));
+    ASSERT_TRUE(reloaded->data.properties.contains("MainTex"));
     // 写回是 guid:// 引用；parse 侧经数据库解析回绝对虚拟路径。
-    EXPECT_EQ(std::get<std::string>(reloaded->properties.at("MainTex")),
+    EXPECT_EQ(std::get<std::string>(reloaded->data.properties.at("MainTex")),
               "assets://textures/checker.png");
 }
 
@@ -214,7 +215,7 @@ TEST_F(AssetExporterTest, MaterialOmitsOptionalFields) {
     const VirtualPath materialPath{"assets://materials/export_test.material.json"};
     Ref<Material> material = loadRuntimeMaterial(materialPath);
     material->keywords.clear();
-    material->setTexture("MainTex", "");
+    setMaterialTextureReference(*material, "MainTex", "");
 
     const VirtualPath targetPath{"assets://materials/omitted.material.json"};
     std::string error;
@@ -232,9 +233,9 @@ TEST_F(AssetExporterTest, MaterialPreservesRenderQueueOverride) {
     const VirtualPath queuedPath{"assets://materials/queued.material.json"};
     const auto queued = ASSET_MANAGER.loadAsset<MaterialAsset>(queuedPath);
     ASSERT_TRUE(queued);
-    ASSERT_EQ(queued->renderQueue, std::optional<int>{2450});
+    ASSERT_EQ(queued->data.renderQueue, std::optional<int>{2450});
 
-    Ref<Material> material = queued->instantiate(resolveShaderReference(queued->shader.string()));
+    Ref<Material> material = queued->instantiate();
     ASSERT_EQ(material->renderQueueOverride(), std::optional<int>{2450});
     const VirtualPath targetPath{"assets://materials/queued_out.material.json"};
     std::string error;
@@ -242,7 +243,7 @@ TEST_F(AssetExporterTest, MaterialPreservesRenderQueueOverride) {
 
     const auto reloaded = ASSET_MANAGER.loadAsset<MaterialAsset>(targetPath);
     ASSERT_TRUE(reloaded);
-    EXPECT_EQ(reloaded->renderQueue, std::optional<int>{2450});
+    EXPECT_EQ(reloaded->data.renderQueue, std::optional<int>{2450});
 }
 
 // 失败路径：目标扩展名不符、非 assets:// 目标、无绑定 shader 的 Material、以及
@@ -252,18 +253,16 @@ TEST_F(AssetExporterTest, MaterialRejectsBadTargetsAndUnexportableTypes) {
     Ref<Material> material = loadRuntimeMaterial(materialPath);
     std::string error;
 
-    EXPECT_FALSE(ASSET_EXPORT_PIPELINE.saveMaterial(*material,
-                                                    VirtualPath{"assets://materials/out.txt"},
-                                                    error));
+    EXPECT_FALSE(ASSET_EXPORT_PIPELINE.saveMaterial(
+        *material, VirtualPath{"assets://materials/out.txt"}, error));
     EXPECT_FALSE(error.empty());
     error.clear();
-    EXPECT_FALSE(ASSET_EXPORT_PIPELINE.saveMaterial(*material,
-                                                    VirtualPath{"library://out.material.json"},
-                                                    error));
+    EXPECT_FALSE(ASSET_EXPORT_PIPELINE.saveMaterial(
+        *material, VirtualPath{"library://out.material.json"}, error));
     EXPECT_FALSE(error.empty());
     error.clear();
     // 默认构造的 Material 没有绑定 RID，提取阶段即失败。
-    Material orphan;
+    Material orphan{test::materialInfo()};
     EXPECT_FALSE(ASSET_EXPORT_PIPELINE.saveMaterial(
         orphan, VirtualPath{"assets://materials/orphan.material.json"}, error));
     EXPECT_NE(error.find("Shader"), std::string::npos);
@@ -281,8 +280,8 @@ TEST_F(AssetExporterTest, SceneWriteViaPipeline) {
     sceneAsset.name = "Pipeline Scene";
     TransformComponentAsset transform;
     transform.position = math::Vec3{1.0F, 2.0F, 3.0F};
-    sceneAsset.nodes.emplace_back(1U, std::nullopt, "Root", true,
-                                  std::vector<SceneComponentAsset>{std::move(transform)});
+    sceneAsset.nodes.emplace_back(
+        1U, std::nullopt, "Root", true, std::vector<SceneComponentAsset>{std::move(transform)});
 
     const VirtualPath targetPath{"assets://scenes/pipeline.scene.json"};
     std::string error;

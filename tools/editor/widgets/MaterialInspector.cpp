@@ -8,7 +8,7 @@
 #include "asset/importer/AssetImportPipeline.h"
 #include "core/filesystem/FileSystem.h"
 #include "render/material/Material.h"
-#include "render/material/MaterialManager.h"
+#include "asset/runtime/MaterialAssetResolver.h"
 #include "render/shader/Shader.h"
 #include "tools/editor/widgets/EditorWidgets.h"
 
@@ -38,7 +38,7 @@ void MaterialInspector::draw(const Ref<Material>& material) {
     // Switching targets flushes the previous target's pending edit so the
     // debounce window can never swallow the last change of a material the
     // widget has already moved away from.
-    if (pendingSavePath_.valid() && !(pendingSavePath_ == data->assetPath())) {
+    if (pendingSavePath_.valid() && !(pendingSavePath_ == materialAssetPath(*data))) {
         const VirtualPath stale = pendingSavePath_;
         pendingSavePath_ = {};
         idleSeconds_ = 0.0F;
@@ -48,9 +48,9 @@ void MaterialInspector::draw(const Ref<Material>& material) {
     // The handle index scopes every control id to this instance, so the
     // component view and the asset view can both embed the widget (and a
     // detached clone never collides with its source asset).
-    ImGui::PushID(static_cast<int>(material->resourceId().index()));
+    ImGui::PushID(static_cast<int>(material->instanceId()));
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (!data->isAssetBacked())
+        if (!static_cast<bool>(findMaterialAsset(*data)))
             ImGui::TextDisabled("Runtime-only (detached) - edits do not write back");
 
         drawIdentity(*data);
@@ -104,7 +104,7 @@ void MaterialInspector::drawShaderCombo(const Ref<Material>& material, Material&
         // setShader rebuilds the uniform block and keeps values of
         // compatible properties (rebuildForShader with preserveValues). The
         // chosen != current guard keeps re-picking the current shader a no-op.
-        MATERIAL_RESOURCE_MANAGER.setShader(material, chosen);
+        setMaterialShader(material, chosen);
         queueSave(data);
     }
 }
@@ -204,7 +204,7 @@ void MaterialInspector::drawProperties(Material& data) {
             break;
         }
         case ShaderAssetPropertyType::Texture2D: {
-            const std::string& current = data.getTexture(property.name);
+            const std::string current = materialTextureReference(data, property.name);
             const VirtualPath currentPath = current.empty() ? VirtualPath{} : VirtualPath{current};
             VirtualPath chosen;
             if (assetCombo(label.c_str(),
@@ -212,7 +212,8 @@ void MaterialInspector::drawProperties(Material& data) {
                            currentPath,
                            chosen,
                            "(none)")) {
-                data.setTexture(property.name, chosen.valid() ? chosen.string() : std::string{});
+                setMaterialTextureReference(
+                    data, property.name, chosen.valid() ? chosen.string() : std::string{});
                 queueSave(data);
             }
             break;
@@ -257,9 +258,9 @@ void MaterialInspector::drawKeywords(Material& data) {
 
 void MaterialInspector::queueSave(const Material& data) {
     // Detached clones keep runtime-only edits: no GUID, nothing to write back.
-    if (!data.isAssetBacked())
+    if (!static_cast<bool>(findMaterialAsset(data)))
         return;
-    pendingSavePath_ = data.assetPath();
+    pendingSavePath_ = materialAssetPath(data);
     idleSeconds_ = 0.0F;
 }
 
@@ -270,9 +271,9 @@ void MaterialInspector::saveNow(const VirtualPath& path) {
         status_ = "Not saved (file removed): " + path.string();
         return;
     }
-    const Ref<Material> material = MATERIAL_RESOURCE_MANAGER.load(path);
+    const Ref<Material> material = resolveMaterialReference(path);
     const Material* data = material.get();
-    if (data == nullptr || !(data->assetPath() == path)) {
+    if (data == nullptr || !(materialAssetPath(*data) == path)) {
         // load() failed (bad source, unmounted assets://) and fell back to the
         // error material; writing that back would corrupt the asset.
         status_ = "Not saved (instance unavailable): " + path.string();

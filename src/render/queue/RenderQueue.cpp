@@ -18,7 +18,9 @@ bool DrawFilter::accepts(const DrawItem& item, std::uint32_t objectLayerMask) co
     return true;
 }
 
-void DrawSorter::sort(std::vector<DrawItem>& items, SortingCriteria criteria, const RenderScene& scene) {
+void DrawSorter::sort(std::vector<DrawItem>& items,
+                      SortingCriteria criteria,
+                      const RenderScene& scene) {
     std::ranges::stable_sort(items, [&](const DrawItem& left, const DrawItem& right) {
         return computeKey(left, criteria, scene) < computeKey(right, criteria, scene);
     });
@@ -40,8 +42,8 @@ std::uint64_t DrawSorter::computeKey(const DrawItem& item,
                 distance = math::length(position - camera->worldPosition);
             }
         }
-        const auto quantized = static_cast<std::uint32_t>(
-            std::clamp(distance, 0.0F, static_cast<float>(0xFFFF)));
+        const auto quantized =
+            static_cast<std::uint32_t>(std::clamp(distance, 0.0F, static_cast<float>(0xFFFF)));
         key |= static_cast<std::uint64_t>(0xFFFF - quantized) << 48;
     }
 
@@ -57,7 +59,7 @@ std::uint64_t DrawSorter::computeKey(const DrawItem& item,
     }
 
     if (hasFlag(criteria, SortingCriteria::Material)) {
-        key |= static_cast<std::uint64_t>(item.materialKey.index()) << 12;
+        key |= static_cast<std::uint64_t>(item.materialKey & 0xFFFFFULL) << 12;
     }
 
     if (hasFlag(criteria, SortingCriteria::Mesh)) {

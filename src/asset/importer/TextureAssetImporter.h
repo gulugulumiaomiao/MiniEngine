@@ -1,4 +1,5 @@
 #pragma once
+#include "asset/types/TextureAsset.h"
 
 #include "asset/importer/AssetImporter.h"
 #include "render/texture/Texture.h"

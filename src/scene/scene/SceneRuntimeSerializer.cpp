@@ -2,7 +2,7 @@
 
 #include "asset/format/SceneAssetFormat.h"
 #include "render/material/Material.h"
-#include "render/material/MaterialManager.h"
+#include "asset/runtime/MaterialAssetResolver.h"
 #include "render/mesh/Mesh.h"
 #include "scene/components/CameraComponent.h"
 #include "scene/components/LightComponent.h"
@@ -24,8 +24,8 @@ namespace {
 
 bool isIdentityPartTransform(const MeshPrimitivePart& part) {
     return part.translation == math::Vec3{0.0F} &&
-           part.rotation == math::Quat{1.0F, 0.0F, 0.0F, 0.0F} &&
-           part.scale == math::Vec3{1.0F} && part.materialSlot == 0;
+           part.rotation == math::Quat{1.0F, 0.0F, 0.0F, 0.0F} && part.scale == math::Vec3{1.0F} &&
+           part.materialSlot == 0;
 }
 
 [[nodiscard]] bool exportMeshComponent(const MeshComponent& component,
@@ -72,14 +72,14 @@ bool isIdentityPartTransform(const MeshPrimitivePart& part) {
     result.enabled = component.enabled();
     for (const Ref<Material>& material : component.materials()) {
         const Material* value = material.get();
-        if (!value || !value->assetPath().valid() ||
-            value->assetPath().scheme() != "assets" ||
-            !value->assetPath().relativePath().ends_with(".material.json")) {
+        if (!value || !materialAssetPath(*value).valid() ||
+            materialAssetPath(*value).scheme() != "assets" ||
+            !materialAssetPath(*value).relativePath().ends_with(".material.json")) {
             error = "node '" + std::string{nodeName} +
                     "' has a Material component without a resolvable asset material";
             return false;
         }
-        result.materials.push_back(value->assetPath());
+        result.materials.push_back(materialAssetPath(*value));
     }
     return true;
 }
@@ -159,9 +159,8 @@ bool isIdentityPartTransform(const MeshPrimitivePart& part) {
 
 } // namespace
 
-std::unique_ptr<SceneAsset> exportSceneToAsset(const Scene& scene,
-                                               const VirtualPath& targetPath,
-                                               std::string& error) {
+std::unique_ptr<SceneAsset>
+exportSceneToAsset(const Scene& scene, const VirtualPath& targetPath, std::string& error) {
     auto asset = std::make_unique<SceneAsset>();
     asset->name = std::string{scene.name()};
     asset->setAssetPath(targetPath);

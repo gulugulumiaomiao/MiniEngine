@@ -1,4 +1,5 @@
 #include "asset/runtime/ShaderAssetResolver.h"
+#include "asset/runtime/MaterialAssetResolver.h"
 #include "asset/exporter/MaterialAssetExporter.h"
 #include "asset/types/MaterialAsset.h"
 
@@ -27,9 +28,8 @@ AssetExportResult MaterialAssetExporter::write(const Asset& asset,
     return AssetExportResult::succeeded(AssetType::Material, targetPath);
 }
 
-std::unique_ptr<MaterialAsset> exportMaterialToAsset(const Material& material,
-                                                     const VirtualPath& targetPath,
-                                                     std::string& error) {
+std::unique_ptr<MaterialAsset>
+exportMaterialToAsset(const Material& material, const VirtualPath& targetPath, std::string& error) {
     const Shader* shader = material.shaderRef().get();
     const auto shaderPath = shader ? shaderAssetPath(*shader) : VirtualPath{};
     if (!shaderPath.valid()) {
@@ -39,36 +39,38 @@ std::unique_ptr<MaterialAsset> exportMaterialToAsset(const Material& material,
 
     auto asset = std::make_unique<MaterialAsset>();
     asset->setAssetPath(targetPath);
-    asset->name = material.name;
-    asset->shader = shaderPath;
-    asset->keywords = material.keywords;
-    asset->renderQueue = material.renderQueueOverride();
+    asset->data.name = material.name;
+    asset->data.shader = shaderPath;
+    asset->data.keywords = material.keywords;
+    asset->data.renderQueue = material.renderQueueOverride();
     for (const ShaderPropertyInfo& property : shader->properties()) {
         switch (property.type) {
         case ShaderPropertyType::Float:
-            asset->properties.emplace(property.name, material.getFloat(property.name));
+            asset->data.properties.emplace(property.name, material.getFloat(property.name));
             break;
         case ShaderPropertyType::Boolean:
-            asset->properties.emplace(property.name, material.getBool(property.name));
+            asset->data.properties.emplace(property.name, material.getBool(property.name));
             break;
         case ShaderPropertyType::Vec2:
-            asset->properties.emplace(property.name, material.getVec2(property.name));
+            asset->data.properties.emplace(property.name, material.getVec2(property.name));
             break;
         case ShaderPropertyType::Vec3:
-            asset->properties.emplace(property.name, material.getVec3(property.name));
+            asset->data.properties.emplace(property.name, material.getVec3(property.name));
             break;
         case ShaderPropertyType::Vec4:
-            asset->properties.emplace(property.name, material.getVec4(property.name));
+            asset->data.properties.emplace(property.name, material.getVec4(property.name));
             break;
         case ShaderPropertyType::Texture2D: {
             // 空纹理槽（未绑定的 Texture2D 属性）不写属性：parse 侧会把缺失属性
             // 解释为 shader 默认值，语义等价且保持源文件最小。
-            const auto texture = material.textures.find(property.name);
-            if (texture != material.textures.end() && !texture->second.empty())
-                asset->properties.emplace(property.name, texture->second);
+            const auto reference = materialTextureReference(material, property.name);
+            if (!reference.empty())
+                asset->data.properties.emplace(property.name, reference);
             break;
         }
-        case ShaderPropertyType::Matrix: break;
+        case ShaderPropertyType::Matrix:
+            asset->data.properties.emplace(property.name, material.getMatrix(property.name));
+            break;
         }
     }
     return asset;

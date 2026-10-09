@@ -1,79 +1,45 @@
-# 运行时 Material 系统
+# Material 资产与运行时分层
 
-Material 是纯运行时对象，不直接依赖 RHI。它保存属性、Keyword、RenderQueue 和 `Ref<Shader>`；Vulkan Buffer、Descriptor 和 Pipeline 由 GPU 资源层管理。
+MaterialAssetData 保存名称、Shader 路径、属性覆盖、纹理引用、keywords 和可选 renderQueue，独立于运行时类型。Artifact 保持 v2 格式。
 
-## 数据结构
+MaterialCreateInfo 保存运行时参数：Ref<Shader>、数值属性、MaterialTextureBinding、keywords 和可选队列。纹理 binding 保存 Ref<Texture>、可选 Ref<Sampler> 或资产层注入的延迟解析回调。Material 不保存资产身份、路径或资产回指，也不参与序列化。
 
-```cpp
-class Material {
-    Ref<Shader> shader_;
-    UniformBlockLayout uniformLayout;
-    std::vector<std::byte> uniformData;
-    // Asset/reference representation (serialized): property -> VirtualPath string.
-    std::unordered_map<std::string, std::string> textures;
-    // Runtime override (not serialized): property -> TextureView + Sampler.
-    std::unordered_map<std::string, TextureBinding> textureBindings_;
-};
-```
-
-`Material::shader()` 直接返回持有的 `Ref<Shader>`（运行时 Shader 由 `resolveShaderReference` 经 ShaderAsset 的唯一 `instantiate` 实例解析，无 ShaderManager）。数值属性以 `UniformBlockLayout + uniformData` 作为唯一运行时数据源。Texture2D 的资产表示保存规范化虚拟路径；运行时可以覆盖为 `TextureBinding { TextureView, Sampler }`，但不会把 GPU handle 写回资产。成功修改属性会设置 dirty 并增加 version。
-
-## 加载流程
+## 实例与重载
 
 ```text
-Material 资产路径
-  -> MATERIAL_MANAGER.load
-  -> ASSET_MANAGER.loadAsset<MaterialAsset>
-  -> resolveShaderReference(materialAsset.shader)
-  -> MaterialAsset::instantiate(Ref<Shader>)
-  -> KeyedHandleRegistry::insert(Material)
-  -> MaterialHandle(index, generation)
+resolveMaterialReference(path/id) [资产层]
+  -> AssetManager.loadAsset<MaterialAsset>
+  -> MaterialAsset.buildRuntimeInfo()
+  -> MaterialAsset.instantiate()
+  -> Ref<Material>
 ```
 
-MaterialManager 继承 KeyedHandleRegistry，由其统一管理 HandlePool、路径到 Handle 的索引、generation 和空闲槽位。MaterialManager 不创建 Pipeline、DescriptorSet 或 GPU Buffer。
+MaterialAsset 强持有唯一实例，重复 instantiate 返回同一对象，运行时可在资产释放后继续存活。MaterialAsset::clone 从资产数据创建独立实例；Material::clone 复制当前运行时状态，分配新 instanceId，GPU 缓存独立。
 
-## Shader 切换
+没有 MaterialManager、MaterialResourceManager、MaterialStorage 或 gpu/material 子目录。instanceId 仅用于排序和编辑器身份。资产关联查询由资产层 findMaterialAsset/materialAssetPath 扫描缓存完成，克隆不会自动写回源资产。
 
-`MaterialManager::setShader(handle, path)` 加载目标 Shader 后重建 Material：
+setShader 使用新 Shader 默认值重建，再迁移同名同类型的数值和纹理，保留 keywords 和 renderQueue override。Shader 原实例重载增加 revision，Material 使用时检查 revision，无需材质注册表。
 
-1. 保存旧 Shader 中的当前属性值。
-2. 使用新 Shader 默认值创建 uniform 和 texture 数据。
-3. 恢复同名且类型兼容的旧值。
-4. Float/Range、Vec4/Color 分别视为兼容类型。
-5. 丢弃新 Shader 未声明的 Keyword。
-6. 保留 Material 的 RenderQueue override，否则采用新 Shader 默认队列。
-7. 设置 dirty 并增加 version。
+MaterialAsset 原实例重载先校验参数，再按默认值和完整覆盖重建；删除覆盖恢复默认值。地址及 instanceId 保持，version 增加。解码或校验失败保留旧数据及实例，克隆不随原资产更新。
 
-Shader 热重载使用相同 Handle 并增加 Shader revision。MaterialManager 会刷新所有引用该 Handle 的材质，因此布局变化不要求游戏对象更新 MaterialHandle。
+## GPU 反射绑定
 
-## Texture + Sampler 绑定
+Material::uniformSet(program, frameIndex) 使用 Program 的 set 1 反射布局。缓存按帧及 ShaderProgramId 分开，不能只按 descriptor layout hash 去重：同 descriptor 类型仍可能有不同 UBO 偏移和纹理名称。
 
-Shader 采样槽最终绑定的是 `rhi::TextureBinding { view, sampler }`。层2 已无 `TextureView` 类，Material 直接以 `Texture`（+ 可选 `Sampler`）为输入：
+- 没有材质资源时不创建、不绑定材质集。
+- 布局完全一致时批量复制，否则按反射成员名称、类型、偏移和大小写入，允许属性子集和不同偏移。
+- 未知成员、类型/大小不匹配或不支持的资源使绑定失败，Forward 回退到错误材质。
+- 只写实际反射的纹理 binding，支持稀疏 binding 和 sampler 覆盖。
+- version 和实际 view/sampler 签名决定更新。仍被帧引用的旧集不原地改写，创建新集保留已提交资源。
 
-```cpp
-setTexture(name, Ref<Texture> texture);                      // 默认 view + 默认 sampler
-setTexture(name, Ref<Texture> texture, Ref<Sampler> sampler); // 默认 view + 指定 sampler
-```
+FrameGpuManager 按帧保活通用 RefCounted 资源，在所属帧 fence 完成后的 beginFrame 释放，不查找或缓存 Material。设备 uid 变化时材质清空旧 GPU 绑定并重新解析延迟纹理。
 
-`Texture` 持有 texture/默认 view/默认 sampler 三个 RID；`binding()` 给默认绑定，`binding(sampler)` 用指定 sampler 搭配同一默认 view。`Sampler` 与纹理默认 sampler 都非拥有（设备按 `SamplerDesc` 去重）。
+## 错误材质与关闭
 
-`MaterialStorage::collectTextureBindings` 每次 resolve 收集最终 binding：`resolveTexture(name)`（缺省经 `resolveTextureReference` 由 VirtualPath 解析并 `instantiate`）+ `resolveSampler(name)`，组装 `sampler ? texture->binding(sampler) : texture->binding()`。绑定签名或 program 反射的 set-1 布局变化会重建 set-1 `UniformSet`；只向 RHI 提交 view/sampler handle，texture handle 从不直接写入 sampled descriptor。
+Material::errorMaterial 是静态 Ref。资产系统就绪后由资产层直接初始化 error.material.json，初始化失败不递归回退。加载或 Forward Program/绑定失败使用它，错误材质本身失败则跳过绘制。
 
-## Renderer 与 GPU 资源
+关闭项目先等待 GPU 空闲，清空错误材质及程序/帧/全局资源，再释放资产和布局缓存，最后销毁 Renderer/Device。外部持有的运行时对象用设备 uid 避免向新设备释放旧 RID。
 
-Renderer 每帧从 Material 选择 `Shader -> SubShader -> ShaderPass`，生成 DrawItem 并按 RenderQueue 排序。`MaterialStorage` 管理材质 set-1 `UniformSet`，`GraphicsPipelineStorage` 产出 `ShaderProgram` 并提供对应的 RHI Pipeline；Render 层不接触 Vulkan 类型。
+## 验证
 
-## 内置错误材质
-
-`MiniEngine/BuiltinColor` 是最小兜底 Shader，只声明一个 `Color` uniform。顶点阶段仅执行对象与相机变换，片元阶段直接输出该颜色。
-
-`assets://materials/error.material.json` 使用该 Shader，并把 `Color` 设置为洋红色 `(1, 0, 1, 1)`。`MaterialManager::errorMaterial()` 延迟加载并复用这个材质。
-
-回退规则：
-
-- Material 资产或其 Shader 加载失败时，`MaterialManager::load()` 返回 Error Material Handle。
-- Shader 编译或 Graphics Pipeline 创建失败时，Renderer 的 Forward Pass 改用 Error Material。
-- Material set-1 `UniformSet` 准备失败时，提交前切换为 Error Material 的 Pipeline 和 `UniformSet`。
-- Error Material 自身不可用时才跳过 DrawItem，避免递归回退。
-
-完整资产导入和热重载流程见 [asset/Pipeline.md](asset/Pipeline.md)。
+MaterialIsolationTest 覆盖原实例重载、删除覆盖、失败保留、Shader revision、反射子集、不同 Program/帧缓存、帧保活、稀疏纹理和 sampler 覆盖。MaterialAssetBoundaryTest 防止运行时依赖资产/序列化类型，旧 v2 Artifact fixture 验证逐字节兼容。

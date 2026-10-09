@@ -13,7 +13,7 @@ namespace editor {
 
 // Unity-style editor for one runtime Material instance. Edits go straight
 // through the Material setters, so every MaterialComponent holding the handle
-// sees the change the same frame (MATERIAL_RESOURCE_MANAGER keeps one instance per
+// sees the change the same frame (MaterialAsset keeps one instance per
 // asset, shared by all users). Asset-backed edits are debounced back into the
 // .material.json source followed by a synchronous reimport, which refreshes
 // the in-place instance with exactly the written values and makes the later

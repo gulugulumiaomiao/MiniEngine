@@ -1,4 +1,5 @@
-﻿#include "asset/manager/AssetManager.h"
+#include "asset/types/TextureAsset.h"
+#include "asset/manager/AssetManager.h"
 #include "render/GraphicsPipelineStorage.h"
 #include "asset/types/MaterialAsset.h"
 #include "asset/types/ShaderAsset.h"
@@ -14,7 +15,7 @@
 #include "core/serialization/BinaryTransfer.h"
 #include "core/filesystem/FileSystem.h"
 #include "render/material/Material.h"
-#include "render/material/MaterialManager.h"
+#include "asset/runtime/MaterialAssetResolver.h"
 #include "render/mesh/Mesh.h"
 #include "render/shader/Shader.h"
 #include "render/texture/Texture.h"
@@ -64,7 +65,7 @@ bool AssetManager::initialize(AssetManagerMode mode) {
         if (!notification.success)
             return;
         if ((notification.type == AssetType::Texture || notification.type == AssetType::Mesh ||
-             notification.type == AssetType::Shader) &&
+             notification.type == AssetType::Shader || notification.type == AssetType::Material) &&
             !notification.removed) {
             // 纹理/网格/shader 就地重传：同一缓存 asset 重新 transfer → syncInstance 推送唯一实例，
             // 保持活链接（若 invalidate+新建 asset，则持有旧 asset 的实例会失联）。
@@ -73,7 +74,6 @@ bool AssetManager::initialize(AssetManagerMode mode) {
                 // Push runtime identity to consumers only for an already instantiated asset.
                 const auto shaderAsset = refDynamicCast<ShaderAsset>(findCached(notification.path));
                 if (shaderAsset && shaderAsset->runtimeInstance()) {
-                    MATERIAL_RESOURCE_MANAGER.refreshShader(shaderAsset->runtimeInstance());
                     GRAPHICS_PIPELINE_STORAGE.invalidateShader(*shaderAsset->runtimeInstance());
                 }
             }
@@ -93,6 +93,7 @@ bool AssetManager::initialize(AssetManagerMode mode) {
 }
 
 void AssetManager::shutdown() {
+    Material::errorMaterial.reset();
     changeListener_ = {};
     clear();
     ASSET_IMPORT_PIPELINE.shutdown();
@@ -172,6 +173,16 @@ Ref<ShaderAsset> AssetManager::findShaderAsset(const Shader& shader) const {
     return {};
 }
 
+Ref<MaterialAsset> AssetManager::findMaterialAsset(const Material& material) const {
+    std::scoped_lock lock{mutex_};
+    for (const auto& [path, cached] : cache_) {
+        const auto asset = refDynamicCast<MaterialAsset>(cached);
+        if (asset && asset->runtimeInstance().get() == &material)
+            return asset;
+    }
+    return {};
+}
+
 void AssetManager::invalidate(const VirtualPath& path) {
     std::scoped_lock lock{mutex_};
     cache_.erase(path.string());
@@ -191,6 +202,16 @@ void AssetManager::reloadInPlace(const VirtualPath& path) {
         artifact->assetType != record->type) {
         Log::error("AssetManager", "Invalid Asset Artifact for reload: %s", path.string().c_str());
         return;
+    }
+    // Check the complete payload before committing an existing material instance.
+    if (record->type == AssetType::Material) {
+        MaterialAssetData decoded;
+        BinaryReader preflight{artifact->payload};
+        if (!decoded.transfer(preflight) || !preflight.finished()) {
+            Log::error(
+                "AssetManager", "Invalid material payload for reload: %s", path.string().c_str());
+            return;
+        }
     }
     BinaryReader reader{artifact->payload};
     if (!cached->transfer(reader) || !reader.finished()) {

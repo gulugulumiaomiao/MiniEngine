@@ -1,7 +1,8 @@
-﻿#pragma once
+#pragma once
 
 #include "core/filesystem/FileSystem.h"
 #include "asset/manager/AssetManager.h"
+#include "asset/runtime/MaterialAssetResolver.h"
 
 #include <filesystem>
 
@@ -32,6 +33,8 @@ initializeAssetEnvironment(const std::filesystem::path& assetRoot,
         shutdownAssetEnvironment();
         return false;
     }
+    if (FILE_SYSTEM.isFile(VirtualPath{"assets://materials/error.material.json"}))
+        (void)initializeErrorMaterial();
     return true;
 }
 

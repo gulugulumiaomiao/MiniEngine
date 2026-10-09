@@ -1,7 +1,7 @@
 #include "tools/editor/panels/InspectorPanel.h"
 #include "tools/editor/model/SceneDocument.h"
 #include "render/material/Material.h"
-#include "render/material/MaterialManager.h"
+#include "asset/runtime/MaterialAssetResolver.h"
 #include "scene/components/MaterialComponent.h"
 #include "scene/scene/Scene.h"
 #include "core/filesystem/FileWatcher.h"
@@ -267,7 +267,7 @@ bool inspectAssetShowsMaterialEditor() {
     AssetScope assets;
     CHECK(assets.valid);
     Harness ui;
-    const Ref<Material> handle = MATERIAL_RESOURCE_MANAGER.load(kWarmMaterialPath);
+    const Ref<Material> handle = resolveMaterialReference(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
     CHECK(handle->getFloat("Metallic") == 0.0F);
 
@@ -293,7 +293,7 @@ bool lastInteractionWins() {
     Harness ui;
     auto& scene = ui.document.scene();
     const auto node = scene.createNode("A");
-    const Ref<Material> handle = MATERIAL_RESOURCE_MANAGER.load(kWarmMaterialPath);
+    const Ref<Material> handle = resolveMaterialReference(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
     auto canEditMetallic = [&]() {
         bool edited = false;
@@ -339,7 +339,7 @@ bool componentSlotEmbedsEditor() {
     Harness ui;
     auto& scene = ui.document.scene();
     const auto node = scene.createNode("A");
-    const Ref<Material> handle = MATERIAL_RESOURCE_MANAGER.load(kWarmMaterialPath);
+    const Ref<Material> handle = resolveMaterialReference(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
     MaterialComponent* component = scene.findNode(node)->addComponent<MaterialComponent>();
     component->setMaterial(0, handle);

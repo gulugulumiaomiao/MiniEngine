@@ -45,8 +45,8 @@ bool FrameGpuManager::initialize() {
     // Synthetic one-member block whose size matches the packed SceneDrawData blob; the scene UBO is
     // written wholesale via Ubo::setRawBytes (the CPU struct already matches the std140 layout).
     sceneUboLayout_ = makeRef<UboLayout>();
-    sceneUboLayout_->addUniform(
-        UboUniform{"SceneData", UboUniformType::Float, 0, static_cast<std::uint32_t>(sizeof(SceneDrawData))});
+    sceneUboLayout_->addUniform(UboUniform{
+        "SceneData", UboUniformType::Float, 0, static_cast<std::uint32_t>(sizeof(SceneDrawData))});
     sceneUboLayout_->finish();
 
     shadowSampler_ = device->sampler_create({
@@ -83,8 +83,8 @@ bool FrameGpuManager::initialize() {
             .memoryUsage = rhi::MemoryUsage::Upload,
             .debugName = "Instance table",
         });
-        frame.sceneSet = makeRef<UniformSet>(
-            sceneLayout_, std::vector<Ref<UboLayout>>{sceneUboLayout_});
+        frame.sceneSet =
+            makeRef<UniformSet>(sceneLayout_, std::vector<Ref<UboLayout>>{sceneUboLayout_});
         frame.sceneSet->setResourceAt(
             1, makeRef<StorageBufferResource>(frame.objectBuffer, kObjectBufferSize));
         frame.sceneSet->setResourceAt(
@@ -128,7 +128,14 @@ const Ref<UniformSet>& FrameGpuManager::sceneUniformSet(std::uint32_t frameIndex
 void FrameGpuManager::beginFrame(std::uint32_t frameIndex) {
     if (frameIndex >= frames_.size())
         Log::fatal("FrameGpuManager", "Invalid frame index");
+    frames_[frameIndex].retained.clear();
     frames_[frameIndex].instancesUsed = 0;
+}
+
+void FrameGpuManager::retain(std::uint32_t frameIndex, Ref<RefCounted> resource) {
+    if (!initialized_ || frameIndex >= frames_.size() || !resource)
+        return;
+    frames_[frameIndex].retained.push_back(std::move(resource));
 }
 
 std::uint32_t FrameGpuManager::reserveInstanceRegion(std::uint32_t frameIndex,

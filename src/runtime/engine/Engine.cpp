@@ -8,12 +8,11 @@
 #include "render/gpu/global_uniform/GlobalUniformGpuManager.h"
 #include "render/pipeline/MiniForwardPipeline.h"
 #include "render/pipeline/RenderPipeline.h"
-#include "render/gpu/material/MaterialStorage.h"
 #include "render/GraphicsPipelineStorage.h"
 #include "render/uniform/PipelineLayout.h"
 #include "render/uniform/UniformSetLayout.h"
 #include "render/material/Material.h"
-#include "render/material/MaterialManager.h"
+#include "asset/runtime/MaterialAssetResolver.h"
 #include "render/mesh/Mesh.h"
 #include "render/renderer/Renderer.h"
 #include "render/shader/Shader.h"
@@ -220,6 +219,8 @@ bool Engine::initializeProjectSubsystems() {
         Log::error("Engine", "Cannot initialize asset system");
         return false;
     }
+    if (!initializeErrorMaterial())
+        return false;
     installSceneChangeListener();
     return true;
 }
@@ -241,9 +242,7 @@ bool Engine::initializeGpuManagers(const rhi::IContextFactory& contextFactory,
                                       []() { return std::make_unique<MiniForwardPipeline>(); });
     renderer_->setPipeline(pipelineRegistry.create(config_.render.pipeline));
 
-    if (!GRAPHICS_PIPELINE_STORAGE.initialize() ||
-        !FRAME_GPU_MANAGER.initialize() ||
-        !MATERIAL_STORAGE.initialize(FrameGpuManager::kFramesInFlight) ||
+    if (!GRAPHICS_PIPELINE_STORAGE.initialize() || !FRAME_GPU_MANAGER.initialize() ||
         !GLOBAL_UNIFORM_GPU_MANAGER.initialize(FrameGpuManager::kFramesInFlight)) {
         Log::error("Engine", "Cannot initialize GPU resource managers");
         return false;
@@ -256,17 +255,16 @@ void Engine::teardownProjectSubsystems() {
     renderScene_.clear();
     if (renderer_)
         renderer_->waitIdle();
-    MATERIAL_STORAGE.shutdown();
+    Material::errorMaterial.reset();
     GRAPHICS_PIPELINE_STORAGE.shutdown();
     GLOBAL_UNIFORM_GPU_MANAGER.shutdown();
     FRAME_GPU_MANAGER.shutdown();
+    ASSET_MANAGER.shutdown();
     // Drop the shared uniform-binding caches while the device is still alive (they hold RIDs into
     // it); this must precede renderer_.reset(), which destroys the device.
     UniformSetLayout::clearCache();
     PipelineLayout::clearCache();
     renderer_.reset();
-    MATERIAL_RESOURCE_MANAGER.clear();
-    ASSET_MANAGER.shutdown();
     activeScenePath_ = {};
     sceneReloadPending_ = false;
 }
@@ -342,7 +340,7 @@ bool Engine::loadScene(const VirtualPath& scenePath) {
 
     const SceneInstantiationContext context{
         .loadMesh = [](const VirtualPath& path) { return resolveMeshReference(path.string()); },
-        .loadMaterial = [](const VirtualPath& path) { return MATERIAL_RESOURCE_MANAGER.load(path); },
+        .loadMaterial = [](const VirtualPath& path) { return resolveMaterialReference(path); },
     };
     Ref<Scene> loaded = asset->instantiate(context);
     if (!loaded) {

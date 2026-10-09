@@ -141,12 +141,12 @@ protected:
         return {VirtualPath{"assets://materials/export_test.material.json"}};
     }
 
-    [[nodiscard]] const AssetPackageEntry*
-    findEntry(const std::vector<AssetPackageEntry>& entries, std::string_view path) const {
-        const auto it = std::find_if(entries.begin(), entries.end(),
-                                     [&](const AssetPackageEntry& entry) {
-                                         return entry.path.string() == path;
-                                     });
+    [[nodiscard]] const AssetPackageEntry* findEntry(const std::vector<AssetPackageEntry>& entries,
+                                                     std::string_view path) const {
+        const auto it =
+            std::find_if(entries.begin(), entries.end(), [&](const AssetPackageEntry& entry) {
+                return entry.path.string() == path;
+            });
         return it == entries.end() ? nullptr : &*it;
     }
 
@@ -242,8 +242,7 @@ TEST_F(AssetPackageTest, PackageLayoutMirrorsSourcesAndManifest) {
     // manifest：schemaVersion、条目数、资产/伴随条目字段形态、guid 派生值。
     const auto manifestBytes = reader->extract("manifest.json");
     ASSERT_TRUE(manifestBytes);
-    const nlohmann::json manifest =
-        nlohmann::json::parse(toString(*manifestBytes), nullptr, false);
+    const nlohmann::json manifest = nlohmann::json::parse(toString(*manifestBytes), nullptr, false);
     ASSERT_FALSE(manifest.is_discarded());
     ASSERT_TRUE(manifest.is_object());
     EXPECT_EQ(manifest.at("$schemaVersion").get<int>(), 1);
@@ -252,8 +251,7 @@ TEST_F(AssetPackageTest, PackageLayoutMirrorsSourcesAndManifest) {
     ASSERT_EQ(jsonEntries.size(), 7U);
 
     const nlohmann::json& materialEntry = jsonEntries.at(0);
-    EXPECT_EQ(materialEntry.at("path").get<std::string>(),
-              "materials/export_test.material.json");
+    EXPECT_EQ(materialEntry.at("path").get<std::string>(), "materials/export_test.material.json");
     EXPECT_EQ(materialEntry.at("type").get<std::string>(), "Material");
     EXPECT_EQ(materialEntry.at("guid").get<std::string>(),
               metaGuid(VirtualPath{"assets://materials/export_test.material.json"}).toString());
@@ -328,7 +326,9 @@ TEST_F(AssetPackageTest, ImportRoundtripIntoFreshEnvironment) {
     AssetPackageImportReport report;
     std::string importError;
     EXPECT_TRUE(importAssetPackage(VirtualPath{"assets://package.mepackage"},
-                                   AssetPackageConflictPolicy::Abort, report, importError))
+                                   AssetPackageConflictPolicy::Abort,
+                                   report,
+                                   importError))
         << importError;
     ASSERT_EQ(report.imported.size(), 3U); // material + shader + texture
     EXPECT_TRUE(report.skipped.empty());
@@ -339,8 +339,8 @@ TEST_F(AssetPackageTest, ImportRoundtripIntoFreshEnvironment) {
               *materialBytes);
     EXPECT_EQ(*FILE_SYSTEM.readBinary(VirtualPath{"assets://shaders/export_test.Forward.vert"}),
               *vertBytes);
-    EXPECT_TRUE(FILE_SYSTEM.exists(
-        VirtualPath{"assets://materials/export_test.material.json.meta"}));
+    EXPECT_TRUE(
+        FILE_SYSTEM.exists(VirtualPath{"assets://materials/export_test.material.json.meta"}));
 
     // 数据库重建：material 有导入成功的 record，依赖闭包完整。
     const VirtualPath materialPath{"assets://materials/export_test.material.json"};
@@ -349,10 +349,10 @@ TEST_F(AssetPackageTest, ImportRoundtripIntoFreshEnvironment) {
     EXPECT_EQ(record->type, AssetType::Material);
     EXPECT_EQ(record->status, AssetImportStatus::Imported);
     const auto hasDependency = [&](std::string_view path) {
-        return std::any_of(record->dependencies.begin(), record->dependencies.end(),
-                           [&](const VirtualPath& dependency) {
-                               return dependency.string() == path;
-                           });
+        return std::any_of(
+            record->dependencies.begin(),
+            record->dependencies.end(),
+            [&](const VirtualPath& dependency) { return dependency.string() == path; });
     };
     EXPECT_TRUE(hasDependency("assets://shaders/export_test.shader.json"));
     EXPECT_TRUE(hasDependency("assets://textures/checker.png"));
@@ -360,7 +360,7 @@ TEST_F(AssetPackageTest, ImportRoundtripIntoFreshEnvironment) {
     // 重建后 loadAsset 可用。
     const auto material = ASSET_MANAGER.loadAsset<MaterialAsset>(materialPath);
     ASSERT_TRUE(material);
-    EXPECT_EQ(material->name, "Package Test Material");
+    EXPECT_EQ(material->data.name, "Package Test Material");
 }
 
 // 冲突三策略：Skip 不触碰冲突条目继续其余；Overwrite 覆盖重建；Abort 预检
@@ -397,8 +397,8 @@ TEST_F(AssetPackageTest, ImportConflictPolicies) {
     {
         AssetPackageImportReport report;
         std::string importError;
-        EXPECT_TRUE(importAssetPackage(packagePath, AssetPackageConflictPolicy::Skip, report,
-                                       importError))
+        EXPECT_TRUE(
+            importAssetPackage(packagePath, AssetPackageConflictPolicy::Skip, report, importError))
             << importError;
         const auto conflictBytes = FILE_SYSTEM.readBinary(materialPath);
         ASSERT_TRUE(conflictBytes);
@@ -413,8 +413,8 @@ TEST_F(AssetPackageTest, ImportConflictPolicies) {
     {
         AssetPackageImportReport report;
         std::string importError;
-        EXPECT_TRUE(importAssetPackage(packagePath, AssetPackageConflictPolicy::Overwrite, report,
-                                       importError))
+        EXPECT_TRUE(importAssetPackage(
+            packagePath, AssetPackageConflictPolicy::Overwrite, report, importError))
             << importError;
         const auto restored = FILE_SYSTEM.readBinary(materialPath);
         ASSERT_TRUE(restored);
@@ -434,8 +434,8 @@ TEST_F(AssetPackageTest, ImportConflictPolicies) {
             freshRoot / "assets" / "materials" / "export_test.material.json.meta", removeError);
         AssetPackageImportReport report;
         std::string importError;
-        EXPECT_FALSE(importAssetPackage(packagePath, AssetPackageConflictPolicy::Abort, report,
-                                        importError));
+        EXPECT_FALSE(importAssetPackage(
+            packagePath, AssetPackageConflictPolicy::Abort, report, importError));
         EXPECT_FALSE(importError.empty());
         EXPECT_FALSE(FILE_SYSTEM.exists(materialPath));
         EXPECT_TRUE(report.imported.empty());
@@ -457,8 +457,8 @@ TEST_F(AssetPackageTest, ImportRejectsCorruptPackages) {
             return false;
         report = {};
         importError.clear();
-        return importAssetPackage(packagePath, AssetPackageConflictPolicy::Overwrite, report,
-                                  importError);
+        return importAssetPackage(
+            packagePath, AssetPackageConflictPolicy::Overwrite, report, importError);
     };
 
     // 坏 zip（非归档字节）。

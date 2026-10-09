@@ -1,3 +1,5 @@
+#include "TestMaterial.h"
+#include "asset/types/TextureAsset.h"
 #include "render/material/Material.h"
 #include "render/texture/Sampler.h"
 #include "render/texture/Texture.h"
@@ -76,7 +78,9 @@ public:
     engine::rhi::RID buffer_create(const engine::rhi::BufferDesc&) override { return {}; }
     void buffer_destroy(engine::rhi::RID) override {}
     void buffer_upload(engine::rhi::RID, std::span<const std::byte>, std::uint64_t) override {}
-    engine::rhi::RID buffer_acquire_transient(const engine::rhi::BufferDesc&) override { return {}; }
+    engine::rhi::RID buffer_acquire_transient(const engine::rhi::BufferDesc&) override {
+        return {};
+    }
 
     engine::rhi::RID texture_create(const engine::rhi::TextureDesc& desc) override {
         textureDescs.push_back(desc);
@@ -98,9 +102,8 @@ public:
         for (const engine::rhi::TextureUploadRegion& region : regions)
             uploadedByteCounts.back() += region.data.size_bytes();
     }
-    engine::rhi::RID
-    texture_view_create(engine::rhi::RID texture,
-                        const engine::rhi::TextureViewDesc& desc) override {
+    engine::rhi::RID texture_view_create(engine::rhi::RID texture,
+                                         const engine::rhi::TextureViewDesc& desc) override {
         viewDescs.push_back(desc);
         viewTextures.push_back(texture);
         return {++createdViews, 1};
@@ -119,8 +122,7 @@ public:
 
     engine::rhi::RID shader_create(const engine::rhi::ShaderDesc&) override { return {}; }
     void shader_destroy(engine::rhi::RID) override {}
-    engine::rhi::RID
-    pipeline_create(const engine::rhi::GraphicsPipelineDesc&) override {
+    engine::rhi::RID pipeline_create(const engine::rhi::GraphicsPipelineDesc&) override {
         return {};
     }
     void pipeline_destroy(engine::rhi::RID) override {}
@@ -134,7 +136,8 @@ public:
         return {};
     }
     void pipeline_layout_destroy(engine::rhi::RID) override {}
-    engine::rhi::RID descriptor_set_allocate(const engine::rhi::DescriptorSetAllocateInfo&) override {
+    engine::rhi::RID
+    descriptor_set_allocate(const engine::rhi::DescriptorSetAllocateInfo&) override {
         return {};
     }
     void descriptor_set_update(engine::rhi::RID,
@@ -211,7 +214,7 @@ TEST_F(TextureTest, InstantiateIsSingleInstanceAndCloneIsDetached) {
 
     const Ref<Texture> cloned = asset->clone();
     ASSERT_TRUE(cloned);
-    EXPECT_NE(cloned, first);            // clone is an independent runtime texture
+    EXPECT_NE(cloned, first);              // clone is an independent runtime texture
     EXPECT_FALSE(cloned->isAssetBacked()); // and is not linked back to the asset
     EXPECT_EQ(cloned->width(), 1U);
 }
@@ -222,8 +225,8 @@ TEST_F(TextureTest, MaterialRetainsTextureByRef) {
     ASSERT_TRUE(texture);
     const std::uint32_t before = texture.useCount();
 
-    Material material;
-    material.textures.emplace("mainTexture", "");
+    Material material{
+        test::materialInfo({{"mainTexture", ShaderPropertyType::Texture2D, std::string{}}})};
     material.setTexture("mainTexture", texture);
 
     EXPECT_EQ(material.resolveTexture("mainTexture"), texture);
@@ -243,8 +246,8 @@ TEST_F(TextureTest, SamplerOverrideKeepsDefaultViewButSwapsSampler) {
 
     const rhi::TextureBinding defaultBinding = white->binding();
     const rhi::TextureBinding pointBinding = white->binding(point);
-    EXPECT_EQ(defaultBinding.view, pointBinding.view);        // same default view
-    EXPECT_NE(defaultBinding.sampler, pointBinding.sampler);  // overridden sampler
+    EXPECT_EQ(defaultBinding.view, pointBinding.view);       // same default view
+    EXPECT_NE(defaultBinding.sampler, pointBinding.sampler); // overridden sampler
     EXPECT_EQ(pointBinding.sampler, point->rhiHandle());
 }
 

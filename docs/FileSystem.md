@@ -3,7 +3,7 @@
 文件系统位于 `src/core/io`，负责虚拟路径、挂载点和原始文件读写。它不解析 Shader、Material 或 Mesh，也不缓存 Asset。
 
 ```text
-MaterialManager → AssetManager → FileSystem → DirectoryMount → 操作系统文件
+MaterialAssetResolver → AssetManager → FileSystem → DirectoryMount → 操作系统文件
 ```
 
 ## 虚拟路径

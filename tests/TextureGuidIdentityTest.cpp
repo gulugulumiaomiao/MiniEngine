@@ -1,3 +1,4 @@
+#include "asset/types/TextureAsset.h"
 #include "render/texture/Texture.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/manager/AssetManager.h"

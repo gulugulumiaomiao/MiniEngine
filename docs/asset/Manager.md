@@ -67,24 +67,7 @@ assets:// 路径
 
 ## 资产与运行时资源
 
-AssetManager 返回可序列化的 CPU 资产描述；Texture/Mesh 经 `XxxAsset::instantiate()` 直接产出唯一运行时实例（无领域 Manager），Material/Shader 则经领域 Manager 转换：
-
-```text
-assets://materials/example.material.json
-  -> AssetManager::loadAsset<MaterialAsset>
-  -> MaterialResourceManager::load
-  -> MaterialAsset::instantiate
-  -> MaterialResourceManager 内部 KeyedHandleRegistry / HandlePool
-  -> Ref<Material>
-```
-
-Shader、Material 使用相同模式（Texture/Mesh 已改为 `Asset::instantiate()` 唯一实例模型，无领域 Manager）。`Handle<Tag>` 是 index + generation
-句柄：销毁 Slot 时 generation 递增，旧 Handle 无法解析，复用 Slot 不会造成
-use-after-free。同一路径在对应 Manager 中只映射到一个有效 Handle
-（`KeyedHandleRegistry` 的 Key → Handle 索引）。`ShaderAsset::instantiate()` 只
-创建 CPU 运行时对象；SPIR-V 编译、Reflection 与 Pipeline 在 Shader 真正参与
-绘制时按需生成。详见 [HandlePool.md](../HandlePool.md) 与
-[KeyedHandleRegistry.md](../KeyedHandleRegistry.md)。
+ShaderAsset 和 MaterialAsset 强持有各自唯一运行时实例，重复 instantiate 返回同一 Ref，运行时无资产回指。Material 通过资产层 resolveMaterialReference(path/id) 获取，不经过领域 Manager。资产关联由资产层扫描缓存查询，克隆及纯运行时对象没有源资产关联。详见 [MaterialSystem.md](../MaterialSystem.md)。
 
 ## 热重载
 
@@ -92,9 +75,9 @@ AssetManager 订阅 `AssetImportPipeline` 的导入通知，成功导入后：
 
 ```text
 通知（成功且未 Removed）
-  -> Texture / Mesh / Shader：reloadInPlace(path)——同一缓存 asset 重新 transfer，其读取分支
+  -> Texture / Mesh / Shader / Material：reloadInPlace(path)——同一缓存 asset 重新 transfer，其读取分支
      调用 syncInstance() 把新数据推送给唯一实例（保持活链接，不 invalidate）
-     -> Shader 额外：MATERIAL_MANAGER.refreshShader——引用该 Shader 的材质按 revision 变化重建布局
+     -> Shader 增加 revision，Material 使用时检查并迁移兼容属性
   -> 其它类型：invalidate(path)——从 Ref 缓存移除（释放强引用），下次 loadAsset 取新数据
   -> changeListener_：通用变更通知（编辑器等订阅方）
 ```
@@ -108,8 +91,7 @@ AssetManager 订阅 `AssetImportPipeline` 的导入通知，成功导入后：
 
 ## 生命周期与关闭顺序
 
-引擎关闭时，先让 Renderer 等待 GPU 空闲并销毁 GPU 资源 Manager（Material、
-GraphicsPipeline、Shader、Texture、Mesh），再由 `ASSET_MANAGER.shutdown()` 统一
+引擎关闭时，先让 Renderer 等待 GPU 空闲并销毁 GPU 程序及帧资源，并清空 Material::errorMaterial，再由 `ASSET_MANAGER.shutdown()` 统一
 编排 CPU 侧清理：
 
 ```text

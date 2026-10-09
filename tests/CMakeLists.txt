@@ -237,6 +237,16 @@ target_compile_definitions(MaterialTest PRIVATE
 )
 add_dependencies(MaterialTest MiniCopyBuiltin)
 
+mini_add_gtest(MaterialIsolationTest)
+target_compile_definitions(MaterialIsolationTest PRIVATE
+    MINI_TEST_ASSET_DIR="${CMAKE_BINARY_DIR}/assets"
+    MINI_TEST_MATERIAL_ISOLATION_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+add_dependencies(MaterialIsolationTest MiniCopyBuiltin)
+add_test(NAME MaterialAssetBoundaryTest
+    COMMAND ${CMAKE_COMMAND}
+        -DMINI_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/MaterialAssetBoundaryTest.cmake)
+
 mini_add_gtest(MaterialGuidIdentityTest)
 target_compile_definitions(MaterialGuidIdentityTest PRIVATE
     MINI_TEST_ASSET_DIR="${CMAKE_BINARY_DIR}/assets"

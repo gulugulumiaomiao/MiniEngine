@@ -1,3 +1,4 @@
+#include "asset/types/TextureAsset.h"
 #include "asset/importer/TextureAssetImporter.h"
 
 #include "asset/importer/AssetImportHelpers.h"
@@ -56,9 +57,8 @@ std::uint64_t readU64(std::span<const std::byte> bytes, std::size_t offset) {
 
 // Box-filters every remaining mip level for the RGBA8 base already stored in blob, appending
 // each level tightly after the previous one. Returns the total mip level count.
-std::uint32_t appendMipChain(std::vector<std::uint8_t>& blob,
-                            std::uint32_t baseWidth,
-                            std::uint32_t baseHeight) {
+std::uint32_t
+appendMipChain(std::vector<std::uint8_t>& blob, std::uint32_t baseWidth, std::uint32_t baseHeight) {
     std::uint32_t levels = 1;
     std::uint32_t srcWidth = baseWidth;
     std::uint32_t srcHeight = baseHeight;
@@ -252,13 +252,14 @@ TextureAssetImporter::createDefaultSettings(const VirtualPath&) const {
     return std::make_unique<TextureImportSettings>();
 }
 
-std::vector<VirtualPath> TextureAssetImporter::gatherDependencies(const AssetImportContext&,
-                                                                 const AssetImportSettings&) const {
+std::vector<VirtualPath>
+TextureAssetImporter::gatherDependencies(const AssetImportContext&,
+                                         const AssetImportSettings&) const {
     return {};
 }
 
 AssetImportResult TextureAssetImporter::import(const AssetImportContext& context,
-                                              const AssetImportSettings& settings) const {
+                                               const AssetImportSettings& settings) const {
     const auto fail = [](std::string error) {
         Log::error("TextureAssetImporter", "%s", error.c_str());
         return AssetImportResult::failed(AssetType::Texture, std::move(error));

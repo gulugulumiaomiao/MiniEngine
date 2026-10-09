@@ -1,7 +1,5 @@
 #pragma once
 
-#include "asset/base/Asset.h"
-#include "asset/base/AssetId.h"
 #include "core/base/RID.h"
 #include "core/base/Ref.h"
 #include "core/base/RefCounted.h"
@@ -17,6 +15,8 @@
 #include <vector>
 
 namespace engine {
+class AssetId;
+class VirtualPath;
 
 namespace rhi {
 class IDevice;
@@ -59,7 +59,7 @@ struct TextureMipLayout {
     std::size_t totalSize{};
 };
 
-struct TextureDesc : public Transferable {
+struct TextureDesc {
     TextureType type{TextureType::Texture2D};
     TextureFormat format{TextureFormat::Rgba8Srgb};
     TextureColorSpace colorSpace{TextureColorSpace::Srgb};
@@ -89,8 +89,6 @@ struct TextureDesc : public Transferable {
                 SamplerDesc sampler)
         : type(type), format(format), colorSpace(colorSpace), width(width), height(height),
           mipCount(mipCount), sampler(std::move(sampler)) {}
-
-    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
 // Derives the mip layout implied by desc. Returns false for unsupported dimensions/formats
@@ -203,35 +201,6 @@ private:
 
 /// 层1 纹理资产：序列化源（desc + 扁平像素）。可 instantiate 出唯一运行时 Texture，
 /// 或 clone 出多个脱离实例。
-class TextureAsset final : public Asset {
-public:
-    ~TextureAsset() override;
-    [[nodiscard]] AssetType type() const override { return AssetType::Texture; }
-
-    TextureDesc desc;
-    std::vector<std::uint8_t> pixels;
-
-    [[nodiscard]] bool transfer(Transfer& archive) override;
-
-    /// 唯一运行时实例：首次创建并登记，之后复用同一实例（asset 就地重传会推送到它）。
-    [[nodiscard]] Ref<Texture> instantiate();
-    /// 克隆一个脱离 asset 的独立运行时纹理（每次新建，不随 asset 变化）。
-    [[nodiscard]] Ref<Texture> clone();
-
-private:
-    friend class Texture;
-
-    /// 把当前 pixels 重新上传给唯一实例（存在时）。就地重传（热重载）后调用。
-    void syncInstance();
-
-    Texture* instance_{}; // 裸观察者指针；~Texture 反注册置空
-};
-
-/// 解析纹理引用为运行时 Texture：空→白；`engine://textures/{white,black,normal,error}`→内置；
-/// `assets://` 或裸路径→经 AssetManager 加载 `TextureAsset` 并 `instantiate`（按 asset 天然去重）；
-/// 失败→error 纹理。取代已删除的 `TextureResourceManager::resolveReference`。
-[[nodiscard]] Ref<Texture> resolveTextureReference(std::string_view reference);
-
 [[nodiscard]] bool validateTexture(const TextureDesc& desc, std::span<const std::uint8_t> pixels);
 
 } // namespace engine

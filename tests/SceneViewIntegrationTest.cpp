@@ -28,6 +28,8 @@ public:
     bool drewGeometry{};
     bool resumed{};
     Ref<Shader> keywordShader;
+    Ref<Material> survivingMaterial;
+    Ref<UniformSet> survivingSet;
 
 private:
     void onStart() override {
@@ -45,16 +47,19 @@ private:
         ASSERT_TRUE(owner);
         keywordShader = owner->instantiate()->clone();
         MaterialAsset materialAsset;
-        const auto material = materialAsset.instantiate(keywordShader);
-        const auto other = materialAsset.instantiate(keywordShader);
+        const auto material = makeRef<Material>(*materialAsset.buildRuntimeInfo(keywordShader));
+        const auto other = makeRef<Material>(*materialAsset.buildRuntimeInfo(keywordShader));
         ASSERT_TRUE(material);
         ASSERT_TRUE(other);
+        survivingMaterial = material;
         const auto& pass = keywordShader->defaultSubShader().requirePass(ShaderPassType::Forward);
         const auto& shadow =
             keywordShader->defaultSubShader().requirePass(ShaderPassType::ShadowCaster);
         EXPECT_EQ(pass.programCount(), 0U);
         const auto off = material->program(pass);
         ASSERT_TRUE(off);
+        survivingSet = material->uniformSet(*off, 0);
+        ASSERT_TRUE(survivingSet);
         EXPECT_EQ(other->program(pass), off);
         material->enableKeyword("UNDECLARED");
         EXPECT_TRUE(material->isKeywordEnabled("UNDECLARED"));
@@ -79,7 +84,8 @@ private:
         Ref<ShaderProgram> orphaned;
         {
             const auto temporary = keywordShader->clone();
-            const auto temporaryMaterial = materialAsset.instantiate(temporary);
+            const auto temporaryMaterial =
+                makeRef<Material>(*materialAsset.buildRuntimeInfo(temporary));
             orphaned = temporaryMaterial->program(temporary->defaultSubShader().passes()[0]);
             ASSERT_TRUE(orphaned);
         }
@@ -98,6 +104,17 @@ private:
         EXPECT_EQ(rebuilt.programCount(), 0U);
         ASSERT_TRUE(material->program(rebuilt));
         EXPECT_EQ(rebuilt.programCount(), 1U);
+        auto booleanInfo = *owner->buildRuntimeInfo();
+        booleanInfo.properties.push_back({"FeatureToggle", ShaderPropertyType::Boolean, true});
+        ASSERT_TRUE(keywordShader->rebuild(std::move(booleanInfo)));
+        const auto booleanProgram = material->program(
+            keywordShader->defaultSubShader().requirePass(ShaderPassType::Forward));
+        ASSERT_TRUE(booleanProgram);
+        EXPECT_TRUE(material->getBool("FeatureToggle"));
+        const auto* toggle = booleanProgram->uboLayouts(1)[0]->findUniform("FeatureToggle");
+        ASSERT_TRUE(toggle);
+        EXPECT_EQ(toggle->type, UboUniformType::UInt);
+        ASSERT_TRUE(material->uniformSet(*booleanProgram, 0));
     }
     void attach() {
         ShowWindow(ENGINE.window().nativeHandle(), SW_HIDE);
@@ -127,6 +144,13 @@ private:
             layer_.detach();
             ASSERT_TRUE(ENGINE.openProject(project_));
             attach();
+            const auto program = survivingMaterial->program(
+                keywordShader->defaultSubShader().requirePass(ShaderPassType::Forward));
+            ASSERT_TRUE(program);
+            const auto newSet = survivingMaterial->uniformSet(*program, 0);
+            ASSERT_TRUE(newSet);
+            EXPECT_NE(newSet, survivingSet);
+            survivingSet = newSet;
         }
         if (frames == 13) {
             layer_.detach();

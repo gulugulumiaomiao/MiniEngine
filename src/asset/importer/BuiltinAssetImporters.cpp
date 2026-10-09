@@ -1,3 +1,4 @@
+#include "asset/types/TextureAsset.h"
 #include "asset/importer/BuiltinAssetImporters.h"
 
 #include "asset/importer/AssetImporterRegistry.h"

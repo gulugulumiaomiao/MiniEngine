@@ -1,150 +1,22 @@
-# Shader 与材质运行时管线
+# Shader 与 Material 运行时管线
 
-> 本文保留早期材质/RHI 分层记录；Shader 编译、缓存、依赖和打包流程已经重构，当前实现以 [ShaderCompilePipeline.md](ShaderCompilePipeline.md) 为准。
-
-本文记录 Shader/Material 重构后的第一版完整框架。目标是把“资产描述、离线编译、运行时程序、RHI 对象、Pipeline、材质 GPU 数据”分层，避免上层直接操作 Vulkan 或以文件路径作为运行时缓存键。
-
-## 总体数据流
+编译及打包见 [ShaderCompilePipeline.md](ShaderCompilePipeline.md)，材质生命周期和反射映射见 [MaterialSystem.md](MaterialSystem.md)。
 
 ```text
-ShaderLab JSON / GLSL
-        │
-        ▼
-ShaderAsset ── ShaderCompileRequest ── PreprocessedShader
-        │                                  │
-        │                                  ▼
-        │                           CompiledShader + SPIRV-Cross Reflection
-        │                                  │ CompileID
-        ▼                                  ▼
-Shader → SubShader → ShaderPass ───── ShaderProgram / ProgramLayout
-                                               │ ProgramID + LayoutID
-                                               ▼
-                              ShaderModule / GraphicsPipeline Cache
-                                               │
-Material → MaterialStorage(set-1 UniformSet) → set 1 ┤
-Scene/Object buffer → set 0 ───────────────────┘
+ShaderAssetData -> ShaderAsset -> ShaderCreateInfo -> Shader
+MaterialAssetData -> MaterialAsset -> MaterialCreateInfo -> Material
+Material -> Shader -> SubShader -> ShaderPass.keyword
+  -> uint64 keyword mask -> ShaderPass.programs[mask]
+  -> GraphicsPipelineStorage -> ShaderCompilePipeline -> ShaderProgram
+DrawListBuilder -> GraphicsPipelineStorage.resolve -> Pipeline
+                -> Material.uniformSet(program, frame) -> set 1
+                -> FrameGpuManager.retain -> 提交帧保活
 ```
 
-## 十个步骤的实现结果
+资产单向持有运行时引用，Material 不经过领域 Manager。ShaderPass 保存 keyword 和直接的 unordered_map<uint64_t, Ref<ShaderProgram>>，编译源由 Shader 保存。Material 的 enableKeyword/disableKeyword 决定 Program，Pass 未声明的关键词忽略。
 
-### 1. 资产和运行时对象分离
+ShaderProgram 保存阶段模块、每个 set 的实际反射 binding、UBO 成员布局、共享 descriptor layout 和 pipeline layout。共享布局 hash 不含成员名称或 UBO 偏移，Material 按 ProgramId 和帧分别缓存，上传以该 Program 反射为准。
 
-- `ShaderAsset`、`MaterialAsset` 只表示磁盘资产和导入结果，由 `AssetManager` 按路径加载与缓存。
-- `Shader`、`SubShader`、`ShaderPass` 是运行时对象。最终参与绘制的是 `ShaderPass`。
-- `Material` 持有运行时 `Ref<Shader>`（不持有 `ShaderAsset`）；Shader 由 `resolveShaderReference` 经 `ShaderAsset::instantiate` 的唯一实例解析，切换时迁移同名兼容属性。
-- `SubShader` 和 `ShaderPass` 不保留对应的 Desc。
+set 0 由 FrameGpuManager 管理场景/对象/实例表/阴影资源，set 1 由 Material 创建，set 2 由 GlobalUniformGpuManager 管理。反射没有材质资源时 set 1 合法为空，Forward 绑定失败回退到 Material::errorMaterial。
 
-### 2. 明确编译输入、预处理结果和编译产物
-
-Shader 编译流程按职责拆分到四组文件：
-
-- `uint64_t` 关键词位掩码：当前 Pass 启用的关键词组合，最多 64 个声明关键词。
-- `ShaderCompileRequest`：源文件、阶段、入口、宏、include 路径、目标 API、编译器版本和选项。
-- `PreprocessedShader`：展开 include 和 define 后的源码、依赖文件及源码 Hash。
-- `CompiledShader`：SPIR-V 字节码、入口、阶段、反射结果和依赖列表。
-
-预处理器支持递归 `#include "..."`、循环依赖检查，并把宏插入 `#version` 之后。
-
-### 3. Reflection 归属于 CompiledShader
-
-SPIRV-Cross 的反射结果保存在 `CompiledShader::reflection`，内容包括 descriptor、uniform member offset、阶段输入和阶段输出。JSON 声明校验仍在离线构建阶段执行，运行时直接消费已验证的布局。
-
-### 4. CompiledShaderCache 使用 CompileID
-
-缓存键由 SPIR-V 内容、阶段、入口和 `uint64_t` 关键词位掩码 共同计算，不再使用文件路径作为对象身份。路径只负责加载和依赖追踪。同一内容可以复用，内容变化会产生新的 CompileID，旧 handle 通过 generation 失效。
-
-### 5. ShaderProgram 与 ProgramCache
-
-`ShaderProgram` 组合一个 Pass 的顶点和片元 `CompiledShader`，并合并两个阶段的 descriptor/interface：
-
-- `ProgramID` 标识阶段组合和 Variant。
-- `ShaderProgramLayout::id` 标识合并后的资源布局。
-- 同 set/binding 类型不一致时记录 `error`，Program 创建返回无效 Handle；Pipeline 创建随之失败并由 Renderer 跳过该 Pass。
-
-### 6. RHI Shader 对象
-
-`ShaderGpuManager` 先按 CompileID 查询 `ShaderModuleCache`；未命中时由 `ShaderModuleGpuFactory` 把 `CompiledShaderHandle` 转成 `rhi::ShaderHandle`。`ShaderModule` 只接收 SPIR-V 字节，不再打开文件，因此 RHI 不依赖资产路径和文件系统。
-
-### 7. 结构化 GraphicsPipelineCache
-
-Pipeline key 包含：
-
-- ProgramID 和 LayoutID；
-- VertexLayout；
-- RenderState；
-- RenderTarget color format。
-
-`GraphicsPipeline` 接收 RHI Shader module 和两个 descriptor set layout，不再临时读取 `.spv`。Swapchain 重建时只清理受格式影响的 Pipeline，编译产物和 Shader module 仍可复用。
-
-### 8. Material Binding
-
-固定的 descriptor 约定为：
-
-- `set = 0, binding = 0`：场景 uniform buffer；
-- `set = 0, binding = 1`：对象 transform storage buffer；
-- `set = 0, binding = 2`：每帧实例表 storage buffer（合批后的对象行索引，见 `docs/DrawBatching.md`）；
-- `set = 0, binding = 3`：阴影贴图 combined image sampler，`FrameGpuManager` 绑定解析后的 shadow map view，未启用阴影时绑定 1x1 `Depth32Float` 占位纹理；
-- `set = 1, binding = 0`：材质 uniform buffer；
-- `set = 1, binding = 1..16`：按 Shader properties 声明顺序排列的 Texture2D。
-
-场景 uniform buffer（`SceneDrawData`，std140，224 字节）布局：`viewProjection`(0)、`cameraPosition`(64)、`directionalLightDirection`(80)、`directionalLightColorIntensity`(96)、`pointLightPositionRange`(112)、`pointLightColorIntensity`(128)、`lightSpaceMatrix`(144)、`shadowParams`(208)；`shadowParams = {strength, depthBias, normalOffset, texelSize}`，shader 侧声明见 `builtin/core/shaders/include/scene.glsl`。
-
-每个 in-flight frame 有独立的材质 set-1 `UniformSet`。`MaterialStorage` 的 LRU 缓存让槽位跨帧常驻：材质 UBO 走
-`Ubo::setRawBytes(uniformBytes)`、纹理走 `setResourceAt(binding, Ref<Texture>)`，经 `rhi::IDevice` 的 descriptor-set 接口创建，不接触 Vulkan descriptor。`Material::version()`
-负责标识 CPU 数据版本；resolve 按三级路径刷新（版本一致直接命中、仅 uniform 变化脏更新、纹理或缓冲变化全量重建），同一帧内相同 `MaterialHandle` 只处理一次。纹理 resolver 返回
-RHI TextureView/Sampler handle，未安装 resolver 或纹理未就绪时只输出 warn。
-
-### 9. Keyword、Variant 与多 Pass
-
-`ShaderKeywordSchema` 为每个 Pass 建立稳定的关键字位表，材质的 keyword 列表转换为 `uint64_t` 关键词位掩码 后参与 CompiledShader、Program 和 Pipeline 缓存。Material 通过 `enableKeyword / disableKeyword` 保存启用关键词；每个 Pass 用 `keyword` 声明过滤当前材质的组合（例如 `RECEIVE_SHADOWS` 只影响 Forward），未声明该词的 Pass 静默忽略。材质切换 Shader 时保留启用状态，过滤仅发生在选择 Program 时。
-
-Renderer 按以下顺序提交存在的 Pass：
-
-```text
-ShadowCaster → DepthOnly → Forward
-```
-
-某个 SubShader 没有对应 Pass 时直接跳过。`blinn_phong` 示例 shader 声明了 `ShadowCaster`（position-only 顶点输入、depth-only 管线）与 `Forward`（`RECEIVE_SHADOWS` 变体做 3x3 PCF 阴影采样）两个 Pass，四个示例材质开启 `RECEIVE_SHADOWS` keyword。
-
-### 10. 依赖、热重载、延迟销毁和 Cooked 元数据
-
-- `ShaderDependencyGraph` 保存 include/SPIR-V 文件到 CompileID 的反向依赖。
-- 每帧首次请求 Pipeline 时轮询已加载依赖的时间戳。
-- 变化按 `CompiledShader → ShaderProgram → RHI Shader → Pipeline` 传播失效。
-- 已提交给 GPU 的旧 `VkPipeline` 和 `VkShaderModule` 进入 retirement 队列，至少经过 frames-in-flight 后才析构。
-- 打包产物是由 `ShaderCompilePipeline` 输出到 `shader-bin://` 的稳定 SPIR-V；未被加载流程消费的旧 `ShaderCooked*` 元数据模型已经删除。
-
-## 关键缓存键
-
-| 缓存 | 键 | 值 |
-|---|---|---|
-| AssetManager | 规范化 `assets://` 路径 | `Ref<Asset>`（强缓存；当前为 ShaderAsset / MaterialAsset） |
-| CompiledShaderCache | SPIR-V 内容 + stage + entry + Variant | CompiledShader |
-| ShaderProgramCache | vertex CompileID + fragment CompileID + Variant | ShaderProgram |
-| ShaderModuleCache | CompileID | RHI Shader handle |
-| GraphicsPipelineCache | ProgramID + LayoutID + VertexLayout + RenderState + RT format | RHI Pipeline handle |
-| MaterialStorage 缓存 | MaterialHandle | 常驻的材质 set-1 `UniformSet`（LRU 驱逐） |
-
-## 生命周期和修改规则
-
-1. Debug 下编辑 JSON/GLSL 后，FileWatcher 将事件交给主线程的 AssetImportPipeline，并按反向依赖重新导入。
-2. `reloadInPlace` 让缓存的 `ShaderAsset` 重新 transfer → `syncInstance` 在原唯一实例上 `rebuildFromAsset`（revision + 1）；SPIR-V 仍在下一次 Pipeline 请求时按需生成。
-3. 材质属性变化只使材质 GPU 数据变脏，不重新创建 Pipeline。
-4. Keyword、VertexLayout、RenderState 或 RenderTarget 格式变化会选择或创建另一条 Pipeline。
-5. Shader 切换时材质保留名称和类型兼容的属性，布局变化由新的 Material GPU buffer 承接；导入或编译失败时继续保留上一条有效 Shader/Pipeline。
-
-## 主要源码位置
-
-- `src/render/shader/Shader.h/.cpp`：资产描述、运行时 Shader/SubShader/Pass、Reflection。
-- `src/render/shader/ShaderGenerator.h/.cpp`：根据运行时 Shader 生成完整阶段源码。
-- `src/render/shader/ShaderPreprocessor.h/.cpp`：define、include 展开及 include 依赖缓存。
-- `src/render/shader/ShaderCompiler.h/.cpp`：接收 `PreprocessedShader` 并编译 SPIR-V。
-- `src/render/shader/ShaderCompilePipeline.h/.cpp`：运行模式、CompiledShader、Program、缓存及流程编排。
-- `src/render/gpu/shader/ShaderModuleCache.h/.cpp`：CompileID 到 RHI Shader handle 的纯缓存。
-- `src/render/gpu/pipeline/GraphicsPipelineCache.h/.cpp`：Pipeline key 到 RHI Pipeline handle 的纯缓存。
-- `src/rhi/vulkan/VulkanGraphicsPipeline.h/.cpp`：将 RHI Pipeline 描述转换为 Vulkan graphics pipeline。
-- `src/render/gpu/material/MaterialStorageCache.h/.cpp`：跨帧常驻的材质 set-1 `UniformSet` 槽位缓存。
-- `src/render/gpu/<domain>/*GpuFactory.h/.cpp`：RHI 资源创建、必要的数据上传和释放实现。
-- `src/render/gpu/<domain>/*GpuManager.h/.cpp`：各类 GPU 缓存命中、资源创建和退役流程编排。
-- `src/render/renderer/Renderer.cpp`：Variant 选择、多 Pass 场景提交和 DrawList 录制；缓存组装与热重载由对应 GPU Manager 负责。
-- `src/rhi/vulkan/VulkanSwapchain.cpp`：acquire、命令缓冲、提交、同步与 present。
+MaterialAsset 原实例重载完整重建，ShaderAsset 原实例重载增加 revision，Material 使用时迁移兼容属性。GraphicsPipelineStorage 负责程序和 Pipeline 退役，FrameGpuManager 保活通用提交资源，不持有材质索引。

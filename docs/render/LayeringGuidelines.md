@@ -55,7 +55,7 @@
 |---|---|---|---|
 | Texture | `TextureAsset`（无运行时管理器） | 无（层2 `Texture` 自持 RHI 句柄） | `VulkanDevice` 分类型句柄池（存实例）texture/view/sampler，对上只暴露 RID |
 | Mesh | `MeshAsset`（无运行时管理器） | 无（层2 `Mesh` 自持 vertex/index buffer 的 RHI RID） | `IDevice` buffer owner（拆分的 allocate_rid/allocate_memory/upload/free_memory/release_rid） |
-| Material | `MaterialResourceManager` | `MaterialStorage`（set-1 `UniformSet`） | `IDevice` descriptor set / uniform owner |
+| Material | MaterialAsset::instantiate / MaterialCreateInfo | Material::uniformSet（set-1 UniformSet） | IDevice descriptor set / uniform owner |
 | Shader | 无（`ShaderAsset` 直接 `instantiate`/`clone`，`resolveShaderReference` 按 asset 去重） | `GraphicsPipelineStorage`（产出并缓存 `ShaderProgram`） | `IDevice` shaderModule / pipeline / descriptor-set-layout / pipeline-layout owner |
 
 ## 4. 跨层引用规则（单向向下）
@@ -99,8 +99,8 @@
 
 ### 6.3 Material
 - `Material` 持 `Ref<Shader>`、按属性名缓存的 `Ref<Texture>` 与可选 `Ref<Sampler>`（`setTexture(tex)` 用默认 sampler，`setTexture(tex, sampler)` 用指定 sampler），不持 Shader RID。
-- `MaterialStorage` 集中完成 pass/variant 选择、GraphicsPipeline 查询、TextureBinding 解析、uniform 上传与跨帧常驻。
-- Material 最后一个 Ref 归零时，MaterialStorage 从所有帧缓存移除对应记录并释放 bind group/uniform buffer。
+- DrawListBuilder 组合 pass/program/pipeline；Material::uniformSet 处理反射上传与每帧缓存。
+- Material 释放自身缓存，已提交 UniformSet 由 FrameGpuManager 的通用 Ref 保活到对应帧 fence 完成。
 
 ### 6.4 Shader
 - `ShaderAsset` 已拆到 `src/asset/types/ShaderAsset.h`；运行时 Shader 只保留用户/渲染语义。
@@ -121,7 +121,7 @@
 - [x] 阶段 1b：Scene/Node/Component/Material/Shader/Mesh/Texture 继承 `RefCounted`；拥有关系使用 `Ref<T>`；四个 ResourceManager 使用裸指针弱索引与析构反注册。
 - [x] 阶段 2：（已被纹理三层重构取代）删除 `TextureStorage` 四件套与 `TextureResourceManager`；层2 `Texture` 改为自持三个 RHI 句柄、经 `IDevice::active()` 创建，`TextureAsset` 提供 `instantiate`/`clone`。
 - [x] 阶段 3：`MaterialAsset` / `ShaderAsset` 定义迁至 `src/asset/types/`，使用方显式包含资产类型头。
-- [x] 阶段 4：pass/variant 选择、pipeline 查询、纹理 View/Sampler 解析和 GPU 常驻统一进入 `MaterialStorage`；Material 只持 `Ref<Shader>` / `Ref<Texture>` 和用户参数。
+- [x] 阶段 4：DrawListBuilder 组合 Program/Pipeline；Material 持有自己的反射绑定及帧缓存，资产和运行时单向分离。
 - [x] 阶段 5：`ShaderModuleInfo` 补全 RHI ShaderModule 描述契约；Program→Pipeline 映射由 `GraphicsPipelineStorage` 显式管理。
 - [x] 阶段 6：（已被 Mesh 三层重构取代）删除 `MeshStorage` 四件套与 `MeshResourceManager`；层2 `Mesh` 改为自持 vertex/index buffer 的 RHI RID、经 `IDevice` 三步创建/两步销毁，`MeshAsset` 提供 `instantiate`/`clone`/`syncInstance`，新增 `resolveMeshReference`。
 - [x] 阶段 7：命名与边界收口；Debug/Release 全量构建和 177 项 CTest 通过；两配置均完成 Vulkan demo 场景实跑。

@@ -1,31 +1,20 @@
 #pragma once
-
 #include "asset/base/Asset.h"
-#include "core/base/Ref.h"
-#include "asset/types/ShaderAssetData.h"
-#include "render/shader/Shader.h"
-
-#include <optional>
-#include <string>
-#include <unordered_map>
-#include <vector>
-
+#include "asset/types/MaterialAssetData.h"
+#include "render/material/Material.h"
 namespace engine {
-
-class Material;
-
 class MaterialAsset final : public Asset {
 public:
-    [[nodiscard]] AssetType type() const override { return AssetType::Material; }
+    AssetType type() const override { return AssetType::Material; }
+    MaterialAssetData data;
+    Ref<Material> instantiate();
+    Ref<Material> clone() const;
+    const Ref<Material>& runtimeInstance() const { return instance_; }
+    std::optional<MaterialCreateInfo>
+    buildRuntimeInfo(const Ref<Shader>& overrideShader = {}) const;
+    bool transfer(Transfer& archive) override;
 
-    std::string name;
-    VirtualPath shader;
-    std::unordered_map<std::string, ShaderAssetValue> properties;
-    std::vector<std::string> keywords;
-    std::optional<int> renderQueue;
-
-    [[nodiscard]] Ref<Material> instantiate(const Ref<Shader>& shader) const;
-    [[nodiscard]] bool transfer(Transfer& archive) override;
+private:
+    Ref<Material> instance_;
 };
-
 } // namespace engine

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstring>
 #include <variant>
+#include <type_traits>
 
 namespace engine {
 namespace {
@@ -103,11 +104,23 @@ bool Ubo::setUniform(std::string_view name, const ShaderValue& value) {
     if (!uniform)
         return false;
 
+    const auto valueSize = std::visit(
+        [](const auto& typed) -> std::size_t {
+            using T = std::decay_t<decltype(typed)>;
+            if constexpr (std::is_same_v<T, bool>)
+                return sizeof(std::uint32_t);
+            return sizeof(T);
+        },
+        value);
+    const bool paddedVec3 = uniform->type == UboUniformType::Vec3 && uniform->size == 16 &&
+                            std::holds_alternative<math::Vec3>(value);
+    if ((uniform->size != valueSize && !paddedVec3) || uniform->offset + valueSize > cpu_.size())
+        return false;
     bool ok = false;
     if (const auto* v = std::get_if<float>(&value)) {
         ok = uniform->type == UboUniformType::Float && writeValue(cpu_, uniform->offset, *v);
     } else if (const auto* v = std::get_if<bool>(&value)) {
-        if (uniform->type == UboUniformType::Bool &&
+        if ((uniform->type == UboUniformType::Bool || uniform->type == UboUniformType::UInt) &&
             static_cast<std::size_t>(uniform->offset) + sizeof(std::uint32_t) <= cpu_.size()) {
             writeBool(cpu_, uniform->offset, *v);
             ok = true;

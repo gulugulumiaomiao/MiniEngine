@@ -1,4 +1,5 @@
-﻿#include "asset/types/MaterialAsset.h"
+#include "asset/types/TextureAsset.h"
+#include "asset/types/MaterialAsset.h"
 #include "asset/types/ShaderAsset.h"
 #include "core/serialization/BinaryTransfer.h"
 #include "core/serialization/JsonTransfer.h"
@@ -319,7 +320,7 @@ bool testObjectScopes() {
            checkObjectScopes<SceneNodeAsset>() && checkObjectScopes<ShaderPropertyAssetData>() &&
            checkObjectScopes<ShaderInterfaceAssetData>() &&
            checkObjectScopes<ShaderRenderStateAssetData>() && checkObjectScopes(pass) &&
-           checkObjectScopes(subShader) && checkObjectScopes<TextureDesc>() &&
+           checkObjectScopes(subShader) && checkObjectScopes<TextureAssetDesc>() &&
            checkObjectScopes<WindowConfig>() && checkObjectScopes<RenderConfig>() &&
            checkObjectScopes<EngineConfig>();
 }
@@ -332,13 +333,12 @@ bool testLegacyShapeAndFailureScope() {
                               2,
                               VertexInputRate::Vertex};
     JsonWriter writer;
-    if (!layout.transfer(writer) ||
-        nlohmann::json::parse(writer.toString()) !=
-            nlohmann::json{{"semantic", {{"type", 0}, {"index", 0}}},
-                           {"format", 2},
-                           {"binding", 1},
-                           {"location", 2},
-                           {"input_rate", 0}})
+    if (!layout.transfer(writer) || nlohmann::json::parse(writer.toString()) !=
+                                        nlohmann::json{{"semantic", {{"type", 0}, {"index", 0}}},
+                                                       {"format", 2},
+                                                       {"binding", 1},
+                                                       {"location", 2},
+                                                       {"input_rate", 0}})
         return false;
     const std::vector<std::byte> legacy{
         std::byte{0}, std::byte{0}, std::byte{0}, std::byte{0}, // semantic.type
@@ -357,7 +357,8 @@ bool testLegacyShapeAndFailureScope() {
         return false;
 
     // 深层失败后命名字段必须恢复父作用域，显式清错才允许继续。
-    JsonReader reader{R"json({"child":{"streams":[{"semantic":{"type":0,"index":0},"format":2,"binding":"bad","location":0,"input_rate":0}]},"after":29})json"};
+    JsonReader reader{
+        R"json({"child":{"streams":[{"semantic":{"type":0,"index":0},"format":2,"binding":"bad","location":0,"input_rate":0}]},"after":29})json"};
     VertexLayout vertexLayout;
     if (!reader.beginObject({}) || reader.transfer("child", vertexLayout) || reader.valid())
         return false;

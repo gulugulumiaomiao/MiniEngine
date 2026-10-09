@@ -2,10 +2,10 @@
 
 #include "core/logging/Log.h"
 #include "core/math/Frustum.h"
-#include "render/material/MaterialManager.h"
+#include "render/material/Material.h"
+#include "render/gpu/frame/FrameGpuManager.h"
 #include "render/mesh/Mesh.h"
 #include "render/pipeline/RenderContext.h"
-#include "render/gpu/material/MaterialStorage.h"
 #include "render/GraphicsPipelineStorage.h"
 #include "render/render_target/RenderTarget.h"
 #include "render/scene/RenderScene.h"
@@ -51,13 +51,22 @@ DrawListBuilder::resolveMaterialPass(const RenderContext& context,
     const rhi::PixelFormat depthFormat = shadowCaster
                                              ? rhi::PixelFormat::Depth32Float
                                              : context.currentForwardTarget().depthFormat();
-    const MaterialPassState state = MATERIAL_STORAGE.resolvePass(*material,
-                                                                 meshInstance,
-                                                                 passTypeForPhase(phase),
-                                                                 renderPipeline_,
-                                                                 colorFormat,
-                                                                 depthFormat);
-    return {materialRef, state.pass, state.pipeline, state.materialSet, state.setCount};
+    const auto* sub = material->shader().selectSubShader(renderPipeline_);
+    const auto* pass = sub ? sub->findPass(passTypeForPhase(phase)) : nullptr;
+    if (!pass)
+        return {};
+    const auto program = material->program(*pass);
+    if (!program)
+        return {};
+    const auto pipeline =
+        GRAPHICS_PIPELINE_STORAGE.resolve(*program, meshInstance, colorFormat, depthFormat);
+    if (!pipeline)
+        return {};
+    const auto set = material->uniformSet(*program, context.frameIndex());
+    if (program->setCount() > 1 && !program->bindings(1).empty() && !set)
+        return {};
+    FRAME_GPU_MANAGER.retain(context.frameIndex(), set);
+    return {materialRef, pass, pipeline, set, program->setCount()};
 }
 
 DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& context) {
@@ -154,11 +163,11 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
                 ResolvedMaterialPass resolved =
                     resolveMaterialPass(context, requestedMaterial, *meshInstance, renderPhase);
                 ResolvedMaterialPass fallback;
-                const Ref<Material> errorMaterial = MATERIAL_RESOURCE_MANAGER.errorMaterial();
+                const Ref<Material> errorMaterial = Material::errorMaterial;
                 if (renderPhase == RenderPhase::Forward) {
-                    fallback = resolveMaterialPass(
-                        context, errorMaterial, *meshInstance, renderPhase);
-                    if (!resolved || !resolved.materialSet) {
+                    fallback =
+                        resolveMaterialPass(context, errorMaterial, *meshInstance, renderPhase);
+                    if (!resolved) {
                         Log::error("DrawListBuilder",
                                    "Using Error Material for an unavailable material");
                         resolved = fallback;
@@ -174,7 +183,7 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
                     .pipeline = resolved.pipeline,
                     .programSetCount = resolved.setCount,
                     .material = resolved.material,
-                    .materialKey = resolved.material->resourceId(),
+                    .materialKey = resolved.material->instanceId(),
                     .materialSet = resolved.materialSet,
                     .fallbackPipeline = fallback.pipeline,
                     .fallbackMaterial = fallback.material,
@@ -186,7 +195,7 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
                                   .firstIndex = subMesh.firstIndex,
                                   .vertexOffset = subMesh.vertexOffset,
                                   .firstInstance = objectIndex},
-                    .renderQueue = material->renderQueue,
+                    .renderQueue = material->effectiveRenderQueue(),
                 });
             }
         }

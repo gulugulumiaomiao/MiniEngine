@@ -14,7 +14,7 @@ engine::DrawItem makeItem(int renderQueue,
     engine::DrawItem item;
     item.renderQueue = renderQueue;
     item.pipeline = engine::rhi::RID{pipelineIndex, 1};
-    item.materialKey = engine::RID{materialIndex, 1};
+    item.materialKey = materialIndex;
     item.indexBuffer = engine::rhi::RID{meshIndex, 1};
     item.arguments.firstInstance = firstInstance;
     return item;
@@ -89,13 +89,15 @@ int main() {
         items.push_back(makeItem(kRenderQueueGeometry, 1, 2, 1));
 
         DrawSorter sorter;
-        sorter.sort(items, SortingCriteria::Pipeline | SortingCriteria::Material | SortingCriteria::Mesh, scene);
+        sorter.sort(items,
+                    SortingCriteria::Pipeline | SortingCriteria::Material | SortingCriteria::Mesh,
+                    scene);
 
         assert(items[0].pipeline.index() == 1);
-        assert(items[0].materialKey.index() == 2);
+        assert(items[0].materialKey == 2);
         assert(items[0].indexBuffer.index() == 1);
         assert(items[1].pipeline.index() == 1);
-        assert(items[1].materialKey.index() == 2);
+        assert(items[1].materialKey == 2);
         assert(items[1].indexBuffer.index() == 3);
         assert(items[2].pipeline.index() == 3);
     }

@@ -18,7 +18,7 @@ constexpr const char* kCategory = "MaterialAsset";
 
 using OrderedJson = nlohmann::ordered_json;
 
-ShaderAssetValue
+MaterialAssetValue
 parseMaterialValue(const Json& value, const VirtualPath& file, const std::string& path) {
     try {
         if (value.is_number()) {
@@ -35,6 +35,12 @@ parseMaterialValue(const Json& value, const VirtualPath& file, const std::string
             case 2: return vectorValue<2, math::Vec2>(kCategory, value, file, path);
             case 3: return vectorValue<3, math::Vec3>(kCategory, value, file, path);
             case 4: return vectorValue<4, math::Vec4>(kCategory, value, file, path);
+            case 16: {
+                math::Mat44 matrix{};
+                for (std::size_t i = 0; i < 16; ++i)
+                    matrix[i / 4][i % 4] = value.at(i).get<float>();
+                return matrix;
+            }
             default: break;
             }
         }
@@ -44,7 +50,7 @@ parseMaterialValue(const Json& value, const VirtualPath& file, const std::string
     fail(kCategory, file, path, "unsupported material property value");
 }
 
-bool valueMatchesProperty(const ShaderAssetValue& value, ShaderAssetPropertyType type) {
+bool valueMatchesProperty(const MaterialAssetValue& value, ShaderAssetPropertyType type) {
     switch (type) {
     case ShaderAssetPropertyType::Float:
     case ShaderAssetPropertyType::Range: return std::holds_alternative<float>(value);
@@ -60,8 +66,8 @@ bool valueMatchesProperty(const ShaderAssetValue& value, ShaderAssetPropertyType
 }
 
 Ref<MaterialAsset> parseMaterialAssetValue(const VirtualPath& path,
-                                          std::string_view source,
-                                          const GuidResolver* resolver) {
+                                           std::string_view source,
+                                           const GuidResolver* resolver) {
     const Json root = readJson(kCategory, path, source);
     if (!root.is_object()) {
         fail(kCategory, path, "$", "material asset root must be an object");
@@ -76,7 +82,7 @@ Ref<MaterialAsset> parseMaterialAssetValue(const VirtualPath& path,
     Ref<MaterialAsset> materialRef = makeRef<MaterialAsset>();
     MaterialAsset& material = *materialRef;
     material.setAssetPath(path);
-    material.name = required<std::string>(kCategory, root, "name", path, "$");
+    material.data.name = required<std::string>(kCategory, root, "name", path, "$");
     const std::string shaderPath = required<std::string>(kCategory, root, "shader", path, "$");
     const AssetReference shaderRef{shaderPath};
     if (shaderRef.isGuid()) {
@@ -85,34 +91,35 @@ Ref<MaterialAsset> parseMaterialAssetValue(const VirtualPath& path,
         }
         const auto resolved = shaderRef.resolve(*resolver);
         if (!resolved) {
-            fail(kCategory, path, "$.shader", "cannot resolve GUID shader reference: " + shaderPath);
+            fail(
+                kCategory, path, "$.shader", "cannot resolve GUID shader reference: " + shaderPath);
         }
-        material.shader = *resolved;
+        material.data.shader = *resolved;
     } else if (shaderRef.isPath()) {
-        material.shader = shaderRef.path();
+        material.data.shader = shaderRef.path();
     }
-    if (!material.shader.valid()) {
+    if (!material.data.shader.valid()) {
         // A reference without a scheme resolves inside the mount that owns the material,
         // so the built-in Error Material under assets:// finds the built-in Shader in the
         // same project assets instead of looking for it in the currently mounted project.
-        material.shader = VirtualPath{path.scheme() + "://" + shaderPath};
+        material.data.shader = VirtualPath{path.scheme() + "://" + shaderPath};
     }
-    if (!material.shader.valid()) {
+    if (!material.data.shader.valid()) {
         fail(kCategory, path, "$.shader", "invalid Shader virtual path");
     }
     if (root.contains("renderQueue")) {
-        material.renderQueue = root.at("renderQueue").get<int>();
+        material.data.renderQueue = root.at("renderQueue").get<int>();
     }
-    material.keywords = root.value("keywords", std::vector<std::string>{});
+    material.data.keywords = root.value("keywords", std::vector<std::string>{});
     std::set<std::string> usedKeywords;
-    for (const std::string& keyword : material.keywords) {
+    for (const std::string& keyword : material.data.keywords) {
         if (!usedKeywords.insert(keyword).second) {
             fail(kCategory, path, "$.keywords", "duplicate keyword '" + keyword + "'");
         }
     }
     const Json values = root.value("properties", Json::object());
     for (const auto& [name, value] : values.items()) {
-        ShaderAssetValue parsed = parseMaterialValue(value, path, "$.properties." + name);
+        MaterialAssetValue parsed = parseMaterialValue(value, path, "$.properties." + name);
         if (std::string* textureReference = std::get_if<std::string>(&parsed)) {
             const AssetReference textureRef{*textureReference};
             if (textureRef.isGuid()) {
@@ -134,7 +141,7 @@ Ref<MaterialAsset> parseMaterialAssetValue(const VirtualPath& path,
                 *textureReference = textureRef.path().string();
             }
         }
-        material.properties.emplace(name, std::move(parsed));
+        material.data.properties.emplace(name, std::move(parsed));
     }
     return materialRef;
 }
@@ -147,20 +154,21 @@ Ref<MaterialAsset> parseMaterialAsset(const VirtualPath& path, std::string_view 
     } catch (const AssetParseFailure&) {
         return {};
     } catch (const Json::exception& error) {
-        Log::error("MaterialAsset", "%s: JSON value error: %s", path.string().c_str(), error.what());
+        Log::error(
+            "MaterialAsset", "%s: JSON value error: %s", path.string().c_str(), error.what());
         return {};
     }
 }
 
-Ref<MaterialAsset> parseMaterialAsset(const VirtualPath& path,
-                                     std::string_view source,
-                                     const GuidResolver& resolver) {
+Ref<MaterialAsset>
+parseMaterialAsset(const VirtualPath& path, std::string_view source, const GuidResolver& resolver) {
     try {
         return parseMaterialAssetValue(path, source, &resolver);
     } catch (const AssetParseFailure&) {
         return {};
     } catch (const Json::exception& error) {
-        Log::error("MaterialAsset", "%s: JSON value error: %s", path.string().c_str(), error.what());
+        Log::error(
+            "MaterialAsset", "%s: JSON value error: %s", path.string().c_str(), error.what());
         return {};
     }
 }
@@ -184,14 +192,14 @@ bool validateMaterialAsset(const MaterialAsset& material,
             declaredKeywords.insert(pass.features.begin(), pass.features.end());
         }
     }
-    for (const std::string& keyword : material.keywords) {
+    for (const std::string& keyword : material.data.keywords) {
         if (!declaredKeywords.contains(keyword)) {
             report("$.keywords",
                    "keyword '" + keyword + "' is not declared by shader '" + shader.data.name +
                        "'");
         }
     }
-    for (const auto& [name, value] : material.properties) {
+    for (const auto& [name, value] : material.data.properties) {
         const ShaderPropertyAssetData* property = shader.findProperty(name);
         if (!property) {
             report("$.properties." + name,
@@ -215,7 +223,7 @@ namespace {
     return path.string();
 }
 
-[[nodiscard]] OrderedJson encodeShaderValue(const ShaderAssetValue& value,
+[[nodiscard]] OrderedJson encodeShaderValue(const MaterialAssetValue& value,
                                             const GuidResolver& resolver) {
     // 注意：nlohmann 的花括号构造（Json{scalar}）会被解释为数组；标量必须用圆括号
     // 构造或赋值。
@@ -229,6 +237,12 @@ namespace {
         return OrderedJson::array({vector->x, vector->y, vector->z});
     if (const math::Vec4* vector = std::get_if<math::Vec4>(&value))
         return OrderedJson::array({vector->x, vector->y, vector->z, vector->w});
+    if (const auto* matrix = std::get_if<math::Mat44>(&value)) {
+        OrderedJson result = OrderedJson::array();
+        for (std::size_t i = 0; i < 16; ++i)
+            result.push_back((*matrix)[i / 4][i % 4]);
+        return result;
+    }
     const std::string& reference = std::get<std::string>(value);
     return OrderedJson(referenceString(VirtualPath{reference}, resolver));
 }
@@ -240,25 +254,24 @@ std::string writeMaterialAssetJson(const MaterialAsset& material, const GuidReso
     // properties）省略时保持省略，往返不把派生值显式化。
     OrderedJson root;
     root["$schemaVersion"] = 1;
-    root["name"] = material.name;
-    root["shader"] = referenceString(material.shader, resolver);
-    if (material.renderQueue)
-        root["renderQueue"] = *material.renderQueue;
-    if (!material.keywords.empty()) {
+    root["name"] = material.data.name;
+    root["shader"] = referenceString(material.data.shader, resolver);
+    if (material.data.renderQueue)
+        root["renderQueue"] = *material.data.renderQueue;
+    if (!material.data.keywords.empty()) {
         OrderedJson keywords = OrderedJson::array();
-        for (const std::string& keyword : material.keywords)
+        for (const std::string& keyword : material.data.keywords)
             keywords.push_back(keyword);
         root["keywords"] = std::move(keywords);
     }
-    if (!material.properties.empty()) {
+    if (!material.data.properties.empty()) {
         // unordered_map 遍历序不稳定；按属性名排序保证等值资产序列化为等值字节。
-        std::vector<const std::pair<const std::string, ShaderAssetValue>*> entries;
-        entries.reserve(material.properties.size());
-        for (const auto& entry : material.properties)
+        std::vector<const std::pair<const std::string, MaterialAssetValue>*> entries;
+        entries.reserve(material.data.properties.size());
+        for (const auto& entry : material.data.properties)
             entries.push_back(&entry);
-        std::ranges::sort(entries, {}, [](const auto* entry) -> const std::string& {
-            return entry->first;
-        });
+        std::ranges::sort(
+            entries, {}, [](const auto* entry) -> const std::string& { return entry->first; });
         OrderedJson properties = OrderedJson::object();
         for (const auto* entry : entries)
             properties[entry->first] = encodeShaderValue(entry->second, resolver);

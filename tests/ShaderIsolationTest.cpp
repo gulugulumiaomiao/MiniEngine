@@ -182,10 +182,10 @@ TEST_F(ShaderIsolationTest, MaterialPreservesCompatibleValuesAcrossLayoutAndType
     asset.data = assetData();
     const auto shader = asset.instantiate();
     MaterialAsset materialAsset;
-    materialAsset.properties.emplace("Roughness", 0.9F);
+    materialAsset.data.properties.emplace("Roughness", 0.9F);
     const math::Vec4 tint{0.1F, 0.2F, 0.3F, 1.0F};
-    materialAsset.properties.emplace("Tint", tint);
-    const auto material = materialAsset.instantiate(shader);
+    materialAsset.data.properties.emplace("Tint", tint);
+    const auto material = makeRef<Material>(*materialAsset.buildRuntimeInfo(shader));
     ASSERT_TRUE(material);
 
     auto info = *asset.buildRuntimeInfo();
@@ -228,8 +228,8 @@ TEST_F(ShaderIsolationTest, MaterialSelectsKeywordsIndependentlyForEachPass) {
     asset.data.subShaders[0].passes.push_back(second);
     const auto shader = asset.instantiate();
     MaterialAsset materialAsset;
-    const auto material = materialAsset.instantiate(shader);
-    const auto other = materialAsset.instantiate(shader);
+    const auto material = makeRef<Material>(*materialAsset.buildRuntimeInfo(shader));
+    const auto other = makeRef<Material>(*materialAsset.buildRuntimeInfo(shader));
     ASSERT_TRUE(material);
     ASSERT_TRUE(other);
     const auto& forward = shader->defaultSubShader().passes()[0];

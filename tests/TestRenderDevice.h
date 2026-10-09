@@ -30,8 +30,9 @@ public:
         buffer_free_memory(handle);
         buffer_release_rid(handle);
     }
-    void buffer_upload(rhi::RID, std::span<const std::byte> data, std::uint64_t) override {
+    void buffer_upload(rhi::RID buffer, std::span<const std::byte> data, std::uint64_t) override {
         uploadedBytes.push_back(data.size_bytes());
+        uploadedBuffers[buffer.index()] = {data.begin(), data.end()};
     }
     rhi::RID buffer_acquire_transient(const rhi::BufferDesc& desc) override {
         return buffer_create(desc);
@@ -89,7 +90,10 @@ public:
     rhi::RID descriptor_set_allocate(const rhi::DescriptorSetAllocateInfo&) override {
         return {++descriptorSets, 1};
     }
-    void descriptor_set_update(rhi::RID, std::span<const rhi::DescriptorWrite>) override {}
+    void descriptor_set_update(rhi::RID set,
+                               std::span<const rhi::DescriptorWrite> writes) override {
+        descriptorWrites[set.index()] = {writes.begin(), writes.end()};
+    }
     void descriptor_set_destroy(rhi::RID) override { ++destroyedDescriptorSets; }
 
     void waitIdle() override {}
@@ -102,6 +106,8 @@ public:
     std::vector<std::vector<std::byte>> shaderBytecode;
     std::vector<rhi::GraphicsPipelineDesc> pipelines;
     std::vector<std::size_t> uploadedBytes;
+    std::unordered_map<std::uint32_t, std::vector<std::byte>> uploadedBuffers;
+    std::unordered_map<std::uint32_t, std::vector<rhi::DescriptorWrite>> descriptorWrites;
     std::uint32_t views{};
     std::uint32_t textureUploads{};
     int destroyedBuffers{};

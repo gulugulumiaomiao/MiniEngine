@@ -7,7 +7,7 @@
 #include "core/filesystem/FileWatcher.h"
 #include "asset/types/MaterialAsset.h"
 #include "render/material/Material.h"
-#include "render/material/MaterialManager.h"
+#include "asset/runtime/MaterialAssetResolver.h"
 #include "scene/components/MaterialComponent.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -201,8 +201,7 @@ struct Harness {
         return {window->DC.CursorStartPos.x + x, window->DC.CursorStartPos.y + y};
     }
     // 从上向下扫描 pressClick，直到谓词成真（控件没有稳定行号可寻址）。
-    template <typename Predicate>
-    bool scan(Predicate predicate, float maxY = 220.0F) {
+    template <typename Predicate> bool scan(Predicate predicate, float maxY = 220.0F) {
         for (float y = 0.0F; y < maxY; y += 6.0F) {
             pressClick(content(100.0F, y));
             if (predicate())
@@ -217,7 +216,7 @@ struct Harness {
 bool editsUpdateInstanceAndWriteBack() {
     Harness ui;
     CHECK(ui.valid);
-    const Ref<Material> handle = MATERIAL_RESOURCE_MANAGER.load(kWarmMaterialPath);
+    const Ref<Material> handle = resolveMaterialReference(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
     MaterialComponent component;
     component.setMaterial(0, handle);
@@ -230,9 +229,7 @@ bool editsUpdateInstanceAndWriteBack() {
     // 引用者持有的是管理器里的同一实例（单句柄语义）。
     CHECK(component.material(0).get() == material);
 
-    CHECK(ui.scan([handle] {
-        return handle->getFloat("Metallic") != 0.0F;
-    }));
+    CHECK(ui.scan([handle] { return handle->getFloat("Metallic") != 0.0F; }));
 
     material = handle.get();
     CHECK(material->getFloat("Metallic") == 1.0F);
@@ -242,7 +239,7 @@ bool editsUpdateInstanceAndWriteBack() {
     ui.pumpDebounce();
     const auto onDisk = readMaterialFromDisk(kWarmMaterialPath);
     CHECK(onDisk != nullptr);
-    const float* const metallic = std::get_if<float>(&onDisk->properties.at("Metallic"));
+    const float* const metallic = std::get_if<float>(&onDisk->data.properties.at("Metallic"));
     CHECK(metallic != nullptr);
     CHECK(*metallic == 1.0F);
     return true;
@@ -252,14 +249,12 @@ bool editsUpdateInstanceAndWriteBack() {
 bool writeBackIsIdempotentThroughReimport() {
     Harness ui;
     CHECK(ui.valid);
-    const Ref<Material> handle = MATERIAL_RESOURCE_MANAGER.load(kWarmMaterialPath);
+    const Ref<Material> handle = resolveMaterialReference(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
     ui.current = handle;
     ui.settle();
 
-    CHECK(ui.scan([handle] {
-        return handle->getFloat("Metallic") != 0.0F;
-    }));
+    CHECK(ui.scan([handle] { return handle->getFloat("Metallic") != 0.0F; }));
     const Material* material = handle.get();
     const float edited = material->getFloat("Metallic");
 
@@ -278,13 +273,13 @@ bool writeBackIsIdempotentThroughReimport() {
 bool shaderSwitchPreservesCompatibleValues() {
     Harness ui;
     CHECK(ui.valid);
-    const Ref<Material> handle = MATERIAL_RESOURCE_MANAGER.load(kWarmMaterialPath);
+    const Ref<Material> handle = resolveMaterialReference(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
     ui.current = handle;
     ui.settle();
 
     const math::Vec4 baseColor = handle->getVec4("BaseColor");
-    MATERIAL_RESOURCE_MANAGER.setShader(handle, VirtualPath{"assets://shaders/fixture2.shader.json"});
+    setMaterialShader(handle, VirtualPath{"assets://shaders/fixture2.shader.json"});
     ui.settle();
 
     Material* material = handle.get();
@@ -292,15 +287,13 @@ bool shaderSwitchPreservesCompatibleValues() {
           VirtualPath{"assets://shaders/fixture2.shader.json"});
     CHECK(material->getVec4("BaseColor") == baseColor);
 
-    CHECK(ui.scan([handle] {
-        return handle->getFloat("Metallic") != 0.0F;
-    }));
+    CHECK(ui.scan([handle] { return handle->getFloat("Metallic") != 0.0F; }));
     ui.pumpDebounce();
 
     const auto onDisk = readMaterialFromDisk(kWarmMaterialPath);
     CHECK(onDisk != nullptr);
-    CHECK(onDisk->shader == VirtualPath{"assets://shaders/fixture2.shader.json"});
-    CHECK(std::get_if<float>(&onDisk->properties.at("Metallic")) != nullptr);
+    CHECK(onDisk->data.shader == VirtualPath{"assets://shaders/fixture2.shader.json"});
+    CHECK(std::get_if<float>(&onDisk->data.properties.at("Metallic")) != nullptr);
     return true;
 }
 
@@ -309,7 +302,7 @@ bool shaderSwitchPreservesCompatibleValues() {
 bool keywordAndRenderQueueOverride() {
     Harness ui;
     CHECK(ui.valid);
-    const Ref<Material> handle = MATERIAL_RESOURCE_MANAGER.load(kWarmMaterialPath);
+    const Ref<Material> handle = resolveMaterialReference(kWarmMaterialPath);
     CHECK(static_cast<bool>(handle));
     ui.current = handle;
     ui.settle();
@@ -318,28 +311,24 @@ bool keywordAndRenderQueueOverride() {
     material->setKeywordEnabled("RECEIVE_SHADOWS", true);
     material->setRenderQueue(3100);
 
-    CHECK(ui.scan([handle] {
-        return handle->getFloat("Metallic") != 0.0F;
-    }));
+    CHECK(ui.scan([handle] { return handle->getFloat("Metallic") != 0.0F; }));
     ui.pumpDebounce();
     auto onDisk = readMaterialFromDisk(kWarmMaterialPath);
     CHECK(onDisk != nullptr);
-    CHECK(onDisk->renderQueue.has_value());
-    CHECK(*onDisk->renderQueue == 3100);
-    CHECK(onDisk->keywords == std::vector<std::string>{"RECEIVE_SHADOWS"});
+    CHECK(onDisk->data.renderQueue.has_value());
+    CHECK(*onDisk->data.renderQueue == 3100);
+    CHECK(onDisk->data.keywords == std::vector<std::string>{"RECEIVE_SHADOWS"});
 
     material = handle.get();
     material->setFloat("Metallic", 0.9F); // 让下一次点击产生编辑事件
     material->setKeywordEnabled("RECEIVE_SHADOWS", false);
     material->setRenderQueue(std::nullopt);
-    CHECK(ui.scan([handle] {
-        return handle->getFloat("Metallic") == 1.0F;
-    }));
+    CHECK(ui.scan([handle] { return handle->getFloat("Metallic") == 1.0F; }));
     ui.pumpDebounce();
     onDisk = readMaterialFromDisk(kWarmMaterialPath);
     CHECK(onDisk != nullptr);
-    CHECK(!onDisk->renderQueue.has_value());
-    CHECK(onDisk->keywords.empty());
+    CHECK(!onDisk->data.renderQueue.has_value());
+    CHECK(onDisk->data.keywords.empty());
     return true;
 }
 
@@ -347,26 +336,24 @@ bool keywordAndRenderQueueOverride() {
 bool detachedMaterialEditsWithoutWriteBack() {
     Harness ui;
     CHECK(ui.valid);
-    const Ref<Material> source = MATERIAL_RESOURCE_MANAGER.load(kWarmMaterialPath);
+    const Ref<Material> source = resolveMaterialReference(kWarmMaterialPath);
     CHECK(static_cast<bool>(source));
-    const Ref<Material> cloned = MATERIAL_RESOURCE_MANAGER.clone(source);
+    const Ref<Material> cloned = source->clone();
     CHECK(static_cast<bool>(cloned));
     ui.current = cloned;
     ui.settle();
 
     const Material* cloneData = cloned.get();
     CHECK(cloneData != nullptr);
-    CHECK(!cloneData->isAssetBacked());
+    CHECK(!static_cast<bool>(findMaterialAsset(*cloneData)));
 
-    CHECK(ui.scan([cloned] {
-        return cloned->getFloat("Metallic") != 0.0F;
-    }));
+    CHECK(ui.scan([cloned] { return cloned->getFloat("Metallic") != 0.0F; }));
     CHECK(cloned->getFloat("Metallic") == 1.0F);
 
     ui.pumpDebounce();
     const auto onDisk = readMaterialFromDisk(kWarmMaterialPath);
     CHECK(onDisk != nullptr);
-    CHECK(onDisk->properties.find("Metallic") == onDisk->properties.end());
+    CHECK(onDisk->data.properties.find("Metallic") == onDisk->data.properties.end());
     return true;
 }
 
@@ -374,29 +361,27 @@ bool detachedMaterialEditsWithoutWriteBack() {
 bool targetSwitchFlushesPendingSave() {
     Harness ui;
     CHECK(ui.valid);
-    const Ref<Material> warm = MATERIAL_RESOURCE_MANAGER.load(kWarmMaterialPath);
-    const Ref<Material> cool = MATERIAL_RESOURCE_MANAGER.load(kCoolMaterialPath);
+    const Ref<Material> warm = resolveMaterialReference(kWarmMaterialPath);
+    const Ref<Material> cool = resolveMaterialReference(kCoolMaterialPath);
     CHECK(static_cast<bool>(warm));
     CHECK(static_cast<bool>(cool));
 
     ui.current = warm;
     ui.settle();
-    CHECK(ui.scan([warm] {
-        return warm->getFloat("Metallic") != 0.0F;
-    }));
+    CHECK(ui.scan([warm] { return warm->getFloat("Metallic") != 0.0F; }));
 
     ui.current = cool; // 不等防抖直接切目标
     ui.settle();
 
     const auto warmOnDisk = readMaterialFromDisk(kWarmMaterialPath);
     CHECK(warmOnDisk != nullptr);
-    const float* const metallic = std::get_if<float>(&warmOnDisk->properties.at("Metallic"));
+    const float* const metallic = std::get_if<float>(&warmOnDisk->data.properties.at("Metallic"));
     CHECK(metallic != nullptr);
     CHECK(*metallic == 1.0F);
 
     const auto coolOnDisk = readMaterialFromDisk(kCoolMaterialPath);
     CHECK(coolOnDisk != nullptr);
-    CHECK(coolOnDisk->properties.find("Metallic") == coolOnDisk->properties.end());
+    CHECK(coolOnDisk->data.properties.find("Metallic") == coolOnDisk->data.properties.end());
     return true;
 }
 

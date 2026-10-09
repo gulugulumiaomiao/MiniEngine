@@ -54,7 +54,8 @@ UniformSet::UniformSet(Ref<UniformSetLayout> layout, std::vector<Ref<UboLayout>>
 
 UniformSet::~UniformSet() {
     // Cross-device safety: only free the descriptor set if the creating device is still active.
-    if (rhi::IDevice* device = RHI_DEVICE; descriptorSet_ && device && device->uid() == deviceUid_) {
+    if (rhi::IDevice* device = RHI_DEVICE;
+        descriptorSet_ && device && device->uid() == deviceUid_) {
         device->descriptor_set_destroy(descriptorSet_);
     }
     descriptorSet_ = {};
@@ -107,6 +108,17 @@ Ubo* UniformSet::uboAt(std::uint32_t binding) const {
     return static_cast<Ubo*>(resource.get());
 }
 
+bool UniformSet::setSamplerOverrideAt(std::uint32_t position, Ref<Sampler> sampler) {
+    if (position >= resources_.size())
+        return false;
+    samplerOverrides_.resize(resources_.size());
+    if (samplerOverrides_[position] != sampler) {
+        samplerOverrides_[position] = std::move(sampler);
+        dirty_ = true;
+    }
+    return true;
+}
+
 void UniformSet::upload() {
     if (dirty_ && descriptorSet_) {
         const std::vector<ResourceBinding>& bindings = layout_->bindings();
@@ -134,7 +146,9 @@ void UniformSet::upload() {
             }
             case UniformResourceType::Texture: {
                 const rhi::TextureBinding binding =
-                    static_cast<const Texture*>(resource.get())->binding();
+                    static_cast<const Texture*>(resource.get())
+                        ->binding(i < samplerOverrides_.size() ? samplerOverrides_[i]
+                                                               : Ref<Sampler>{});
                 write.textureView = binding.view;
                 write.sampler = binding.sampler;
                 break;

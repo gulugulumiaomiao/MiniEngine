@@ -22,6 +22,5 @@ private:
 - `AssetImportPipeline`
 - `FileWatcher`
 - `AssetManager`
-- `MaterialManager`
 
 现有调用方式和宏保持不变，例如 `AssetManager::instance()` 与 `ASSET_MANAGER`。

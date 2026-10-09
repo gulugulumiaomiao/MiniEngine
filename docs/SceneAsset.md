@@ -67,7 +67,7 @@ bool reloadScene();
 const VirtualPath& activeScenePath() const;
 ```
 
-`loadScene` 先完整加载并实例化新 Scene，成功后才替换当前 Scene。因此加载失败时会继续运行旧 Scene。运行时 Mesh 和 Material 分别由 `MESH_MANAGER` 与 `MATERIAL_MANAGER` 加载。
+`loadScene` 先完整加载并实例化新 Scene，成功后才替换当前 Scene。因此加载失败时会继续运行旧 Scene。运行时 Mesh 由 MeshAsset::instantiate 创建，Material 通过资产层 resolveMaterialReference 获取 MaterialAsset 的唯一实例。
 
 ## 5. 热重载
 

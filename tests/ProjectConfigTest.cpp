@@ -309,6 +309,14 @@ bool testWindowSession(const std::filesystem::path& root) {
 #else
     for (const auto& mount : projectMounts(session))
         std::filesystem::create_directories(mount.directory);
+    // Runtime startup initializes the static error material from project assets.
+    std::error_code builtinError;
+    std::filesystem::copy(std::filesystem::path{MINI_TEST_BUILTIN_DIR} / "core",
+                          session / "assets",
+                          std::filesystem::copy_options::recursive,
+                          builtinError);
+    if (builtinError)
+        return false;
     WindowSession app{session};
 #endif
     const rhi::vulkan::VulkanFactory factory;

@@ -83,54 +83,54 @@ findDescriptor(const SpirvReflection& reflection, std::uint32_t set, std::uint32
     return found == reflection.descriptors.end() ? nullptr : &*found;
 }
 
-// Validates the Material uniform block against the shader's declared properties. A stage
-// that never reads material data legitimately has no block: the generator always declares
-// it, but SPIR-V optimization strips unused descriptors, so absence is not an error. Only a
-// wrong descriptor type or a member at an unexpected offset would corrupt the upload.
+// Material upload follows reflected names and types; optimized subsets and different
+// offsets are valid. Descriptor binding numbers are owned by the program reflection.
 void validateMaterialBlock(std::span<const ShaderPropertyInfo> properties,
                            const SpirvReflection& reflection,
                            const VirtualPath& path) {
-    const UniformBlockLayout layout = buildUniformBlockLayout(properties);
-    if (layout.members.empty())
-        return;
-    const ShaderDescriptorBinding* block = findDescriptor(reflection, 1, 0);
-    if (!block)
-        return;
-    if (block->type != ShaderDescriptorType::UniformBuffer)
-        reflectionFail("%s set 1 binding 0 is not a uniform block", path.string().c_str());
-    for (const UniformMemberLayout& expected : layout.members) {
-        const auto member =
-            std::ranges::find_if(block->members, [&expected](const ShaderUniformMember& actual) {
-                return actual.name == expected.name;
-            });
-        if (member == block->members.end() || member->offset != expected.offset) {
-            reflectionFail("%s uniform member %s has an unexpected offset",
-                           path.string().c_str(),
-                           expected.name.c_str());
-        }
-    }
-}
-
-void validateTextureBindings(std::span<const ShaderPropertyInfo> properties,
-                             const SpirvReflection& vertex,
-                             const SpirvReflection& fragment) {
-    std::uint32_t binding = 1;
-    for (const ShaderPropertyInfo& property : properties) {
-        if (property.type != ShaderPropertyType::Texture2D)
+    for (const auto& descriptor : reflection.descriptors) {
+        if (descriptor.set != 1)
             continue;
-        const ShaderDescriptorBinding* descriptor = findDescriptor(fragment, 1, binding);
-        if (!descriptor)
-            descriptor = findDescriptor(vertex, 1, binding);
-        // Same reasoning as validateMaterialBlock: a pass that never samples the texture
-        // has no descriptor left after optimization. The binding counter still advances so
-        // the remaining properties keep their declared slots.
-        if (descriptor && descriptor->type != ShaderDescriptorType::CombinedImageSampler) {
-            reflectionFail("Texture property %s is bound as the wrong descriptor type at set 1 "
-                           "binding %u",
-                           property.name.c_str(),
-                           binding);
+        if (descriptor.type == ShaderDescriptorType::UniformBuffer) {
+            for (const auto& member : descriptor.members) {
+                const auto property =
+                    std::ranges::find(properties, member.name, &ShaderPropertyInfo::name);
+                if (property == properties.end())
+                    reflectionFail("%s unknown material member %s",
+                                   path.string().c_str(),
+                                   member.name.c_str());
+                const auto expected = [&] {
+                    switch (property->type) {
+                    case ShaderPropertyType::Float: return UboUniformType::Float;
+                    case ShaderPropertyType::Boolean: return UboUniformType::UInt;
+                    case ShaderPropertyType::Vec2: return UboUniformType::Vec2;
+                    case ShaderPropertyType::Vec3: return UboUniformType::Vec3;
+                    case ShaderPropertyType::Vec4: return UboUniformType::Vec4;
+                    case ShaderPropertyType::Matrix: return UboUniformType::Mat4;
+                    case ShaderPropertyType::Texture2D: return UboUniformType::Float;
+                    }
+                    return UboUniformType::Float;
+                }();
+                const bool boolean = property->type == ShaderPropertyType::Boolean &&
+                                     member.type == UboUniformType::Bool;
+                if (property->type == ShaderPropertyType::Texture2D ||
+                    (member.type != expected && !boolean))
+                    reflectionFail("%s incompatible material member %s",
+                                   path.string().c_str(),
+                                   member.name.c_str());
+            }
+        } else if (descriptor.type == ShaderDescriptorType::CombinedImageSampler) {
+            const auto property =
+                std::ranges::find(properties, descriptor.name, &ShaderPropertyInfo::name);
+            if (property == properties.end() || property->type != ShaderPropertyType::Texture2D)
+                reflectionFail("%s incompatible material texture %s",
+                               path.string().c_str(),
+                               descriptor.name.c_str());
+        } else {
+            reflectionFail("%s unsupported material descriptor %s",
+                           path.string().c_str(),
+                           descriptor.name.c_str());
         }
-        ++binding;
     }
 }
 
@@ -341,15 +341,29 @@ bool ShaderCompilePipeline::validateSpirvReflection(const Shader& shader,
             pass.fragmentOutputs(), fragment.outputs, fragmentPath, "fragment output");
         validateMaterialBlock(shader.properties(), vertex, vertexPath);
         validateMaterialBlock(shader.properties(), fragment, fragmentPath);
-        validateTextureBindings(shader.properties(), vertex, fragment);
         validateGlobalBlock(vertex, vertexPath);
         validateGlobalBlock(fragment, fragmentPath);
         validateGlobalTextureBindings(vertex, fragment);
         for (const ShaderDescriptorBinding& descriptor : vertex.descriptors) {
-            if (const ShaderDescriptorBinding* other =
-                    findDescriptor(fragment, descriptor.set, descriptor.binding);
-                other && other->type != descriptor.type) {
+            const auto* other = findDescriptor(fragment, descriptor.set, descriptor.binding);
+            if (!other)
+                continue;
+            if (other->type != descriptor.type) {
                 reflectionFail("Descriptor type differs between vertex and fragment stages");
+            }
+            if (descriptor.set == 1 && descriptor.type == ShaderDescriptorType::UniformBuffer) {
+                const bool same = std::ranges::equal(
+                    descriptor.members,
+                    other->members,
+                    [](const ShaderUniformMember& a, const ShaderUniformMember& b) {
+                        return a.name == b.name && a.type == b.type && a.offset == b.offset &&
+                               a.size == b.size;
+                    });
+                if (!same)
+                    reflectionFail(
+                        "Material block layout differs between vertex and fragment stages");
+            } else if (descriptor.set == 1 && descriptor.name != other->name) {
+                reflectionFail("Material texture name differs between vertex and fragment stages");
             }
         }
     } catch (const ReflectionFailure&) {

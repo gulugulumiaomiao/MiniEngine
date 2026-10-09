@@ -1,4 +1,5 @@
-﻿#include "asset/database/AssetDatabase.h"
+#include "asset/types/TextureAsset.h"
+#include "asset/database/AssetDatabase.h"
 #include "asset/derived_data/AssetArtifact.h"
 #include "asset/types/MaterialAsset.h"
 #include "asset/types/ShaderAsset.h"
@@ -95,9 +96,11 @@ int main() {
         return 3;
     }
     const VirtualPath probePath{"assets://probe.shader.json"};
-    for (const AssetType type :
-         {AssetType::Shader, AssetType::Material, AssetType::Mesh, AssetType::Texture,
-          AssetType::Scene}) {
+    for (const AssetType type : {AssetType::Shader,
+                                 AssetType::Material,
+                                 AssetType::Mesh,
+                                 AssetType::Texture,
+                                 AssetType::Scene}) {
         const AssetImporter* importer = registry.find(type);
         const std::unique_ptr<AssetImportSettings> settings =
             importer->createDefaultSettings(probePath);
@@ -336,9 +339,9 @@ int main() {
     TextureAsset singleMip;
     BinaryReader singleMipReader{singleMipArtifact ? singleMipArtifact->payload
                                                    : std::span<const std::byte>{}};
-    if (!singleMipResult.success || !singleMipArtifact ||
-        !singleMip.transfer(singleMipReader) || !singleMipReader.finished() ||
-        singleMip.desc.mipCount != 1 || singleMip.pixels.size() != 16) {
+    if (!singleMipResult.success || !singleMipArtifact || !singleMip.transfer(singleMipReader) ||
+        !singleMipReader.finished() || singleMip.desc.mipCount != 1 ||
+        singleMip.pixels.size() != 16) {
         return 17;
     }
 
@@ -363,8 +366,8 @@ int main() {
     TextureAsset samplerAsset;
     BinaryReader samplerReader{samplerArtifact ? samplerArtifact->payload
                                                : std::span<const std::byte>{}};
-    if (!samplerResult.success || !samplerArtifact ||
-        !samplerAsset.transfer(samplerReader) || !samplerReader.finished() ||
+    if (!samplerResult.success || !samplerArtifact || !samplerAsset.transfer(samplerReader) ||
+        !samplerReader.finished() ||
         samplerAsset.desc.sampler.filterMode != TextureFilterMode::Point ||
         samplerAsset.desc.sampler.addressModeU != TextureAddressMode::ClampToEdge ||
         samplerAsset.desc.sampler.addressModeV != TextureAddressMode::MirroredRepeat ||
@@ -409,8 +412,8 @@ int main() {
         materialImporter->createDefaultSettings(materialPath);
     if (!materialSettings ||
         materialImporter->gatherDependencies(materialContext, *materialSettings) !=
-            std::vector<VirtualPath>{
-                textureShaderPath, VirtualPath{"assets://textures/override.png"}}) {
+            std::vector<VirtualPath>{textureShaderPath,
+                                     VirtualPath{"assets://textures/override.png"}}) {
         return 18;
     }
 
@@ -437,9 +440,8 @@ int main() {
     const AssetImporter* sceneImporter = registry.find(AssetType::Scene);
     const std::unique_ptr<AssetImportSettings> sceneSettings =
         sceneImporter->createDefaultSettings(scenePath);
-    if (!sceneSettings ||
-        sceneImporter->gatherDependencies(sceneContext, *sceneSettings) !=
-            std::vector<VirtualPath>{meshPath, materialPath}) {
+    if (!sceneSettings || sceneImporter->gatherDependencies(sceneContext, *sceneSettings) !=
+                              std::vector<VirtualPath>{meshPath, materialPath}) {
         return 19;
     }
 

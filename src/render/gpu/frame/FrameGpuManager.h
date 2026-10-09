@@ -21,10 +21,10 @@ class IDevice;
 // per-frame instance table and the shared set-0 UniformSet that binds them (plus the shadow map).
 //
 // The set-0 layout is built from the fixed engine convention {0: uniform, 1: object SSBO,
-// 2: instance SSBO, 3: shadow combined-image-sampler} via UniformSetLayout::acquire. Because acquire
-// dedups on the (binding, type) ordered hash, this resolves to the very same layout instance a
-// compiled program reflects for set 0 (the user shaders declare this convention), so the shared
-// scene set is compatible with every program's pipeline layout.
+// 2: instance SSBO, 3: shadow combined-image-sampler} via UniformSetLayout::acquire. Because
+// acquire dedups on the (binding, type) ordered hash, this resolves to the very same layout
+// instance a compiled program reflects for set 0 (the user shaders declare this convention), so the
+// shared scene set is compatible with every program's pipeline layout.
 class FrameGpuManager final : public Singleton<FrameGpuManager> {
 public:
     static constexpr std::uint32_t kFramesInFlight = 2;
@@ -42,8 +42,10 @@ public:
     // Per-frame instance table management. Batches draw multiple instances per
     // drawIndexed call; the table maps each instance slot to an object row.
     void beginFrame(std::uint32_t frameIndex);
+    void retain(std::uint32_t frameIndex, Ref<RefCounted> resource);
     // Reserves `count` contiguous instance slots and returns the first slot index.
-    [[nodiscard]] std::uint32_t reserveInstanceRegion(std::uint32_t frameIndex, std::uint32_t count);
+    [[nodiscard]] std::uint32_t reserveInstanceRegion(std::uint32_t frameIndex,
+                                                      std::uint32_t count);
     // Uploads object rows into the reserved region starting at `baseSlot`.
     void uploadInstanceRegion(std::uint32_t frameIndex,
                               std::uint32_t baseSlot,
@@ -53,7 +55,9 @@ public:
 
 private:
     struct FrameResources {
-        Ref<UniformSet> sceneSet; // set 0: scene UBO(0) + object SSBO(1) + instance SSBO(2) + shadow(3)
+        std::vector<Ref<RefCounted>> retained;
+        Ref<UniformSet>
+            sceneSet; // set 0: scene UBO(0) + object SSBO(1) + instance SSBO(2) + shadow(3)
         rhi::RID objectBuffer;
         rhi::RID instanceTable;
         rhi::RID shadowView;

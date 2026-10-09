@@ -1,10 +1,10 @@
-﻿#include "asset/importer/AssetImportPipeline.h"
+#include "asset/importer/AssetImportPipeline.h"
 #include "core/filesystem/FileWatcher.h"
 #include "asset/types/MaterialAsset.h"
 #include "asset/types/ShaderAsset.h"
 #include "asset/manager/AssetManager.h"
 #include "render/material/Material.h"
-#include "render/material/MaterialManager.h"
+#include "asset/runtime/MaterialAssetResolver.h"
 #include "render/mesh/Mesh.h"
 #include "render/scene/RenderScene.h"
 #include "render/shader/Shader.h"
@@ -37,7 +37,7 @@ int main() {
         return 3;
     }
 
-    const Ref<Material> runtime = MATERIAL_RESOURCE_MANAGER.load(material->assetPath());
+    const Ref<Material> runtime = resolveMaterialReference(material->assetPath());
     if (!runtime || runtime->shader().name() != "MiniEngine/VertexColor") {
         return 4;
     }
@@ -48,7 +48,7 @@ int main() {
         return 6;
     const SceneInstantiationContext context{
         .loadMesh = [](const VirtualPath& path) { return resolveMeshReference(path.string()); },
-        .loadMaterial = [](const VirtualPath& path) { return MATERIAL_RESOURCE_MANAGER.load(path); },
+        .loadMaterial = [](const VirtualPath& path) { return resolveMaterialReference(path); },
     };
     Ref<Scene> scene = showcase->instantiate(context);
     if (!scene)
@@ -63,6 +63,6 @@ int main() {
         return 6;
     }
     scene.reset();
-    MATERIAL_RESOURCE_MANAGER.clear();
+    Material::errorMaterial.reset();
     test::shutdownAssetEnvironment();
 }

@@ -1,7 +1,9 @@
 #pragma once
+#include "asset/types/TextureAsset.h"
 
 #include "asset/base/Asset.h"
 #include "asset/types/ShaderAsset.h"
+#include "asset/types/MaterialAsset.h"
 #include "core/base/Ref.h"
 #include "core/base/Singleton.h"
 #include "core/filesystem/VirtualPath.h"
@@ -36,6 +38,7 @@ public:
 
     [[nodiscard]] Ref<ShaderAsset> findShaderAsset(const Shader& shader) const;
 
+    [[nodiscard]] Ref<MaterialAsset> findMaterialAsset(const Material& material) const;
     void invalidate(const VirtualPath& path);
     /// 就地重传缓存中的资产（不丢弃、不新建对象）：用于纹理热重载把新内容推送给唯一运行时
     /// 实例（TextureAsset::transfer 读取分支会调用 syncInstance）。未缓存则退化为 invalidate。

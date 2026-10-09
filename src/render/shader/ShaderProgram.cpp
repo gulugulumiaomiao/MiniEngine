@@ -78,6 +78,7 @@ Ref<ShaderProgram> ShaderProgram::create(const CompiledShader& vertex,
     std::vector<Ref<UniformSetLayout>> setLayouts;
     setLayouts.reserve(setCount);
     program->setUboLayouts_.assign(setCount, {});
+    program->bindings_.assign(setCount, {});
     for (std::uint32_t set = 0; set < setCount; ++set) {
         std::vector<ResourceBinding> bindings;
         std::vector<Ref<UboLayout>> uboLayouts;
@@ -89,6 +90,7 @@ Ref<ShaderProgram> ShaderProgram::create(const CompiledShader& vertex,
             if (isBufferType(binding->type))
                 uboLayouts.push_back(buildUboLayout(*binding));
         }
+        program->bindings_[set] = bindings;
         setLayouts.push_back(UniformSetLayout::acquire(bindings));
         program->setUboLayouts_[set] = std::move(uboLayouts);
     }

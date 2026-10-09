@@ -1,10 +1,10 @@
-﻿#include "tools/editor/panels/InspectorPanel.h"
+#include "tools/editor/panels/InspectorPanel.h"
 
 #include "asset/base/AssetMeta.h"
 #include "asset/database/AssetDatabase.h"
 #include "core/filesystem/FileSystem.h"
 #include "render/material/Material.h"
-#include "render/material/MaterialManager.h"
+#include "asset/runtime/MaterialAssetResolver.h"
 #include "scene/node/Node.h"
 #include "scene/scene/Scene.h"
 #include "tools/editor/model/SceneDocument.h"
@@ -113,8 +113,8 @@ void InspectorPanel::drawAssetInspector() {
 
     switch (inferAssetType(path)) {
     case AssetType::Material: {
-        const Ref<Material> material = MATERIAL_RESOURCE_MANAGER.load(path);
-        if (!material || !(material->assetPath() == path)) {
+        const Ref<Material> material = resolveMaterialReference(path);
+        if (!material || !(materialAssetPath(*material) == path)) {
             // load() falls back to the Error Material, which must never be
             // offered for editing under another asset's name.
             ImGui::TextUnformatted("Failed to load material");

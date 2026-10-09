@@ -47,7 +47,7 @@ struct DrawItem {
     // i < programSetCount, so passes whose SPIR-V stripped set 1/set 2 stay within their layout.
     std::uint32_t programSetCount{};
     Ref<Material> material;
-    RID materialKey;
+    std::uint64_t materialKey{};
     Ref<UniformSet> materialSet;
     rhi::RID fallbackPipeline;
     Ref<Material> fallbackMaterial;

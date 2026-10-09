@@ -1,3 +1,4 @@
+#include "asset/types/TextureAsset.h"
 #include "asset/runtime/ShaderAssetResolver.h"
 #include "render/shader/Shader.h"
 #include "asset/types/ShaderAsset.h"

@@ -3,7 +3,6 @@
 #include "core/logging/Log.h"
 #include "render/gpu/frame/FrameGpuManager.h"
 #include "render/gpu/global_uniform/GlobalUniformGpuManager.h"
-#include "render/gpu/material/MaterialStorage.h"
 #include "render/pipeline/RenderContext.h"
 #include "render/pipeline/passes/DepthOnlyPass.h"
 #include "render/pipeline/passes/ForwardPass.h"
@@ -23,16 +22,15 @@ MiniForwardPipeline::MiniForwardPipeline() {
 }
 
 void MiniForwardPipeline::render(RenderContext& context) {
-    // Material GPU sets are resolved while building the draw list (resolvePass needs the frame's
-    // LRU slot ready), so begin the material frame first.
-    MATERIAL_STORAGE.beginFrame(context.frameIndex());
+    // The renderer has waited for this frame slot. Release its retained bindings before
+    // building the new draw list, whose material sets are retained for the next submission.
+    FRAME_GPU_MANAGER.beginFrame(context.frameIndex());
     DrawListBuilder builder;
     DrawList drawList = builder.build(context.scene(), context);
 
     std::erase_if(drawList.items, [](const DrawItem& item) { return !item.pipeline; });
 
     GLOBAL_UNIFORM_GPU_MANAGER.beginFrame(context.frameIndex());
-    FRAME_GPU_MANAGER.beginFrame(context.frameIndex());
     FRAME_GPU_MANAGER.upload(context.frameIndex(), drawList);
 
     RenderGraph graph;

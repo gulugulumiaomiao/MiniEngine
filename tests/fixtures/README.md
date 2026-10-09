@@ -9,3 +9,10 @@ ShaderIsolationTest reads it with the new asset schema, creates a runtime Shader
 and checks that rewriting the payload produces the exact original bytes. Keep
 this golden fixture unchanged; regenerating it with the new serializer would
 remove the backwards-compatibility coverage.
+
+## Material compatibility fixture
+
+`material_legacy_v2.artifact` was generated from the built-in warm vertex-color
+material by the Debug MiniAssetCooker executable before the Material split on
+2026-10-09. MaterialIsolationTest checks that the new asset schema rewrites the
+original v2 payload byte for byte. Keep this fixture unchanged.

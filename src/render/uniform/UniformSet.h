@@ -4,6 +4,7 @@
 #include "core/base/RefCounted.h"
 #include "render/shader/Shader.h" // ShaderValue
 #include "render/uniform/Ubo.h"
+#include "render/texture/Sampler.h"
 #include "render/uniform/UniformResource.h"
 #include "render/uniform/UniformSetLayout.h"
 #include "rhi/api/ResourceDesc.h" // rhi::RID, DescriptorWrite, ResourceType
@@ -27,7 +28,8 @@ class IDevice;
 //
 // Name lookup (resourceMap_) covers both cases: a non-UBO binding is keyed by its reflected binding
 // name, and a UBO binding contributes each of its member names, all mapping to the slot position.
-// setUniform() therefore reaches a UBO member by name; setResource() replaces a texture/sampler slot.
+// setUniform() therefore reaches a UBO member by name; setResource() replaces a texture/sampler
+// slot.
 class UniformSet final : public RefCounted {
 public:
     // `uboLayouts` supplies the block layout for each uniform-buffer binding, in ascending binding
@@ -41,8 +43,8 @@ public:
     // unknown or does not resolve to a UBO slot (delegates the type check to Ubo::setUniform).
     [[nodiscard]] bool setUniform(std::string_view name, const ShaderValue& value);
     // Assigns a texture/sampler/UBO resource to the named binding. The accepted resource kind is
-    // dictated by the UniformSetLayout-declared descriptor type; a mismatch returns false. Marks the
-    // set dirty (descriptors are rewritten on the next upload) on success.
+    // dictated by the UniformSetLayout-declared descriptor type; a mismatch returns false. Marks
+    // the set dirty (descriptors are rewritten on the next upload) on success.
     [[nodiscard]] bool setResource(std::string_view name, Ref<UniformResource> resource);
     // Positional variant (binding slot index). For owners that address slots by index rather than
     // by reflected name — robust against layout dedup returning an instance whose binding names
@@ -50,6 +52,7 @@ public:
     [[nodiscard]] bool setResourceAt(std::uint32_t binding, Ref<UniformResource> resource);
     // Rewrites descriptors when dirty, then uploads every UBO's buffer (each Ubo tracks its own
     // dirty flag, so UBO value changes need no descriptor rewrite — the buffer RID is stable).
+    bool setSamplerOverrideAt(std::uint32_t position, Ref<Sampler> sampler);
     void upload();
 
     [[nodiscard]] rhi::RID descriptorSet() const { return descriptorSet_; }
@@ -62,6 +65,7 @@ public:
 private:
     std::uint64_t deviceUid_{};
     Ref<UniformSetLayout> layout_;
+    std::vector<Ref<Sampler>> samplerOverrides_;
     std::vector<Ref<UniformResource>> resources_; // parallel to layout_->bindings()
     std::unordered_map<std::string, std::uint32_t> resourceMap_;
     rhi::RID descriptorSet_;

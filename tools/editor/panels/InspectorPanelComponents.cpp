@@ -1,7 +1,7 @@
 #include "tools/editor/panels/InspectorPanel.h"
 
 #include "render/material/Material.h"
-#include "render/material/MaterialManager.h"
+#include "asset/runtime/MaterialAssetResolver.h"
 #include "render/mesh/Mesh.h"
 #include "render/scene/Lighting.h"
 #include "scene/components/CameraComponent.h"
@@ -51,8 +51,7 @@ bool multiField(const char* label,
 
 } // namespace
 
-template <typename T>
-bool InspectorPanel::beginComponent(const char* title, T* component) {
+template <typename T> bool InspectorPanel::beginComponent(const char* title, T* component) {
     if (component == nullptr)
         return false;
     if (!ImGui::CollapsingHeader(title, ImGuiTreeNodeFlags_DefaultOpen))
@@ -67,8 +66,7 @@ bool InspectorPanel::beginComponent(const char* title, T* component) {
     return true;
 }
 
-template <typename T>
-void InspectorPanel::endComponent(Node& node) {
+template <typename T> void InspectorPanel::endComponent(Node& node) {
     ImGui::Separator();
     if (ImGui::Button("Remove Component")) {
         node.removeComponent<T>();
@@ -124,13 +122,22 @@ void InspectorPanel::drawMultiTransform(const SelectionSet<RID>& selection) {
         transforms.push_back(&node->transform());
 
     // 各组值一致时显示公共值并把编辑写入所有节点；混合值显示灰色占位。
-    if (multiField("Position", transforms, &TransformComponent::localPosition, dragVec3,
+    if (multiField("Position",
+                   transforms,
+                   &TransformComponent::localPosition,
+                   dragVec3,
                    &TransformComponent::setLocalPosition))
         document_.markDirty();
-    if (multiField("Rotation", transforms, &TransformComponent::localRotation, dragEuler,
+    if (multiField("Rotation",
+                   transforms,
+                   &TransformComponent::localRotation,
+                   dragEuler,
                    &TransformComponent::setLocalRotation))
         document_.markDirty();
-    if (multiField("Scale", transforms, &TransformComponent::localScale, dragVec3,
+    if (multiField("Scale",
+                   transforms,
+                   &TransformComponent::localScale,
+                   dragVec3,
                    &TransformComponent::setLocalScale))
         document_.markDirty();
     ImGui::PopID();
@@ -287,7 +294,8 @@ void InspectorPanel::drawPrimitive(MeshComponent& mesh) {
         bool capBottom = cylinder->capBottom;
         bool capTop = cylinder->capTop;
         changed = ImGui::DragFloat("Bottom Radius", &bottomRadius, kDragSpeed, 0.0F, 0.0F, "%.3f");
-        changed = ImGui::DragFloat("Top Radius", &topRadius, kDragSpeed, 0.0F, 0.0F, "%.3f") || changed;
+        changed =
+            ImGui::DragFloat("Top Radius", &topRadius, kDragSpeed, 0.0F, 0.0F, "%.3f") || changed;
         changed = ImGui::DragFloat("Height", &height, kDragSpeed, 0.01F, 0.0F, "%.3f") || changed;
         changed = inputUint("Radial Segments", radialSegments) || changed;
         changed = inputUint("Height Segments", heightSegments) || changed;
@@ -325,11 +333,12 @@ void InspectorPanel::drawMaterial(Node& node) {
     for (std::size_t slot = 0; slot < slots.size(); ++slot) {
         ImGui::PushID(static_cast<int>(slot));
         const Material* current = slots[slot].get();
-        const VirtualPath currentPath = current != nullptr ? current->assetPath() : VirtualPath{};
+        const VirtualPath currentPath =
+            current != nullptr ? materialAssetPath(*current) : VirtualPath{};
         const std::string label = "Slot " + std::to_string(slot);
         VirtualPath chosen;
         if (assetCombo(label.c_str(), materials, currentPath, chosen)) {
-            const Ref<Material> loaded = MATERIAL_RESOURCE_MANAGER.load(chosen);
+            const Ref<Material> loaded = resolveMaterialReference(chosen);
             if (loaded) {
                 material->setMaterial(static_cast<std::uint32_t>(slot), loaded);
                 document_.markDirty();
@@ -373,8 +382,8 @@ void InspectorPanel::drawCamera(Node& node) {
         if (ImGui::DragFloat("Field Of View", &camera->fieldOfView, 0.1F, 1.0F, 179.0F, "%.1f deg"))
             document_.markDirty();
     } else {
-        if (ImGui::DragFloat("Orthographic Size", &camera->orthographicSize, 0.05F, 0.01F, 0.0F,
-                             "%.2f"))
+        if (ImGui::DragFloat(
+                "Orthographic Size", &camera->orthographicSize, 0.05F, 0.01F, 0.0F, "%.2f"))
             document_.markDirty();
     }
     if (ImGui::DragFloat("Near Plane", &camera->nearPlane, 0.01F, 0.001F, 0.0F, "%.3f"))
@@ -416,11 +425,11 @@ void InspectorPanel::drawLight(Node& node) {
             document_.markDirty();
     }
     if (light->type == LightType::Spot) {
-        if (ImGui::DragFloat("Inner Spot Angle", &light->innerSpotAngle, 0.1F, 0.0F, 89.0F,
-                             "%.1f deg"))
+        if (ImGui::DragFloat(
+                "Inner Spot Angle", &light->innerSpotAngle, 0.1F, 0.0F, 89.0F, "%.1f deg"))
             document_.markDirty();
-        if (ImGui::DragFloat("Outer Spot Angle", &light->outerSpotAngle, 0.1F, 0.0F, 90.0F,
-                             "%.1f deg"))
+        if (ImGui::DragFloat(
+                "Outer Spot Angle", &light->outerSpotAngle, 0.1F, 0.0F, 90.0F, "%.1f deg"))
             document_.markDirty();
         if (light->innerSpotAngle > light->outerSpotAngle)
             light->innerSpotAngle = light->outerSpotAngle;

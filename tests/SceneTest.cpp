@@ -1,3 +1,4 @@
+#include "TestMaterial.h"
 #include "TestRenderDevice.h"
 
 #include "core/math/Math.h"
@@ -123,13 +124,12 @@ int main() {
     MaterialComponent* material = child->addComponent<MaterialComponent>();
     const Ref<Mesh> testMesh = makeStubMesh();
     mesh->setAssetMesh(testMesh);
-    const Ref<Material> testMaterialA = makeRef<Material>();
-    const Ref<Material> testMaterialB = makeRef<Material>();
+    const Ref<Material> testMaterialA = makeRef<Material>(test::materialInfo());
+    const Ref<Material> testMaterialB = makeRef<Material>(test::materialInfo());
     material->setMaterial(0, testMaterialA);
     material->setMaterial(2, testMaterialB);
     if (mesh->mesh() != testMesh || material->material(1) != testMaterialA ||
-        material->material(2) != testMaterialB ||
-        root->removeComponent<TransformComponent>()) {
+        material->material(2) != testMaterialB || root->removeComponent<TransformComponent>()) {
         return 12;
     }
 
@@ -150,8 +150,7 @@ int main() {
     RenderScene renderScene;
     scene.buildRenderScene(renderScene, 16.0F / 9.0F);
     if (renderScene.objects().size() != 1 || !renderScene.camera() ||
-        renderScene.lights().size() != 1 ||
-        renderScene.objects().front().mesh != testMesh ||
+        renderScene.lights().size() != 1 || renderScene.objects().front().mesh != testMesh ||
         renderScene.objects().front().material(1) != testMaterialA ||
         !near(renderScene.camera()->worldPosition, {0.0F, 0.0F, 5.0F}) ||
         !near(renderScene.lights().front().direction, {0.0F, 0.0F, -1.0F}) ||

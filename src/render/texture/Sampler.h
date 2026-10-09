@@ -2,7 +2,6 @@
 
 #include "core/base/Ref.h"
 #include "core/base/RefCounted.h"
-#include "core/serialization/Transferable.h"
 #include "render/uniform/UniformResource.h"
 #include "rhi/api/ResourceDesc.h" // rhi::RID / rhi::SamplerDesc（toRhi 翻译目标）
 
@@ -12,7 +11,7 @@ namespace engine {
 enum class TextureFilterMode { Point, Bilinear, Trilinear };
 enum class TextureAddressMode { Repeat, MirroredRepeat, ClampToEdge };
 
-struct SamplerDesc : public Transferable {
+struct SamplerDesc {
     TextureFilterMode filterMode{TextureFilterMode::Bilinear};
     TextureAddressMode addressModeU{TextureAddressMode::Repeat};
     TextureAddressMode addressModeV{TextureAddressMode::Repeat};
@@ -25,8 +24,6 @@ struct SamplerDesc : public Transferable {
                 float maxAnisotropy)
         : filterMode(filterMode), addressModeU(addressModeU), addressModeV(addressModeV),
           maxAnisotropy(maxAnisotropy) {}
-
-    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
 /// 层2 → 层3 采样描述翻译（Texture 默认 sampler 与 Sampler::resolve 共用）。

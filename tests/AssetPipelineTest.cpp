@@ -1,4 +1,4 @@
-﻿#include "asset/runtime/ShaderAssetResolver.h"
+#include "asset/runtime/ShaderAssetResolver.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/importer/AssetImportPipeline.h"
 #include "asset/base/AssetMeta.h"
@@ -8,7 +8,7 @@
 #include "core/filesystem/FileSystem.h"
 #include "asset/manager/AssetManager.h"
 #include "render/material/Material.h"
-#include "render/material/MaterialManager.h"
+#include "asset/runtime/MaterialAssetResolver.h"
 #include "render/mesh/Mesh.h"
 #include "render/shader/Shader.h"
 #include "scene/scene/Scene.h"
@@ -38,8 +38,6 @@ static_assert(
     std::is_base_of_v<engine::Singleton<engine::AssetImportPipeline>, engine::AssetImportPipeline>);
 static_assert(std::is_base_of_v<engine::Singleton<engine::FileWatcher>, engine::FileWatcher>);
 static_assert(std::is_base_of_v<engine::Singleton<engine::AssetManager>, engine::AssetManager>);
-static_assert(
-    std::is_base_of_v<engine::Singleton<engine::MaterialResourceManager>, engine::MaterialResourceManager>);
 
 struct TestWorkspace {
     std::filesystem::path root =
@@ -56,7 +54,7 @@ struct TestWorkspace {
     }
 
     ~TestWorkspace() {
-        MATERIAL_MANAGER.clear();
+        Material::errorMaterial.reset();
         engine::test::shutdownAssetEnvironment();
         std::error_code error;
         std::filesystem::remove_all(root, error);
@@ -171,8 +169,8 @@ int main() {
     const auto foreignMeta = foreignRecord && FILE_SYSTEM.isFile(foreignMetaPath)
                                  ? loadAssetMeta(foreignMetaPath)
                                  : std::nullopt;
-    if (!foreignRecord || foreignRecord->status != AssetImportStatus::Imported ||
-        !foreignMeta || foreignMeta->assetType != AssetType::Shader) {
+    if (!foreignRecord || foreignRecord->status != AssetImportStatus::Imported || !foreignMeta ||
+        foreignMeta->assetType != AssetType::Shader) {
         return 50;
     }
     const auto foreignText = FILE_SYSTEM.readText(foreignMetaPath);
@@ -238,7 +236,7 @@ int main() {
     }
     const SceneInstantiationContext sceneContext{
         .loadMesh = [](const VirtualPath& path) { return resolveMeshReference(path.string()); },
-        .loadMaterial = [](const VirtualPath& path) { return MATERIAL_MANAGER.load(path); },
+        .loadMaterial = [](const VirtualPath& path) { return resolveMaterialReference(path); },
     };
     const Ref<Scene> runtimeScene = sceneAsset->instantiate(sceneContext);
     if (!runtimeScene || runtimeScene->nodeCount() != 2)
@@ -271,13 +269,13 @@ int main() {
     const auto shaderAssetB = ASSET_MANAGER.loadAsset<ShaderAsset>(firstPath);
     const auto materialAsset = ASSET_MANAGER.loadAsset<MaterialAsset>(materialPath);
     if (!shaderAssetA || shaderAssetA != shaderAssetB || !materialAsset ||
-        materialAsset->shader != firstPath || materialAsset->renderQueue != 2450) {
+        materialAsset->data.shader != firstPath || materialAsset->data.renderQueue != 2450) {
         return 4;
     }
 
     Ref<Shader> firstHandleA = resolveShaderReference(firstPath.string());
     Ref<Shader> firstHandleB = resolveShaderReference(firstPath.string());
-    Ref<Material> materialHandle = MATERIAL_MANAGER.load(materialPath);
+    Ref<Material> materialHandle = resolveMaterialReference(materialPath);
     if (!firstHandleA || firstHandleA != firstHandleB || !materialHandle)
         return 5;
     Material& material = *materialHandle;
@@ -286,7 +284,7 @@ int main() {
         return 6;
     }
 
-    MATERIAL_MANAGER.setShader(materialHandle, VirtualPath{"assets://shaders/second.shader.json"});
+    setMaterialShader(materialHandle, VirtualPath{"assets://shaders/second.shader.json"});
     const Ref<Shader> secondHandle = material.shaderRef();
     if (!secondHandle || secondHandle == firstHandleA ||
         material.shader().name() != "Tests/Second" ||

@@ -27,7 +27,7 @@ class IDevice;
 // draw-context state (vertex layout, render-target formats) unknown at compile time, so the
 // draw-item stage (GraphicsPipelineStorage) builds the VkPipeline from vertexShader()/
 // fragmentShader()/pipelineLayout(); and the actual UniformSets are built by their owners
-// (MaterialStorage for the per-material set, FrameGpuManager/GlobalUniformGpuManager for the shared
+// (Material for the per-material set, FrameGpuManager/GlobalUniformGpuManager for the shared
 // scene/global sets) from setLayout()/uboLayouts().
 class ShaderProgram final : public RefCounted {
 public:
@@ -41,6 +41,7 @@ public:
     ShaderProgram& operator=(const ShaderProgram&) = delete;
 
     [[nodiscard]] ShaderProgramId id() const { return id_; }
+    [[nodiscard]] std::uint64_t deviceUid() const { return deviceUid_; }
     [[nodiscard]] rhi::RID vertexShader() const { return vertex_; }
     [[nodiscard]] rhi::RID fragmentShader() const { return fragment_; }
     [[nodiscard]] const std::string& vertexEntry() const { return vertexEntry_; }
@@ -56,6 +57,7 @@ public:
     [[nodiscard]] const Ref<UniformSetLayout>& setLayout(std::uint32_t set) const {
         return pipelineLayout_->setLayouts()[set];
     }
+    const std::vector<ResourceBinding>& bindings(std::uint32_t set) const { return bindings_[set]; }
     // UboLayouts for a set's uniform-buffer bindings, in ascending binding order (empty when the
     // set has no UBO). Consumers pass these to UniformSet to instantiate the block buffers.
     [[nodiscard]] const std::vector<Ref<UboLayout>>& uboLayouts(std::uint32_t set) const {
@@ -72,6 +74,7 @@ private:
     std::string vertexEntry_;
     std::string fragmentEntry_;
     Ref<PipelineLayout> pipelineLayout_;
+    std::vector<std::vector<ResourceBinding>> bindings_;
     std::vector<std::vector<Ref<UboLayout>>>
         setUboLayouts_; // per set: UBO block layouts, binding order
 };

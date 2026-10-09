@@ -1,3 +1,4 @@
+#include "asset/types/TextureAsset.h"
 #include "render/texture/Texture.h"
 
 #include "asset/manager/AssetManager.h"
@@ -87,15 +88,6 @@ bool rgbaByteSize(std::uint32_t width, std::uint32_t height, std::size_t& result
 }
 
 } // namespace
-
-bool TextureDesc::transfer(Transfer& archive) {
-    return archive.beginObject({}) && archive.transfer("type", type) &&
-           archive.transfer("format", format) && archive.transfer("color_space", colorSpace) &&
-           archive.transfer("width", width) && archive.transfer("height", height) &&
-           archive.transfer("depth", depth) && archive.transfer("array_layers", arrayLayers) &&
-           archive.transfer("mip_count", mipCount) && archive.transfer("sampler", sampler) &&
-           archive.endObject();
-}
 
 bool computeTextureLayout(const TextureDesc& desc, TextureMipLayout& layout) {
     layout = {};
@@ -260,8 +252,8 @@ void Texture::upload(std::span<const std::uint8_t> pixels) {
     std::uint32_t mipHeight = height_;
     for (std::uint32_t level = 0; level < layout.offsets.size(); ++level) {
         const std::size_t begin = layout.offsets[level];
-        const std::size_t end = level + 1U < layout.offsets.size() ? layout.offsets[level + 1U]
-                                                                   : layout.totalSize;
+        const std::size_t end =
+            level + 1U < layout.offsets.size() ? layout.offsets[level + 1U] : layout.totalSize;
         const std::span<const std::byte> data{
             reinterpret_cast<const std::byte*>(pixels.data() + begin), end - begin};
         uploads.push_back({level, 0, mipWidth, mipHeight, data});
@@ -347,8 +339,22 @@ Ref<Texture> Texture::errorTexture() {
         return instance;
     if (!instance || ownerUid != device->uid()) {
         static constexpr std::uint8_t kPixels[16] = {
-            0xffU, 0x00U, 0xffU, 0xffU, 0x00U, 0x00U, 0x00U, 0xffU,
-            0x00U, 0x00U, 0x00U, 0xffU, 0xffU, 0x00U, 0xffU, 0xffU,
+            0xffU,
+            0x00U,
+            0xffU,
+            0xffU,
+            0x00U,
+            0x00U,
+            0x00U,
+            0xffU,
+            0x00U,
+            0x00U,
+            0x00U,
+            0xffU,
+            0xffU,
+            0x00U,
+            0xffU,
+            0xffU,
         };
         const TextureDesc desc{
             TextureType::Texture2D, TextureFormat::Rgba8Srgb, TextureColorSpace::Srgb, 2, 2, 1};
@@ -374,15 +380,15 @@ TextureAsset::~TextureAsset() {
 bool TextureAsset::transfer(Transfer& archive) {
     std::uint32_t magic = kTextureMagic;
     std::uint16_t version = kTextureVersion;
-    TextureDesc decodedDesc;
+    TextureAssetDesc decodedDesc;
     std::vector<std::uint8_t> decodedPixels;
-    TextureDesc& targetDesc = archive.reading() ? decodedDesc : desc;
+    TextureAssetDesc& targetDesc = archive.reading() ? decodedDesc : desc;
     std::vector<std::uint8_t>& targetPixels = archive.reading() ? decodedPixels : pixels;
     if ((archive.writing() && !validateTexture(desc, pixels)) || !archive.beginObject({}) ||
         !archive.transfer("magic", magic) || magic != kTextureMagic ||
         !archive.transfer("version", version) || version != kTextureVersion ||
-        !archive.transfer("description", targetDesc) ||
-        !archive.transfer("pixels", targetPixels) || !archive.endObject() ||
+        !archive.transfer("description", targetDesc) || !archive.transfer("pixels", targetPixels) ||
+        !archive.endObject() ||
         (archive.reading() && !validateTexture(decodedDesc, decodedPixels))) {
         Log::error(
             "TextureAsset", "Invalid TextureAsset payload: %s", assetPath().string().c_str());

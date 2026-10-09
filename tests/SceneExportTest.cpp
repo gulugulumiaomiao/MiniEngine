@@ -1,4 +1,4 @@
-﻿#include "asset/runtime/ShaderAssetResolver.h"
+#include "asset/runtime/ShaderAssetResolver.h"
 #include "TestAssetEnvironment.h"
 #include "TestRenderDevice.h"
 
@@ -7,7 +7,7 @@
 #include "asset/format/SceneAssetFormat.h"
 #include "core/filesystem/FileWatcher.h"
 #include "render/material/Material.h"
-#include "render/material/MaterialManager.h"
+#include "asset/runtime/MaterialAssetResolver.h"
 #include "render/mesh/Mesh.h"
 #include "render/shader/Shader.h"
 #include "scene/components/CameraComponent.h"
@@ -56,8 +56,7 @@ using namespace engine;
     return source;
 }
 
-[[nodiscard]] Ref<Scene> buildExportScene(Ref<Mesh> mesh,
-                                          Ref<Material> material) {
+[[nodiscard]] Ref<Scene> buildExportScene(Ref<Mesh> mesh, Ref<Material> material) {
     Ref<Scene> scene = makeRef<Scene>("Export Roundtrip");
 
     Node* world = scene->findNode(scene->createNode("World"));
@@ -116,16 +115,9 @@ int main() {
     if (!meshHandle)
         return 31;
 
-    MATERIAL_MANAGER.clear();
-    MaterialAsset materialAsset;
-    materialAsset.setAssetPath(VirtualPath{"assets://materials/test_export.material.json"});
-    materialAsset.name = "Export Material";
-    const Ref<Shader> builtinShader =
-        resolveShaderReference("assets://shaders/builtin_color.shader.json");
-    if (!builtinShader)
-        return 32;
+    Material::errorMaterial.reset();
     const Ref<Material> materialHandle =
-        MATERIAL_RESOURCE_MANAGER.insert(materialAsset.instantiate(builtinShader));
+        resolveMaterialReference(VirtualPath{"assets://materials/warm_vertex_color.material.json"});
     if (!materialHandle)
         return 33;
 
@@ -157,7 +149,7 @@ int main() {
         worldMesh->castShadow || worldMesh->layerMask != 3 || !worldMaterial ||
         worldMaterial->materials.size() != 1 ||
         worldMaterial->materials[0] !=
-            VirtualPath{"assets://materials/test_export.material.json"}) {
+            VirtualPath{"assets://materials/warm_vertex_color.material.json"}) {
         return 4;
     }
 
@@ -174,17 +166,15 @@ int main() {
     const auto* light = std::get_if<LightComponentAsset>(&sunAsset.components[1]);
     if (sunAsset.id != 3 || sunAsset.parent || sunAsset.name != "Sun" || !light ||
         light->type != LightType::Spot || light->color != math::Vec3{1.0F, 0.9F, 0.8F} ||
-        light->intensity != 2.0F || light->range != 12.0F ||
-        light->innerSpotAngle != 25.0F || light->outerSpotAngle != 35.0F ||
-        !light->castShadow) {
+        light->intensity != 2.0F || light->range != 12.0F || light->innerSpotAngle != 25.0F ||
+        light->outerSpotAngle != 35.0F || !light->castShadow) {
         return 6;
     }
 
     const SceneNodeAsset& primitiveAsset = asset->nodes[3];
     const auto* primitiveMesh = std::get_if<MeshComponentAsset>(&primitiveAsset.components[1]);
-    if (primitiveAsset.id != 4 || primitiveAsset.parent ||
-        primitiveAsset.name != "Primitive Box" || !primitiveMesh ||
-        primitiveMesh->sourceType != MeshComponentSourceType::Primitive ||
+    if (primitiveAsset.id != 4 || primitiveAsset.parent || primitiveAsset.name != "Primitive Box" ||
+        !primitiveMesh || primitiveMesh->sourceType != MeshComponentSourceType::Primitive ||
         primitiveMesh->primitiveRecipe.parts.size() != 1) {
         return 7;
     }
@@ -197,7 +187,8 @@ int main() {
 
     // --- writeSceneAssetJson + parseSceneAsset roundtrip ---
     const std::string roundtripJson = format::writeSceneAssetJson(*asset, ASSET_DATABASE);
-    const Ref<SceneAsset> reparsed = format::parseSceneAsset(targetPath, roundtripJson);
+    const Ref<SceneAsset> reparsed =
+        format::parseSceneAsset(targetPath, roundtripJson, ASSET_DATABASE);
     if (!reparsed || reparsed->name != asset->name || reparsed->nodes != asset->nodes)
         return 9;
 
@@ -221,7 +212,7 @@ int main() {
         requestedMeshes.size() != 1 || requestedMaterials.size() != 1 ||
         requestedMeshes.front() != VirtualPath{"assets://meshes/triangle.mesh.json"} ||
         requestedMaterials.front() !=
-            VirtualPath{"assets://materials/test_export.material.json"}) {
+            VirtualPath{"assets://materials/warm_vertex_color.material.json"}) {
         return 10;
     }
     const Node* runtimeWorld = runtime->findNode(runtime->root().children().front());
@@ -237,8 +228,8 @@ int main() {
         return 11;
     }
     const Node* runtimeCamera = runtime->findNode(runtimeWorld->children().front());
-    if (!runtimeCamera || runtimeCamera->name() != "Main Camera" ||
-        runtimeCamera->activeSelf() || !runtimeCamera->getComponent<CameraComponent>() ||
+    if (!runtimeCamera || runtimeCamera->name() != "Main Camera" || runtimeCamera->activeSelf() ||
+        !runtimeCamera->getComponent<CameraComponent>() ||
         runtimeCamera->getComponent<CameraComponent>()->fieldOfView != 75.0F) {
         return 12;
     }
@@ -313,6 +304,6 @@ int main() {
 
     runtime.reset();
     scene.reset();
-    MATERIAL_MANAGER.clear();
+    Material::errorMaterial.reset();
     return 0;
 }

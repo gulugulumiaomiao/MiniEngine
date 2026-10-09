@@ -1,3 +1,4 @@
+#include "asset/types/TextureAsset.h"
 #include "render/gpu/global_uniform/GlobalUniformGpuManager.h"
 
 #include "core/logging/Log.h"

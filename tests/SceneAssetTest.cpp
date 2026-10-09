@@ -1,4 +1,5 @@
-﻿#include "TestRenderDevice.h"
+#include "TestMaterial.h"
+#include "TestRenderDevice.h"
 #include "asset/derived_data/AssetArtifact.h"
 #include "asset/base/AssetId.h"
 #include "asset/base/AssetMeta.h"
@@ -235,7 +236,7 @@ int main() {
     stubRecipe.parts.push_back({PlaneGeometry{}});
     const Ref<MeshAsset> stubAsset = MeshBuilder::buildAsset(stubRecipe);
     const Ref<Mesh> loadedMesh = stubAsset ? stubAsset->instantiate() : Ref<Mesh>{};
-    const Ref<Material> loadedMaterial = makeRef<Material>();
+    const Ref<Material> loadedMaterial = makeRef<Material>(test::materialInfo());
     const SceneInstantiationContext context{
         .loadMesh =
             [&loadedMeshes, loadedMesh](const VirtualPath& path) {

@@ -45,9 +45,9 @@ mat4 model = Objects.transforms[InstanceIndices.objectIndices[gl_InstanceIndex]]
 
 ```text
 MiniForwardPipeline::render
+  -> FRAME_GPU_MANAGER.beginFrame     fence 完成后释放旧引用并重置计数
   -> DrawListBuilder.build            剔除 + 生成 DrawItem（含 materialSet，firstInstance = 对象行）
-                                      resolveMaterialPass 内解析材质常驻三级路径（见下文）
-  -> FRAME_GPU_MANAGER.beginFrame     重置当前帧实例表计数
+                                      组合 Program、Pipeline 和 Material 绑定
   -> FRAME_GPU_MANAGER.upload         上传 scene / objects 数据
   -> 各 pass execute（回调内）
       -> drawFilteredItems(frameIndex, items, ...)
@@ -61,22 +61,7 @@ MiniForwardPipeline::render
 
 ## 材质常驻
 
-### 三级 resolve 路径
-
-`MaterialStorage::resolve(material, program)`：
-
-1. **快路径**：槽位命中且 `Material::version()` 与已上传版本一致 → 直接返回 set-1 `UniformSet`，零 GPU 操作。
-2. **脏更新**：仅 uniform 内容变化（纹理签名未变）→ `Ubo::setRawBytes(uniformBytes)` 只重传 uniform 字节，保留 `UniformSet`。
-3. **全量重建**：槽位被驱逐、纹理引用变化或 program 的 set-1 布局变化 → 重建 `UniformSet` 并记录簿记。
-
-`Material` 的任何属性修改（含 `setTexture`、`setShader`、shader 热重载）都会递增 `version_`，因此三级路径自动覆盖所有失效场景。
-
-### MaterialStorage 缓存常驻策略
-
-- `beginFrame` 不再清空查找表；槽位与其 GPU 资源跨帧驻留。
-- 每个 in-flight frame 各持有一份槽位池（同帧内相同材质只上传一次，帧间写入互不冲突）。
-- 容量上限 `kMaxResidentMaterials = 512`；超限时驱逐 LRU 槽位：查找表移除旧占用者，槽位标记 `pendingRelease`，下次被新材质全量重建前释放旧 `UniformSet`。
-- `MaterialStorageEntry` 簿记字段：`materialSet`(`Ref<UniformSet>`)、`setLayout`、`uniformVersion`、`textureBindings`、`pendingRelease`。
+Material::uniformSet(program, frameIndex) 持有各 Program/帧的绑定，依据 version 和纹理签名更新。布局一致时批量复制，否则按反射成员映射。仍被帧引用的旧绑定采用新集替换，FrameGpuManager 在 fence 完成后释放通用保活引用。没有领域缓存或 LRU 槽位池，详见 [MaterialSystem.md](MaterialSystem.md)。
 
 ## 排序与合批的关系
 
@@ -86,8 +71,8 @@ MiniForwardPipeline::render
 
 - `src/render/renderer/DrawBatcher.h/.cpp` 合批器
 - `src/render/gpu/frame/FrameGpuManager.h/.cpp` 实例表缓冲与上传
-- `src/render/gpu/material/*` 材质常驻三级路径
+- `src/render/material/Material.cpp` 材质反射绑定与每帧缓存
 - `src/render/pipeline/passes/RenderPassUtils.cpp` 批次命令编码
 - `builtin/core/shaders/include/objects.glsl` 共享的对象/实例表声明
 - `tests/DrawBatcherTest.cpp` 合并规则测试
-- `tests/RenderCacheTest.cpp` 材质缓存常驻/LRU 测试
+- `tests/MaterialIsolationTest.cpp` 材质缓存与帧保活测试
