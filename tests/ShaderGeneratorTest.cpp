@@ -1,4 +1,4 @@
-﻿#include "asset/manager/AssetManager.h"
+#include "asset/manager/AssetManager.h"
 #include "asset/types/ShaderAsset.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderGenerator.h"
@@ -41,7 +41,7 @@ int main() {
         ASSET_MANAGER.loadAsset<ShaderAsset>(VirtualPath{"assets://material_values.shader.json"});
     if (!shaderOwner)
         return 5;
-    const Shader shader{*shaderOwner};
+    const Shader shader{*shaderOwner->buildRuntimeInfo()};
     const ShaderPass& materialPass = shader.defaultSubShader().requirePass(ShaderPassType::Forward);
     ShaderGenerator generator;
     const auto generated = generator.generateStage(
@@ -58,27 +58,27 @@ int main() {
         VirtualPath{"assets://shader_interface_valid.shader.json"});
     if (!interfaceShaderOwner)
         return 6;
-    const Shader interfaceShader{*interfaceShaderOwner};
+    const Shader interfaceShader{*interfaceShaderOwner->buildRuntimeInfo()};
     const ShaderPass& interfacePass =
         interfaceShader.defaultSubShader().requirePass(ShaderPassType::Forward);
-    const auto vertex =
-        generator.generateStage(interfaceShader,
-                                interfacePass,
-                                ShaderStage::Vertex,
-                                *FILE_SYSTEM.readText(interfacePass.program().vertexSource));
-    const auto fragment =
-        generator.generateStage(interfaceShader,
-                                interfacePass,
-                                ShaderStage::Fragment,
-                                *FILE_SYSTEM.readText(interfacePass.program().fragmentSource));
+    const auto vertex = generator.generateStage(
+        interfaceShader,
+        interfacePass,
+        ShaderStage::Vertex,
+        *FILE_SYSTEM.readText(interfaceShader.programSource(interfacePass).vertexSource));
+    const auto fragment = generator.generateStage(
+        interfaceShader,
+        interfacePass,
+        ShaderStage::Fragment,
+        *FILE_SYSTEM.readText(interfaceShader.programSource(interfacePass).fragmentSource));
     std::string expectedVertex = readFile(sourceFixtures / "shader_interface.expected.vert.glsl");
     std::string expectedFragment = readFile(sourceFixtures / "shader_interface.expected.frag.glsl");
     expectedVertex.replace(expectedVertex.find("generated_interface.vert"),
                            std::string{"generated_interface.vert"}.size(),
-                           interfacePass.program().vertexSource.string());
+                           interfaceShader.programSource(interfacePass).vertexSource.string());
     expectedFragment.replace(expectedFragment.find("generated_interface.frag"),
                              std::string{"generated_interface.frag"}.size(),
-                             interfacePass.program().fragmentSource.string());
+                             interfaceShader.programSource(interfacePass).fragmentSource.string());
     if (!vertex || !fragment || *vertex != expectedVertex || *fragment != expectedFragment) {
         return 4;
     }

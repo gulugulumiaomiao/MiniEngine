@@ -270,6 +270,14 @@ add_dependencies(ShaderLayoutTest MiniCopyBuiltin)
 
 mini_add_gtest(GlobalUniformTest)
 
+mini_add_gtest(ShaderIsolationTest)
+target_compile_definitions(ShaderIsolationTest PRIVATE
+    MINI_TEST_SHADER_ISOLATION_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+add_test(NAME ShaderAssetBoundaryTest
+    COMMAND ${CMAKE_COMMAND}
+        -DMINI_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/ShaderAssetBoundaryTest.cmake)
+
 mini_add_test(ShaderGeneratorTest)
 target_compile_definitions(ShaderGeneratorTest PRIVATE
     MINI_TEST_SHADER_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets"

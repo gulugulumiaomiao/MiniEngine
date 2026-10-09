@@ -29,8 +29,8 @@ int main() {
     if (!vertexColorOwner)
         return 8;
     const ShaderAsset& vertexColor = *vertexColorOwner;
-    const ShaderPassDesc& vertexColorPass =
-        vertexColor.subShaders.front().requirePass(ShaderPassType::Forward);
+    const ShaderPassAssetDesc& vertexColorPass =
+        vertexColor.data.subShaders.front().requirePass(ShaderAssetPassType::Forward);
     if (vertexColorPass.program.vertexSource.filename() != "vertex_color.Forward.vert" ||
         vertexColorPass.program.fragmentSource.filename() != "vertex_color.Forward.frag" ||
         vertexColorPass.vertexInput.size() != 2 || vertexColorPass.varyings.size() != 1 ||
@@ -46,13 +46,14 @@ int main() {
     if (!generatedOwner)
         return 9;
     const ShaderAsset& generated = *generatedOwner;
-    const ShaderPassDesc& pass = generated.subShaders.front().requirePass(ShaderPassType::Forward);
+    const ShaderPassAssetDesc& pass =
+        generated.data.subShaders.front().requirePass(ShaderAssetPassType::Forward);
     if (pass.program.vertexSource.filename() != "generated_interface.vert" ||
         pass.program.fragmentSource.filename() != "generated_interface.frag" ||
         pass.vertexInput.size() != 2 || pass.varyings.size() != 2 ||
         pass.fragmentOutputs.size() != 1 || pass.vertexInput[0].semantic != "POSITION" ||
-        pass.vertexInput[0].type != ShaderValueType::Vec3 ||
-        pass.varyings[1].interpolation != ShaderInterpolation::Flat) {
+        pass.vertexInput[0].type != ShaderAssetValueType::Vec3 ||
+        pass.varyings[1].interpolation != ShaderAssetInterpolation::Flat) {
         return 2;
     }
 
@@ -61,16 +62,18 @@ int main() {
         VirtualPath{"assets://shader_lightmode_inferred.shader.json"});
     if (!inferredOwner)
         return 3;
-    if (inferredOwner->subShaders.front()
-            .requirePass(ShaderPassType::Forward)
-            .name != "Forward")
+    if (inferredOwner->data.subShaders.front().requirePass(ShaderAssetPassType::Forward).name !=
+        "Forward")
         return 4;
 
-    const RenderStateDesc& defaults = generated.subShaders.front().passes.front().renderState;
-    if (defaults.cull != CullMode::Back || defaults.frontFace != FrontFace::Clockwise ||
-        defaults.fill != FillMode::Solid || defaults.topology != PrimitiveTopology::TriangleList ||
-        !defaults.depthWrite || defaults.depthTest != DepthCompare::LessEqual ||
-        defaults.blend != BlendMode::Off || defaults.colorMask != "RGBA") {
+    const ShaderRenderStateAssetData& defaults =
+        generated.data.subShaders.front().passes.front().renderState;
+    if (defaults.cull != ShaderAssetCullMode::Back ||
+        defaults.frontFace != ShaderAssetFrontFace::Clockwise ||
+        defaults.fill != ShaderAssetFillMode::Solid ||
+        defaults.topology != ShaderAssetPrimitiveTopology::TriangleList || !defaults.depthWrite ||
+        defaults.depthTest != ShaderAssetDepthCompare::LessEqual ||
+        defaults.blend != ShaderAssetBlendMode::Off || defaults.colorMask != "RGBA") {
         return 5;
     }
 

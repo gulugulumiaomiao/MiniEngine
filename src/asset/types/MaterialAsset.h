@@ -2,6 +2,7 @@
 
 #include "asset/base/Asset.h"
 #include "core/base/Ref.h"
+#include "asset/types/ShaderAssetData.h"
 #include "render/shader/Shader.h"
 
 #include <optional>
@@ -19,7 +20,7 @@ public:
 
     std::string name;
     VirtualPath shader;
-    std::unordered_map<std::string, ShaderValue> properties;
+    std::unordered_map<std::string, ShaderAssetValue> properties;
     std::vector<std::string> keywords;
     std::optional<int> renderQueue;
 

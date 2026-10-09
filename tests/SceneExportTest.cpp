@@ -1,4 +1,5 @@
-﻿#include "TestAssetEnvironment.h"
+﻿#include "asset/runtime/ShaderAssetResolver.h"
+#include "TestAssetEnvironment.h"
 #include "TestRenderDevice.h"
 
 #include "asset/types/MaterialAsset.h"

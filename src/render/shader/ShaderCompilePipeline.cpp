@@ -25,8 +25,7 @@ template <typename... Args> [[noreturn]] void reflectionFail(const char* format,
     throw ReflectionFailure{};
 }
 
-ShaderValueType reflectValueType(const spirv_cross::SPIRType& type,
-                                 const VirtualPath& path) {
+ShaderValueType reflectValueType(const spirv_cross::SPIRType& type, const VirtualPath& path) {
     if (type.basetype == spirv_cross::SPIRType::Float) {
         switch (type.vecsize) {
         case 1: return ShaderValueType::Float;
@@ -88,7 +87,7 @@ findDescriptor(const SpirvReflection& reflection, std::uint32_t set, std::uint32
 // that never reads material data legitimately has no block: the generator always declares
 // it, but SPIR-V optimization strips unused descriptors, so absence is not an error. Only a
 // wrong descriptor type or a member at an unexpected offset would corrupt the upload.
-void validateMaterialBlock(std::span<const ShaderPropertyDesc> properties,
+void validateMaterialBlock(std::span<const ShaderPropertyInfo> properties,
                            const SpirvReflection& reflection,
                            const VirtualPath& path) {
     const UniformBlockLayout layout = buildUniformBlockLayout(properties);
@@ -112,11 +111,11 @@ void validateMaterialBlock(std::span<const ShaderPropertyDesc> properties,
     }
 }
 
-void validateTextureBindings(std::span<const ShaderPropertyDesc> properties,
+void validateTextureBindings(std::span<const ShaderPropertyInfo> properties,
                              const SpirvReflection& vertex,
                              const SpirvReflection& fragment) {
     std::uint32_t binding = 1;
-    for (const ShaderPropertyDesc& property : properties) {
+    for (const ShaderPropertyInfo& property : properties) {
         if (property.type != ShaderPropertyType::Texture2D)
             continue;
         const ShaderDescriptorBinding* descriptor = findDescriptor(fragment, 1, binding);
@@ -159,11 +158,10 @@ void validateGlobalBlock(const SpirvReflection& reflection, const VirtualPath& p
     }
 }
 
-void validateGlobalTextureBindings(const SpirvReflection& vertex,
-                                   const SpirvReflection& fragment) {
+void validateGlobalTextureBindings(const SpirvReflection& vertex, const SpirvReflection& fragment) {
     constexpr std::uint32_t kMaxGlobalTextures = 8;
     std::uint32_t binding = 1;
-    for (const ShaderPropertyDesc& property : GLOBAL_UNIFORM_MANAGER.textureProperties()) {
+    for (const ShaderPropertyInfo& property : GLOBAL_UNIFORM_MANAGER.textureProperties()) {
         if (binding > kMaxGlobalTextures)
             break;
         const ShaderDescriptorBinding* descriptor = findDescriptor(fragment, 2, binding);
@@ -274,10 +272,10 @@ ShaderCompilePipeline::reflectSpirv(std::span<const std::byte> bytecode,
             }
         };
 
-        const auto reflectDescriptors = [&compiler, &result, &reflectUboType,
-                                         &reflectUboSize](const auto& shaderResources,
-                                                          ShaderDescriptorType descriptorType,
-                                                          bool reflectMembers = false) {
+        const auto reflectDescriptors = [&compiler, &result, &reflectUboType, &reflectUboSize](
+                                            const auto& shaderResources,
+                                            ShaderDescriptorType descriptorType,
+                                            bool reflectMembers = false) {
             for (const spirv_cross::Resource& resource : shaderResources) {
                 if (!compiler.has_decoration(resource.id, spv::DecorationDescriptorSet) ||
                     !compiler.has_decoration(resource.id, spv::DecorationBinding)) {
@@ -321,21 +319,18 @@ ShaderCompilePipeline::reflectSpirv(std::span<const std::byte> bytecode,
             });
         return result;
     } catch (const spirv_cross::CompilerError& error) {
-        Log::error("SpirvReflection",
-                   "Cannot reflect %s: %s",
-                   sourcePath.string().c_str(),
-                   error.what());
-    } catch (const ReflectionFailure&) {
-    }
+        Log::error(
+            "SpirvReflection", "Cannot reflect %s: %s", sourcePath.string().c_str(), error.what());
+    } catch (const ReflectionFailure&) {}
     return std::nullopt;
 }
 
 bool ShaderCompilePipeline::validateSpirvReflection(const Shader& shader,
-                                                     const ShaderPass& pass,
-                                                     const SpirvReflection& vertex,
-                                                     const SpirvReflection& fragment,
-                                                     const VirtualPath& vertexPath,
-                                                     const VirtualPath& fragmentPath) {
+                                                    const ShaderPass& pass,
+                                                    const SpirvReflection& vertex,
+                                                    const SpirvReflection& fragment,
+                                                    const VirtualPath& vertexPath,
+                                                    const VirtualPath& fragmentPath) {
     try {
         if (vertex.stage != ShaderStage::Vertex || fragment.stage != ShaderStage::Fragment)
             reflectionFail("SPIR-V stage does not match pass declaration");
@@ -396,13 +391,11 @@ VirtualPath ShaderCompilePipeline::packagedBinaryPath(const ShaderCompilePipelin
                                                       const Shader& shader,
                                                       const ShaderPass& pass,
                                                       ShaderStage stage,
-                                                      const ShaderVariantKey& variant) {
-    Hash64 hash = hashString(shader.assetPath().string());
+                                                      std::uint64_t variant) {
+    Hash64 hash = shader.compileKey();
     hash = hashString(pass.name(), hash);
     hashAppend(hash, pass.type());
-    hashAppend(hash, variant.keywordBits);
-    hashAppend(hash, variant.meshFeatureBits);
-    hashAppend(hash, variant.platformFeatureBits);
+    hashAppend(hash, variant);
     const std::string suffix = stage == ShaderStage::Vertex ? ".vert.spv" : ".frag.spv";
     return config.packagedRoot.joined(hashToHex(hash) + suffix);
 }
@@ -410,32 +403,27 @@ VirtualPath ShaderCompilePipeline::packagedBinaryPath(const ShaderCompilePipelin
 CompiledShaderId ShaderCompilePipeline::makeCompiledShaderId(std::span<const std::byte> bytecode,
                                                              ShaderStage stage,
                                                              std::string_view entryPoint,
-                                                             const ShaderVariantKey& variant) {
+                                                             std::uint64_t variant) {
     Hash64 hash = hashBytes(bytecode);
     hashAppend(hash, stage);
     hash = hashString(entryPoint, hash);
-    hashAppend(hash, variant.keywordBits);
-    hashAppend(hash, variant.meshFeatureBits);
-    hashAppend(hash, variant.platformFeatureBits);
+    hashAppend(hash, variant);
     return hash;
 }
 
 ShaderHash ShaderCompilePipeline::makeCompiledShaderPathKey(const VirtualPath& binaryPath,
                                                             ShaderStage stage,
                                                             std::string_view entryPoint,
-                                                            const ShaderVariantKey& variant) {
+                                                            std::uint64_t variant) {
     Hash64 hash = hashString("CompiledShaderPath");
     hash = hashString(binaryPath.string(), hash);
     hashAppend(hash, stage);
     hash = hashString(entryPoint, hash);
-    hashAppend(hash, variant.keywordBits);
-    hashAppend(hash, variant.meshFeatureBits);
-    hashAppend(hash, variant.platformFeatureBits);
+    hashAppend(hash, variant);
     return hash;
 }
 
-std::optional<RID>
-ShaderCompilePipeline::CompiledShaderCache::findPath(ShaderHash pathKey) const {
+std::optional<RID> ShaderCompilePipeline::CompiledShaderCache::findPath(ShaderHash pathKey) const {
     if (const auto found = pathEntries_.find(pathKey);
         found != pathEntries_.end() && find(found->second)) {
         return found->second;
@@ -443,8 +431,7 @@ ShaderCompilePipeline::CompiledShaderCache::findPath(ShaderHash pathKey) const {
     return std::nullopt;
 }
 
-void ShaderCompilePipeline::CompiledShaderCache::rememberPath(ShaderHash pathKey,
-                                                              RID handle) {
+void ShaderCompilePipeline::CompiledShaderCache::rememberPath(ShaderHash pathKey, RID handle) {
     if (find(handle))
         pathEntries_[pathKey] = handle;
 }
@@ -455,8 +442,7 @@ bool ShaderCompilePipeline::CompiledShaderCache::containsPath(std::span<const Vi
                                [&candidate](const VirtualPath& path) { return path == candidate; });
 }
 
-const CompiledShader&
-ShaderCompilePipeline::CompiledShaderCache::resolve(RID handle) const {
+const CompiledShader& ShaderCompilePipeline::CompiledShaderCache::resolve(RID handle) const {
     const CompiledShader* shader = find(handle);
     if (!shader)
         Log::fatal("CompiledShaderCache", "Invalid or stale compiled shader handle");
@@ -468,8 +454,7 @@ void ShaderCompilePipeline::CompiledShaderCache::removeId(CompiledShaderId id,
     const RID handle = findHandle(id);
     if (!handle)
         return;
-    std::erase_if(pathEntries_,
-                  [handle](const auto& entry) { return entry.second == handle; });
+    std::erase_if(pathEntries_, [handle](const auto& entry) { return entry.second == handle; });
     if (destroy(handle))
         removed.push_back(id);
 }
@@ -492,8 +477,7 @@ void ShaderCompilePipeline::CompiledShaderCache::clear() {
     KeyedHandleRegistry::clear();
 }
 
-const CompiledProgram&
-ShaderCompilePipeline::ShaderProgramCache::resolve(RID handle) const {
+const CompiledProgram& ShaderCompilePipeline::ShaderProgramCache::resolve(RID handle) const {
     const CompiledProgram* program = find(handle);
     if (!program)
         Log::fatal("ShaderProgramCache", "Invalid or stale shader program handle");
@@ -523,10 +507,10 @@ ShaderCompilePipeline::ShaderCompilePipeline(ShaderCompilePipelineConfig config)
       compiler_(config_.intermediateRoot) {}
 
 RID ShaderCompilePipeline::loadCompiledShader(const VirtualPath& binaryPath,
-                                                               ShaderStage stage,
-                                                               std::string_view entryPoint,
-                                                               const ShaderVariantKey& variant,
-                                                               std::span<const std::byte> bytecode) {
+                                              ShaderStage stage,
+                                              std::string_view entryPoint,
+                                              std::uint64_t variant,
+                                              std::span<const std::byte> bytecode) {
     if (bytecode.empty() || bytecode.size() % sizeof(std::uint32_t) != 0) {
         Log::error(
             "ShaderCompilePipeline", "Invalid or missing SPIR-V: %s", binaryPath.string().c_str());
@@ -546,11 +530,10 @@ RID ShaderCompilePipeline::loadCompiledShader(const VirtualPath& binaryPath,
                                          binaryPath});
 }
 
-RID ShaderCompilePipeline::loadPackagedShader(
-    const VirtualPath& binaryPath,
-    ShaderStage stage,
-    std::string_view entryPoint,
-    const ShaderVariantKey& variant) {
+RID ShaderCompilePipeline::loadPackagedShader(const VirtualPath& binaryPath,
+                                              ShaderStage stage,
+                                              std::string_view entryPoint,
+                                              std::uint64_t variant) {
     const ShaderHash pathKey = makeCompiledShaderPathKey(binaryPath, stage, entryPoint, variant);
     if (const auto cached = compiledShadersCache_.findPath(pathKey))
         return *cached;
@@ -560,17 +543,16 @@ RID ShaderCompilePipeline::loadPackagedShader(
             "ShaderCompilePipeline", "Invalid or missing SPIR-V: %s", binaryPath.string().c_str());
         return {};
     }
-    const RID handle =
-        loadCompiledShader(binaryPath, stage, entryPoint, variant, *bytecode);
+    const RID handle = loadCompiledShader(binaryPath, stage, entryPoint, variant, *bytecode);
     if (handle)
         compiledShadersCache_.rememberPath(pathKey, handle);
     return handle;
 }
 
 RID ShaderCompilePipeline::compileStage(const Shader& shader,
-                                                         const ShaderPass& pass,
-                                                         ShaderStage stage,
-                                                         const ShaderVariantKey& variant) {
+                                        const ShaderPass& pass,
+                                        ShaderStage stage,
+                                        std::uint64_t variant) {
     const VirtualPath packaged = packagedBinaryPath(config_, shader, pass, stage, variant);
     if (config_.mode == ShaderCompileMode::PackagedRuntime) {
         if (!FILE_SYSTEM.isFile(packaged)) {
@@ -585,13 +567,14 @@ RID ShaderCompilePipeline::compileStage(const Shader& shader,
         return loadPackagedShader(packaged, stage, "main", variant);
     }
 
-    const VirtualPath sourcePath =
-        stage == ShaderStage::Vertex ? pass.program().vertexSource : pass.program().fragmentSource;
+    const VirtualPath sourcePath = stage == ShaderStage::Vertex
+                                       ? shader.programSource(pass).vertexSource
+                                       : shader.programSource(pass).fragmentSource;
     const auto userSource = FILE_SYSTEM.readText(sourcePath);
     if (!userSource)
         return {};
 
-    ShaderHash generatedKey = hashString(shader.assetPath().string());
+    ShaderHash generatedKey = shader.instanceId();
     generatedKey = hashString(pass.name(), generatedKey);
     generatedKey = hashString(sourcePath.string(), generatedKey);
     generatedKey = hashString(*userSource, generatedKey);
@@ -603,9 +586,10 @@ RID ShaderCompilePipeline::compileStage(const Shader& shader,
         if (!generated)
             return {};
         GeneratedSource entry;
+        entry.shaderInstanceId = shader.instanceId();
         entry.cachePath = VirtualPath{"shader-generated://" + hashToHex(generatedKey) + ".glsl"};
         entry.source = std::move(*generated);
-        const std::array dependencies{shader.assetPath(), sourcePath};
+        const std::array dependencies{sourcePath};
         FILE_DEPENDENCY_GRAPH.replaceDependencies(entry.cachePath, dependencies);
         generatedEntry = generatedSources_.emplace(generatedKey, std::move(entry)).first;
     }
@@ -614,17 +598,19 @@ RID ShaderCompilePipeline::compileStage(const Shader& shader,
     request.sourcePath = sourcePath;
     request.stage = stage;
     request.source = generatedEntry->second.source;
-    const std::vector<std::string>& keywords = pass.keywordSchema().keywords();
+    const std::vector<std::string>& keywords = pass.keyword().keywords();
     for (std::size_t bit = 0; bit < keywords.size(); ++bit) {
-        if ((variant.keywordBits & (std::uint64_t{1} << bit)) != 0)
+        if ((variant & (std::uint64_t{1} << bit)) != 0)
             request.defines.push_back({keywords[bit], "1"});
     }
-    request.defines.push_back({"MINI_MESH_FEATURE_BITS", std::to_string(variant.meshFeatureBits)});
-    request.defines.push_back(
-        {"MINI_PLATFORM_FEATURE_BITS", std::to_string(variant.platformFeatureBits)});
     const auto processed = preprocessor_.process(request);
     if (!processed)
         return {};
+    // Includes resolve relative to the user source path, but the processed output also
+    // depends on the runtime-generated declarations. Preserve both dependency edges.
+    auto dependencies = FILE_DEPENDENCY_GRAPH.dependenciesOf(processed->cachePath);
+    dependencies.push_back(generatedEntry->second.cachePath);
+    FILE_DEPENDENCY_GRAPH.replaceDependencies(processed->cachePath, dependencies);
     const auto spirv = compiler_.compile(*processed, config_.compilerOptions);
     if (!spirv)
         return {};
@@ -642,8 +628,7 @@ RID ShaderCompilePipeline::compileStage(const Shader& shader,
         FILE_DEPENDENCY_GRAPH.replaceDependencies(packaged, dependency);
         binaryPath = packaged;
     }
-    return loadCompiledShader(
-        binaryPath, stage, processed->entryPoint, variant, spirv->bytecode);
+    return loadCompiledShader(binaryPath, stage, processed->entryPoint, variant, spirv->bytecode);
 }
 
 std::optional<ShaderProgramLayout>
@@ -672,23 +657,19 @@ ShaderCompilePipeline::mergeLayout(const CompiledShader& vertex, const CompiledS
 }
 
 RID ShaderCompilePipeline::getOrCreate(const Shader& shader,
-                                                       const ShaderPass& pass,
-                                                       const ShaderVariantKey& variant) {
-    const RID vertexHandle =
-        compileStage(shader, pass, ShaderStage::Vertex, variant);
+                                       const ShaderPass& pass,
+                                       std::uint64_t variant) {
+    const RID vertexHandle = compileStage(shader, pass, ShaderStage::Vertex, variant);
     if (!vertexHandle)
         return {};
-    const RID fragmentHandle =
-        compileStage(shader, pass, ShaderStage::Fragment, variant);
+    const RID fragmentHandle = compileStage(shader, pass, ShaderStage::Fragment, variant);
     if (!fragmentHandle)
         return {};
     const CompiledShader& vertex = compiledShadersCache_.resolve(vertexHandle);
     const CompiledShader& fragment = compiledShadersCache_.resolve(fragmentHandle);
     ShaderProgramId id = vertex.id;
     hashAppend(id, fragment.id);
-    hashAppend(id, variant.keywordBits);
-    hashAppend(id, variant.meshFeatureBits);
-    hashAppend(id, variant.platformFeatureBits);
+    hashAppend(id, variant);
     if (const RID cached = programsCache_.findHandle(id); cached)
         return cached;
     if (!validateSpirvReflection(shader,
@@ -702,13 +683,8 @@ RID ShaderCompilePipeline::getOrCreate(const Shader& shader,
     auto layout = mergeLayout(vertex, fragment);
     if (!layout)
         return {};
-    return programsCache_.insert({id,
-                                  variant,
-                                  vertexHandle,
-                                  fragmentHandle,
-                                  vertex.id,
-                                  fragment.id,
-                                  std::move(*layout)});
+    return programsCache_.insert(
+        {id, variant, vertexHandle, fragmentHandle, vertex.id, fragment.id, std::move(*layout)});
 }
 
 const CompiledProgram& ShaderCompilePipeline::resolveProgram(RID handle) const {
@@ -720,14 +696,27 @@ const CompiledShader& ShaderCompilePipeline::resolveCompiled(RID handle) const {
 }
 
 std::vector<CompiledShaderId> ShaderCompilePipeline::invalidate(const VirtualPath& changedFile) {
-    std::vector<VirtualPath> affected =
-        FILE_DEPENDENCY_GRAPH.transitiveDependentsOf(changedFile);
+    std::vector<VirtualPath> affected = FILE_DEPENDENCY_GRAPH.transitiveDependentsOf(changedFile);
     affected.push_back(changedFile);
     invalidateGeneratedSources(affected);
     preprocessor_.invalidate(affected);
     compiler_.invalidate(affected);
     std::vector<CompiledShaderId> removed = compiledShadersCache_.invalidatePaths(affected);
     programsCache_.invalidate(removed);
+    return removed;
+}
+
+std::vector<CompiledShaderId> ShaderCompilePipeline::invalidateShader(std::uint64_t instanceId) {
+    std::vector<VirtualPath> paths;
+    for (const auto& [key, source] : generatedSources_) {
+        if (source.shaderInstanceId == instanceId)
+            paths.push_back(source.cachePath);
+    }
+    std::vector<CompiledShaderId> removed;
+    for (const auto& path : paths) {
+        const auto invalidated = invalidate(path);
+        removed.insert(removed.end(), invalidated.begin(), invalidated.end());
+    }
     return removed;
 }
 

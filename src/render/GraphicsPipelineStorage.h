@@ -35,13 +35,13 @@ public:
     [[nodiscard]] bool initialize();
     // Compiles (or reuses) the program for a shader pass + variant, building its vs/fs modules,
     // reflected uniform-set layouts and pipeline layout.
-    [[nodiscard]] Ref<ShaderProgram> getOrCreateProgram(const Shader& shader,
-                                                        const ShaderPass& pass,
-                                                        const ShaderVariantKey& variant);
+    [[nodiscard]] Ref<ShaderProgram>
+    getOrCreateProgram(const Shader& shader, const ShaderPass& pass, std::uint64_t variant);
     [[nodiscard]] rhi::RID resolve(const ShaderProgram& program,
                                    const Mesh& mesh,
                                    rhi::PixelFormat colorFormat,
                                    rhi::PixelFormat depthFormat);
+    void invalidateShader(const Shader& shader);
     void refreshShaders(std::uint64_t frameSerial, std::uint64_t retireSerial);
     void collect(std::uint64_t completedSerial);
     void clear();
@@ -72,7 +72,9 @@ private:
                                                             const ShaderProgram& program) const;
 
     std::unique_ptr<ShaderCompilePipeline> compilePipeline_;
-    std::unordered_map<ShaderProgramId, Ref<ShaderProgram>> programs_;
+    // Keep programs alive until GPU retirement, even if a Shader is rebuilt/destroyed.
+    std::vector<Ref<ShaderProgram>> livePrograms_;
+    std::vector<std::uint64_t> pendingShaderInvalidations_;
     GraphicsPipelineStorageCache cache_;
     std::unique_ptr<GraphicsPipelineStorageFactory> factory_;
     std::vector<RetiredPipeline> retired_;

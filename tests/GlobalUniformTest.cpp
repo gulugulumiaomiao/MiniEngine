@@ -16,16 +16,16 @@ protected:
 };
 
 TEST_F(GlobalUniformTest, LayoutMergesNumericGlobals) {
-    std::vector<ShaderPropertyDesc> properties;
+    std::vector<ShaderPropertyInfo> properties;
     {
-        ShaderPropertyDesc p;
+        ShaderPropertyInfo p;
         p.name = "_GlobalTint";
-        p.type = ShaderPropertyType::Color;
+        p.type = ShaderPropertyType::Vec4;
         p.defaultValue = math::Vec4{1.0F, 0.0F, 0.0F, 1.0F};
         properties.push_back(p);
     }
     {
-        ShaderPropertyDesc p;
+        ShaderPropertyInfo p;
         p.name = "_GlobalScale";
         p.type = ShaderPropertyType::Float;
         p.defaultValue = 2.0F;
@@ -40,17 +40,17 @@ TEST_F(GlobalUniformTest, LayoutMergesNumericGlobals) {
     EXPECT_EQ(layout.members[0].type, ShaderPropertyType::Float);
     EXPECT_EQ(layout.members[0].offset, 0u);
     EXPECT_EQ(layout.members[1].name, "_GlobalTint");
-    EXPECT_EQ(layout.members[1].type, ShaderPropertyType::Color);
+    EXPECT_EQ(layout.members[1].type, ShaderPropertyType::Vec4);
     EXPECT_EQ(layout.members[1].offset, 16u);
     EXPECT_EQ(layout.byteSize, 32u);
 }
 
 TEST_F(GlobalUniformTest, SetValueUpdatesBuffer) {
-    std::vector<ShaderPropertyDesc> properties;
+    std::vector<ShaderPropertyInfo> properties;
     {
-        ShaderPropertyDesc p;
+        ShaderPropertyInfo p;
         p.name = "_GlobalTint";
-        p.type = ShaderPropertyType::Color;
+        p.type = ShaderPropertyType::Vec4;
         p.defaultValue = math::Vec4{1.0F, 0.0F, 0.0F, 1.0F};
         properties.push_back(p);
     }
@@ -75,9 +75,9 @@ TEST_F(GlobalUniformTest, SetValueUpdatesBuffer) {
 }
 
 TEST_F(GlobalUniformTest, MatrixLayoutAndBuffer) {
-    std::vector<ShaderPropertyDesc> properties;
+    std::vector<ShaderPropertyInfo> properties;
     {
-        ShaderPropertyDesc p;
+        ShaderPropertyInfo p;
         p.name = "_GlobalMatrix";
         p.type = ShaderPropertyType::Matrix;
         p.defaultValue = math::Mat44{1.0F};
@@ -108,9 +108,9 @@ TEST_F(GlobalUniformTest, MatrixLayoutAndBuffer) {
 }
 
 TEST_F(GlobalUniformTest, TexturePropertiesAreTrackedSeparately) {
-    std::vector<ShaderPropertyDesc> properties;
+    std::vector<ShaderPropertyInfo> properties;
     {
-        ShaderPropertyDesc p;
+        ShaderPropertyInfo p;
         p.name = "_GlobalTex";
         p.type = ShaderPropertyType::Texture2D;
         p.defaultValue = std::string{"assets://textures/white.png"};

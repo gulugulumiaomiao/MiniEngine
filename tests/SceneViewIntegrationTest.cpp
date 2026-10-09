@@ -1,4 +1,8 @@
 #include "runtime/engine/Engine.h"
+#include "asset/manager/AssetManager.h"
+#include "asset/types/ShaderAsset.h"
+#include "asset/types/MaterialAsset.h"
+#include "render/GraphicsPipelineStorage.h"
 #include "runtime/window/Window.h"
 #include "render/renderer/Renderer.h"
 #include "render/render_target/RenderTarget.h"
@@ -23,6 +27,8 @@ public:
     int frames{};
     bool drewGeometry{};
     bool resumed{};
+    Ref<Shader> keywordShader;
+
 private:
     void onStart() override {
         if (!ENGINE.openProject(project_)) {
@@ -31,6 +37,67 @@ private:
             return;
         }
         attach();
+        checkKeywordPrograms();
+    }
+    void checkKeywordPrograms() {
+        const auto owner = ASSET_MANAGER.loadAsset<ShaderAsset>(
+            VirtualPath{"assets://shaders/blinn_phong.shader.json"});
+        ASSERT_TRUE(owner);
+        keywordShader = owner->instantiate()->clone();
+        MaterialAsset materialAsset;
+        const auto material = materialAsset.instantiate(keywordShader);
+        const auto other = materialAsset.instantiate(keywordShader);
+        ASSERT_TRUE(material);
+        ASSERT_TRUE(other);
+        const auto& pass = keywordShader->defaultSubShader().requirePass(ShaderPassType::Forward);
+        const auto& shadow =
+            keywordShader->defaultSubShader().requirePass(ShaderPassType::ShadowCaster);
+        EXPECT_EQ(pass.programCount(), 0U);
+        const auto off = material->program(pass);
+        ASSERT_TRUE(off);
+        EXPECT_EQ(other->program(pass), off);
+        material->enableKeyword("UNDECLARED");
+        EXPECT_TRUE(material->isKeywordEnabled("UNDECLARED"));
+        EXPECT_EQ(material->program(pass), off);
+        EXPECT_EQ(pass.programCount(), 1U);
+        material->disableKeyword("UNDECLARED");
+        material->enableKeyword("RECEIVE_SHADOWS");
+        const auto on = material->program(pass);
+        ASSERT_TRUE(on);
+        EXPECT_NE(on, off);
+        EXPECT_EQ(pass.programCount(), 2U);
+        EXPECT_EQ(pass.findProgram(material->variantKey(pass)), on);
+        const auto shadowOn = material->program(shadow);
+        ASSERT_TRUE(shadowOn);
+        material->disableKeyword("RECEIVE_SHADOWS");
+        EXPECT_EQ(material->program(pass), off);
+        EXPECT_EQ(material->program(shadow), shadowOn);
+        EXPECT_EQ(shadow.programCount(), 1U);
+        EXPECT_EQ(keywordShader->clone()->defaultSubShader().passes()[0].programCount(), 0U);
+        // Destroy an owner with a populated direct map before cache invalidation.
+        // The GPU store must keep its program alive without retaining a Pass pointer.
+        Ref<ShaderProgram> orphaned;
+        {
+            const auto temporary = keywordShader->clone();
+            const auto temporaryMaterial = materialAsset.instantiate(temporary);
+            orphaned = temporaryMaterial->program(temporary->defaultSubShader().passes()[0]);
+            ASSERT_TRUE(orphaned);
+        }
+        GRAPHICS_PIPELINE_STORAGE.invalidateShader(*keywordShader);
+        GRAPHICS_PIPELINE_STORAGE.refreshShaders(777, 0);
+        EXPECT_EQ(pass.programCount(), 0U);
+        EXPECT_EQ(shadow.programCount(), 0U);
+        EXPECT_TRUE(orphaned->vertexShader());
+        const auto refreshed = material->program(pass);
+        ASSERT_TRUE(refreshed);
+        EXPECT_NE(refreshed, off);
+        ASSERT_TRUE(keywordShader->rebuild(*owner->buildRuntimeInfo()));
+        material->setShader(keywordShader);
+        const auto& rebuilt =
+            keywordShader->defaultSubShader().requirePass(ShaderPassType::Forward);
+        EXPECT_EQ(rebuilt.programCount(), 0U);
+        ASSERT_TRUE(material->program(rebuilt));
+        EXPECT_EQ(rebuilt.programCount(), 1U);
     }
     void attach() {
         ShowWindow(ENGINE.window().nativeHandle(), SW_HIDE);
@@ -47,7 +114,8 @@ private:
             const auto& camera = ENGINE.renderScene().camera();
             ASSERT_TRUE(camera.has_value());
             EXPECT_NEAR(std::abs(camera->projection[1][1] / camera->projection[0][0]),
-                        ENGINE.renderer().sceneAspectRatio(), 0.001F);
+                        ENGINE.renderer().sceneAspectRatio(),
+                        0.001F);
             EXPECT_FALSE(ENGINE.renderScene().objects().empty());
             drewGeometry = true;
         }
@@ -123,9 +191,10 @@ protected:
     std::streambuf* oldCerr{};
     bool ownsScratch{};
 };
-}
+} // namespace
 
-TEST_F(SceneViewIntegrationTest, VulkanSceneResizeHideEmptyAndProjectReattachHaveNoValidationErrors) {
+TEST_F(SceneViewIntegrationTest,
+       VulkanSceneResizeHideEmptyAndProjectReattachHaveNoValidationErrors) {
     std::string error;
     const auto project = editor::createNewProject(scratch, "ViewportProject", error);
     ASSERT_TRUE(project.has_value()) << error;
@@ -135,6 +204,8 @@ TEST_F(SceneViewIntegrationTest, VulkanSceneResizeHideEmptyAndProjectReattachHav
     EXPECT_EQ(application.frames, 19);
     EXPECT_TRUE(application.drewGeometry);
     EXPECT_TRUE(application.resumed);
+    ASSERT_TRUE(application.keywordShader);
+    EXPECT_EQ(application.keywordShader->defaultSubShader().passes()[0].programCount(), 0U);
     EXPECT_EQ(validation.str().find("Validation Error"), std::string::npos) << validation.str();
     EXPECT_EQ(validation.str().find("VUID-"), std::string::npos) << validation.str();
 }

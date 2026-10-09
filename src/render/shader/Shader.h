@@ -1,225 +1,20 @@
 #pragma once
 
-#include "asset/base/Asset.h"
 #include "core/base/Ref.h"
 #include "core/base/RefCounted.h"
-#include "asset/base/AssetId.h"
-#include "core/filesystem/VirtualPath.h"
-#include "core/math/Math.h"
-#include "core/base/RID.h"
+#include "render/shader/ShaderTypes.h"
+#include "render/shader/ShaderProgram.h"
 
-#include <cstdint>
-#include <memory>
-#include <optional>
-#include <span>
-#include <string>
-#include <string_view>
-#include <utility>
-#include <variant>
-#include <vector>
+#include <unordered_map>
 
 namespace engine {
 
-class ShaderAsset;
-class Shader;
-
-enum class ShaderPropertyType { Float, Range, Vec2, Vec3, Vec4, Color, Texture2D, Boolean, Matrix };
-enum class ShaderPassType { Forward, DepthOnly, ShadowCaster };
-enum class CullMode { Off, Front, Back };
-enum class FrontFace { Clockwise, CounterClockwise };
-enum class FillMode { Solid, Wireframe };
-enum class PrimitiveTopology { TriangleList, LineList };
-enum class DepthCompare { Never, Less, LessEqual, Equal, Greater, GreaterEqual, Always };
-enum class BlendMode { Off, Alpha, Additive, PremultipliedAlpha };
-enum class ShaderValueType { Float, Vec2, Vec3, Vec4 };
-enum class ShaderInterpolation { Smooth, Flat, NoPerspective };
-
-// Full GLSL scalar/vector/matrix type set for a uniform-block member (a superset of
-// ShaderValueType). SPIR-V reflection tags each UBO field with one of these so the CPU-side Ubo
-// can validate writes and derive std140 sizes. Deliberately RHI-free and declared here (layer 1)
-// so render/shader/Shader.h keeps its "no rhi/ include" invariant while the layer-2 uniform code
-// (which already includes this header for ShaderValue) reuses the same enum.
-enum class UboUniformType {
-    Bool,
-    Int,
-    UInt,
-    Float,
-    BVec2,
-    IVec2,
-    UVec2,
-    Vec2,
-    BVec3,
-    IVec3,
-    UVec3,
-    Vec3,
-    BVec4,
-    IVec4,
-    UVec4,
-    Vec4,
-    Mat2,
-    Mat3,
-    Mat4,
-};
-
-struct ShaderVariantKey {
-    std::uint64_t keywordBits{};
-    std::uint32_t meshFeatureBits{};
-    std::uint32_t platformFeatureBits{};
-
-    bool operator==(const ShaderVariantKey&) const = default;
-};
-
-class ShaderKeywordSchema final {
-public:
-    ShaderKeywordSchema() = default;
-    explicit ShaderKeywordSchema(std::vector<std::string> keywords);
-
-    [[nodiscard]] const std::vector<std::string>& keywords() const { return keywords_; }
-    [[nodiscard]] bool declares(std::string_view keyword) const;
-    [[nodiscard]] ShaderVariantKey makeKey(std::span<const std::string> enabledKeywords,
-                                           std::uint32_t meshFeatureBits = 0,
-                                           std::uint32_t platformFeatureBits = 0) const;
-
-private:
-    std::vector<std::string> keywords_;
-};
-
-using ShaderValue = std::variant<float, bool, math::Vec2, math::Vec3, math::Vec4, std::string, math::Mat44>;
-
-struct ShaderPropertyDesc : public Transferable {
-    std::string name;
-    std::string displayName;
-    ShaderPropertyType type{ShaderPropertyType::Float};
-    ShaderValue defaultValue{0.0F};
-    std::optional<math::Vec2> range;
-    std::vector<std::string> attributes;
-
-    [[nodiscard]] bool transfer(Transfer& archive) override;
-};
-
-struct RenderStateDesc : public Transferable {
-    CullMode cull{CullMode::Back};
-    FrontFace frontFace{FrontFace::Clockwise};
-    FillMode fill{FillMode::Solid};
-    PrimitiveTopology topology{PrimitiveTopology::TriangleList};
-    bool depthWrite{true};
-    DepthCompare depthTest{DepthCompare::LessEqual};
-    BlendMode blend{BlendMode::Off};
-    std::string colorMask{"RGBA"};
-
-    [[nodiscard]] bool transfer(Transfer& archive) override;
-};
-
-struct ShaderInterfaceVariable : public Transferable {
-    std::string name;
-    std::string semantic;
-    ShaderValueType type{ShaderValueType::Float};
-    std::uint32_t location{};
-    ShaderInterpolation interpolation{ShaderInterpolation::Smooth};
-
-    [[nodiscard]] bool transfer(Transfer& archive) override;
-};
-
-struct ShaderProgramDesc {
-    VirtualPath vertexSource;
-    VirtualPath fragmentSource;
-
-    [[nodiscard]] bool hasSourceProgram() const {
-        return !vertexSource.empty() && !fragmentSource.empty();
-    }
-};
-
-struct ShaderPassDesc {
-    std::string name;
-    ShaderPassType type{ShaderPassType::Forward};
-    ShaderProgramDesc program;
-    std::vector<ShaderInterfaceVariable> vertexInput;
-    std::vector<ShaderInterfaceVariable> varyings;
-    std::vector<ShaderInterfaceVariable> fragmentOutputs;
-    std::vector<std::string> features;
-};
-
-struct ShaderPassAsset : public Transferable {
-    ShaderPassDesc pass;
-    RenderStateDesc renderState;
-
-    [[nodiscard]] bool transfer(Transfer& archive) override;
-};
-
-struct SubShaderDesc : public Transferable {
-    std::string renderPipeline{"MiniForward"};
-    int renderQueue{2000};
-    std::vector<ShaderPassAsset> passes;
-
-    [[nodiscard]] const ShaderPassDesc& requirePass(ShaderPassType type) const;
-    [[nodiscard]] bool transfer(Transfer& archive) override;
-};
-
-struct UniformMemberLayout {
-    std::string name;
-    ShaderPropertyType type{ShaderPropertyType::Float};
-    std::uint32_t offset{};
-    std::uint32_t size{};
-    std::uint32_t alignment{};
-};
-
-struct UniformBlockLayout {
-    std::uint32_t byteSize{};
-    std::vector<UniformMemberLayout> members;
-
-    [[nodiscard]] const UniformMemberLayout* findMember(std::string_view name) const;
-    [[nodiscard]] const UniformMemberLayout& requireMember(std::string_view name) const;
-};
-
-[[nodiscard]] bool isUniformProperty(ShaderPropertyType type);
-[[nodiscard]] UniformBlockLayout
-buildUniformBlockLayout(std::span<const ShaderPropertyDesc> properties);
-
-enum class ShaderStage { Vertex, Fragment };
-enum class ShaderDescriptorType {
-    UniformBuffer,
-    StorageBuffer,
-    Sampler,
-    SampledImage,
-    CombinedImageSampler,
-    Unknown,
-};
-
-struct ShaderStageVariable {
-    std::string name;
-    ShaderValueType type{ShaderValueType::Float};
-    std::uint32_t location{};
-};
-
-struct ShaderUniformMember {
-    std::string name;
-    UboUniformType type{UboUniformType::Float};
-    std::uint32_t offset{};
-    std::uint32_t size{};
-};
-
-struct ShaderDescriptorBinding {
-    std::string name;
-    ShaderDescriptorType type{ShaderDescriptorType::Unknown};
-    std::uint32_t set{};
-    std::uint32_t binding{};
-    std::vector<ShaderUniformMember> members;
-};
-
-struct SpirvReflection {
-    ShaderStage stage{ShaderStage::Vertex};
-    std::vector<ShaderStageVariable> inputs;
-    std::vector<ShaderStageVariable> outputs;
-    std::vector<ShaderDescriptorBinding> descriptors;
-};
-
 class ShaderPass final {
 public:
-    ShaderPass(const ShaderPassDesc& desc, const RenderStateDesc& renderState);
+    explicit ShaderPass(const ShaderPassCreateInfo& desc);
 
     [[nodiscard]] ShaderPassType type() const { return type_; }
     [[nodiscard]] const std::string& name() const { return name_; }
-    [[nodiscard]] const ShaderProgramDesc& program() const { return program_; }
     [[nodiscard]] const std::vector<ShaderInterfaceVariable>& vertexInput() const {
         return vertexInput_;
     }
@@ -227,28 +22,27 @@ public:
     [[nodiscard]] const std::vector<ShaderInterfaceVariable>& fragmentOutputs() const {
         return fragmentOutputs_;
     }
-    [[nodiscard]] const RenderStateDesc& renderState() const { return renderState_; }
-    [[nodiscard]] const std::vector<std::string>& features() const { return features_; }
-    [[nodiscard]] const ShaderKeywordSchema& keywordSchema() const { return keywordSchema_; }
-    [[nodiscard]] ShaderVariantKey variantKey(std::span<const std::string> materialKeywords,
-                                              std::uint32_t meshFeatureBits = 0,
-                                              std::uint32_t platformFeatureBits = 0) const;
+    [[nodiscard]] const RenderState& renderState() const { return renderState_; }
+    [[nodiscard]] const ShaderKeywordSchema& keyword() const { return keyword_; }
+    [[nodiscard]] Ref<ShaderProgram> findProgram(std::uint64_t key) const;
+    [[nodiscard]] std::size_t programCount() const { return programs_.size(); }
 
 private:
     std::string name_;
     ShaderPassType type_{ShaderPassType::Forward};
-    ShaderProgramDesc program_;
     std::vector<ShaderInterfaceVariable> vertexInput_;
     std::vector<ShaderInterfaceVariable> varyings_;
     std::vector<ShaderInterfaceVariable> fragmentOutputs_;
-    RenderStateDesc renderState_;
-    std::vector<std::string> features_;
-    ShaderKeywordSchema keywordSchema_;
+    RenderState renderState_;
+    ShaderKeywordSchema keyword_;
+    mutable std::unordered_map<std::uint64_t, Ref<ShaderProgram>> programs_;
+    friend class Shader;
+    friend class GraphicsPipelineStorage;
 };
 
 class SubShader final {
 public:
-    explicit SubShader(const SubShaderDesc& desc);
+    explicit SubShader(const SubShaderCreateInfo& desc);
 
     [[nodiscard]] const std::string& renderPipeline() const { return renderPipeline_; }
     [[nodiscard]] int renderQueue() const { return renderQueue_; }
@@ -265,17 +59,16 @@ private:
 
 class Shader final : public RefCounted {
 public:
-    explicit Shader(const ShaderAsset& asset);
+    explicit Shader(ShaderCreateInfo info);
     ~Shader() override;
     Shader(const Shader&) = delete;
     Shader& operator=(const Shader&) = delete;
     Shader(Shader&&) = delete;
     Shader& operator=(Shader&&) = delete;
 
-    [[nodiscard]] const VirtualPath& assetPath() const;
     [[nodiscard]] const std::string& name() const { return name_; }
-    [[nodiscard]] const std::vector<ShaderPropertyDesc>& properties() const { return properties_; }
-    [[nodiscard]] const std::vector<ShaderPropertyDesc>& globalProperties() const {
+    [[nodiscard]] const std::vector<ShaderPropertyInfo>& properties() const { return properties_; }
+    [[nodiscard]] const std::vector<ShaderPropertyInfo>& globalProperties() const {
         return globalProperties_;
     }
     [[nodiscard]] const UniformBlockLayout& uniformBlockLayout() const {
@@ -290,11 +83,13 @@ public:
     [[nodiscard]] const SubShader& defaultSubShader() const;
     [[nodiscard]] bool declaresKeyword(std::string_view keyword) const;
     [[nodiscard]] std::uint64_t revision() const { return revision_; }
+    // Compilation input belongs to Shader, never to ShaderPass.
+    [[nodiscard]] const ShaderProgramDesc& programSource(const ShaderPass& pass) const;
 
-    [[nodiscard]] AssetId assetId() const;
-    [[nodiscard]] bool isAssetBacked() const { return asset_ != nullptr; }
     [[nodiscard]] Ref<Shader> clone() const;
-    void rebuildFromAsset(const ShaderAsset& asset);
+    [[nodiscard]] bool rebuild(ShaderCreateInfo info);
+    [[nodiscard]] ShaderCompileKey compileKey() const { return compileKey_; }
+    [[nodiscard]] std::uint64_t instanceId() const { return instanceId_; }
 
     // Unity-style global shader property API. Values set here are shared across
     // all shaders that declare a matching global property.
@@ -307,26 +102,21 @@ public:
     static void setGlobalTexture(std::string_view name, std::string_view texturePath);
 
 private:
-    friend class ShaderAsset;
-    Shader() = default;
-    /// 建立与 asset 的活链接（仅 instantiate 唯一实例调用）。asset 为非拥有裸指针：
-    /// ShaderAsset 由 AssetManager 强缓存常驻，实例不延长其生命周期。
-    void bindAsset(ShaderAsset* asset) { asset_ = asset; }
+    [[nodiscard]] ShaderCreateInfo snapshot() const;
+    static void clearProgramCaches();
+    friend class GraphicsPipelineStorage;
 
     std::string name_;
-    std::vector<ShaderPropertyDesc> properties_;
-    std::vector<ShaderPropertyDesc> globalProperties_;
+    std::vector<ShaderPropertyInfo> properties_;
+    std::vector<ShaderPropertyInfo> globalProperties_;
     UniformBlockLayout uniformBlockLayout_;
     UniformBlockLayout globalUniformBlockLayout_;
     std::vector<SubShader> subShaders_;
+    std::vector<std::vector<ShaderProgramDesc>> programSources_;
     std::uint64_t revision_{1};
 
-    ShaderAsset* asset_{}; // 非拥有活链接（asset 由 AssetManager 常驻）；仅 instantiate 实例设置
+    ShaderCompileKey compileKey_{};
+    std::uint64_t instanceId_{};
 };
-
-/// 解析 shader 引用为运行时 Shader：空→{}；`assets://` 或裸路径→经 AssetManager 加载
-/// `ShaderAsset` 并 `instantiate`（按 asset 天然去重，每 asset 唯一实例）；失败→{}（调用方回退
-/// Error Material）。取代已删除的 `ShaderResourceManager::load`。
-[[nodiscard]] Ref<Shader> resolveShaderReference(std::string_view reference);
 
 } // namespace engine

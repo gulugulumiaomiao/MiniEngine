@@ -18,7 +18,8 @@ constexpr const char* kCategory = "MaterialAsset";
 
 using OrderedJson = nlohmann::ordered_json;
 
-ShaderValue parseMaterialValue(const Json& value, const VirtualPath& file, const std::string& path) {
+ShaderAssetValue
+parseMaterialValue(const Json& value, const VirtualPath& file, const std::string& path) {
     try {
         if (value.is_number()) {
             return value.get<float>();
@@ -43,17 +44,17 @@ ShaderValue parseMaterialValue(const Json& value, const VirtualPath& file, const
     fail(kCategory, file, path, "unsupported material property value");
 }
 
-bool valueMatchesProperty(const ShaderValue& value, ShaderPropertyType type) {
+bool valueMatchesProperty(const ShaderAssetValue& value, ShaderAssetPropertyType type) {
     switch (type) {
-    case ShaderPropertyType::Float:
-    case ShaderPropertyType::Range: return std::holds_alternative<float>(value);
-    case ShaderPropertyType::Boolean: return std::holds_alternative<bool>(value);
-    case ShaderPropertyType::Vec2: return std::holds_alternative<math::Vec2>(value);
-    case ShaderPropertyType::Vec3: return std::holds_alternative<math::Vec3>(value);
-    case ShaderPropertyType::Vec4:
-    case ShaderPropertyType::Color: return std::holds_alternative<math::Vec4>(value);
-    case ShaderPropertyType::Matrix: return std::holds_alternative<math::Mat44>(value);
-    case ShaderPropertyType::Texture2D: return std::holds_alternative<std::string>(value);
+    case ShaderAssetPropertyType::Float:
+    case ShaderAssetPropertyType::Range: return std::holds_alternative<float>(value);
+    case ShaderAssetPropertyType::Boolean: return std::holds_alternative<bool>(value);
+    case ShaderAssetPropertyType::Vec2: return std::holds_alternative<math::Vec2>(value);
+    case ShaderAssetPropertyType::Vec3: return std::holds_alternative<math::Vec3>(value);
+    case ShaderAssetPropertyType::Vec4:
+    case ShaderAssetPropertyType::Color: return std::holds_alternative<math::Vec4>(value);
+    case ShaderAssetPropertyType::Matrix: return std::holds_alternative<math::Mat44>(value);
+    case ShaderAssetPropertyType::Texture2D: return std::holds_alternative<std::string>(value);
     }
     return false;
 }
@@ -111,7 +112,7 @@ Ref<MaterialAsset> parseMaterialAssetValue(const VirtualPath& path,
     }
     const Json values = root.value("properties", Json::object());
     for (const auto& [name, value] : values.items()) {
-        ShaderValue parsed = parseMaterialValue(value, path, "$.properties." + name);
+        ShaderAssetValue parsed = parseMaterialValue(value, path, "$.properties." + name);
         if (std::string* textureReference = std::get_if<std::string>(&parsed)) {
             const AssetReference textureRef{*textureReference};
             if (textureRef.isGuid()) {
@@ -177,23 +178,24 @@ bool validateMaterialAsset(const MaterialAsset& material,
                    message.c_str());
     };
     std::set<std::string> declaredKeywords;
-    for (const SubShaderDesc& subShader : shader.subShaders) {
-        for (const ShaderPassAsset& passAsset : subShader.passes) {
-            const ShaderPassDesc& pass = passAsset.pass;
+    for (const SubShaderAssetData& subShader : shader.data.subShaders) {
+        for (const ShaderPassAssetData& passAsset : subShader.passes) {
+            const ShaderPassAssetDesc& pass = passAsset.pass;
             declaredKeywords.insert(pass.features.begin(), pass.features.end());
         }
     }
     for (const std::string& keyword : material.keywords) {
         if (!declaredKeywords.contains(keyword)) {
             report("$.keywords",
-                   "keyword '" + keyword + "' is not declared by shader '" + shader.name + "'");
+                   "keyword '" + keyword + "' is not declared by shader '" + shader.data.name +
+                       "'");
         }
     }
     for (const auto& [name, value] : material.properties) {
-        const ShaderPropertyDesc* property = shader.findProperty(name);
+        const ShaderPropertyAssetData* property = shader.findProperty(name);
         if (!property) {
             report("$.properties." + name,
-                   "property is not declared by shader '" + shader.name + "'");
+                   "property is not declared by shader '" + shader.data.name + "'");
             continue;
         }
         if (!valueMatchesProperty(value, property->type)) {
@@ -213,7 +215,8 @@ namespace {
     return path.string();
 }
 
-[[nodiscard]] OrderedJson encodeShaderValue(const ShaderValue& value, const GuidResolver& resolver) {
+[[nodiscard]] OrderedJson encodeShaderValue(const ShaderAssetValue& value,
+                                            const GuidResolver& resolver) {
     // 注意：nlohmann 的花括号构造（Json{scalar}）会被解释为数组；标量必须用圆括号
     // 构造或赋值。
     if (const float* scalar = std::get_if<float>(&value))
@@ -249,7 +252,7 @@ std::string writeMaterialAssetJson(const MaterialAsset& material, const GuidReso
     }
     if (!material.properties.empty()) {
         // unordered_map 遍历序不稳定；按属性名排序保证等值资产序列化为等值字节。
-        std::vector<const std::pair<const std::string, ShaderValue>*> entries;
+        std::vector<const std::pair<const std::string, ShaderAssetValue>*> entries;
         entries.reserve(material.properties.size());
         for (const auto& entry : material.properties)
             entries.push_back(&entry);

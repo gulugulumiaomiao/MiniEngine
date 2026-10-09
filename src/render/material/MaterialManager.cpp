@@ -1,3 +1,4 @@
+#include "asset/runtime/ShaderAssetResolver.h"
 #include "render/material/MaterialManager.h"
 
 #include "asset/types/MaterialAsset.h"
@@ -143,9 +144,9 @@ void MaterialResourceManager::setShader(const Ref<Material>& material,
     material->setShader(std::move(shader));
 }
 
-void MaterialResourceManager::refreshShader(const AssetId& shaderAssetId) {
-    resources_.forEach([&shaderAssetId](Material* material) {
-        if (material && material->shaderRef() && material->shader().assetId() == shaderAssetId)
+void MaterialResourceManager::refreshShader(const Ref<Shader>& shader) {
+    resources_.forEach([&shader](Material* material) {
+        if (material && material->shaderRef() && material->shaderRef() == shader)
             material->setShader(material->shaderRef());
     });
 }

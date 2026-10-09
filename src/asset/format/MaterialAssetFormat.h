@@ -1,5 +1,7 @@
 #pragma once
 
+#include "asset/types/ShaderAsset.h"
+
 // .material.json source format: parse a material document into a MaterialAsset
 // and validate it against the shader it references. Importers and exporters
 // share this unit; the runtime Material classes no longer carry source-file

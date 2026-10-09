@@ -2,9 +2,9 @@
 
 #include "core/base/Ref.h"
 #include "core/base/RefCounted.h"
-#include "render/shader/ShaderCompilePipeline.h" // CompiledShader, ShaderProgramId
+#include "render/shader/ShaderTypes.h"
 #include "render/uniform/PipelineLayout.h"
-#include "render/uniform/Ubo.h"                  // UboLayout
+#include "render/uniform/Ubo.h" // UboLayout
 #include "render/uniform/UniformSetLayout.h"
 #include "rhi/api/ResourceDesc.h" // rhi::RID
 
@@ -13,6 +13,8 @@
 #include <vector>
 
 namespace engine {
+
+struct CompiledShader;
 
 namespace rhi {
 class IDevice;
@@ -32,9 +34,8 @@ public:
     // Builds the program from the two compiled stages: creates the vs/fs shader modules, merges
     // their reflected descriptors per set into deduped UniformSetLayouts + UboLayouts, and acquires
     // the shared PipelineLayout.
-    [[nodiscard]] static Ref<ShaderProgram> create(const CompiledShader& vertex,
-                                                   const CompiledShader& fragment,
-                                                   ShaderProgramId id);
+    [[nodiscard]] static Ref<ShaderProgram>
+    create(const CompiledShader& vertex, const CompiledShader& fragment, ShaderProgramId id);
     ~ShaderProgram() override;
     ShaderProgram(const ShaderProgram&) = delete;
     ShaderProgram& operator=(const ShaderProgram&) = delete;
@@ -55,8 +56,8 @@ public:
     [[nodiscard]] const Ref<UniformSetLayout>& setLayout(std::uint32_t set) const {
         return pipelineLayout_->setLayouts()[set];
     }
-    // UboLayouts for a set's uniform-buffer bindings, in ascending binding order (empty when the set
-    // has no UBO). Consumers pass these to UniformSet to instantiate the block buffers.
+    // UboLayouts for a set's uniform-buffer bindings, in ascending binding order (empty when the
+    // set has no UBO). Consumers pass these to UniformSet to instantiate the block buffers.
     [[nodiscard]] const std::vector<Ref<UboLayout>>& uboLayouts(std::uint32_t set) const {
         return setUboLayouts_[set];
     }
@@ -71,7 +72,8 @@ private:
     std::string vertexEntry_;
     std::string fragmentEntry_;
     Ref<PipelineLayout> pipelineLayout_;
-    std::vector<std::vector<Ref<UboLayout>>> setUboLayouts_; // per set: UBO block layouts, binding order
+    std::vector<std::vector<Ref<UboLayout>>>
+        setUboLayouts_; // per set: UBO block layouts, binding order
 };
 
 } // namespace engine

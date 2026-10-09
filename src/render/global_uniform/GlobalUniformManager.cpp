@@ -12,13 +12,11 @@ namespace {
 
 const char* glslTypeName(ShaderPropertyType type) {
     switch (type) {
-    case ShaderPropertyType::Float:
-    case ShaderPropertyType::Range: return "float";
+    case ShaderPropertyType::Float: return "float";
     case ShaderPropertyType::Boolean: return "bool";
     case ShaderPropertyType::Vec2: return "vec2";
     case ShaderPropertyType::Vec3: return "vec3";
-    case ShaderPropertyType::Vec4:
-    case ShaderPropertyType::Color: return "vec4";
+    case ShaderPropertyType::Vec4: return "vec4";
     case ShaderPropertyType::Matrix: return "mat4";
     case ShaderPropertyType::Texture2D: return "sampler2D";
     }
@@ -26,17 +24,7 @@ const char* glslTypeName(ShaderPropertyType type) {
 }
 
 bool compatibleGlobalTypes(ShaderPropertyType left, ShaderPropertyType right) {
-    if (left == right)
-        return true;
-    if ((left == ShaderPropertyType::Float || left == ShaderPropertyType::Range) &&
-        (right == ShaderPropertyType::Float || right == ShaderPropertyType::Range))
-        return true;
-    if ((left == ShaderPropertyType::Vec4 || left == ShaderPropertyType::Color) &&
-        (right == ShaderPropertyType::Vec4 || right == ShaderPropertyType::Color))
-        return true;
-    if (left == ShaderPropertyType::Matrix && right == ShaderPropertyType::Matrix)
-        return true;
-    return false;
+    return left == right;
 }
 
 template <typename T>
@@ -49,9 +37,10 @@ void writeValueBytes(std::vector<std::byte>& data, const UniformMemberLayout& me
 GlobalUniformManager::GlobalUniformManager() = default;
 GlobalUniformManager::~GlobalUniformManager() = default;
 
-void GlobalUniformManager::registerGlobalProperties(std::span<const ShaderPropertyDesc> properties) {
+void GlobalUniformManager::registerGlobalProperties(
+    std::span<const ShaderPropertyInfo> properties) {
     bool changed = false;
-    for (const ShaderPropertyDesc& property : properties) {
+    for (const ShaderPropertyInfo& property : properties) {
         const auto existing = globals_.find(property.name);
         if (existing == globals_.end()) {
             globals_.emplace(property.name, KnownGlobal{property.type, property.defaultValue});
@@ -123,11 +112,11 @@ void GlobalUniformManager::setVector(std::string_view name, const math::Vec4& va
 void GlobalUniformManager::setColor(std::string_view name, const math::Vec4& value) {
     const auto found = globals_.find(std::string{name});
     if (found == globals_.end()) {
-        globals_.emplace(std::string{name}, KnownGlobal{ShaderPropertyType::Color, value});
+        globals_.emplace(std::string{name}, KnownGlobal{ShaderPropertyType::Vec4, value});
         rebuild();
         return;
     }
-    if (!compatibleGlobalTypes(found->second.type, ShaderPropertyType::Color)) {
+    if (!compatibleGlobalTypes(found->second.type, ShaderPropertyType::Vec4)) {
         Log::error("GlobalUniform",
                    "Cannot set color on global property '%.*s' of type %s",
                    static_cast<int>(name.size()),
@@ -208,12 +197,11 @@ const std::string* GlobalUniformManager::findTexture(std::string_view name) cons
 void GlobalUniformManager::rebuild() {
     // Numeric globals share one std140 block; sort by name so the layout is stable
     // regardless of shader registration order.
-    std::vector<ShaderPropertyDesc> numeric;
+    std::vector<ShaderPropertyInfo> numeric;
     textureProperties_.clear();
     for (const auto& [name, global] : globals_) {
-        ShaderPropertyDesc desc;
+        ShaderPropertyInfo desc;
         desc.name = name;
-        desc.displayName = name;
         desc.type = global.type;
         desc.defaultValue = global.value;
         if (global.type == ShaderPropertyType::Texture2D) {
@@ -222,11 +210,11 @@ void GlobalUniformManager::rebuild() {
             numeric.push_back(std::move(desc));
         }
     }
-    std::ranges::sort(numeric, [](const ShaderPropertyDesc& left, const ShaderPropertyDesc& right) {
+    std::ranges::sort(numeric, [](const ShaderPropertyInfo& left, const ShaderPropertyInfo& right) {
         return left.name < right.name;
     });
     std::ranges::sort(textureProperties_,
-                      [](const ShaderPropertyDesc& left, const ShaderPropertyDesc& right) {
+                      [](const ShaderPropertyInfo& left, const ShaderPropertyInfo& right) {
                           return left.name < right.name;
                       });
 
@@ -242,8 +230,7 @@ void GlobalUniformManager::rebuildBuffer() {
             continue;
         const KnownGlobal& global = found->second;
         switch (member.type) {
-        case ShaderPropertyType::Float:
-        case ShaderPropertyType::Range: {
+        case ShaderPropertyType::Float: {
             if (const float* value = std::get_if<float>(&global.value))
                 writeValueBytes(uniformData_, member, *value);
             break;
@@ -265,8 +252,7 @@ void GlobalUniformManager::rebuildBuffer() {
                 writeValueBytes(uniformData_, member, *value);
             break;
         }
-        case ShaderPropertyType::Vec4:
-        case ShaderPropertyType::Color: {
+        case ShaderPropertyType::Vec4: {
             if (const math::Vec4* value = std::get_if<math::Vec4>(&global.value))
                 writeValueBytes(uniformData_, member, *value);
             break;

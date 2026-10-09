@@ -3,9 +3,9 @@
 #include "core/base/Ref.h"
 #include "core/base/RefCounted.h"
 #include "core/math/hash.h"
-#include "render/shader/Shader.h"         // ShaderValue, UboUniformType
+#include "render/shader/ShaderTypes.h" // ShaderValue, UboUniformType
 #include "render/uniform/UniformResource.h"
-#include "rhi/api/ResourceDesc.h"         // rhi::RID, BufferDesc, ResourceType
+#include "rhi/api/ResourceDesc.h" // rhi::RID, BufferDesc, ResourceType
 
 #include <cstddef>
 #include <cstdint>
@@ -52,8 +52,8 @@ private:
 };
 
 // A concrete uniform-buffer instance: a CPU staging buffer laid out per its UboLayout plus the GPU
-// buffer RID it uploads into. setUniform() writes the CPU buffer and marks dirty; upload() pushes it
-// to the GPU when dirty. It is also a UniformResource (bindingType == UniformBuffer) so it can
+// buffer RID it uploads into. setUniform() writes the CPU buffer and marks dirty; upload() pushes
+// it to the GPU when dirty. It is also a UniformResource (bindingType == UniformBuffer) so it can
 // occupy a descriptor-set binding slot.
 //
 // Two-phase construction mirrors the device buffer lifecycle: the constructor reserves the buffer
@@ -80,9 +80,9 @@ public:
     // unknown, the buffer is not created yet, or the value's variant does not match the member's
     // UboUniformType; marks dirty on success.
     bool setUniform(std::string_view name, const ShaderValue& value);
-    // Bulk-writes a pre-packed std140 blob (e.g. SceneDrawData / a material's uniformBytes) into the
-    // CPU buffer, truncating to the buffer size; marks dirty. For blocks whose payload the owner
-    // already lays out to match the reflected UboLayout byte-for-byte.
+    // Bulk-writes a pre-packed std140 blob (e.g. SceneDrawData / a material's uniformBytes) into
+    // the CPU buffer, truncating to the buffer size; marks dirty. For blocks whose payload the
+    // owner already lays out to match the reflected UboLayout byte-for-byte.
     void setRawBytes(std::span<const std::byte> data);
     // Pushes the CPU buffer to the GPU when dirty (and created); clears the dirty flag.
     void upload();

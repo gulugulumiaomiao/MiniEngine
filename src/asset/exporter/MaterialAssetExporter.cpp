@@ -1,3 +1,4 @@
+#include "asset/runtime/ShaderAssetResolver.h"
 #include "asset/exporter/MaterialAssetExporter.h"
 #include "asset/types/MaterialAsset.h"
 
@@ -30,7 +31,8 @@ std::unique_ptr<MaterialAsset> exportMaterialToAsset(const Material& material,
                                                      const VirtualPath& targetPath,
                                                      std::string& error) {
     const Shader* shader = material.shaderRef().get();
-    if (!shader || !shader->assetPath().valid()) {
+    const auto shaderPath = shader ? shaderAssetPath(*shader) : VirtualPath{};
+    if (!shaderPath.valid()) {
         error = "Material '" + material.name + "' has no resolvable Shader";
         return nullptr;
     }
@@ -38,13 +40,12 @@ std::unique_ptr<MaterialAsset> exportMaterialToAsset(const Material& material,
     auto asset = std::make_unique<MaterialAsset>();
     asset->setAssetPath(targetPath);
     asset->name = material.name;
-    asset->shader = shader->assetPath();
+    asset->shader = shaderPath;
     asset->keywords = material.keywords;
     asset->renderQueue = material.renderQueueOverride();
-    for (const ShaderPropertyDesc& property : shader->properties()) {
+    for (const ShaderPropertyInfo& property : shader->properties()) {
         switch (property.type) {
         case ShaderPropertyType::Float:
-        case ShaderPropertyType::Range:
             asset->properties.emplace(property.name, material.getFloat(property.name));
             break;
         case ShaderPropertyType::Boolean:
@@ -57,7 +58,6 @@ std::unique_ptr<MaterialAsset> exportMaterialToAsset(const Material& material,
             asset->properties.emplace(property.name, material.getVec3(property.name));
             break;
         case ShaderPropertyType::Vec4:
-        case ShaderPropertyType::Color:
             asset->properties.emplace(property.name, material.getVec4(property.name));
             break;
         case ShaderPropertyType::Texture2D: {

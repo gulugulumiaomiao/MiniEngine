@@ -1,4 +1,4 @@
-﻿#include "asset/manager/AssetManager.h"
+#include "asset/manager/AssetManager.h"
 #include "core/filesystem/FileSystem.h"
 #include "core/logging/Log.h"
 #include "asset/types/ShaderAsset.h"
@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
         !FILE_SYSTEM.mountDirectory("shader-bin", output / "compiled", false))
         return 1;
 
-    const engine::Shader shader{*shaderAsset};
+    const engine::Shader shader{*shaderAsset->buildRuntimeInfo()};
     const engine::ShaderPass* pass = nullptr;
     for (const engine::SubShader& subShader : shader.subShaders()) {
         for (const engine::ShaderPass& candidate : subShader.passes()) {
@@ -81,7 +81,8 @@ int main(int argc, char** argv) {
 
     engine::ShaderCompilePipelineConfig config;
     config.mode = engine::ShaderCompileMode::OfflineTool;
-    config.preprocessorConfig.includeSearchPaths = {engine::VirtualPath{"assets://shaders/include"}};
+    config.preprocessorConfig.includeSearchPaths = {
+        engine::VirtualPath{"assets://shaders/include"}};
     config.compilerOptions.compilerVersion = MINI_GLSLC_EXECUTABLE;
 #if defined(MINI_SHADER_RELEASE)
     config.compilerOptions.optimization = engine::ShaderOptimization::Release;
@@ -93,7 +94,7 @@ int main(int argc, char** argv) {
         keywords.emplace_back(argv[index]);
     }
     engine::ShaderCompilePipeline pipeline{std::move(config)};
-    if (!pipeline.getOrCreate(shader, *pass, pass->variantKey(keywords)))
+    if (!pipeline.getOrCreate(shader, *pass, pass->keyword().makeKey(keywords)))
         return 1;
     engine::Log::info("MiniShaderCompiler",
                       "Compiled packaged Shader: %s/%s",

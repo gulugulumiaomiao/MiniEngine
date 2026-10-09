@@ -1,6 +1,7 @@
 #pragma once
 
 #include "asset/base/Asset.h"
+#include "asset/types/ShaderAsset.h"
 #include "core/base/Ref.h"
 #include "core/base/Singleton.h"
 #include "core/filesystem/VirtualPath.h"
@@ -32,6 +33,8 @@ public:
     [[nodiscard]] Ref<AssetTypeT> loadAsset(const VirtualPath& path) {
         return refDynamicCast<AssetTypeT>(loadAsset(path));
     }
+
+    [[nodiscard]] Ref<ShaderAsset> findShaderAsset(const Shader& shader) const;
 
     void invalidate(const VirtualPath& path);
     /// 就地重传缓存中的资产（不丢弃、不新建对象）：用于纹理热重载把新内容推送给唯一运行时

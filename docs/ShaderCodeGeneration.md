@@ -165,7 +165,7 @@ void FragmentMain(MiniVaryings inValue, out MiniFragmentOutput outValue)
 
 ## 当前边界与下一步
 
-当前已经完成 `.vert/.frag` → 生成阶段 GLSL → `glslc` → SPIR-V → SPIRV-Cross Reflection → 运行时 ShaderProgram 的完整构建链。运行时二进制路径由处理后源码哈希生成，不再保存在 `ShaderPassDesc` 中。
+当前已经完成 `.vert/.frag` → 生成阶段 GLSL → `glslc` → SPIR-V → SPIRV-Cross Reflection → 运行时 ShaderProgram 的完整构建链。运行时二进制路径由处理后源码哈希生成，不再保存在 `ShaderPassCreateInfo` 中。
 
 ## 统一预处理流程
 

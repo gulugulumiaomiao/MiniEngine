@@ -57,9 +57,11 @@ bool GraphicsPipelineStorage::initialize() {
 
 Ref<ShaderProgram> GraphicsPipelineStorage::getOrCreateProgram(const Shader& shader,
                                                                const ShaderPass& pass,
-                                                               const ShaderVariantKey& variant) {
+                                                               std::uint64_t variant) {
     if (!initialized())
         return {};
+    if (const auto program = pass.findProgram(variant))
+        return program;
     const RID programHandle = compilePipeline_->getOrCreate(shader, pass, variant);
     if (!programHandle) {
         Log::error("GraphicsPipelineStorage",
@@ -68,14 +70,13 @@ Ref<ShaderProgram> GraphicsPipelineStorage::getOrCreateProgram(const Shader& sha
         return {};
     }
     const CompiledProgram& compiled = compilePipeline_->resolveProgram(programHandle);
-    if (const auto found = programs_.find(compiled.id); found != programs_.end())
-        return found->second;
     const CompiledShader& vertex = compilePipeline_->resolveCompiled(compiled.vertex);
     const CompiledShader& fragment = compilePipeline_->resolveCompiled(compiled.fragment);
     Ref<ShaderProgram> program = ShaderProgram::create(vertex, fragment, compiled.id);
     if (!program)
         return {};
-    programs_.emplace(compiled.id, program);
+    pass.programs_.emplace(variant, program);
+    livePrograms_.push_back(program);
     return program;
 }
 
@@ -133,8 +134,8 @@ rhi::RID GraphicsPipelineStorage::resolve(const ShaderProgram& program,
         return cached->pipeline;
 
     GraphicsPipelineStorageEntry created;
-    if (!factory_->create(
-            makeDescription(mesh.vertexLayout(), colorFormat, depthFormat, program), created)) {
+    if (!factory_->create(makeDescription(mesh.vertexLayout(), colorFormat, depthFormat, program),
+                          created)) {
         return {};
     }
     created.program = program.id();
@@ -144,21 +145,31 @@ rhi::RID GraphicsPipelineStorage::resolve(const ShaderProgram& program,
     return stored.stored->pipeline;
 }
 
+void GraphicsPipelineStorage::invalidateShader(const Shader& shader) {
+    if (initialized())
+        pendingShaderInvalidations_.push_back(shader.instanceId());
+}
+
 void GraphicsPipelineStorage::refreshShaders(std::uint64_t frameSerial,
                                              std::uint64_t retireSerial) {
     if (!initialized() || lastShaderPollSerial_ == frameSerial)
         return;
     lastShaderPollSerial_ = frameSerial;
     const std::vector<CompiledShaderId> changed = compilePipeline_->invalidateChanged();
-    if (changed.empty())
+    const bool definitionsChanged = !pendingShaderInvalidations_.empty();
+    for (const auto id : pendingShaderInvalidations_)
+        (void)compilePipeline_->invalidateShader(id);
+    pendingShaderInvalidations_.clear();
+    if (changed.empty() && !definitionsChanged)
         return;
     // Coarse invalidation: any shader change retires every pipeline and program; they are rebuilt
     // on demand. Fine-grained matching is unnecessary because reloads are rare.
     for (auto& entry : cache_.extractAll())
         retired_.push_back({std::move(entry.second), retireSerial});
-    for (auto& [id, program] : programs_)
+    Shader::clearProgramCaches();
+    for (auto& program : livePrograms_)
         retiredPrograms_.push_back({std::move(program), retireSerial});
-    programs_.clear();
+    livePrograms_.clear();
     Log::info("GraphicsPipelineStorage", "Reloaded %zu changed shader stages", changed.size());
 }
 
@@ -190,11 +201,13 @@ void GraphicsPipelineStorage::shutdown() {
     if (!initialized())
         return;
     clear();
+    Shader::clearProgramCaches();
     retiredPrograms_.clear();
-    programs_.clear();
+    livePrograms_.clear();
     factory_.reset();
     compilePipeline_->clear();
     compilePipeline_.reset();
+    pendingShaderInvalidations_.clear();
     lastShaderPollSerial_ = ~std::uint64_t{};
 }
 

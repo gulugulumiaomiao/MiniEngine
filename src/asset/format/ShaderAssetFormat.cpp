@@ -17,45 +17,46 @@ namespace {
 
 constexpr const char* kCategory = "ShaderAsset";
 
-ShaderPropertyType
+ShaderAssetPropertyType
 propertyType(const std::string& value, const VirtualPath& file, const std::string& path) {
-    return parseEnum<ShaderPropertyType>(kCategory,
-                                         value,
-                                         {{"Float", ShaderPropertyType::Float},
-                                          {"Range", ShaderPropertyType::Range},
-                                          {"Vec2", ShaderPropertyType::Vec2},
-                                          {"Vec3", ShaderPropertyType::Vec3},
-                                          {"Vec4", ShaderPropertyType::Vec4},
-                                          {"Vector", ShaderPropertyType::Vec4},
-                                          {"Color", ShaderPropertyType::Color},
-                                          {"Matrix", ShaderPropertyType::Matrix},
-                                          {"Texture2D", ShaderPropertyType::Texture2D},
-                                          {"Bool", ShaderPropertyType::Boolean}},
-                                         file,
-                                         path);
+    return parseEnum<ShaderAssetPropertyType>(kCategory,
+                                              value,
+                                              {{"Float", ShaderAssetPropertyType::Float},
+                                               {"Range", ShaderAssetPropertyType::Range},
+                                               {"Vec2", ShaderAssetPropertyType::Vec2},
+                                               {"Vec3", ShaderAssetPropertyType::Vec3},
+                                               {"Vec4", ShaderAssetPropertyType::Vec4},
+                                               {"Vector", ShaderAssetPropertyType::Vec4},
+                                               {"Color", ShaderAssetPropertyType::Color},
+                                               {"Matrix", ShaderAssetPropertyType::Matrix},
+                                               {"Texture2D", ShaderAssetPropertyType::Texture2D},
+                                               {"Bool", ShaderAssetPropertyType::Boolean}},
+                                              file,
+                                              path);
 }
 
-ShaderValueType
+ShaderAssetValueType
 interfaceValueType(const std::string& value, const VirtualPath& file, const std::string& path) {
-    return parseEnum<ShaderValueType>(kCategory,
-                                      value,
-                                      {{"Float", ShaderValueType::Float},
-                                       {"Vec2", ShaderValueType::Vec2},
-                                       {"Vec3", ShaderValueType::Vec3},
-                                       {"Vec4", ShaderValueType::Vec4}},
-                                      file,
-                                      path);
+    return parseEnum<ShaderAssetValueType>(kCategory,
+                                           value,
+                                           {{"Float", ShaderAssetValueType::Float},
+                                            {"Vec2", ShaderAssetValueType::Vec2},
+                                            {"Vec3", ShaderAssetValueType::Vec3},
+                                            {"Vec4", ShaderAssetValueType::Vec4}},
+                                           file,
+                                           path);
 }
 
-ShaderInterpolation
+ShaderAssetInterpolation
 interpolation(const std::string& value, const VirtualPath& file, const std::string& path) {
-    return parseEnum<ShaderInterpolation>(kCategory,
-                                          value,
-                                          {{"Smooth", ShaderInterpolation::Smooth},
-                                           {"Flat", ShaderInterpolation::Flat},
-                                           {"NoPerspective", ShaderInterpolation::NoPerspective}},
-                                          file,
-                                          path);
+    return parseEnum<ShaderAssetInterpolation>(
+        kCategory,
+        value,
+        {{"Smooth", ShaderAssetInterpolation::Smooth},
+         {"Flat", ShaderAssetInterpolation::Flat},
+         {"NoPerspective", ShaderAssetInterpolation::NoPerspective}},
+        file,
+        path);
 }
 
 bool validIdentifier(const std::string& value) {
@@ -71,12 +72,12 @@ bool validIdentifier(const std::string& value) {
            std::ranges::all_of(value, identifierCharacter);
 }
 
-std::vector<ShaderInterfaceVariable> parseInterfaceVariables(const Json& pass,
-                                                             const char* key,
-                                                             bool requireSemantic,
-                                                             bool allowInterpolation,
-                                                             const VirtualPath& file,
-                                                             const std::string& passPath) {
+std::vector<ShaderInterfaceAssetData> parseInterfaceVariables(const Json& pass,
+                                                              const char* key,
+                                                              bool requireSemantic,
+                                                              bool allowInterpolation,
+                                                              const VirtualPath& file,
+                                                              const std::string& passPath) {
     if (!pass.contains(key)) {
         return {};
     }
@@ -89,7 +90,7 @@ std::vector<ShaderInterfaceVariable> parseInterfaceVariables(const Json& pass,
     std::set<std::string> names;
     std::set<std::uint32_t> locations;
     std::set<std::string> semantics;
-    std::vector<ShaderInterfaceVariable> result;
+    std::vector<ShaderInterfaceAssetData> result;
     result.reserve(variables.size());
     for (std::size_t i = 0; i < variables.size(); ++i) {
         const Json& json = variables[i];
@@ -97,7 +98,7 @@ std::vector<ShaderInterfaceVariable> parseInterfaceVariables(const Json& pass,
         if (!json.is_object()) {
             fail(kCategory, file, at, "interface variable must be an object");
         }
-        ShaderInterfaceVariable variable;
+        ShaderInterfaceAssetData variable;
         variable.name = required<std::string>(kCategory, json, "name", file, at);
         if (!validIdentifier(variable.name)) {
             fail(kCategory, file, at + ".name", "must be a valid shader identifier");
@@ -149,20 +150,23 @@ std::vector<ShaderInterfaceVariable> parseInterfaceVariables(const Json& pass,
     return result;
 }
 
-ShaderValue parseValue(const Json& value,
-                       ShaderPropertyType type,
-                       const VirtualPath& file,
-                       const std::string& path) {
+ShaderAssetValue parseValue(const Json& value,
+                            ShaderAssetPropertyType type,
+                            const VirtualPath& file,
+                            const std::string& path) {
     try {
         switch (type) {
-        case ShaderPropertyType::Float:
-        case ShaderPropertyType::Range: return value.get<float>();
-        case ShaderPropertyType::Boolean: return value.get<bool>();
-        case ShaderPropertyType::Vec2: return vectorValue<2, math::Vec2>(kCategory, value, file, path);
-        case ShaderPropertyType::Vec3: return vectorValue<3, math::Vec3>(kCategory, value, file, path);
-        case ShaderPropertyType::Vec4:
-        case ShaderPropertyType::Color: return vectorValue<4, math::Vec4>(kCategory, value, file, path);
-        case ShaderPropertyType::Matrix: {
+        case ShaderAssetPropertyType::Float:
+        case ShaderAssetPropertyType::Range: return value.get<float>();
+        case ShaderAssetPropertyType::Boolean: return value.get<bool>();
+        case ShaderAssetPropertyType::Vec2:
+            return vectorValue<2, math::Vec2>(kCategory, value, file, path);
+        case ShaderAssetPropertyType::Vec3:
+            return vectorValue<3, math::Vec3>(kCategory, value, file, path);
+        case ShaderAssetPropertyType::Vec4:
+        case ShaderAssetPropertyType::Color:
+            return vectorValue<4, math::Vec4>(kCategory, value, file, path);
+        case ShaderAssetPropertyType::Matrix: {
             if (!value.is_array() || value.size() != 16) {
                 fail(kCategory, file, path, "expected an array of 16 numbers");
             }
@@ -178,7 +182,7 @@ ShaderValue parseValue(const Json& value,
                 fail(kCategory, file, path, "matrix elements must be numbers");
             }
         }
-        case ShaderPropertyType::Texture2D: return value.get<std::string>();
+        case ShaderAssetPropertyType::Texture2D: return value.get<std::string>();
         }
     } catch (const Json::exception&) {
         fail(kCategory, file, path, "value does not match property type");
@@ -186,65 +190,69 @@ ShaderValue parseValue(const Json& value,
     fail(kCategory, file, path, "unsupported property type");
 }
 
-RenderStateDesc parseState(const Json& value, const VirtualPath& file, const std::string& path) {
-    RenderStateDesc state;
+ShaderRenderStateAssetData
+parseState(const Json& value, const VirtualPath& file, const std::string& path) {
+    ShaderRenderStateAssetData state;
     if (value.contains("cull")) {
-        state.cull = parseEnum<CullMode>(kCategory,
-                                         value.at("cull").get<std::string>(),
-                                         {{"Off", CullMode::Off},
-                                          {"Front", CullMode::Front},
-                                          {"Back", CullMode::Back}},
-                                         file,
-                                         path + ".cull");
+        state.cull = parseEnum<ShaderAssetCullMode>(kCategory,
+                                                    value.at("cull").get<std::string>(),
+                                                    {{"Off", ShaderAssetCullMode::Off},
+                                                     {"Front", ShaderAssetCullMode::Front},
+                                                     {"Back", ShaderAssetCullMode::Back}},
+                                                    file,
+                                                    path + ".cull");
     }
     if (value.contains("frontFace")) {
-        state.frontFace = parseEnum<FrontFace>(kCategory,
-                                               value.at("frontFace").get<std::string>(),
-                                               {{"CW", FrontFace::Clockwise},
-                                                {"CCW", FrontFace::CounterClockwise}},
-                                               file,
-                                               path + ".frontFace");
+        state.frontFace =
+            parseEnum<ShaderAssetFrontFace>(kCategory,
+                                            value.at("frontFace").get<std::string>(),
+                                            {{"CW", ShaderAssetFrontFace::Clockwise},
+                                             {"CCW", ShaderAssetFrontFace::CounterClockwise}},
+                                            file,
+                                            path + ".frontFace");
     }
     if (value.contains("fill")) {
-        state.fill = parseEnum<FillMode>(kCategory,
-                                         value.at("fill").get<std::string>(),
-                                         {{"Solid", FillMode::Solid},
-                                          {"Wireframe", FillMode::Wireframe}},
-                                         file,
-                                         path + ".fill");
+        state.fill = parseEnum<ShaderAssetFillMode>(
+            kCategory,
+            value.at("fill").get<std::string>(),
+            {{"Solid", ShaderAssetFillMode::Solid}, {"Wireframe", ShaderAssetFillMode::Wireframe}},
+            file,
+            path + ".fill");
     }
     if (value.contains("topology")) {
-        state.topology = parseEnum<PrimitiveTopology>(kCategory,
-                                                      value.at("topology").get<std::string>(),
-                                                      {{"TriangleList",
-                                                        PrimitiveTopology::TriangleList},
-                                                       {"LineList", PrimitiveTopology::LineList}},
-                                                      file,
-                                                      path + ".topology");
+        state.topology = parseEnum<ShaderAssetPrimitiveTopology>(
+            kCategory,
+            value.at("topology").get<std::string>(),
+            {{"TriangleList", ShaderAssetPrimitiveTopology::TriangleList},
+             {"LineList", ShaderAssetPrimitiveTopology::LineList}},
+            file,
+            path + ".topology");
     }
     state.depthWrite = value.value("depthWrite", state.depthWrite);
     if (value.contains("depthTest")) {
-        state.depthTest = parseEnum<DepthCompare>(kCategory,
-                                                  value.at("depthTest").get<std::string>(),
-                                                  {{"Never", DepthCompare::Never},
-                                                   {"Less", DepthCompare::Less},
-                                                   {"LessEqual", DepthCompare::LessEqual},
-                                                   {"Equal", DepthCompare::Equal},
-                                                   {"Greater", DepthCompare::Greater},
-                                                   {"GreaterEqual", DepthCompare::GreaterEqual},
-                                                   {"Always", DepthCompare::Always}},
-                                                  file,
-                                                  path + ".depthTest");
+        state.depthTest = parseEnum<ShaderAssetDepthCompare>(
+            kCategory,
+            value.at("depthTest").get<std::string>(),
+            {{"Never", ShaderAssetDepthCompare::Never},
+             {"Less", ShaderAssetDepthCompare::Less},
+             {"LessEqual", ShaderAssetDepthCompare::LessEqual},
+             {"Equal", ShaderAssetDepthCompare::Equal},
+             {"Greater", ShaderAssetDepthCompare::Greater},
+             {"GreaterEqual", ShaderAssetDepthCompare::GreaterEqual},
+             {"Always", ShaderAssetDepthCompare::Always}},
+            file,
+            path + ".depthTest");
     }
     if (value.contains("blend")) {
-        state.blend = parseEnum<BlendMode>(kCategory,
-                                           value.at("blend").get<std::string>(),
-                                           {{"Off", BlendMode::Off},
-                                            {"Alpha", BlendMode::Alpha},
-                                            {"Additive", BlendMode::Additive},
-                                            {"PremultipliedAlpha", BlendMode::PremultipliedAlpha}},
-                                           file,
-                                           path + ".blend");
+        state.blend = parseEnum<ShaderAssetBlendMode>(
+            kCategory,
+            value.at("blend").get<std::string>(),
+            {{"Off", ShaderAssetBlendMode::Off},
+             {"Alpha", ShaderAssetBlendMode::Alpha},
+             {"Additive", ShaderAssetBlendMode::Additive},
+             {"PremultipliedAlpha", ShaderAssetBlendMode::PremultipliedAlpha}},
+            file,
+            path + ".blend");
     }
     state.colorMask = value.value("colorMask", state.colorMask);
     if (state.colorMask.find_first_not_of("RGBA") != std::string::npos) {
@@ -253,11 +261,11 @@ RenderStateDesc parseState(const Json& value, const VirtualPath& file, const std
     return state;
 }
 
-std::vector<ShaderPropertyDesc> parsePropertyList(const Json& list,
-                                                  const char* key,
-                                                  const VirtualPath& path,
-                                                  std::set<std::string>& usedNames) {
-    std::vector<ShaderPropertyDesc> result;
+std::vector<ShaderPropertyAssetData> parsePropertyList(const Json& list,
+                                                       const char* key,
+                                                       const VirtualPath& path,
+                                                       std::set<std::string>& usedNames) {
+    std::vector<ShaderPropertyAssetData> result;
     if (!list.is_array()) {
         fail(kCategory, path, std::string{"$."} + key, "must be an array");
     }
@@ -265,7 +273,7 @@ std::vector<ShaderPropertyDesc> parsePropertyList(const Json& list,
     for (std::size_t i = 0; i < list.size(); ++i) {
         const Json& json = list[i];
         const std::string at = std::string{"$."} + key + "[" + std::to_string(i) + "]";
-        ShaderPropertyDesc property;
+        ShaderPropertyAssetData property;
         property.name = required<std::string>(kCategory, json, "name", path, at);
         property.displayName = json.value("displayName", property.name);
         property.type = propertyType(
@@ -278,7 +286,7 @@ std::vector<ShaderPropertyDesc> parsePropertyList(const Json& list,
         }
         property.defaultValue =
             parseValue(json.at("default"), property.type, path, at + ".default");
-        if (property.type == ShaderPropertyType::Range) {
+        if (property.type == ShaderAssetPropertyType::Range) {
             if (!json.contains("range") || !json.at("range").is_array() ||
                 json.at("range").size() != 2) {
                 fail(kCategory, path, at + ".range", "Range property requires [min, max]");
@@ -336,18 +344,14 @@ Ref<ShaderAsset> parseShaderAssetValue(const VirtualPath& path, std::string_view
     Ref<ShaderAsset> assetRef = makeRef<ShaderAsset>();
     ShaderAsset& asset = *assetRef;
     asset.setAssetPath(path);
-    asset.name = required<std::string>(kCategory, root, "name", path, "$");
+    asset.data.name = required<std::string>(kCategory, root, "name", path, "$");
     const Json rootTags = root.value("tags", Json::object());
 
     std::set<std::string> propertyNames;
-    asset.properties = parsePropertyList(root.value("properties", Json::array()),
-                                         "properties",
-                                         path,
-                                         propertyNames);
-    asset.globalProperties = parsePropertyList(root.value("globalProperties", Json::array()),
-                                               "globalProperties",
-                                               path,
-                                               propertyNames);
+    asset.data.properties = parsePropertyList(
+        root.value("properties", Json::array()), "properties", path, propertyNames);
+    asset.data.globalProperties = parsePropertyList(
+        root.value("globalProperties", Json::array()), "globalProperties", path, propertyNames);
 
     Json subShaders;
     if (root.contains("subShaders") && root.at("subShaders").is_array()) {
@@ -366,7 +370,7 @@ Ref<ShaderAsset> parseShaderAssetValue(const VirtualPath& path, std::string_view
         if (!subShaderJson.is_object()) {
             fail(kCategory, path, subShaderAt, "must be an object");
         }
-        SubShaderDesc subShader;
+        SubShaderAssetData subShader;
         const Json tags = subShaderJson.value("tags", rootTags);
         subShader.renderPipeline = tags.value("renderPipeline", subShader.renderPipeline);
         subShader.renderQueue = parseQueue(tags, path);
@@ -378,22 +382,22 @@ Ref<ShaderAsset> parseShaderAssetValue(const VirtualPath& path, std::string_view
         for (std::size_t i = 0; i < passes.size(); ++i) {
             const Json& json = passes[i];
             const std::string at = subShaderAt + ".passes[" + std::to_string(i) + "]";
-            ShaderPassAsset passAsset;
-            ShaderPassDesc& pass = passAsset.pass;
+            ShaderPassAssetData passAsset;
+            ShaderPassAssetDesc& pass = passAsset.pass;
             pass.name = required<std::string>(kCategory, json, "name", path, at);
             if (!passNames.insert(pass.name).second) {
                 fail(kCategory, path, at + ".name", "duplicate pass '" + pass.name + "'");
             }
             // lightMode is optional and defaults to the pass name, which for the
             // built-in pass names (Forward/DepthOnly/ShadowCaster) is the mode itself.
-            pass.type =
-                parseEnum<ShaderPassType>(kCategory,
-                                          json.value("lightMode", pass.name),
-                                          {{"Forward", ShaderPassType::Forward},
-                                           {"DepthOnly", ShaderPassType::DepthOnly},
-                                           {"ShadowCaster", ShaderPassType::ShadowCaster}},
-                                          path,
-                                          at + ".lightMode");
+            pass.type = parseEnum<ShaderAssetPassType>(
+                kCategory,
+                json.value("lightMode", pass.name),
+                {{"Forward", ShaderAssetPassType::Forward},
+                 {"DepthOnly", ShaderAssetPassType::DepthOnly},
+                 {"ShadowCaster", ShaderAssetPassType::ShadowCaster}},
+                path,
+                at + ".lightMode");
             if (!json.contains("program") || !json.at("program").is_object()) {
                 fail(kCategory, path, at + ".program", "must be an object");
             }
@@ -418,7 +422,7 @@ Ref<ShaderAsset> parseShaderAssetValue(const VirtualPath& path, std::string_view
             pass.features = json.value("features", std::vector<std::string>{});
             subShader.passes.push_back(std::move(passAsset));
         }
-        asset.subShaders.push_back(std::move(subShader));
+        asset.data.subShaders.push_back(std::move(subShader));
     }
     return assetRef;
 }

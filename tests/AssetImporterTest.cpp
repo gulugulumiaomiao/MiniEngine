@@ -224,8 +224,8 @@ int main() {
     shader.setAssetPath(shaderPath);
     BinaryReader shaderReader{artifact->payload};
     if (!shader.transfer(shaderReader) || !shaderReader.finished() ||
-        shader.name != "Importer/Test" || shader.subShaders.size() != 1 ||
-        shader.subShaders.front().passes.size() != 1) {
+        shader.data.name != "Importer/Test" || shader.data.subShaders.size() != 1 ||
+        shader.data.subShaders.front().passes.size() != 1) {
         return 6;
     }
 

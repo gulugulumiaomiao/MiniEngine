@@ -1,3 +1,4 @@
+#include "asset/runtime/ShaderAssetResolver.h"
 #include "tools/editor/widgets/MaterialInspector.h"
 
 #include "asset/database/AssetDatabase.h"
@@ -287,7 +288,8 @@ bool shaderSwitchPreservesCompatibleValues() {
     ui.settle();
 
     Material* material = handle.get();
-    CHECK(material->shader().assetPath() == VirtualPath{"assets://shaders/fixture2.shader.json"});
+    CHECK(shaderAssetPath(material->shader()) ==
+          VirtualPath{"assets://shaders/fixture2.shader.json"});
     CHECK(material->getVec4("BaseColor") == baseColor);
 
     CHECK(ui.scan([handle] {

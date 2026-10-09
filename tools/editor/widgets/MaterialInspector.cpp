@@ -1,3 +1,4 @@
+#include "asset/runtime/ShaderAssetResolver.h"
 #include "tools/editor/widgets/MaterialInspector.h"
 
 #include "asset/types/MaterialAsset.h"
@@ -21,7 +22,7 @@ namespace {
 
 constexpr float kSaveDebounceSeconds = 0.5F;
 
-[[nodiscard]] std::string propertyLabel(const ShaderPropertyDesc& property) {
+[[nodiscard]] std::string propertyLabel(const ShaderPropertyAssetData& property) {
     return property.displayName.empty() ? property.name : property.displayName;
 }
 
@@ -96,7 +97,7 @@ void MaterialInspector::drawIdentity(Material& data) {
 }
 
 void MaterialInspector::drawShaderCombo(const Ref<Material>& material, Material& data) {
-    const VirtualPath current = data.shader().assetPath();
+    const VirtualPath current = shaderAssetPath(data.shader());
     VirtualPath chosen;
     if (assetCombo("Shader", collectAssets(AssetType::Shader), current, chosen) &&
         !(chosen == current)) {
@@ -124,19 +125,42 @@ void MaterialInspector::drawRenderQueue(Material& data) {
 }
 
 void MaterialInspector::drawProperties(Material& data) {
-    for (const ShaderPropertyDesc& property : data.shader().properties()) {
+    const auto shaderAsset = findShaderAsset(data.shader());
+    std::vector<ShaderPropertyAssetData> fallback;
+    if (!shaderAsset) {
+        for (const auto& runtime : data.shader().properties()) {
+            ShaderPropertyAssetData property;
+            property.name = runtime.name;
+            switch (runtime.type) {
+            case ShaderPropertyType::Float: property.type = ShaderAssetPropertyType::Float; break;
+            case ShaderPropertyType::Vec2: property.type = ShaderAssetPropertyType::Vec2; break;
+            case ShaderPropertyType::Vec3: property.type = ShaderAssetPropertyType::Vec3; break;
+            case ShaderPropertyType::Vec4: property.type = ShaderAssetPropertyType::Vec4; break;
+            case ShaderPropertyType::Texture2D:
+                property.type = ShaderAssetPropertyType::Texture2D;
+                break;
+            case ShaderPropertyType::Boolean:
+                property.type = ShaderAssetPropertyType::Boolean;
+                break;
+            case ShaderPropertyType::Matrix: property.type = ShaderAssetPropertyType::Matrix; break;
+            }
+            fallback.push_back(std::move(property));
+        }
+    }
+    const auto& properties = shaderAsset ? shaderAsset->data.properties : fallback;
+    for (const ShaderPropertyAssetData& property : properties) {
         ImGui::PushID(property.name.c_str());
         const std::string label = propertyLabel(property);
         bool edited = false;
         switch (property.type) {
-        case ShaderPropertyType::Float: {
+        case ShaderAssetPropertyType::Float: {
             float value = data.getFloat(property.name);
             edited = ImGui::DragFloat(label.c_str(), &value, kDragSpeed, 0.0F, 0.0F, "%.3f");
             if (edited)
                 data.setFloat(property.name, value);
             break;
         }
-        case ShaderPropertyType::Range: {
+        case ShaderAssetPropertyType::Range: {
             const math::Vec2 range = property.range.value_or(math::Vec2{0.0F, 1.0F});
             float value = data.getFloat(property.name);
             edited = ImGui::SliderFloat(label.c_str(), &value, range.x, range.y, "%.3f");
@@ -144,53 +168,58 @@ void MaterialInspector::drawProperties(Material& data) {
                 data.setFloat(property.name, value);
             break;
         }
-        case ShaderPropertyType::Boolean: {
+        case ShaderAssetPropertyType::Boolean: {
             bool value = data.getBool(property.name);
             edited = ImGui::Checkbox(label.c_str(), &value);
             if (edited)
                 data.setBool(property.name, value);
             break;
         }
-        case ShaderPropertyType::Vec2: {
+        case ShaderAssetPropertyType::Vec2: {
             math::Vec2 value = data.getVec2(property.name);
             edited = ImGui::DragFloat2(label.c_str(), &value.x, kDragSpeed, 0.0F, 0.0F, "%.3f");
             if (edited)
                 data.setVec2(property.name, value);
             break;
         }
-        case ShaderPropertyType::Vec3: {
+        case ShaderAssetPropertyType::Vec3: {
             math::Vec3 value = data.getVec3(property.name);
             edited = ImGui::DragFloat3(label.c_str(), &value.x, kDragSpeed, 0.0F, 0.0F, "%.3f");
             if (edited)
                 data.setVec3(property.name, value);
             break;
         }
-        case ShaderPropertyType::Vec4: {
+        case ShaderAssetPropertyType::Vec4: {
             math::Vec4 value = data.getVec4(property.name);
             edited = ImGui::DragFloat4(label.c_str(), &value.x, kDragSpeed, 0.0F, 0.0F, "%.3f");
             if (edited)
                 data.setVec4(property.name, value);
             break;
         }
-        case ShaderPropertyType::Color: {
+        case ShaderAssetPropertyType::Color: {
             math::Vec4 value = data.getVec4(property.name);
             edited = ImGui::ColorEdit4(label.c_str(), &value.x);
             if (edited)
                 data.setVec4(property.name, value);
             break;
         }
-        case ShaderPropertyType::Texture2D: {
+        case ShaderAssetPropertyType::Texture2D: {
             const std::string& current = data.getTexture(property.name);
-            const VirtualPath currentPath =
-                current.empty() ? VirtualPath{} : VirtualPath{current};
+            const VirtualPath currentPath = current.empty() ? VirtualPath{} : VirtualPath{current};
             VirtualPath chosen;
-            if (assetCombo(label.c_str(), collectAssets(AssetType::Texture), currentPath, chosen,
+            if (assetCombo(label.c_str(),
+                           collectAssets(AssetType::Texture),
+                           currentPath,
+                           chosen,
                            "(none)")) {
                 data.setTexture(property.name, chosen.valid() ? chosen.string() : std::string{});
                 queueSave(data);
             }
             break;
         }
+        case ShaderAssetPropertyType::Matrix:
+            ImGui::TextDisabled("%s (matrix)", label.c_str());
+            break;
         }
         if (edited)
             queueSave(data);
@@ -199,12 +228,12 @@ void MaterialInspector::drawProperties(Material& data) {
 }
 
 void MaterialInspector::drawKeywords(Material& data) {
-    // The declared set is the union of every pass's features; shaders that
+    // The declared set is the union of every pass's keywords; shaders that
     // declare none skip the section entirely.
     std::vector<std::string> declared;
     for (const SubShader& subShader : data.shader().subShaders()) {
         for (const ShaderPass& pass : subShader.passes()) {
-            for (const std::string& keyword : pass.features()) {
+            for (const std::string& keyword : pass.keyword().keywords()) {
                 if (std::ranges::find(declared, keyword) == declared.end())
                     declared.push_back(keyword);
             }
@@ -217,7 +246,10 @@ void MaterialInspector::drawKeywords(Material& data) {
     for (const std::string& keyword : declared) {
         bool enabled = std::ranges::find(data.keywords, keyword) != data.keywords.end();
         if (ImGui::Checkbox(keyword.c_str(), &enabled)) {
-            data.setKeywordEnabled(keyword, enabled);
+            if (enabled)
+                data.enableKeyword(keyword);
+            else
+                data.disableKeyword(keyword);
             queueSave(data);
         }
     }

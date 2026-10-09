@@ -37,26 +37,26 @@ private:
                               bool includeInterpolation);
     [[nodiscard]] static std::string lineDirectiveName(const std::string& value);
     static void writeUserSource(std::ostringstream& output,
-                                const ShaderPassDesc& pass,
+                                const ShaderPassCreateInfo& pass,
                                 const VirtualPath& sourcePath,
                                 std::string_view stageName,
                                 std::string_view userSource);
     [[nodiscard]] static std::optional<std::string>
-    generateVertexStage(const ShaderPassDesc& pass,
+    generateVertexStage(const ShaderPassCreateInfo& pass,
                         std::string_view materialDeclarations,
                         std::string_view userSource);
     [[nodiscard]] static std::optional<std::string>
-    generateFragmentStage(const ShaderPassDesc& pass,
+    generateFragmentStage(const ShaderPassCreateInfo& pass,
                           std::string_view materialDeclarations,
                           std::string_view userSource);
-    [[nodiscard]] static bool validateLayout(std::span<const ShaderPropertyDesc> properties,
+    [[nodiscard]] static bool validateLayout(std::span<const ShaderPropertyInfo> properties,
                                              const UniformBlockLayout& layout);
     [[nodiscard]] static std::optional<std::string>
-    generateMaterialDeclarations(std::span<const ShaderPropertyDesc> properties,
+    generateMaterialDeclarations(std::span<const ShaderPropertyInfo> properties,
                                  const UniformBlockLayout& layout);
     [[nodiscard]] static std::optional<std::string>
     generateGlobalDeclarations(const UniformBlockLayout& layout,
-                               std::span<const ShaderPropertyDesc> textureProperties);
+                               std::span<const ShaderPropertyInfo> textureProperties);
 };
 
 } // namespace engine

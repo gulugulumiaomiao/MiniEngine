@@ -1,3 +1,4 @@
+#include "asset/runtime/ShaderAssetResolver.h"
 #include "render/shader/Shader.h"
 #include "asset/types/ShaderAsset.h"
 #include "asset/manager/AssetManager.h"
@@ -12,9 +13,7 @@ namespace {
 
 constexpr const char* kBuiltinColorPath = "assets://shaders/builtin_color.shader.json";
 
-// Shader 已去掉 ShaderResourceManager，改为与 TextureAsset/MeshAsset 同构的“无 Manager”模型：
-// resolveShaderReference 经 AssetManager 加载 ShaderAsset 并 instantiate，“每 asset 唯一实例”
-// 天然承担去重；clone 产出脱离 asset 的独立实例；热重载经 reloadInPlace→transfer→syncInstance。
+// Asset-side resolution shares a runtime instance; clones hold independent snapshots.
 class ShaderGuidIdentityTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -28,8 +27,8 @@ TEST_F(ShaderGuidIdentityTest, ResolveSameReferenceReturnsSameInstance) {
     using namespace engine;
     const Ref<Shader> first = resolveShaderReference(kBuiltinColorPath);
     ASSERT_TRUE(first);
-    EXPECT_TRUE(first->isAssetBacked());
-    EXPECT_EQ(first->assetPath(), VirtualPath{kBuiltinColorPath});
+    EXPECT_TRUE(static_cast<bool>(findShaderAsset(*first)));
+    EXPECT_EQ(shaderAssetPath(*first), VirtualPath{kBuiltinColorPath});
 
     // 同一引用反复解析命中同一唯一实例（按 asset 去重）。
     const Ref<Shader> second = resolveShaderReference(kBuiltinColorPath);
@@ -50,10 +49,10 @@ TEST_F(ShaderGuidIdentityTest, CloneReturnsDifferentInstanceAndIsNotAssetBacked)
     const Ref<Shader> cloned = original->clone();
     ASSERT_TRUE(cloned);
     EXPECT_NE(cloned, original);
-    EXPECT_TRUE(original->isAssetBacked());
-    EXPECT_FALSE(cloned->isAssetBacked());
+    EXPECT_TRUE(static_cast<bool>(findShaderAsset(*original)));
+    EXPECT_FALSE(static_cast<bool>(findShaderAsset(*cloned)));
     // 新模型：clone 脱离 asset，不再保留 assetPath（与 TextureAsset::clone 一致）。
-    EXPECT_FALSE(cloned->assetPath().valid());
+    EXPECT_FALSE(shaderAssetPath(*cloned).valid());
     // 内容仍是 asset 的快照副本。
     EXPECT_EQ(cloned->name(), original->name());
 }
@@ -82,7 +81,7 @@ TEST_F(ShaderGuidIdentityTest, ReloadInPlaceUpdatesInstanceButNotClone) {
     const std::uint64_t originalRevision = original->revision();
     const std::uint64_t clonedRevision = cloned->revision();
 
-    // 就地重传：缓存的 ShaderAsset 重新 transfer → syncInstance → rebuildFromAsset（revision++）。
+    // Asset reload pushes converted runtime data into the existing instance (revision++).
     ASSET_MANAGER.reloadInPlace(path);
 
     EXPECT_GT(original->revision(), originalRevision);

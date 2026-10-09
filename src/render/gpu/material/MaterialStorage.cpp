@@ -64,9 +64,7 @@ MaterialPassState MaterialStorage::resolvePass(const Material& material,
     const ShaderPass* pass = subShader->findPass(passType);
     if (!pass)
         return {};
-    const ShaderVariantKey variant = pass->variantKey(material.keywords);
-    const Ref<ShaderProgram> program =
-        GRAPHICS_PIPELINE_STORAGE.getOrCreateProgram(material.shader(), *pass, variant);
+    const Ref<ShaderProgram> program = material.program(*pass);
     if (!program)
         return {};
     const rhi::RID pipeline =
@@ -110,7 +108,7 @@ Ref<UniformSet> MaterialStorage::resolve(const Material& material, const ShaderP
         // Material textures occupy set-1 bindings 1..N in property-declaration order (binding 0 is
         // the material uniform block). Positions match binding indices here (contiguous from 0).
         std::uint32_t binding = 1;
-        for (const ShaderPropertyDesc& property : material.shader().properties()) {
+        for (const ShaderPropertyInfo& property : material.shader().properties()) {
             if (property.type != ShaderPropertyType::Texture2D)
                 continue;
             const Ref<Texture> texture = material.resolveTexture(property.name);
@@ -128,7 +126,7 @@ Ref<UniformSet> MaterialStorage::resolve(const Material& material, const ShaderP
 
 bool MaterialStorage::collectTextureBindings(const Material& material) {
     textureScratch_.clear();
-    for (const ShaderPropertyDesc& property : material.shader().properties()) {
+    for (const ShaderPropertyInfo& property : material.shader().properties()) {
         if (property.type != ShaderPropertyType::Texture2D)
             continue;
         const Ref<Texture> texture = material.resolveTexture(property.name);

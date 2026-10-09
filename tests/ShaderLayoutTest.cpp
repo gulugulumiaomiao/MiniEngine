@@ -9,8 +9,8 @@
 
 namespace {
 
-engine::ShaderPropertyDesc property(std::string name, engine::ShaderPropertyType type) {
-    engine::ShaderPropertyDesc result;
+engine::ShaderPropertyInfo property(std::string name, engine::ShaderPropertyType type) {
+    engine::ShaderPropertyInfo result;
     result.name = std::move(name);
     result.type = type;
     return result;
@@ -31,10 +31,10 @@ bool memberEquals(const engine::UniformBlockLayout& layout,
 int main() {
     using namespace engine;
 
-    const std::vector<ShaderPropertyDesc> synthetic{
+    const std::vector<ShaderPropertyInfo> synthetic{
         property("Scalar", ShaderPropertyType::Float),
         property("Uv", ShaderPropertyType::Vec2),
-        property("RangeValue", ShaderPropertyType::Range),
+        property("RangeValue", ShaderPropertyType::Float),
         property("Direction", ShaderPropertyType::Vec3),
         property("Enabled", ShaderPropertyType::Boolean),
         property("Texture", ShaderPropertyType::Texture2D),
@@ -57,7 +57,8 @@ int main() {
     if (!shaderOwner)
         return 4;
     const ShaderAsset& shader = *shaderOwner;
-    const UniformBlockLayout realLayout = buildUniformBlockLayout(shader.properties);
+    const UniformBlockLayout realLayout =
+        buildUniformBlockLayout(shader.buildRuntimeInfo()->properties);
     if (realLayout.byteSize != 64 || realLayout.members.size() != 4 ||
         !memberEquals(realLayout, "BaseColor", 0, 16, 16) ||
         !memberEquals(realLayout, "UvScale", 16, 8, 8) ||
@@ -66,12 +67,12 @@ int main() {
         return 2;
     }
 
-    const std::vector<ShaderPropertyDesc> textureOnly{
+    const std::vector<ShaderPropertyInfo> textureOnly{
         property("MainTexture", ShaderPropertyType::Texture2D)};
     const UniformBlockLayout emptyLayout = buildUniformBlockLayout(textureOnly);
     if (emptyLayout.byteSize != 0 || !emptyLayout.members.empty() ||
         isUniformProperty(ShaderPropertyType::Texture2D) ||
-        !isUniformProperty(ShaderPropertyType::Color)) {
+        !isUniformProperty(ShaderPropertyType::Vec4)) {
         return 3;
     }
     test::shutdownAssetEnvironment();

@@ -289,10 +289,10 @@ template <typename T> bool checkObjectScopes(T source = {}) {
 
 bool testObjectScopes() {
     using namespace engine;
-    ShaderPassAsset pass;
+    ShaderPassAssetData pass;
     pass.pass.program.vertexSource = VirtualPath{"assets://shaders/test.vert"};
     pass.pass.program.fragmentSource = VirtualPath{"assets://shaders/test.frag"};
-    SubShaderDesc subShader;
+    SubShaderAssetData subShader;
     subShader.passes.push_back(pass);
     MeshComponentAsset mesh;
     mesh.mesh = VirtualPath{"assets://meshes/test.mesh.json"};
@@ -305,21 +305,21 @@ bool testObjectScopes() {
     if (!meshAsset)
         return false;
     return checkObjectScopes<Sample>() && checkObjectScopes<VertexSemantic>() &&
-           checkObjectScopes<VertexStreamLayout>() &&
-           checkObjectScopes<VertexLayout>() && checkObjectScopes<Aabb>() &&
-           checkObjectScopes<BoundingSphere>() && checkObjectScopes<MeshBounds>() &&
-           checkObjectScopes<SubMesh>() && checkObjectScopes<MeshDesc>() &&
-           checkObjectScopes<MeshBuildRecipe>() && checkObjectScopes<VertexStream>() &&
-           checkObjectScopes<MeshData>() && checkObjectScopes<PlaneGeometry>() &&
-           checkObjectScopes<BoxGeometry>() && checkObjectScopes<UvSphereGeometry>() &&
-           checkObjectScopes<CylinderGeometry>() && checkObjectScopes<MeshPrimitive>() &&
-           checkObjectScopes<MeshPrimitivePart>() && checkObjectScopes<TransformComponentAsset>() &&
+           checkObjectScopes<VertexStreamLayout>() && checkObjectScopes<VertexLayout>() &&
+           checkObjectScopes<Aabb>() && checkObjectScopes<BoundingSphere>() &&
+           checkObjectScopes<MeshBounds>() && checkObjectScopes<SubMesh>() &&
+           checkObjectScopes<MeshDesc>() && checkObjectScopes<MeshBuildRecipe>() &&
+           checkObjectScopes<VertexStream>() && checkObjectScopes<MeshData>() &&
+           checkObjectScopes<PlaneGeometry>() && checkObjectScopes<BoxGeometry>() &&
+           checkObjectScopes<UvSphereGeometry>() && checkObjectScopes<CylinderGeometry>() &&
+           checkObjectScopes<MeshPrimitive>() && checkObjectScopes<MeshPrimitivePart>() &&
+           checkObjectScopes<TransformComponentAsset>() &&
            checkObjectScopes<CameraComponentAsset>() && checkObjectScopes<LightComponentAsset>() &&
            checkObjectScopes<MaterialComponentAsset>() && checkObjectScopes(mesh) &&
-           checkObjectScopes<SceneNodeAsset>() && checkObjectScopes<ShaderPropertyDesc>() &&
-           checkObjectScopes<ShaderInterfaceVariable>() && checkObjectScopes<RenderStateDesc>() &&
-           checkObjectScopes(pass) && checkObjectScopes(subShader) &&
-           checkObjectScopes<TextureDesc>() &&
+           checkObjectScopes<SceneNodeAsset>() && checkObjectScopes<ShaderPropertyAssetData>() &&
+           checkObjectScopes<ShaderInterfaceAssetData>() &&
+           checkObjectScopes<ShaderRenderStateAssetData>() && checkObjectScopes(pass) &&
+           checkObjectScopes(subShader) && checkObjectScopes<TextureDesc>() &&
            checkObjectScopes<WindowConfig>() && checkObjectScopes<RenderConfig>() &&
            checkObjectScopes<EngineConfig>();
 }

@@ -181,8 +181,8 @@ collectExportClosure(std::span<const VirtualPath> roots, std::string& error) {
                     error = "Cannot parse Shader source: " + path.string();
                     return {};
                 }
-                for (const SubShaderDesc& subShader : shader->subShaders) {
-                    for (const ShaderPassAsset& passAsset : subShader.passes) {
+                for (const SubShaderAssetData& subShader : shader->data.subShaders) {
+                    for (const ShaderPassAssetData& passAsset : subShader.passes) {
                         enqueue(passAsset.pass.program.vertexSource);
                         enqueue(passAsset.pass.program.fragmentSource);
                     }

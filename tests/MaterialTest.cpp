@@ -1,4 +1,5 @@
-﻿#include "asset/types/MaterialAsset.h"
+#include "asset/runtime/ShaderAssetResolver.h"
+#include "asset/types/MaterialAsset.h"
 #include "asset/types/ShaderAsset.h"
 #include "render/material/Material.h"
 #include "render/material/MaterialManager.h"
@@ -66,7 +67,7 @@ int main() {
         return 16;
     }
     if (warmData.shaderRef() != coolShared->shaderRef() ||
-        warmData.shader().assetPath() != coolShared->shader().assetPath()) {
+        shaderAssetPath(warmData.shader()) != shaderAssetPath(coolShared->shader())) {
         return 13;
     }
     const math::Vec4 color = warmData.getVec4("BaseColor");
@@ -99,33 +100,33 @@ int main() {
         warmData.version() != 4) {
         return 29;
     }
-    // setKeywordEnabled: a keyword the Shader does not declare is rejected
-    // (vertex_color declares no features).
-    warmData.setKeywordEnabled("RECEIVE_SHADOWS", true);
-    if (!warmData.keywords.empty() || warmData.version() != 4) {
+    // Materials retain enabled keywords; vertex_color declares none, so its
+    // pass ignores RECEIVE_SHADOWS during variant selection.
+    warmData.enableKeyword("RECEIVE_SHADOWS");
+    if (!warmData.isKeywordEnabled("RECEIVE_SHADOWS") || warmData.version() != 5 ||
+        warmData.variantKey(runtimeSubShader->requirePass(ShaderPassType::Forward)) != 0) {
         return 30;
     }
+    warmData.disableKeyword("RECEIVE_SHADOWS");
     // After switching to blinn_phong (declares RECEIVE_SHADOWS on Forward):
     // enabling the keyword changes the variant key, re-enabling is idempotent,
     // and disabling restores the original key.
     materials.setShader(warm, VirtualPath{"assets://shaders/blinn_phong.shader.json"});
-    const ShaderVariantKey keywordOffKey =
-        warmData.shader().defaultSubShader().requirePass(ShaderPassType::Forward)
-            .variantKey(warmData.keywords);
+    const std::uint64_t keywordOffKey = warmData.variantKey(
+        warmData.shader().defaultSubShader().requirePass(ShaderPassType::Forward));
     const std::uint64_t versionBeforeKeywords = warmData.version();
-    warmData.setKeywordEnabled("RECEIVE_SHADOWS", true);
-    warmData.setKeywordEnabled("RECEIVE_SHADOWS", true); // Idempotent.
-    const ShaderVariantKey keywordOnKey =
-        warmData.shader().defaultSubShader().requirePass(ShaderPassType::Forward)
-            .variantKey(warmData.keywords);
+    warmData.enableKeyword("RECEIVE_SHADOWS");
+    warmData.enableKeyword("RECEIVE_SHADOWS"); // Idempotent.
+    const std::uint64_t keywordOnKey = warmData.variantKey(
+        warmData.shader().defaultSubShader().requirePass(ShaderPassType::Forward));
     if (warmData.keywords != std::vector<std::string>{"RECEIVE_SHADOWS"} ||
         warmData.version() != versionBeforeKeywords + 1 || keywordOnKey == keywordOffKey) {
         return 31;
     }
-    warmData.setKeywordEnabled("RECEIVE_SHADOWS", false);
+    warmData.disableKeyword("RECEIVE_SHADOWS");
     if (!warmData.keywords.empty() || warmData.version() != versionBeforeKeywords + 2 ||
-        warmData.shader().defaultSubShader().requirePass(ShaderPassType::Forward)
-                .variantKey(warmData.keywords) != keywordOffKey) {
+        warmData.variantKey(warmData.shader().defaultSubShader().requirePass(
+            ShaderPassType::Forward)) != keywordOffKey) {
         return 32;
     }
     const RID warmId = warm->resourceId();

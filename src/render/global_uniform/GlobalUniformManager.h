@@ -25,7 +25,7 @@ public:
     // Register global properties declared by a shader. Called automatically from
     // Shader construction. Rebuilds the shared uniform block layout if the known
     // set of globals changes.
-    void registerGlobalProperties(std::span<const ShaderPropertyDesc> properties);
+    void registerGlobalProperties(std::span<const ShaderPropertyInfo> properties);
 
     // Clear all registered globals and reset the buffer. Exposed for tests so that
     // each case starts from a clean state; the engine does not call this at runtime.
@@ -44,7 +44,7 @@ public:
     [[nodiscard]] std::uint64_t version() const { return version_; }
 
     [[nodiscard]] const std::string* findTexture(std::string_view name) const;
-    [[nodiscard]] std::span<const ShaderPropertyDesc> textureProperties() const {
+    [[nodiscard]] std::span<const ShaderPropertyInfo> textureProperties() const {
         return textureProperties_;
     }
 
@@ -62,7 +62,7 @@ private:
     void markChanged();
 
     std::unordered_map<std::string, KnownGlobal> globals_;
-    std::vector<ShaderPropertyDesc> textureProperties_;
+    std::vector<ShaderPropertyInfo> textureProperties_;
     UniformBlockLayout layout_;
     std::vector<std::byte> uniformData_;
     std::uint64_t version_{1};

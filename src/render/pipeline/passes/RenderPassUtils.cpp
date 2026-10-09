@@ -66,7 +66,7 @@ rhi::ColorWriteMask toRhiColorMask(std::string_view mask) {
     return result;
 }
 
-void applyRenderState(rhi::RID commandBuffer, const RenderStateDesc& state) {
+void applyRenderState(rhi::RID commandBuffer, const RenderState& state) {
     rhi::setPrimitiveTopology(commandBuffer, toRhi(state.topology));
     rhi::setFillMode(commandBuffer, toRhi(state.fill));
     rhi::setCullMode(commandBuffer, toRhi(state.cull));

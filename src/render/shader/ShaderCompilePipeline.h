@@ -21,7 +21,6 @@ namespace engine {
 
 using ShaderHash = Hash64;
 using CompiledShaderId = ShaderHash;
-using ShaderProgramId = ShaderHash;
 using ShaderProgramLayoutId = ShaderHash;
 
 enum class ShaderCompileMode { DevelopmentRuntime, OfflineTool, PackagedRuntime };
@@ -44,7 +43,7 @@ struct ShaderProgramLayout {
 
 struct CompiledProgram {
     ShaderProgramId id{};
-    ShaderVariantKey variant;
+    std::uint64_t variant{};
     RID vertex;
     RID fragment;
     CompiledShaderId vertexId{};
@@ -64,15 +63,17 @@ class ShaderCompilePipeline final {
 public:
     explicit ShaderCompilePipeline(ShaderCompilePipelineConfig config = {});
     [[nodiscard]] RID
-    getOrCreate(const Shader& shader, const ShaderPass& pass, const ShaderVariantKey& variant = {});
+    getOrCreate(const Shader& shader, const ShaderPass& pass, std::uint64_t variant = {});
     [[nodiscard]] const CompiledProgram& resolveProgram(RID handle) const;
     [[nodiscard]] const CompiledShader& resolveCompiled(RID handle) const;
     [[nodiscard]] std::vector<CompiledShaderId> invalidate(const VirtualPath& changedFile);
     [[nodiscard]] std::vector<CompiledShaderId> invalidateChanged();
+    [[nodiscard]] std::vector<CompiledShaderId> invalidateShader(std::uint64_t instanceId);
     void clear();
 
 private:
     struct GeneratedSource {
+        std::uint64_t shaderInstanceId{};
         VirtualPath cachePath;
         std::string source;
     };
@@ -116,15 +117,15 @@ private:
                                                         const Shader& shader,
                                                         const ShaderPass& pass,
                                                         ShaderStage stage,
-                                                        const ShaderVariantKey& variant);
+                                                        std::uint64_t variant);
     [[nodiscard]] static CompiledShaderId makeCompiledShaderId(std::span<const std::byte> bytecode,
                                                                ShaderStage stage,
                                                                std::string_view entryPoint,
-                                                               const ShaderVariantKey& variant);
+                                                               std::uint64_t variant);
     [[nodiscard]] static ShaderHash makeCompiledShaderPathKey(const VirtualPath& binaryPath,
                                                               ShaderStage stage,
                                                               std::string_view entryPoint,
-                                                              const ShaderVariantKey& variant);
+                                                              std::uint64_t variant);
     [[nodiscard]] static std::optional<SpirvReflection>
     reflectSpirv(std::span<const std::byte> bytecode, const VirtualPath& sourcePath);
     [[nodiscard]] static bool validateSpirvReflection(const Shader& shader,
@@ -134,18 +135,18 @@ private:
                                                       const VirtualPath& vertexPath,
                                                       const VirtualPath& fragmentPath);
     [[nodiscard]] RID compileStage(const Shader& shader,
-                                                    const ShaderPass& pass,
-                                                    ShaderStage stage,
-                                                    const ShaderVariantKey& variant);
+                                   const ShaderPass& pass,
+                                   ShaderStage stage,
+                                   std::uint64_t variant);
     [[nodiscard]] RID loadCompiledShader(const VirtualPath& binaryPath,
-                                                          ShaderStage stage,
-                                                          std::string_view entryPoint,
-                                                          const ShaderVariantKey& variant,
-                                                          std::span<const std::byte> bytecode);
+                                         ShaderStage stage,
+                                         std::string_view entryPoint,
+                                         std::uint64_t variant,
+                                         std::span<const std::byte> bytecode);
     [[nodiscard]] RID loadPackagedShader(const VirtualPath& binaryPath,
-                                                          ShaderStage stage,
-                                                          std::string_view entryPoint,
-                                                          const ShaderVariantKey& variant);
+                                         ShaderStage stage,
+                                         std::string_view entryPoint,
+                                         std::uint64_t variant);
     [[nodiscard]] static std::optional<ShaderProgramLayout>
     mergeLayout(const CompiledShader& vertex, const CompiledShader& fragment);
     void invalidateGeneratedSources(std::span<const VirtualPath> paths);

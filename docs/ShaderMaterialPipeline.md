@@ -38,7 +38,7 @@ Scene/Object buffer → set 0 ────────────────�
 
 Shader 编译流程按职责拆分到四组文件：
 
-- `ShaderVariantKey`：关键字位、Mesh 特征位、平台特征位。
+- `uint64_t` 关键词位掩码：当前 Pass 启用的关键词组合，最多 64 个声明关键词。
 - `ShaderCompileRequest`：源文件、阶段、入口、宏、include 路径、目标 API、编译器版本和选项。
 - `PreprocessedShader`：展开 include 和 define 后的源码、依赖文件及源码 Hash。
 - `CompiledShader`：SPIR-V 字节码、入口、阶段、反射结果和依赖列表。
@@ -51,7 +51,7 @@ SPIRV-Cross 的反射结果保存在 `CompiledShader::reflection`，内容包括
 
 ### 4. CompiledShaderCache 使用 CompileID
 
-缓存键由 SPIR-V 内容、阶段、入口和 `ShaderVariantKey` 共同计算，不再使用文件路径作为对象身份。路径只负责加载和依赖追踪。同一内容可以复用，内容变化会产生新的 CompileID，旧 handle 通过 generation 失效。
+缓存键由 SPIR-V 内容、阶段、入口和 `uint64_t` 关键词位掩码 共同计算，不再使用文件路径作为对象身份。路径只负责加载和依赖追踪。同一内容可以复用，内容变化会产生新的 CompileID，旧 handle 通过 generation 失效。
 
 ### 5. ShaderProgram 与 ProgramCache
 
@@ -96,7 +96,7 @@ RHI TextureView/Sampler handle，未安装 resolver 或纹理未就绪时只输�
 
 ### 9. Keyword、Variant 与多 Pass
 
-`ShaderKeywordSchema` 为每个 Pass 建立稳定的关键字位表，材质的 keyword 列表转换为 `ShaderVariantKey` 后参与 CompiledShader、Program 和 Pipeline 缓存。材质 keyword 只需被 shader 的任意 Pass 声明（例如 `RECEIVE_SHADOWS` 只影响 Forward）：未声明该 keyword 的 Pass 静默忽略，拼写错误在材质实例化时按 shader 级一次性告警。
+`ShaderKeywordSchema` 为每个 Pass 建立稳定的关键字位表，材质的 keyword 列表转换为 `uint64_t` 关键词位掩码 后参与 CompiledShader、Program 和 Pipeline 缓存。Material 通过 `enableKeyword / disableKeyword` 保存启用关键词；每个 Pass 用 `keyword` 声明过滤当前材质的组合（例如 `RECEIVE_SHADOWS` 只影响 Forward），未声明该词的 Pass 静默忽略。材质切换 Shader 时保留启用状态，过滤仅发生在选择 Program 时。
 
 Renderer 按以下顺序提交存在的 Pass：
 

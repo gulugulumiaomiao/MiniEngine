@@ -1,4 +1,5 @@
 #include "render/shader/ShaderProgram.h"
+#include "render/shader/ShaderCompilePipeline.h"
 
 #include "core/logging/Log.h"
 #include "render/shader/Shader.h" // ShaderDescriptorBinding/Type, ShaderUniformMember

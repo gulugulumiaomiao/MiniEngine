@@ -1,4 +1,5 @@
-﻿#include "render/material/Material.h"
+#include "render/material/Material.h"
+#include "render/GraphicsPipelineStorage.h"
 
 #include "asset/types/MaterialAsset.h"
 
@@ -24,10 +25,10 @@ constexpr std::uint16_t kMaterialAssetVersion = 2;
 
 struct MaterialPropertyEntry : public Transferable {
     std::string name;
-    ShaderValue value;
+    ShaderAssetValue value;
 
     MaterialPropertyEntry() = default;
-    MaterialPropertyEntry(std::string name, ShaderValue value)
+    MaterialPropertyEntry(std::string name, ShaderAssetValue value)
         : name(std::move(name)), value(std::move(value)) {}
 
     [[nodiscard]] bool transfer(Transfer& archive) override {
@@ -105,20 +106,6 @@ bool requireType(const UniformMemberLayout& member,
     return true;
 }
 
-bool requireOneOf(const UniformMemberLayout& member,
-                  ShaderPropertyType first,
-                  ShaderPropertyType second,
-                  std::string_view name) {
-    if (member.type != first && member.type != second) {
-        Log::warn("Material",
-                  "Property has the wrong type: %.*s",
-                  static_cast<int>(name.size()),
-                  name.data());
-        return false;
-    }
-    return true;
-}
-
 const UniformMemberLayout* findMember(const UniformBlockLayout& layout, std::string_view name) {
     const UniformMemberLayout* member = layout.findMember(name);
     if (!member) {
@@ -131,16 +118,7 @@ const UniformMemberLayout* findMember(const UniformBlockLayout& layout, std::str
 }
 
 bool compatiblePropertyTypes(ShaderPropertyType oldType, ShaderPropertyType newType) {
-    if (oldType == newType) {
-        return true;
-    }
-    const bool scalarPair =
-        (oldType == ShaderPropertyType::Float || oldType == ShaderPropertyType::Range) &&
-        (newType == ShaderPropertyType::Float || newType == ShaderPropertyType::Range);
-    const bool vec4Pair =
-        (oldType == ShaderPropertyType::Vec4 || oldType == ShaderPropertyType::Color) &&
-        (newType == ShaderPropertyType::Vec4 || newType == ShaderPropertyType::Color);
-    return scalarPair || vec4Pair;
+    return oldType == newType;
 }
 
 template <typename Value>
@@ -186,15 +164,13 @@ const Shader& Material::shader() const {
     return *shader_;
 }
 
-ShaderValue Material::propertyValue(const ShaderPropertyDesc& property) const {
+ShaderValue Material::propertyValue(const ShaderPropertyInfo& property) const {
     switch (property.type) {
-    case ShaderPropertyType::Float:
-    case ShaderPropertyType::Range: return getFloat(property.name);
+    case ShaderPropertyType::Float: return getFloat(property.name);
     case ShaderPropertyType::Boolean: return getBool(property.name);
     case ShaderPropertyType::Vec2: return getVec2(property.name);
     case ShaderPropertyType::Vec3: return getVec3(property.name);
-    case ShaderPropertyType::Vec4:
-    case ShaderPropertyType::Color: return getVec4(property.name);
+    case ShaderPropertyType::Vec4: return getVec4(property.name);
     case ShaderPropertyType::Texture2D: return getTexture(property.name);
     case ShaderPropertyType::Matrix: return math::Mat44{1.0F};
     }
@@ -239,14 +215,22 @@ void Material::setRenderQueue(std::optional<int> queueOverride) {
     markChanged();
 }
 
+bool Material::isKeywordEnabled(std::string_view keyword) const {
+    return std::ranges::find(keywords, keyword) != keywords.end();
+}
+
+std::uint64_t Material::variantKey(const ShaderPass& pass) const {
+    return pass.keyword().makeKey(keywords);
+}
+
+Ref<ShaderProgram> Material::program(const ShaderPass& pass) const {
+    return GRAPHICS_PIPELINE_STORAGE.getOrCreateProgram(shader(), pass, variantKey(pass));
+}
+
 void Material::setKeywordEnabled(const std::string& keyword, bool enabled) {
     const auto found = std::ranges::find(keywords, keyword);
     if (enabled == (found != keywords.end()))
         return;
-    if (!shader_ || !shader().declaresKeyword(keyword)) {
-        Log::warn("Material", "Shader does not declare keyword: %s", keyword.c_str());
-        return;
-    }
     if (enabled)
         keywords.push_back(keyword);
     else
@@ -263,11 +247,15 @@ void Material::rebuildForShader(Ref<Shader> newShaderRef, bool preserveValues) {
 
     std::unordered_map<std::string, std::pair<ShaderPropertyType, ShaderValue>> oldValues;
     if (preserveValues && shader_) {
-        for (const ShaderPropertyDesc& property : shader().properties())
-            oldValues.emplace(property.name, std::pair{property.type, propertyValue(property)});
+        for (const auto& member : uniformLayout.members) {
+            ShaderPropertyInfo property{member.name, member.type};
+            oldValues.emplace(member.name, std::pair{member.type, propertyValue(property)});
+        }
+        for (const auto& [name, value] : textures)
+            oldValues.emplace(name, std::pair{ShaderPropertyType::Texture2D, ShaderValue{value}});
     }
     const auto oldTextureRefs = std::move(textureRefs_);
-    const auto oldKeywords = std::move(keywords);
+    auto oldKeywords = std::move(keywords);
 
     shader_ = std::move(newShaderRef);
     shaderRevision_ = newShader.revision();
@@ -279,7 +267,7 @@ void Material::rebuildForShader(Ref<Shader> newShaderRef, bool preserveValues) {
     renderQueue = renderQueueOverride_.value_or(newShader.defaultSubShader().renderQueue());
 
     suppressChanges_ = true;
-    for (const ShaderPropertyDesc& property : newShader.properties()) {
+    for (const ShaderPropertyInfo& property : newShader.properties()) {
         setPropertyValue(property.name, property.defaultValue);
         const auto old = oldValues.find(property.name);
         if (old != oldValues.end() && compatiblePropertyTypes(old->second.first, property.type))
@@ -290,10 +278,7 @@ void Material::rebuildForShader(Ref<Shader> newShaderRef, bool preserveValues) {
                 textureRefs_.insert(*texture);
         }
     }
-    for (const std::string& keyword : oldKeywords) {
-        if (newShader.declaresKeyword(keyword))
-            keywords.push_back(keyword);
-    }
+    keywords = std::move(oldKeywords);
     suppressChanges_ = false;
     if (preserveValues)
         markChanged();
@@ -309,18 +294,11 @@ Ref<Material> MaterialAsset::instantiate(const Ref<Shader>& shader) const {
     material->initialize(assetId, assetPath(), name, shader, renderQueue);
     if (!shader)
         return material;
-    for (const std::string& keyword : keywords) {
-        if (!shader->declaresKeyword(keyword)) {
-            Log::warn("Material",
-                      "Keyword is not declared by shader: %s (%s)",
-                      keyword.c_str(),
-                      name.c_str());
-        }
-    }
     material->keywords = keywords;
     material->suppressChanges_ = true;
     for (const auto& [propertyName, value] : properties)
-        material->setPropertyValue(propertyName, value);
+        material->setPropertyValue(
+            propertyName, std::visit([](const auto& item) -> ShaderValue { return item; }, value));
     material->suppressChanges_ = false;
     material->version_ = 1;
     material->dirty_ = true;
@@ -329,8 +307,7 @@ Ref<Material> MaterialAsset::instantiate(const Ref<Shader>& shader) const {
 
 float Material::getFloat(std::string_view name) const {
     const UniformMemberLayout* member = findMember(uniformLayout, name);
-    return member &&
-                   requireOneOf(*member, ShaderPropertyType::Float, ShaderPropertyType::Range, name)
+    return member && requireType(*member, ShaderPropertyType::Float, name)
                ? readUniformValue<float>(*this, *member)
                : 0.0F;
 }
@@ -351,8 +328,7 @@ math::Vec3 Material::getVec3(std::string_view name) const {
 
 math::Vec4 Material::getVec4(std::string_view name) const {
     const UniformMemberLayout* member = findMember(uniformLayout, name);
-    return member &&
-                   requireOneOf(*member, ShaderPropertyType::Vec4, ShaderPropertyType::Color, name)
+    return member && requireType(*member, ShaderPropertyType::Vec4, name)
                ? readUniformValue<math::Vec4>(*this, *member)
                : math::Vec4{};
 }
@@ -397,8 +373,7 @@ Ref<Sampler> Material::resolveSampler(std::string_view name) const {
 
 void Material::setFloat(std::string_view name, float value) {
     const UniformMemberLayout* member = findMember(uniformLayout, name);
-    if (!member ||
-        !requireOneOf(*member, ShaderPropertyType::Float, ShaderPropertyType::Range, name))
+    if (!member || !requireType(*member, ShaderPropertyType::Float, name))
         return;
     writeUniformValue(*this, *member, value);
     markChanged();
@@ -422,8 +397,7 @@ void Material::setVec3(std::string_view name, const math::Vec3& value) {
 
 void Material::setVec4(std::string_view name, const math::Vec4& value) {
     const UniformMemberLayout* member = findMember(uniformLayout, name);
-    if (!member ||
-        !requireOneOf(*member, ShaderPropertyType::Vec4, ShaderPropertyType::Color, name))
+    if (!member || !requireType(*member, ShaderPropertyType::Vec4, name))
         return;
     writeUniformValue(*this, *member, value);
     markChanged();
@@ -466,7 +440,9 @@ void Material::setTexture(std::string_view name, Ref<Texture> texture) {
     markChanged();
 }
 
-void Material::setTexture(std::string_view name, Ref<Texture> texture, const Ref<Sampler>& sampler) {
+void Material::setTexture(std::string_view name,
+                          Ref<Texture> texture,
+                          const Ref<Sampler>& sampler) {
     setTexture(name, std::move(texture));
     if (sampler)
         textureSamplers_.insert_or_assign(std::string{name}, sampler);
@@ -475,8 +451,7 @@ void Material::setTexture(std::string_view name, Ref<Texture> texture, const Ref
 void Material::setPropertyValue(std::string_view name, const ShaderValue& value) {
     if (const UniformMemberLayout* member = uniformLayout.findMember(name)) {
         switch (member->type) {
-        case ShaderPropertyType::Float:
-        case ShaderPropertyType::Range: {
+        case ShaderPropertyType::Float: {
             if (const float* typed = requireValue<float>(value, name)) {
                 setFloat(name, *typed);
             }
@@ -494,8 +469,7 @@ void Material::setPropertyValue(std::string_view name, const ShaderValue& value)
             }
             return;
         }
-        case ShaderPropertyType::Vec4:
-        case ShaderPropertyType::Color: {
+        case ShaderPropertyType::Vec4: {
             if (const math::Vec4* typed = requireValue<math::Vec4>(value, name)) {
                 setVec4(name, *typed);
             }
@@ -568,20 +542,11 @@ void Material::rebuildFromAsset(const MaterialAsset& asset, Ref<Shader> newShade
     // Apply authoritative asset values.
     suppressChanges_ = true;
     for (const auto& [propertyName, value] : asset.properties) {
-        setPropertyValue(propertyName, value);
+        setPropertyValue(propertyName,
+                         std::visit([](const auto& item) -> ShaderValue { return item; }, value));
     }
 
-    keywords.clear();
-    for (const std::string& keyword : asset.keywords) {
-        if (newShader->declaresKeyword(keyword)) {
-            keywords.push_back(keyword);
-        } else {
-            Log::warn("Material",
-                      "Keyword is not declared by shader: %s (%s)",
-                      keyword.c_str(),
-                      name.c_str());
-        }
-    }
+    keywords = asset.keywords;
     suppressChanges_ = false;
 
     renderQueue = renderQueueOverride_.value_or(newShader->defaultSubShader().renderQueue());

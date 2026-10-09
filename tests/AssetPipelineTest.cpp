@@ -1,4 +1,5 @@
-﻿#include "asset/database/AssetDatabase.h"
+﻿#include "asset/runtime/ShaderAssetResolver.h"
+#include "asset/database/AssetDatabase.h"
 #include "asset/importer/AssetImportPipeline.h"
 #include "asset/base/AssetMeta.h"
 #include "core/filesystem/FileWatcher.h"
@@ -367,14 +368,14 @@ int main() {
         return 24;
     }
 
-    // 新模型（无 Manager）：唯一实例由 ShaderAsset 以裸指针观察、不持强引用；释放全部 Ref 后
-    // 实例析构、asset 回指清空，再次 resolve 得到全新的 asset-backed 唯一实例（不再有 Manager
-    // 的 RID index 复用 / generation 递增语义）。
+    // The asset retains its runtime instance when external references are released.
+    const auto firstInstanceId = firstHandleA->instanceId();
     firstHandleA.reset();
     firstHandleB.reset();
     const Ref<Shader> recreated = resolveShaderReference(firstPath.string());
-    if (!recreated || !recreated->isAssetBacked() ||
-        recreated->name() != "Tests/First Reloaded" || recreated != shaderAssetA->instantiate()) {
+    if (!recreated || !static_cast<bool>(findShaderAsset(*recreated)) ||
+        recreated->name() != "Tests/First Reloaded" || recreated != shaderAssetA->instantiate() ||
+        recreated->instanceId() != firstInstanceId) {
         return 17;
     }
     return 0;

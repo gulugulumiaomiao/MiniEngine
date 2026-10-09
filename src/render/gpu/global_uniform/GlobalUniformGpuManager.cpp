@@ -106,7 +106,7 @@ void GlobalUniformGpuManager::updateFrame(std::uint32_t frameIndex) {
     // Textures occupy positions [hasUbo ? 1 : 0] .. in the sorted-binding resource array.
     std::uint32_t pos = layoutHasUbo_ ? 1U : 0U;
     std::uint32_t filled = 0;
-    for (const ShaderPropertyDesc& property : globals.textureProperties()) {
+    for (const ShaderPropertyInfo& property : globals.textureProperties()) {
         if (filled >= layoutTextureCount_)
             break;
         const std::string* reference = globals.findTexture(property.name);

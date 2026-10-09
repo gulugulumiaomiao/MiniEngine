@@ -57,10 +57,15 @@ public:
     // step with the other setters. Idempotent: an unchanged value does not bump
     // the version.
     void setRenderQueue(std::optional<int> queueOverride);
-    // Toggles one shader keyword (affects variant selection). Only keywords the
-    // current Shader declares are accepted; rebuildForShader drops undeclared
-    // ones anyway. Idempotent: re-applying the current state is a no-op.
+    // Material owns enabled keywords independently of Shader declarations.
+    // Each pass ignores undeclared keywords during program selection.
+    // Idempotent: re-applying the current state is a no-op.
     void setKeywordEnabled(const std::string& keyword, bool enabled);
+    void enableKeyword(const std::string& keyword) { setKeywordEnabled(keyword, true); }
+    void disableKeyword(const std::string& keyword) { setKeywordEnabled(keyword, false); }
+    [[nodiscard]] bool isKeywordEnabled(std::string_view keyword) const;
+    [[nodiscard]] std::uint64_t variantKey(const ShaderPass& pass) const;
+    [[nodiscard]] Ref<ShaderProgram> program(const ShaderPass& pass) const;
 
     // Creates a detached runtime copy. The clone is not asset-backed: changes to
     // the source asset will not affect it, and it will not be returned by
@@ -100,7 +105,7 @@ private:
                     std::optional<int> renderQueueOverride);
     void rebuildForShader(Ref<Shader> shader, bool preserveValues);
     void rebuildFromAsset(const MaterialAsset& asset, Ref<Shader> newShader);
-    [[nodiscard]] ShaderValue propertyValue(const ShaderPropertyDesc& property) const;
+    [[nodiscard]] ShaderValue propertyValue(const ShaderPropertyInfo& property) const;
     void setPropertyValue(std::string_view name, const ShaderValue& value);
     void markChanged();
 

@@ -37,11 +37,11 @@ collectMaterialDependencies(const VirtualPath& materialPath) {
         return {};
     }
     std::vector<VirtualPath> dependencies{material->shader};
-    for (const ShaderPropertyDesc& property : shader->properties) {
-        if (property.type != ShaderPropertyType::Texture2D)
+    for (const ShaderPropertyAssetData& property : shader->data.properties) {
+        if (property.type != ShaderAssetPropertyType::Texture2D)
             continue;
         const auto override = material->properties.find(property.name);
-        const ShaderValue& value =
+        const ShaderAssetValue& value =
             override == material->properties.end() ? property.defaultValue : override->second;
         const std::string* reference = std::get_if<std::string>(&value);
         if (!reference || reference->empty())
@@ -117,11 +117,11 @@ AssetImportResult MaterialAssetImporter::import(const AssetImportContext& contex
         return fail("Material properties do not match Shader: " + context.sourcePath.string());
     }
     std::vector<VirtualPath> dependencies{material->shader};
-    for (const ShaderPropertyDesc& property : shader->properties) {
-        if (property.type != ShaderPropertyType::Texture2D)
+    for (const ShaderPropertyAssetData& property : shader->data.properties) {
+        if (property.type != ShaderAssetPropertyType::Texture2D)
             continue;
         const auto override = material->properties.find(property.name);
-        const ShaderValue& value =
+        const ShaderAssetValue& value =
             override == material->properties.end() ? property.defaultValue : override->second;
         const std::string* reference = std::get_if<std::string>(&value);
         if (!reference || reference->empty())

@@ -1,4 +1,4 @@
-﻿#include "asset/manager/AssetManager.h"
+#include "asset/manager/AssetManager.h"
 #include "asset/types/ShaderAsset.h"
 #include "render/shader/Shader.h"
 #include "render/shader/ShaderCompilePipeline.h"
@@ -59,9 +59,8 @@ int main() {
 
     const ShaderKeywordSchema schema{{"NORMAL_MAP", "ALPHA_TEST"}};
     const std::vector<std::string> enabled{"NORMAL_MAP"};
-    const ShaderVariantKey variant = schema.makeKey(enabled, 2, 4);
-    if (!schema.declares("ALPHA_TEST") || variant.keywordBits != 2 ||
-        variant.meshFeatureBits != 2 || variant.platformFeatureBits != 4) {
+    const std::uint64_t variant = schema.makeKey(enabled);
+    if (!schema.declares("ALPHA_TEST") || variant != 2) {
         return 2;
     }
 
@@ -77,7 +76,7 @@ int main() {
     if (!assetOwner)
         return 10;
     const ShaderAsset& asset = *assetOwner;
-    const Shader runtimeShader{asset};
+    const Shader runtimeShader{*asset.buildRuntimeInfo()};
     const ShaderPass& pass = runtimeShader.defaultSubShader().requirePass(ShaderPassType::Forward);
     ShaderCompilePipeline pipeline;
     const RID programHandle = pipeline.getOrCreate(runtimeShader, pass);
@@ -109,7 +108,17 @@ int main() {
         return 14;
     }
 
-    const ShaderPassDesc& assetPass = asset.subShaders.front().requirePass(ShaderPassType::Forward);
+    // Offline output is located by the same stable key for asset instances and clones.
+    const auto linkedRuntime = assetOwner->instantiate();
+    const auto detachedRuntime = linkedRuntime->clone();
+    for (const auto& shader : {linkedRuntime, detachedRuntime}) {
+        if (shader->compileKey() != runtimeShader.compileKey() ||
+            !packagedPipeline.getOrCreate(*shader, shader->defaultSubShader().passes().front()))
+            return 21;
+    }
+
+    const ShaderPassAssetDesc& assetPass =
+        asset.data.subShaders.front().requirePass(ShaderAssetPassType::Forward);
     ShaderPreprocessRequest generatedRequest;
     generatedRequest.sourcePath = assetPass.program.vertexSource;
     generatedRequest.stage = ShaderStage::Vertex;
@@ -145,6 +154,11 @@ int main() {
         rebuiltVertex.generation() == vertexHandle.generation()) {
         return 16;
     }
+    if (pipeline.invalidateShader(runtimeShader.instanceId()).empty())
+        return 22;
+    const auto afterDefinitionChange = pipeline.getOrCreate(runtimeShader, pass);
+    if (!afterDefinitionChange || afterDefinitionChange == rebuiltProgramHandle)
+        return 23;
     test::shutdownAssetEnvironment();
     (void)FILE_SYSTEM.unmount("shader-bin");
     (void)FILE_SYSTEM.unmount("shader-cache");

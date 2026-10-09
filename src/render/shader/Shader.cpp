@@ -1,165 +1,63 @@
-﻿#include "render/shader/Shader.h"
+#include "render/shader/Shader.h"
 
-#include "asset/types/ShaderAsset.h"
-
-#include "asset/manager/AssetManager.h"
 #include "core/logging/Log.h"
-#include "core/serialization/Transfer.h"
 #include "render/global_uniform/GlobalUniformManager.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <limits>
+#include <set>
 #include <utility>
+#include <unordered_set>
 
 namespace engine {
-
 namespace {
 
-constexpr std::uint32_t kShaderAssetMagic = 0x52444853U;
-constexpr std::uint16_t kShaderAssetVersion = 3;
+// Non-owning registry: Shader instances never move and unregister on destruction.
+std::unordered_set<Shader*> liveShaders;
 
-template <typename Enum>
-bool transferShaderEnum(Transfer& archive, std::string_view name, Enum& value, Enum maximum) {
-    return archive.transfer(name, value) && value >= static_cast<Enum>(0) && value <= maximum;
+template <typename Enum> bool validEnum(Enum value, Enum maximum) {
+    return value >= static_cast<Enum>(0) && value <= maximum;
 }
 
-} // namespace
-
-bool ShaderInterfaceVariable::transfer(Transfer& archive) {
-    return archive.beginObject({}) && archive.transfer("name", name) &&
-           archive.transfer("semantic", semantic) &&
-           transferShaderEnum(archive, "type", type, ShaderValueType::Vec4) &&
-           archive.transfer("location", location) &&
-           transferShaderEnum(
-               archive, "interpolation", interpolation, ShaderInterpolation::NoPerspective) &&
-           archive.endObject();
+bool validIdentifier(std::string_view name) {
+    const auto letter = [](char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+    };
+    return !name.empty() && letter(name.front()) &&
+           std::ranges::all_of(name, [&](char c) { return letter(c) || (c >= '0' && c <= '9'); });
 }
 
-bool RenderStateDesc::transfer(Transfer& archive) {
-    return archive.beginObject({}) && transferShaderEnum(archive, "cull", cull, CullMode::Back) &&
-           transferShaderEnum(archive, "front_face", frontFace, FrontFace::CounterClockwise) &&
-           transferShaderEnum(archive, "fill", fill, FillMode::Wireframe) &&
-           transferShaderEnum(archive, "topology", topology, PrimitiveTopology::LineList) &&
-           archive.transfer("depth_write", depthWrite) &&
-           transferShaderEnum(archive, "depth_test", depthTest, DepthCompare::Always) &&
-           transferShaderEnum(archive, "blend", blend, BlendMode::PremultipliedAlpha) &&
-           archive.transfer("color_mask", colorMask) && archive.endObject();
-}
-
-bool ShaderPropertyDesc::transfer(Transfer& archive) {
-    return archive.beginObject({}) && archive.transfer("name", name) &&
-           archive.transfer("display_name", displayName) &&
-           transferShaderEnum(archive, "property_type", type, ShaderPropertyType::Matrix) &&
-           archive.transfer("default_value", defaultValue) && archive.transfer("range", range) &&
-           archive.transfer("attributes", attributes) && archive.endObject();
-}
-
-bool ShaderPassAsset::transfer(Transfer& archive) {
-    return archive.beginObject({}) && archive.transfer("name", pass.name) &&
-           transferShaderEnum(archive, "pass_type", pass.type, ShaderPassType::ShadowCaster) &&
-           archive.transfer("vertex_source", pass.program.vertexSource) &&
-           archive.transfer("fragment_source", pass.program.fragmentSource) &&
-           archive.transfer("vertex_input", pass.vertexInput) &&
-           archive.transfer("varyings", pass.varyings) &&
-           archive.transfer("fragment_outputs", pass.fragmentOutputs) &&
-           archive.transfer("features", pass.features) &&
-           archive.transfer("render_state", renderState) && archive.endObject();
-}
-
-bool SubShaderDesc::transfer(Transfer& archive) {
-    return archive.beginObject({}) && archive.transfer("render_pipeline", renderPipeline) &&
-           archive.transfer("render_queue", renderQueue) && archive.transfer("passes", passes) &&
-           archive.endObject();
-}
-
-bool ShaderAsset::transfer(Transfer& archive) {
-    ShaderAsset decoded;
-    ShaderAsset& target = archive.reading() ? decoded : *this;
-    std::uint32_t magic = kShaderAssetMagic;
-    std::uint16_t version = kShaderAssetVersion;
-    const bool succeeded = archive.beginObject({}) && archive.transfer("magic", magic) &&
-                           magic == kShaderAssetMagic && archive.transfer("version", version) &&
-                           version == kShaderAssetVersion &&
-                           archive.transfer("name", target.name) &&
-                           archive.transfer("properties", target.properties) &&
-                           archive.transfer("global_properties", target.globalProperties) &&
-                           archive.transfer("sub_shaders", target.subShaders) &&
-                           !target.subShaders.empty() && archive.endObject();
-    if (!succeeded) {
-        Log::error("ShaderAsset",
-                   "Invalid payload %s: %s",
-                   assetPath().string().c_str(),
-                   archive.error().empty() ? "validation failed" : archive.error().c_str());
+bool validProperty(const ShaderPropertyInfo& property) {
+    if (!validIdentifier(property.name))
         return false;
+    switch (property.type) {
+    case ShaderPropertyType::Float: return std::holds_alternative<float>(property.defaultValue);
+    case ShaderPropertyType::Vec2: return std::holds_alternative<math::Vec2>(property.defaultValue);
+    case ShaderPropertyType::Vec3: return std::holds_alternative<math::Vec3>(property.defaultValue);
+    case ShaderPropertyType::Vec4: return std::holds_alternative<math::Vec4>(property.defaultValue);
+    case ShaderPropertyType::Boolean: return std::holds_alternative<bool>(property.defaultValue);
+    case ShaderPropertyType::Texture2D:
+        return std::holds_alternative<std::string>(property.defaultValue);
+    case ShaderPropertyType::Matrix:
+        return std::holds_alternative<math::Mat44>(property.defaultValue);
     }
-    if (archive.reading()) {
-        name = std::move(decoded.name);
-        properties = std::move(decoded.properties);
-        subShaders = std::move(decoded.subShaders);
-        // 就地重传（热重载）后把新内容重建到唯一实例，保持活链接（同 TextureAsset/MeshAsset）。
-        syncInstance();
+    return false;
+}
+
+bool validInterface(std::span<const ShaderInterfaceVariable> variables) {
+    std::set<std::string> names;
+    std::set<std::uint32_t> locations;
+    for (const auto& item : variables) {
+        if (!validIdentifier(item.name) || !names.insert(item.name).second ||
+            !locations.insert(item.location).second ||
+            !validEnum(item.type, ShaderValueType::Vec4) ||
+            !validEnum(item.interpolation, ShaderInterpolation::NoPerspective))
+            return false;
     }
     return true;
 }
-
-ShaderKeywordSchema::ShaderKeywordSchema(std::vector<std::string> keywords)
-    : keywords_(std::move(keywords)) {
-    std::ranges::sort(keywords_);
-    keywords_.erase(std::unique(keywords_.begin(), keywords_.end()), keywords_.end());
-    if (keywords_.size() > 64) {
-        Log::fatal("ShaderKeywordSchema", "A pass cannot declare more than 64 keywords");
-    }
-}
-
-bool ShaderKeywordSchema::declares(std::string_view keyword) const {
-    return std::ranges::binary_search(keywords_, keyword);
-}
-
-ShaderVariantKey ShaderKeywordSchema::makeKey(std::span<const std::string> enabledKeywords,
-                                              std::uint32_t meshFeatureBits,
-                                              std::uint32_t platformFeatureBits) const {
-    ShaderVariantKey result{0, meshFeatureBits, platformFeatureBits};
-    for (const std::string& keyword : enabledKeywords) {
-        // Material keywords may target any pass of the shader (e.g. RECEIVE_SHADOWS only
-        // affects the Forward pass); passes that do not declare a keyword simply ignore it.
-        const auto found = std::ranges::lower_bound(keywords_, keyword);
-        if (found == keywords_.end() || *found != keyword) {
-            continue;
-        }
-        const std::size_t bit = static_cast<std::size_t>(std::distance(keywords_.begin(), found));
-        result.keywordBits |= std::uint64_t{1} << bit;
-    }
-    return result;
-}
-
-const ShaderPassDesc& SubShaderDesc::requirePass(ShaderPassType type) const {
-    const auto found = std::ranges::find_if(
-        passes, [type](const ShaderPassAsset& asset) { return asset.pass.type == type; });
-    if (found == passes.end()) {
-        Log::fatal("ShaderAsset", "SubShader has no required pass");
-    }
-    return found->pass;
-}
-
-const ShaderPropertyDesc* ShaderAsset::findProperty(const std::string& name) const {
-    const auto found = std::ranges::find_if(
-        properties, [&name](const ShaderPropertyDesc& property) { return property.name == name; });
-    return found == properties.end() ? nullptr : &*found;
-}
-
-const ShaderPropertyDesc* ShaderAsset::findGlobalProperty(const std::string& name) const {
-    const auto found = std::ranges::find_if(globalProperties,
-                                            [&name](const ShaderPropertyDesc& property) {
-                                                return property.name == name;
-                                            });
-    return found == globalProperties.end() ? nullptr : &*found;
-}
-
-} // namespace engine
-
-namespace engine {
-namespace {
 
 struct Std140TypeLayout {
     std::uint32_t size;
@@ -169,12 +67,10 @@ struct Std140TypeLayout {
 Std140TypeLayout std140TypeLayout(ShaderPropertyType type) {
     switch (type) {
     case ShaderPropertyType::Float:
-    case ShaderPropertyType::Range:
     case ShaderPropertyType::Boolean: return {4, 4};
     case ShaderPropertyType::Vec2: return {8, 8};
     case ShaderPropertyType::Vec3: return {16, 16};
-    case ShaderPropertyType::Vec4:
-    case ShaderPropertyType::Color: return {16, 16};
+    case ShaderPropertyType::Vec4: return {16, 16};
     case ShaderPropertyType::Matrix: return {64, 16};
     case ShaderPropertyType::Texture2D:
         assert(false && "Texture2D is a descriptor, not a uniform member");
@@ -193,6 +89,72 @@ std::uint32_t alignUp(std::uint32_t value, std::uint32_t alignment) {
 
 } // namespace
 
+bool validateShaderCreateInfo(const ShaderCreateInfo& info) {
+    if (info.subShaders.empty())
+        return false;
+    std::set<std::string> propertyNames;
+    const auto validProperties = [&](const auto& properties) {
+        // At most 64 bytes per std140 member, plus final alignment padding.
+        if (properties.size() > (std::numeric_limits<std::uint32_t>::max() - 16U) / 64U)
+            return false;
+        for (const auto& property : properties) {
+            if (!validProperty(property) || !propertyNames.insert(property.name).second)
+                return false;
+        }
+        return true;
+    };
+    if (!validProperties(info.properties) || !validProperties(info.globalProperties))
+        return false;
+    for (const auto& sub : info.subShaders) {
+        if (sub.passes.empty() || sub.renderPipeline.empty())
+            return false;
+        std::set<std::string> passNames;
+        for (const auto& pass : sub.passes) {
+            const auto& state = pass.renderState;
+            if (pass.name.empty() || !passNames.insert(pass.name).second ||
+                !validEnum(pass.type, ShaderPassType::ShadowCaster) ||
+                !pass.program.hasSourceProgram() || !validInterface(pass.vertexInput) ||
+                !validInterface(pass.varyings) || !validInterface(pass.fragmentOutputs) ||
+                !validEnum(state.cull, CullMode::Back) ||
+                !validEnum(state.frontFace, FrontFace::CounterClockwise) ||
+                !validEnum(state.fill, FillMode::Wireframe) ||
+                !validEnum(state.topology, PrimitiveTopology::LineList) ||
+                !validEnum(state.depthTest, DepthCompare::Always) ||
+                !validEnum(state.blend, BlendMode::PremultipliedAlpha) ||
+                state.colorMask.find_first_not_of("RGBA") != std::string::npos)
+                return false;
+            const std::set<std::string> keywords(pass.features.begin(), pass.features.end());
+            if (keywords.size() > 64 || !std::ranges::all_of(keywords, [](const auto& keyword) {
+                    return validIdentifier(keyword);
+                }))
+                return false;
+        }
+    }
+    return true;
+}
+
+ShaderKeywordSchema::ShaderKeywordSchema(std::vector<std::string> keywords)
+    : keywords_(std::move(keywords)) {
+    std::ranges::sort(keywords_);
+    keywords_.erase(std::unique(keywords_.begin(), keywords_.end()), keywords_.end());
+    if (keywords_.size() > 64)
+        Log::fatal("ShaderKeywordSchema", "A pass cannot declare more than 64 keywords");
+}
+
+bool ShaderKeywordSchema::declares(std::string_view keyword) const {
+    return std::ranges::binary_search(keywords_, keyword);
+}
+
+std::uint64_t ShaderKeywordSchema::makeKey(std::span<const std::string> enabledKeywords) const {
+    std::uint64_t result{};
+    for (const auto& keyword : enabledKeywords) {
+        const auto it = std::ranges::lower_bound(keywords_, keyword);
+        if (it != keywords_.end() && *it == keyword)
+            result |= std::uint64_t{1} << std::distance(keywords_.begin(), it);
+    }
+    return result;
+}
+
 const UniformMemberLayout* UniformBlockLayout::findMember(std::string_view name) const {
     const auto member = std::ranges::find_if(
         members, [name](const UniformMemberLayout& item) { return item.name == name; });
@@ -210,10 +172,10 @@ bool isUniformProperty(ShaderPropertyType type) {
     return type != ShaderPropertyType::Texture2D;
 }
 
-UniformBlockLayout buildUniformBlockLayout(std::span<const ShaderPropertyDesc> properties) {
+UniformBlockLayout buildUniformBlockLayout(std::span<const ShaderPropertyInfo> properties) {
     UniformBlockLayout result;
     std::uint32_t cursor = 0;
-    for (const ShaderPropertyDesc& property : properties) {
+    for (const ShaderPropertyInfo& property : properties) {
         if (!isUniformProperty(property.type)) {
             continue;
         }
@@ -230,22 +192,21 @@ UniformBlockLayout buildUniformBlockLayout(std::span<const ShaderPropertyDesc> p
     return result;
 }
 
-ShaderPass::ShaderPass(const ShaderPassDesc& desc, const RenderStateDesc& renderState)
-    : name_(desc.name), type_(desc.type), program_(desc.program), vertexInput_(desc.vertexInput),
-      varyings_(desc.varyings), fragmentOutputs_(desc.fragmentOutputs), renderState_(renderState),
-      features_(desc.features), keywordSchema_(desc.features) {}
+ShaderPass::ShaderPass(const ShaderPassCreateInfo& desc)
+    : name_(desc.name), type_(desc.type), vertexInput_(desc.vertexInput), varyings_(desc.varyings),
+      fragmentOutputs_(desc.fragmentOutputs), renderState_(desc.renderState),
+      keyword_(desc.features) {}
 
-ShaderVariantKey ShaderPass::variantKey(std::span<const std::string> materialKeywords,
-                                        std::uint32_t meshFeatureBits,
-                                        std::uint32_t platformFeatureBits) const {
-    return keywordSchema_.makeKey(materialKeywords, meshFeatureBits, platformFeatureBits);
+Ref<ShaderProgram> ShaderPass::findProgram(std::uint64_t key) const {
+    const auto found = programs_.find(key);
+    return found == programs_.end() ? Ref<ShaderProgram>{} : found->second;
 }
 
-SubShader::SubShader(const SubShaderDesc& desc)
+SubShader::SubShader(const SubShaderCreateInfo& desc)
     : renderPipeline_(desc.renderPipeline), renderQueue_(desc.renderQueue) {
     passes_.reserve(desc.passes.size());
-    for (const ShaderPassAsset& asset : desc.passes) {
-        passes_.emplace_back(asset.pass, asset.renderState);
+    for (const ShaderPassCreateInfo& pass : desc.passes) {
+        passes_.emplace_back(pass);
     }
 }
 
@@ -266,97 +227,98 @@ bool SubShader::supports(std::string_view renderPipeline) const {
     return renderPipeline_ == renderPipeline;
 }
 
-Shader::Shader(const ShaderAsset& asset)
-    : name_(asset.name), properties_(asset.properties),
-      globalProperties_(asset.globalProperties),
-      uniformBlockLayout_(buildUniformBlockLayout(properties_)),
-      globalUniformBlockLayout_(buildUniformBlockLayout(globalProperties_)) {
-    GLOBAL_UNIFORM_MANAGER.registerGlobalProperties(globalProperties_);
-    subShaders_.reserve(asset.subShaders.size());
-    for (const SubShaderDesc& subShader : asset.subShaders) {
+Shader::Shader(ShaderCreateInfo info) {
+    if (!validateShaderCreateInfo(info))
+        Log::fatal("Shader", "Invalid runtime shader description");
+    static std::atomic<std::uint64_t> nextId{1};
+    instanceId_ = nextId.fetch_add(1, std::memory_order_relaxed);
+    name_ = std::move(info.name);
+    properties_ = std::move(info.properties);
+    globalProperties_ = std::move(info.globalProperties);
+    compileKey_ = info.compileKey;
+    uniformBlockLayout_ = buildUniformBlockLayout(properties_);
+    globalUniformBlockLayout_ = buildUniformBlockLayout(globalProperties_);
+    for (const SubShaderCreateInfo& subShader : info.subShaders) {
         subShaders_.emplace_back(subShader);
+        auto& sources = programSources_.emplace_back();
+        for (const auto& pass : subShader.passes)
+            sources.push_back(pass.program);
     }
+    GLOBAL_UNIFORM_MANAGER.registerGlobalProperties(globalProperties_);
+    liveShaders.insert(this);
 }
 
 Shader::~Shader() {
-    // 双向观察者：实例先于 asset 销毁时清除 asset 的回指，避免 ~ShaderAsset 解引用悬垂实例。
-    if (asset_ && asset_->instance_ == this)
-        asset_->instance_ = nullptr;
+    liveShaders.erase(this);
+}
+
+void Shader::clearProgramCaches() {
+    for (const auto* shader : liveShaders) {
+        for (const auto& sub : shader->subShaders_) {
+            for (const auto& pass : sub.passes())
+                pass.programs_.clear();
+        }
+    }
+}
+
+ShaderCreateInfo Shader::snapshot() const {
+    ShaderCreateInfo info;
+    info.name = name_;
+    info.properties = properties_;
+    info.globalProperties = globalProperties_;
+    info.compileKey = compileKey_;
+    for (const SubShader& sub : subShaders_) {
+        SubShaderCreateInfo subInfo;
+        subInfo.renderPipeline = sub.renderPipeline();
+        subInfo.renderQueue = sub.renderQueue();
+        for (const ShaderPass& pass : sub.passes()) {
+            ShaderPassCreateInfo passInfo;
+            passInfo.name = pass.name();
+            passInfo.type = pass.type();
+            passInfo.program = programSource(pass);
+            passInfo.vertexInput = pass.vertexInput();
+            passInfo.varyings = pass.varyings();
+            passInfo.fragmentOutputs = pass.fragmentOutputs();
+            passInfo.features = pass.keyword().keywords();
+            passInfo.renderState = pass.renderState();
+            subInfo.passes.push_back(std::move(passInfo));
+        }
+        info.subShaders.push_back(std::move(subInfo));
+    }
+    return info;
+}
+
+const ShaderProgramDesc& Shader::programSource(const ShaderPass& pass) const {
+    for (std::size_t sub = 0; sub < subShaders_.size(); ++sub) {
+        const auto& passes = subShaders_[sub].passes();
+        for (std::size_t index = 0; index < passes.size(); ++index) {
+            if (&passes[index] == &pass)
+                return programSources_[sub][index];
+        }
+    }
+    Log::fatal("Shader", "Pass does not belong to this shader");
 }
 
 Ref<Shader> Shader::clone() const {
-    if (!asset_) {
-        Log::error("Shader", "clone() requires an asset-backed shader");
-        return {};
-    }
-    return asset_->clone();
+    return makeRef<Shader>(snapshot());
 }
 
-void Shader::rebuildFromAsset(const ShaderAsset& asset) {
+bool Shader::rebuild(ShaderCreateInfo info) {
+    if (!validateShaderCreateInfo(info))
+        return false;
     if (revision_ == std::numeric_limits<std::uint64_t>::max())
         Log::fatal("Shader", "Shader revision overflow");
-    // 直接构造一个脱离 asset 的临时 Shader（不能走 asset.instantiate()：那会返回唯一实例即 this，
-    // 造成自移动）；把临时对象的数据字段移入本实例，保留 asset_ 活链接与身份。
-    Ref<Shader> replacement{new Shader(asset)};
-    name_ = std::move(replacement->name_);
-    properties_ = std::move(replacement->properties_);
-    globalProperties_ = std::move(replacement->globalProperties_);
-    uniformBlockLayout_ = std::move(replacement->uniformBlockLayout_);
-    globalUniformBlockLayout_ = std::move(replacement->globalUniformBlockLayout_);
-    subShaders_ = std::move(replacement->subShaders_);
+    Shader replacement{std::move(info)};
+    name_ = std::move(replacement.name_);
+    properties_ = std::move(replacement.properties_);
+    globalProperties_ = std::move(replacement.globalProperties_);
+    uniformBlockLayout_ = std::move(replacement.uniformBlockLayout_);
+    globalUniformBlockLayout_ = std::move(replacement.globalUniformBlockLayout_);
+    subShaders_ = std::move(replacement.subShaders_);
+    programSources_ = std::move(replacement.programSources_);
+    compileKey_ = replacement.compileKey_;
     ++revision_;
-}
-
-const VirtualPath& Shader::assetPath() const {
-    static const VirtualPath kEmpty;
-    return asset_ ? asset_->assetPath() : kEmpty;
-}
-
-AssetId Shader::assetId() const {
-    return asset_ ? asset_->assetId() : AssetId{};
-}
-
-Ref<Shader> ShaderAsset::instantiate() {
-    if (instance_)
-        return Ref<Shader>(instance_); // 复用唯一实例（addRef）
-    Ref<Shader> shader{new Shader{*this}};
-    shader->bindAsset(this);
-    instance_ = shader.get();
-    return shader;
-}
-
-Ref<Shader> ShaderAsset::clone() {
-    return Ref<Shader>{new Shader{*this}}; // 脱离实例：不登记、不链接 asset
-}
-
-void ShaderAsset::syncInstance() {
-    if (instance_)
-        instance_->rebuildFromAsset(*this);
-}
-
-ShaderAsset::~ShaderAsset() {
-    // 双向观察者：asset 先于其唯一实例销毁时清除实例回指，避免 ~Shader 解引用悬垂 asset_。
-    if (instance_)
-        instance_->asset_ = nullptr;
-}
-
-Ref<Shader> resolveShaderReference(std::string_view reference) {
-    if (reference.empty())
-        return {};
-    VirtualPath path{reference};
-    if (!path.valid())
-        path = VirtualPath{"assets://" + std::string{reference}};
-    if (path.valid() && path.scheme() == "assets") {
-        if (const Ref<ShaderAsset> asset = ASSET_MANAGER.loadAsset<ShaderAsset>(path)) {
-            if (Ref<Shader> shader = asset->instantiate())
-                return shader;
-        }
-    }
-    Log::warn("Shader",
-              "Cannot resolve shader reference: %.*s",
-              static_cast<int>(reference.size()),
-              reference.data());
-    return {};
+    return true;
 }
 
 const SubShader* Shader::selectSubShader(std::string_view renderPipeline) const {
@@ -387,7 +349,7 @@ const SubShader& Shader::defaultSubShader() const {
 bool Shader::declaresKeyword(std::string_view keyword) const {
     return std::ranges::any_of(subShaders_, [keyword](const SubShader& subShader) {
         return std::ranges::any_of(subShader.passes(), [keyword](const ShaderPass& pass) {
-            return std::ranges::find(pass.features(), keyword) != pass.features().end();
+            return pass.keyword().declares(keyword);
         });
     });
 }

@@ -1,3 +1,4 @@
+#include "asset/runtime/ShaderAssetResolver.h"
 #include <gtest/gtest.h>
 
 #include "asset/base/AssetReference.h"

@@ -1,4 +1,5 @@
 ﻿#include "asset/manager/AssetManager.h"
+#include "render/GraphicsPipelineStorage.h"
 #include "asset/types/MaterialAsset.h"
 #include "asset/types/ShaderAsset.h"
 
@@ -69,10 +70,12 @@ bool AssetManager::initialize(AssetManagerMode mode) {
             // 保持活链接（若 invalidate+新建 asset，则持有旧 asset 的实例会失联）。
             reloadInPlace(notification.path);
             if (notification.type == AssetType::Shader) {
-                // shader 内容变化后刷新引用它的材质（按 shader asset guid 匹配，revision 变化触发重建）。
-                const std::optional<AssetId> assetId = ASSET_DATABASE.findGuid(notification.path);
-                if (assetId)
-                    MATERIAL_RESOURCE_MANAGER.refreshShader(*assetId);
+                // Push runtime identity to consumers only for an already instantiated asset.
+                const auto shaderAsset = refDynamicCast<ShaderAsset>(findCached(notification.path));
+                if (shaderAsset && shaderAsset->runtimeInstance()) {
+                    MATERIAL_RESOURCE_MANAGER.refreshShader(shaderAsset->runtimeInstance());
+                    GRAPHICS_PIPELINE_STORAGE.invalidateShader(*shaderAsset->runtimeInstance());
+                }
             }
         } else {
             invalidate(notification.path);
@@ -156,6 +159,17 @@ Ref<Asset> AssetManager::loadAsset(const VirtualPath& path) {
         return {};
     }
     return cache(path, std::move(asset));
+}
+
+Ref<ShaderAsset> AssetManager::findShaderAsset(const Shader& shader) const {
+    std::scoped_lock lock{mutex_};
+    for (const auto& entry : cache_) {
+        const auto& cached = entry.second;
+        const auto asset = refDynamicCast<ShaderAsset>(cached);
+        if (asset && asset->runtimeInstance().get() == &shader)
+            return asset;
+    }
+    return {};
 }
 
 void AssetManager::invalidate(const VirtualPath& path) {

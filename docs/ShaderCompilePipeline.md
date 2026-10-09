@@ -2,7 +2,7 @@
 
 Shader 保留资产与运行时两层：`ShaderAsset` 负责 JSON、Artifact 和资产身份，
 `ShaderAsset::instantiate()` 生成供渲染使用的 `Shader`。编译链从 `Shader` 开始，
-不持有也不接收 `ShaderAsset`。
+不持有也不接收 `ShaderAsset`，也不使用资产序列化描述。资产侧先转换为 `ShaderCreateInfo`；运行时 Shader 仅保存运行时属性、Pass 和派生布局。
 
 ```text
 shader.json -> ShaderAsset -> Shader -> ShaderCompilePipeline
@@ -89,20 +89,23 @@ cmake --build build/clang-publish --target MiniShaderPackagedShaders
 
 ### PackagedRuntime
 
-根据 Shader 路径、Pass、Variant、Target 和 Stage 计算固定路径，只加载
+根据资产侧提供的稳定 ShaderCompileKey、Pass、Variant 和 Stage 计算固定路径，只加载
 `shader-bin://*.spv`。任何阶段缺失都会记录预期路径、返回无效 Program，Renderer
 使用内置洋红 Error Material。打包模式不会调用 glslc，也不会回退到运行时编译。
 
-## GPU 创建
+## GPU 集成
 
 ```text
-ShaderCompilePipeline
-  -> ShaderProgram + CompiledShader handles
-  -> ShaderGpuManager -> ShaderModuleCache
-  -> IDevice::createShader
-  -> GraphicsPipelineCache
-  -> IDevice::createGraphicsPipeline
+Material::program(pass)
+  -> 用 pass.keyword() 过滤材质启用关键词，生成 uint64_t 关键词位掩码
+  -> GraphicsPipelineStorage 查询 Pass 的程序表
+  -> ShaderCompilePipeline 生成 CompiledProgram / CompiledShader
+  -> ShaderProgram 创建 GPU 模块、UniformSetLayout 和 PipelineLayout
+  -> 保存到 Pass 的组合程序表
+  -> GraphicsPipelineStorage 根据 Program、Mesh 和 RT 格式创建图形管线
   -> draw
 ```
 
-单例 `ShaderGpuManager` 持有一个 `ShaderCompilePipeline`，Renderer 不拥有编译器、CompiledShaderCache 或 ShaderProgramCache。
+`GraphicsPipelineStorage` 拥有一个 `ShaderCompilePipeline`，负责创建 GPU 程序和图形管线；Program 的组合缓存属于 Pass，Material 决定当前使用的组合。Renderer 不拥有编译器或程序缓存。
+
+Shader 的编译源描述由 Shader 自身保存，Pass 不再持有 `ShaderProgramDesc`。开发时变体首次使用才编译；发布时仍按相同的组合键加载离线 SPIR-V。热重载与关闭时会清空存活 Pass 的程序表；已提交 GPU 使用的程序由 GraphicsPipelineStorage 按序号延迟回收。

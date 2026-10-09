@@ -21,7 +21,7 @@ public:
     void refreshAsset(const AssetId& assetId);
     void refreshAsset(const VirtualPath& materialPath);
     void setShader(const Ref<Material>& material, const VirtualPath& shaderPath);
-    void refreshShader(const AssetId& shaderAssetId);
+    void refreshShader(const Ref<Shader>& shader);
 
     [[nodiscard]] Ref<Material> insert(const Ref<Material>& material);
     [[nodiscard]] Ref<Material> insertUnkeyed(const Ref<Material>& material);

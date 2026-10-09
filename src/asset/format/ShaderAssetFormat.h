@@ -6,7 +6,6 @@
 
 #include "asset/types/ShaderAsset.h"
 #include "core/base/Ref.h"
-#include "render/shader/Shader.h"
 
 #include <string_view>
 

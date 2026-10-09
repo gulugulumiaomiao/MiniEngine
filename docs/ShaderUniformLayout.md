@@ -51,7 +51,7 @@ struct UniformBlockLayout {
 
 ```cpp
 UniformBlockLayout buildUniformBlockLayout(
-    std::span<const ShaderPropertyDesc> properties);
+    std::span<const ShaderPropertyInfo> properties);
 ```
 
 `findMember` 用于可选查询，`requireMember` 在属性不存在时记录 fatal 日志并退出程序。
