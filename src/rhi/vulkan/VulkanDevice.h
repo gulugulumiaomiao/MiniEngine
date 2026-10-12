@@ -8,6 +8,7 @@
 #include "rhi/vulkan/VulkanDescriptorSet.h"
 #include "rhi/vulkan/VulkanDescriptorSetLayout.h"
 #include "rhi/vulkan/VulkanGraphicsPipeline.h"
+#include "rhi/vulkan/VulkanRenderPass.h"
 #include "rhi/vulkan/VulkanSampler.h"
 #include "rhi/vulkan/VulkanShaderModule.h"
 #include "rhi/vulkan/VulkanTexture.h"
@@ -29,6 +30,9 @@ namespace engine::rhi::vulkan {
 struct ResolvedPipeline {
     VkPipeline pipeline{VK_NULL_HANDLE};
     VkPipelineLayout layout{VK_NULL_HANDLE};
+    RID renderPass;
+    std::uint32_t subpass{};
+    std::uint32_t colorAttachmentCount{};
 };
 
 // Synchronization primitives attached to a submission. Null handles disable the corresponding
@@ -86,6 +90,13 @@ public:
 
     [[nodiscard]] RID pipeline_create(const GraphicsPipelineDesc& desc) override;
     void pipeline_destroy(RID handle) override;
+    [[nodiscard]] RID render_pass_create(const RenderPassDesc& desc) override;
+    void render_pass_destroy(RID handle) override;
+    [[nodiscard]] RID framebuffer_create(const FramebufferDesc& desc) override;
+    void framebuffer_destroy(RID handle) override;
+    [[nodiscard]] TextureViewInfo texture_view_info(RID view) const override;
+    [[nodiscard]] const VulkanRenderPass& renderPass(RID handle) const;
+    [[nodiscard]] const VulkanFramebuffer& framebuffer(RID handle) const;
 
     // ---- New uniform-binding system (descriptor set layouts / pipeline layouts / descriptor sets)
     [[nodiscard]] RID descriptor_set_layout_allocate_rid() override;
@@ -214,6 +225,8 @@ private:
     HandlePool<VulkanSampler, RID> samplers_;
     HandlePool<VulkanShaderModule, RID> shaders_;
     HandlePool<VulkanGraphicsPipeline, RID> pipelines_;
+    HandlePool<VulkanRenderPass, RID> renderPasses_;
+    HandlePool<VulkanFramebuffer, RID> framebuffers_;
     HandlePool<VulkanCommandBuffer, RID> commandBuffers_;
     // Uniform-binding system pools.
     HandlePool<VulkanDescriptorSetLayout, RID> setLayouts_;

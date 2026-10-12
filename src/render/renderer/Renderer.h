@@ -2,6 +2,7 @@
 
 #include "render/pipeline/RenderPipeline.h"
 #include "render/render_graph/RgTexturePool.h"
+#include "render/render_graph/RgRenderPassCache.h"
 #include "rhi/RhiFactory.h"
 
 #include <cstdint>
@@ -70,6 +71,7 @@ public:
         return *forwardTargets_[swapchain_->frameIndex()];
     }
     [[nodiscard]] RgTexturePool& rgTexturePool() { return *rgTexturePool_; }
+    [[nodiscard]] RgRenderPassCache& rgRenderPassCache() { return *rgRenderPassCache_; }
     [[nodiscard]] Window& window() { return window_; }
     [[nodiscard]] std::uint64_t frameSerial() const { return frameSerial_; }
 
@@ -82,6 +84,7 @@ private:
     std::unique_ptr<rhi::ISwapchain> swapchain_;
     std::vector<std::unique_ptr<RenderTarget>> forwardTargets_;
     std::optional<RgTexturePool> rgTexturePool_;
+    std::optional<RgRenderPassCache> rgRenderPassCache_;
     std::unique_ptr<IRenderPipeline> pipeline_;
     IFrameOverlay* overlay_{};
     std::uint64_t frameSerial_{};

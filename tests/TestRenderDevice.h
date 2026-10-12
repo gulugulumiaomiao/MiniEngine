@@ -84,6 +84,32 @@ public:
     }
     void pipeline_destroy(rhi::RID) override { ++destroyedPipelines; }
 
+    rhi::RID render_pass_create(const rhi::RenderPassDesc& desc) override {
+        renderPasses.push_back(desc);
+        return {static_cast<std::uint32_t>(renderPasses.size()), 1};
+    }
+    void render_pass_destroy(rhi::RID handle) override {
+        destroyedRenderPasses.push_back(handle);
+        renderObjectDestructionOrder.push_back("RenderPass");
+    }
+    rhi::RID framebuffer_create(const rhi::FramebufferDesc& desc) override {
+        framebuffers.push_back(desc);
+        return {static_cast<std::uint32_t>(framebuffers.size()), 1};
+    }
+    void framebuffer_destroy(rhi::RID handle) override {
+        destroyedFramebuffers.push_back(handle);
+        renderObjectDestructionOrder.push_back("Framebuffer");
+    }
+    rhi::TextureViewInfo texture_view_info(rhi::RID view) const override {
+        for (const auto& [index, handle] : defaultTextureViews) {
+            if (view != handle) continue;
+            const auto& d = textures[index - 1];
+            return {{index, 1}, d.format, d.samples, d.usage, d.width, d.height,
+                    0, d.mipCount, 0, d.arrayLayers};
+        }
+        return {};
+    }
+
     rhi::RID shader_allocate_rid() override { return {++shaderRids, 1}; }
     void shader_release_rid(rhi::RID) override {}
     rhi::RID descriptor_set_layout_allocate_rid() override { return {++setLayouts, 1}; }
@@ -112,6 +138,11 @@ public:
     std::vector<rhi::ShaderStage> shaders;
     std::vector<std::vector<std::byte>> shaderBytecode;
     std::vector<rhi::GraphicsPipelineDesc> pipelines;
+    std::vector<rhi::RenderPassDesc> renderPasses;
+    std::vector<rhi::FramebufferDesc> framebuffers;
+    std::vector<rhi::RID> destroyedRenderPasses;
+    std::vector<rhi::RID> destroyedFramebuffers;
+    std::vector<std::string> renderObjectDestructionOrder;
     std::vector<std::size_t> uploadedBytes;
     std::unordered_map<std::uint32_t, std::vector<std::byte>> uploadedBuffers;
     std::unordered_map<std::uint32_t, std::vector<rhi::DescriptorWrite>> descriptorWrites;

@@ -27,6 +27,8 @@ public:
         std::uint32_t mipCount{1};
         rhi::TextureUsage usage{rhi::TextureUsage::None};
         bool inUse{false};
+        rhi::ResourceState lastState{rhi::ResourceState::Undefined};
+        rhi::AccessMode lastAccess{rhi::AccessMode::Read};
     };
 
     explicit RgTexturePool(std::uint32_t framesInFlight = 2);

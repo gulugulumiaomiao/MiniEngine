@@ -23,6 +23,7 @@ namespace {
     case ShaderDescriptorType::Sampler: return rhi::ResourceType::Sampler;
     case ShaderDescriptorType::SampledImage: return rhi::ResourceType::SampledImage;
     case ShaderDescriptorType::CombinedImageSampler: return rhi::ResourceType::CombinedImageSampler;
+    case ShaderDescriptorType::InputAttachment: return rhi::ResourceType::InputAttachment;
     case ShaderDescriptorType::Unknown: return rhi::ResourceType::UniformBuffer;
     }
     return rhi::ResourceType::UniformBuffer;

@@ -310,7 +310,7 @@ ShaderCompilePipeline::reflectSpirv(std::span<const std::byte> bytecode,
         reflectDescriptors(resources.sampled_images, ShaderDescriptorType::CombinedImageSampler);
         reflectDescriptors(resources.separate_images, ShaderDescriptorType::SampledImage);
         reflectDescriptors(resources.storage_images, ShaderDescriptorType::SampledImage);
-        reflectDescriptors(resources.subpass_inputs, ShaderDescriptorType::SampledImage);
+        reflectDescriptors(resources.subpass_inputs, ShaderDescriptorType::InputAttachment);
         reflectDescriptors(resources.separate_samplers, ShaderDescriptorType::Sampler);
         std::ranges::sort(
             result.descriptors,

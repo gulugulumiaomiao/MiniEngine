@@ -45,7 +45,7 @@ void DepthOnlyPass::execute(RenderContext& context,
     rendering.depthAttachments.push_back(
         {depthHandle, rhi::LoadOp::Clear, rhi::StoreOp::Store, 1.0F});
 
-    std::vector<RgResourceUsage> resources;
+    std::vector<RgResourceAccess> resources;
     resources.reserve(1);
     resources.push_back({depthHandle, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment});
 

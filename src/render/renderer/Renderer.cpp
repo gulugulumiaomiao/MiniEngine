@@ -20,6 +20,7 @@ Renderer::Renderer(Window& window, rhi::Context context)
         Log::fatal("Renderer", "RHI context is incomplete");
     }
     rgTexturePool_.emplace();
+    rgRenderPassCache_.emplace();
     forwardTargets_.reserve(FrameGpuManager::kFramesInFlight);
     for (std::uint32_t frame = 0; frame < FrameGpuManager::kFramesInFlight; ++frame) {
         auto target = std::make_unique<RenderTarget>();
@@ -40,6 +41,8 @@ Renderer::~Renderer() {
     if (!device_)
         return;
     device_->waitIdle();
+    // Destroy graph framebuffers before their views and render passes while idle.
+    rgRenderPassCache_.reset();
     // Transient pool entries call into the device on destruction; the implicit member
     // destruction order would run after device_.reset() below and hit a dangling device.
     rgTexturePool_.reset();
@@ -109,6 +112,7 @@ void Renderer::recreateSwapchain() {
     const auto [width, height] = window_.framebufferSize();
     device_->waitIdle();
     GRAPHICS_PIPELINE_STORAGE.clear();
+    rgRenderPassCache_->clearFramebuffers();
     swapchain_->resize(width, height);
     for (const std::unique_ptr<RenderTarget>& target : forwardTargets_) {
         if (offscreenScene_)
@@ -149,6 +153,12 @@ void Renderer::prepareForwardTarget() {
             .additionalUsage = rhi::TextureUsage::Sampled,
         });
     }
+    // Only this frame slot's views are replaced; its fence has completed. Cached
+    // framebuffers for other in-flight slots must remain alive.
+    for (std::size_t i = 0; i < target.colorAttachmentCount(); ++i)
+        rgRenderPassCache_->invalidateFramebuffers(target.colorView(i));
+    if (target.hasDepthAttachment())
+        rgRenderPassCache_->invalidateFramebuffers(target.depthView());
     if (!target.create(std::move(desc)))
         Log::fatal("Renderer", "Cannot prepare the scene render target");
 }

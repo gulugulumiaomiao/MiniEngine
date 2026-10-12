@@ -233,6 +233,10 @@ if(NOT MSVC)
     target_compile_options(TextureViewCacheTest PRIVATE -Wno-missing-field-initializers)
 endif()
 mini_add_test(RgTexturePoolTest)
+mini_add_gtest(RenderGraphTest)
+target_compile_definitions(RenderGraphTest PRIVATE
+    MINI_TEST_RG_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets"
+    MINI_TEST_RG_CACHE_DIR="${CMAKE_CURRENT_BINARY_DIR}/render-graph-reflection")
 mini_add_test(RenderPipelineTest)
 mini_add_test(RenderQueueTest)
 mini_add_test(DrawBatcherTest)
@@ -368,6 +372,21 @@ target_link_libraries(SwapchainLayoutTest PRIVATE user32)
 # Real-device coverage for the RID-only RHI (per-type pools + command free functions). Probes
 # for a Vulkan 1.3 runtime and skips gracefully when absent, like the other GPU-backed tests.
 mini_add_gtest(RhiDeviceTest)
+set(MINI_RG_SHADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/render-graph-shaders")
+set(MINI_RG_SHADER_OUTPUTS)
+foreach(shader render_graph_fullscreen.vert render_graph_gbuffer.frag render_graph_lighting.frag)
+    set(output "${MINI_RG_SHADER_DIR}/${shader}.spv")
+    add_custom_command(OUTPUT "${output}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${MINI_RG_SHADER_DIR}"
+        COMMAND "${GLSLC_EXECUTABLE}" --target-env=vulkan1.3 -O0
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/${shader}" -o "${output}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/${shader}"
+        VERBATIM)
+    list(APPEND MINI_RG_SHADER_OUTPUTS "${output}")
+endforeach()
+add_custom_target(RenderGraphTestShaders DEPENDS ${MINI_RG_SHADER_OUTPUTS})
+add_dependencies(RhiDeviceTest RenderGraphTestShaders)
+target_compile_definitions(RhiDeviceTest PRIVATE MINI_TEST_RENDER_GRAPH_SHADER_DIR="${MINI_RG_SHADER_DIR}")
 target_include_directories(RhiDeviceTest SYSTEM PRIVATE
     ${PROJECT_SOURCE_DIR}/third_party/vma/include
 )

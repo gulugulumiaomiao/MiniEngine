@@ -41,6 +41,14 @@ public:
                                    const Mesh& mesh,
                                    rhi::PixelFormat colorFormat,
                                    rhi::PixelFormat depthFormat);
+    // Subpass-aware variant. Called inside the grouped pass callback after graph compilation.
+    [[nodiscard]] rhi::RID resolve(const ShaderProgram& program,
+                                   const Mesh& mesh,
+                                   std::span<const rhi::PixelFormat> colorFormats,
+                                   rhi::PixelFormat depthFormat,
+                                   rhi::RID renderPass,
+                                   std::uint32_t subpass,
+                                   rhi::SampleCount samples = rhi::SampleCount::One);
     void invalidateShader(const Shader& shader);
     void refreshShaders(std::uint64_t frameSerial, std::uint64_t retireSerial);
     void collect(std::uint64_t completedSerial);

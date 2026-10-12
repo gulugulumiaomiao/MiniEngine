@@ -145,6 +145,33 @@ rhi::RID GraphicsPipelineStorage::resolve(const ShaderProgram& program,
     return stored.stored->pipeline;
 }
 
+rhi::RID GraphicsPipelineStorage::resolve(const ShaderProgram& program, const Mesh& mesh,
+                                          std::span<const rhi::PixelFormat> colorFormats,
+                                          rhi::PixelFormat depthFormat, rhi::RID renderPass,
+                                          std::uint32_t subpass, rhi::SampleCount samples) {
+    if (!initialized()) return {};
+    ShaderHash key = program.id();
+    hashAppend(key, mesh.vertexLayout().hash());
+    hashAppend(key, static_cast<std::uint64_t>(colorFormats.size()));
+    for (const auto format : colorFormats) hashAppend(key, format);
+    hashAppend(key, depthFormat);
+    hashAppend(key, renderPass.value());
+    hashAppend(key, subpass);
+    hashAppend(key, samples);
+    if (const auto* cached = cache_.find(key)) return cached->pipeline;
+    auto desc = makeDescription(mesh.vertexLayout(), rhi::PixelFormat::Undefined, depthFormat, program);
+    desc.colorFormats.assign(colorFormats.begin(), colorFormats.end());
+    desc.renderPass = renderPass;
+    desc.subpass = subpass;
+    desc.samples = samples;
+    GraphicsPipelineStorageEntry created;
+    if (!factory_->create(desc, created)) return {};
+    created.program = program.id();
+    auto stored = cache_.store(key, std::move(created));
+    if (stored.replaced) factory_->release(*stored.replaced);
+    return stored.stored->pipeline;
+}
+
 void GraphicsPipelineStorage::invalidateShader(const Shader& shader) {
     if (initialized())
         pendingShaderInvalidations_.push_back(shader.instanceId());

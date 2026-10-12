@@ -4,6 +4,7 @@
 #include "rhi/api/ResourceDesc.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -34,11 +35,13 @@ struct RgTextureDesc {
     std::string debugName;
 };
 
-// Resource usage declared by a pass. The RenderGraph uses this list to emit barriers.
-struct RgResourceUsage {
+// Resource access declared by a pass. Compilation derives synchronization and pass
+// dependencies from these declarations, and validates reads/writes and initialization.
+struct RgResourceAccess {
     RgTextureHandle texture;
     rhi::TextureAspect aspect{rhi::TextureAspect::Color};
     rhi::ResourceState state{rhi::ResourceState::ShaderRead};
+    rhi::AccessMode access{rhi::AccessMode::Auto};
 };
 
 // Attachment description used during graph recording, before RHI handles are resolved.
@@ -54,12 +57,29 @@ struct RgDepthAttachment {
     rhi::LoadOp loadOp{rhi::LoadOp::Clear};
     rhi::StoreOp storeOp{rhi::StoreOp::Store};
     float clearDepth{1.0F};
+    rhi::AccessMode access{rhi::AccessMode::ReadWrite};
 };
 
 struct RgRenderingInfo {
     rhi::Rect renderArea;
     std::vector<RgColorAttachment> colorAttachments;
     std::vector<RgDepthAttachment> depthAttachments;
+    std::vector<RgTextureHandle> inputAttachments;
+};
+
+// Passed to grouped-pass callbacks after compilation. Use renderPass/subpass when
+// creating or resolving a graphics pipeline; null renderPass means dynamic rendering.
+struct RgExecuteContext {
+    rhi::RID commandBuffer;
+    rhi::RID renderPass;
+    std::uint32_t subpass{};
+};
+
+struct RgRasterPass {
+    std::string name;
+    RgRenderingInfo rendering;
+    std::vector<RgResourceAccess> resources;
+    std::function<void(const RgExecuteContext&)> execute;
 };
 
 } // namespace engine

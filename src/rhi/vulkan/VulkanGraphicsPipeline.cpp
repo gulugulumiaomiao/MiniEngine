@@ -13,8 +13,10 @@ VulkanGraphicsPipeline::VulkanGraphicsPipeline(VkDevice device,
                                                VkShaderModule vertexShader,
                                                VkShaderModule fragmentShader,
                                                VkPipelineLayout layout,
-                                               VkPipelineCache cache)
-    : device_(device), layout_(layout) {
+                                               VkPipelineCache cache,
+                                               VkRenderPass renderPass)
+    : device_(device), layout_(layout), renderPass_(desc.renderPass), subpass_(desc.subpass),
+      colorAttachmentCount_(static_cast<std::uint32_t>(desc.colorFormats.size())) {
     std::array<VkPipelineShaderStageCreateInfo, 2> stages{};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -63,7 +65,7 @@ VulkanGraphicsPipeline::VulkanGraphicsPipeline(VkDevice device,
 
     VkPipelineMultisampleStateCreateInfo multisampling{
         VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampling.rasterizationSamples = toVulkan(desc.samples);
 
     // Color blend and depth/stencil states are fully dynamic; use benign defaults
     // for pipeline creation and let the command buffer configure them per batch.
@@ -106,7 +108,9 @@ VulkanGraphicsPipeline::VulkanGraphicsPipeline(VkDevice device,
     }
 
     VkGraphicsPipelineCreateInfo pipelineInfo{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-    pipelineInfo.pNext = &renderingInfo;
+    pipelineInfo.pNext = renderPass == VK_NULL_HANDLE ? &renderingInfo : nullptr;
+    pipelineInfo.renderPass = renderPass;
+    pipelineInfo.subpass = desc.subpass;
     pipelineInfo.stageCount = static_cast<std::uint32_t>(stages.size());
     pipelineInfo.pStages = stages.data();
     pipelineInfo.pVertexInputState = &vertexInput;

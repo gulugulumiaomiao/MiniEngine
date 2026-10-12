@@ -28,7 +28,7 @@ RenderGraph v2
 
 ```text
 src/render/render_graph/
-├── RgTypes.h              RgTextureHandle / RgTextureDesc / RgResourceUsage / RgRenderingInfo
+├── RgTypes.h              RgTextureHandle / RgTextureDesc / RgResourceAccess / RgRenderingInfo
 ├── RgTexturePool.h/.cpp   跨帧纹理池
 ├── RenderGraph.h/.cpp     v2 API（import/create/compile/execute/reset）
 ```
@@ -96,12 +96,12 @@ graph.reset();
 ### RenderTarget
 
 - `importColor()` / `importDepth()` 现在返回 `RgTextureHandle`。
-- 移除 `writeUsages()`：调用方通过返回的 handle 自行构建 `RgResourceUsage`。
+- 移除 `writeUsages()`：调用方通过返回的 handle 自行构建 `RgResourceAccess`。
 - 继续保留 `renderingInfo()`（返回 `rhi::RenderingInfo`），用于非 RG 的直接 RHI 使用。
 
 ### MiniForwardPipeline
 
-- `recordDrawCommands` 改用 `RgRenderingInfo` 与 `RgResourceUsage`。
+- `recordDrawCommands` 改用 `RgRenderingInfo` 与 `RgResourceAccess`。
 - 后缓冲与 forward depth 均通过 `importTexture` / `importDepth` 获得 handle。
 - 在 `execute()` 前后分别调用 `compile(context.rgTexturePool())` 与 `graph.reset()`。
 

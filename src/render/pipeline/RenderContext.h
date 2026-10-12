@@ -10,6 +10,7 @@ namespace engine {
 class Renderer;
 class RenderTarget;
 class RgTexturePool;
+class RgRenderPassCache;
 
 namespace rhi {
 class ISwapchain;
@@ -23,6 +24,7 @@ public:
     [[nodiscard]] rhi::RID commandBuffer() const;
     [[nodiscard]] RenderTarget& currentForwardTarget() const;
     [[nodiscard]] RgTexturePool& rgTexturePool() const;
+    [[nodiscard]] RgRenderPassCache& rgRenderPassCache() const;
     [[nodiscard]] std::uint32_t frameIndex() const;
     [[nodiscard]] std::uint64_t frameSerial() const;
     [[nodiscard]] const RenderScene& scene() const { return scene_; }

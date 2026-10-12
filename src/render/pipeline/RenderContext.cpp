@@ -38,6 +38,10 @@ RgTexturePool& RenderContext::rgTexturePool() const {
     return renderer_.rgTexturePool();
 }
 
+RgRenderPassCache& RenderContext::rgRenderPassCache() const {
+    return renderer_.rgRenderPassCache();
+}
+
 std::uint32_t RenderContext::frameIndex() const {
     return renderer_.swapchain().frameIndex();
 }

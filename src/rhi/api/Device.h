@@ -82,6 +82,14 @@ public:
     [[nodiscard]] virtual RID pipeline_create(const GraphicsPipelineDesc& desc) = 0;
     virtual void pipeline_destroy(RID handle) = 0;
 
+    // Raw render-pass/framebuffer lifecycle. Reuse and invalidation belong to the
+    // render-graph layer. Retire GPU work before destroying these objects or their views.
+    [[nodiscard]] virtual RID render_pass_create(const RenderPassDesc&) { return {}; }
+    virtual void render_pass_destroy(RID) {}
+    [[nodiscard]] virtual RID framebuffer_create(const FramebufferDesc&) { return {}; }
+    virtual void framebuffer_destroy(RID) {}
+    [[nodiscard]] virtual TextureViewInfo texture_view_info(RID) const { return {}; }
+
     // Descriptor set layouts, pipeline layouts and descriptor sets: the reflection-driven
     // uniform-binding system (engine layer UniformSetLayout / PipelineLayout / UniformSet).
     //

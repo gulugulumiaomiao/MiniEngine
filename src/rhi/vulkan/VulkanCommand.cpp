@@ -29,6 +29,9 @@ void resourceBarriers(RID cmd, std::span<const TextureBarrier> barriers) {
 }
 void beginRendering(RID cmd, const RenderingInfo& info) { resolve(cmd).beginRendering(info); }
 void endRendering(RID cmd) { resolve(cmd).endRendering(); }
+void beginRenderPass(RID cmd, const RenderPassBeginInfo& info) { resolve(cmd).beginRenderPass(info); }
+void nextSubpass(RID cmd) { resolve(cmd).nextSubpass(); }
+void endRenderPass(RID cmd) { resolve(cmd).endRenderPass(); }
 void setViewport(RID cmd, const Viewport& viewport) { resolve(cmd).setViewport(viewport); }
 void setScissor(RID cmd, const Rect& scissor) { resolve(cmd).setScissor(scissor); }
 void setCullMode(RID cmd, CullMode mode) { resolve(cmd).setCullMode(mode); }

@@ -33,6 +33,7 @@ enum class ResourceType {
     CombinedImageSampler,   // VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
     Sampler,                // VK_DESCRIPTOR_TYPE_SAMPLER
     StorageImage,           // VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
+    InputAttachment,        // VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT
 };
 
 // ---------------------------------------------------------------------------
@@ -145,6 +146,8 @@ constexpr bool hasFlag(ColorWriteMask value, ColorWriteMask flag) {
 // (cull mode, front face, depth test/write/compare, blend mode, color write mask,
 // primitive topology and fill mode) are set at command buffer record time through
 // the RHI command buffer and do not contribute to the pipeline layout or cache key.
+enum class SampleCount { One, Two, Four, Eight };
+
 struct GraphicsPipelineDesc {
     RID vertexShader;
     std::string vertexEntry{"main"};
@@ -156,6 +159,11 @@ struct GraphicsPipelineDesc {
     std::vector<VertexStreamDesc> vertexStreams;
     std::vector<PixelFormat> colorFormats;
     PixelFormat depthFormat{PixelFormat::Undefined};
+    // Null selects dynamic rendering. Otherwise this identifies the cached render pass
+    // and the subpass for which the pipeline is compiled.
+    RID renderPass;
+    std::uint32_t subpass{};
+    SampleCount samples{SampleCount::One};
 };
 
 // ---------------------------------------------------------------------------
@@ -207,6 +215,7 @@ enum class TextureUsage : std::uint32_t {
     TransferDestination = 1U << 2U,
     ColorAttachment = 1U << 3U,
     DepthStencilAttachment = 1U << 4U,
+    InputAttachment = 1U << 5U,
 };
 
 constexpr TextureUsage operator|(TextureUsage left, TextureUsage right) {
@@ -220,7 +229,6 @@ constexpr bool hasFlag(TextureUsage value, TextureUsage flag) {
 
 // Image tiling and multisample count (map to VkImageTiling / VkSampleCountFlagBits).
 enum class TextureTiling { Optimal, Linear };
-enum class SampleCount { One, Two, Four, Eight };
 
 struct TextureDesc {
     TextureType dimension{TextureType::Texture2D};
@@ -442,7 +450,78 @@ enum class ResourceState {
     ShaderRead,
     ColorAttachment,
     DepthAttachment,
+    InputAttachment,
     Present,
+};
+
+enum class AccessMode { Auto, Read, Write, ReadWrite };
+
+inline constexpr std::uint32_t kUnusedAttachment = 0xFFFFFFFFU;
+
+struct RenderPassAttachmentDesc {
+    PixelFormat format{PixelFormat::Undefined};
+    SampleCount samples{SampleCount::One};
+    LoadOp loadOp{LoadOp::Load};
+    StoreOp storeOp{StoreOp::Store};
+    ResourceState initialState{ResourceState::Undefined};
+    ResourceState finalState{ResourceState::ShaderRead};
+    bool operator==(const RenderPassAttachmentDesc&) const = default;
+};
+
+struct AttachmentReference {
+    std::uint32_t attachment{kUnusedAttachment};
+    ResourceState state{ResourceState::ColorAttachment};
+    bool operator==(const AttachmentReference&) const = default;
+};
+
+struct SubpassDesc {
+    std::vector<AttachmentReference> colors;
+    std::vector<AttachmentReference> inputs; // order matches shader input_attachment_index
+    AttachmentReference depth{kUnusedAttachment, ResourceState::DepthAttachment};
+    std::vector<std::uint32_t> preserves;
+    bool operator==(const SubpassDesc&) const = default;
+};
+
+struct SubpassDependency {
+    std::uint32_t source{};
+    std::uint32_t destination{};
+    ResourceState before{ResourceState::ColorAttachment};
+    ResourceState after{ResourceState::InputAttachment};
+    AccessMode sourceAccess{AccessMode::Auto};
+    AccessMode destinationAccess{AccessMode::Auto};
+    bool byRegion{true};
+    // A final read-only use still performs a color/depth store operation.
+    ResourceState destinationStoreState{ResourceState::Undefined};
+    bool operator==(const SubpassDependency&) const = default;
+};
+
+struct RenderPassDesc {
+    std::vector<RenderPassAttachmentDesc> attachments;
+    std::vector<SubpassDesc> subpasses;
+    std::vector<SubpassDependency> dependencies;
+    bool operator==(const RenderPassDesc&) const = default;
+};
+
+struct FramebufferDesc {
+    RID renderPass;
+    std::vector<RID> views; // same order as RenderPassDesc::attachments
+    std::uint32_t width{};
+    std::uint32_t height{};
+    std::uint32_t layers{1};
+    bool operator==(const FramebufferDesc&) const = default;
+};
+
+struct TextureViewInfo {
+    RID texture;
+    PixelFormat format{PixelFormat::Undefined};
+    SampleCount samples{SampleCount::One};
+    TextureUsage usage{TextureUsage::None};
+    std::uint32_t width{};
+    std::uint32_t height{};
+    std::uint32_t baseMip{};
+    std::uint32_t mipCount{1};
+    std::uint32_t baseLayer{};
+    std::uint32_t layerCount{1};
 };
 
 struct Viewport {
@@ -479,6 +558,18 @@ struct RenderingInfo {
     Rect renderArea;
     std::vector<ColorAttachment> colorAttachments;
     std::vector<DepthAttachment> depthAttachments;
+};
+
+struct AttachmentClearValue {
+    math::Vec4 color{0.0F};
+    float depth{1.0F};
+};
+
+struct RenderPassBeginInfo {
+    RID renderPass;
+    RID framebuffer;
+    Rect renderArea;
+    std::vector<AttachmentClearValue> clearValues;
 };
 
 struct DrawArguments {
@@ -567,6 +658,8 @@ struct TextureBarrier {
     std::uint32_t mipCount{1};
     std::uint32_t baseArrayLayer{};
     std::uint32_t layerCount{1};
+    AccessMode sourceAccess{AccessMode::Auto};
+    AccessMode destinationAccess{AccessMode::Auto};
 };
 
 // Range sentinels matching VK_REMAINING_MIP_LEVELS / VK_REMAINING_ARRAY_LAYERS.

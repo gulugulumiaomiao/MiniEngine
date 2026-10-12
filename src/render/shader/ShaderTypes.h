@@ -143,6 +143,7 @@ enum class ShaderDescriptorType {
     Sampler,
     SampledImage,
     CombinedImageSampler,
+    InputAttachment,
     Unknown,
 };
 

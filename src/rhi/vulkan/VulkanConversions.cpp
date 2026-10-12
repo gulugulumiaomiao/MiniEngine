@@ -97,6 +97,8 @@ VkImageUsageFlags toVulkan(TextureUsage usage) {
         result |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     if (hasFlag(usage, TextureUsage::DepthStencilAttachment))
         result |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    if (hasFlag(usage, TextureUsage::InputAttachment))
+        result |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
     return result;
 }
 
@@ -153,6 +155,7 @@ VkDescriptorType toVulkan(ResourceType type) {
     case ResourceType::CombinedImageSampler: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     case ResourceType::Sampler: return VK_DESCRIPTOR_TYPE_SAMPLER;
     case ResourceType::StorageImage: return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    case ResourceType::InputAttachment: return VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
     }
     Log::fatal(kLogSource, "Unsupported RHI resource type");
 }

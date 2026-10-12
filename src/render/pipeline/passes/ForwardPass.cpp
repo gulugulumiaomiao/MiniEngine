@@ -86,7 +86,7 @@ void ForwardPass::execute(RenderContext& context,
     rendering.depthAttachments.push_back(
         {depthHandle, rhi::LoadOp::Clear, rhi::StoreOp::DontCare, 1.0F});
 
-    std::vector<RgResourceUsage> resources;
+    std::vector<RgResourceAccess> resources;
     resources.reserve(3);
     resources.push_back({backBuffer, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment});
     resources.push_back({depthHandle, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment});

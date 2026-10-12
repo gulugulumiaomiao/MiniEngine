@@ -46,6 +46,9 @@ public:
     void resourceBarriers(std::span<const TextureBarrier> barriers);
     void beginRendering(const RenderingInfo& info);
     void endRendering();
+    void beginRenderPass(const RenderPassBeginInfo& info);
+    void nextSubpass();
+    void endRenderPass();
     void setViewport(const Viewport& viewport);
     void setScissor(const Rect& scissor);
     void setCullMode(CullMode mode);
@@ -86,6 +89,10 @@ private:
     bool owned_{false};
     CommandState state_{CommandState::Initial};
     VkPipelineLayout boundPipelineLayout_{VK_NULL_HANDLE};
+    bool dynamicRendering_{};
+    RID activeRenderPass_;
+    std::uint32_t activeSubpass_{};
+    std::uint32_t colorAttachmentCount_{1};
     PFN_vkCmdSetColorBlendEnableEXT pfnSetColorBlendEnable_{nullptr};
     PFN_vkCmdSetColorBlendEquationEXT pfnSetColorBlendEquation_{nullptr};
     PFN_vkCmdSetColorWriteMaskEXT pfnSetColorWriteMask_{nullptr};

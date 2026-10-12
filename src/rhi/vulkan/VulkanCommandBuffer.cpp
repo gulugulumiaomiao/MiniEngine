@@ -5,65 +5,15 @@
 #include "core/base/BuildConfig.h"
 #include "rhi/vulkan/VulkanConversions.h"
 #include "rhi/vulkan/VulkanDevice.h"
+#include "rhi/vulkan/VulkanSynchronization.h"
 
+#include <algorithm>
 #include <array>
 #include <stdexcept>
 #include <vector>
 
 namespace engine::rhi::vulkan {
 namespace {
-
-struct VulkanState {
-    VkPipelineStageFlags stage;
-    VkAccessFlags access;
-    VkImageLayout layout;
-};
-
-VulkanState mapState(ResourceState state) {
-    switch (state) {
-    case ResourceState::Undefined:
-        return {VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_IMAGE_LAYOUT_UNDEFINED};
-    case ResourceState::CopySource:
-        return {VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_ACCESS_TRANSFER_READ_BIT,
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL};
-    case ResourceState::CopyDestination:
-        return {VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_ACCESS_TRANSFER_WRITE_BIT,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL};
-    case ResourceState::ShaderRead:
-        return {VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                VK_ACCESS_SHADER_READ_BIT,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-    case ResourceState::ColorAttachment:
-        return {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-    case ResourceState::DepthAttachment:
-        return {VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-                    VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
-    case ResourceState::Present:
-        return {VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR};
-    }
-    Log::fatal("VulkanCommandBuffer", "Unsupported RHI resource state");
-}
-
-VkAttachmentLoadOp mapLoadOp(LoadOp operation) {
-    switch (operation) {
-    case LoadOp::Load: return VK_ATTACHMENT_LOAD_OP_LOAD;
-    case LoadOp::Clear: return VK_ATTACHMENT_LOAD_OP_CLEAR;
-    case LoadOp::DontCare: return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    }
-    Log::fatal("VulkanCommandBuffer", "Unsupported RHI load operation");
-}
-
-VkAttachmentStoreOp mapStoreOp(StoreOp operation) {
-    return operation == StoreOp::Store ? VK_ATTACHMENT_STORE_OP_STORE
-                                       : VK_ATTACHMENT_STORE_OP_DONT_CARE;
-}
 
 void toVulkanBlend(BlendMode mode, VkColorBlendEquationEXT& equation, VkBool32& enable) {
     if (mode == BlendMode::Off) {
@@ -149,6 +99,9 @@ void VulkanCommandBuffer::begin() {
         }
     }
     boundPipelineLayout_ = VK_NULL_HANDLE;
+    dynamicRendering_ = false;
+    activeRenderPass_ = {};
+    activeSubpass_ = 0;
     VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     if (vkBeginCommandBuffer(commandBuffer_, &beginInfo) != VK_SUCCESS) {
@@ -158,6 +111,8 @@ void VulkanCommandBuffer::begin() {
 }
 
 void VulkanCommandBuffer::end() {
+    if (dynamicRendering_ || activeRenderPass_)
+        Log::fatal("VulkanCommandBuffer", "Rendering must end before command buffer end");
     if (state_ != CommandState::Recording) {
         Log::fatal("VulkanCommandBuffer", "end() requires a Recording command buffer");
     }
@@ -179,16 +134,34 @@ void VulkanCommandBuffer::resourceBarriers(std::span<const TextureBarrier> barri
         return;
     }
     ensureRecording("resourceBarriers");
+    if (dynamicRendering_ || activeRenderPass_)
+        Log::fatal("VulkanCommandBuffer", "Resource barriers must be outside rendering");
     std::vector<VkImageMemoryBarrier> imageBarriers;
     imageBarriers.reserve(barriers.size());
     VkPipelineStageFlags sourceStages{};
     VkPipelineStageFlags destinationStages{};
     for (const TextureBarrier& barrier : barriers) {
-        const VulkanState before = mapState(barrier.before);
-        const VulkanState after = mapState(barrier.after);
+        VulkanState before = mapState(barrier.before);
+        VulkanState after = mapState(barrier.after);
+        // A stored attachment can finish in input-attachment layout. Its implicit
+        // render-pass store is still a color/depth write, so include those scopes.
+        if (barrier.before == ResourceState::InputAttachment &&
+            barrier.sourceAccess == AccessMode::ReadWrite) {
+            before.stage |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+            before.access |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        }
+        if (barrier.after == ResourceState::InputAttachment &&
+            barrier.destinationAccess == AccessMode::ReadWrite) {
+            after.stage |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+            after.access |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        }
         VkImageMemoryBarrier native{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-        native.srcAccessMask = before.access;
-        native.dstAccessMask = after.access;
+        native.srcAccessMask = filterAccess(before.access, barrier.sourceAccess);
+        native.dstAccessMask = filterAccess(after.access, barrier.destinationAccess);
         native.oldLayout = before.layout;
         native.newLayout = after.layout;
         native.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -219,6 +192,8 @@ void VulkanCommandBuffer::resourceBarriers(std::span<const TextureBarrier> barri
 
 void VulkanCommandBuffer::beginRendering(const RenderingInfo& info) {
     ensureRecording("beginRendering");
+    if (dynamicRendering_ || activeRenderPass_)
+        Log::fatal("VulkanCommandBuffer", "Rendering scopes cannot nest");
     std::vector<VkRenderingAttachmentInfo> colors;
     colors.reserve(info.colorAttachments.size());
     for (const ColorAttachment& attachment : info.colorAttachments) {
@@ -255,11 +230,66 @@ void VulkanCommandBuffer::beginRendering(const RenderingInfo& info) {
     native.pColorAttachments = colors.data();
     native.pDepthAttachment = depths.empty() ? nullptr : depths.data();
     vkCmdBeginRendering(commandBuffer_, &native);
+    dynamicRendering_ = true;
 }
 
 void VulkanCommandBuffer::endRendering() {
     ensureRecording("endRendering");
+    if (!dynamicRendering_) Log::fatal("VulkanCommandBuffer", "No dynamic rendering scope");
     vkCmdEndRendering(commandBuffer_);
+    dynamicRendering_ = false;
+}
+
+void VulkanCommandBuffer::beginRenderPass(const RenderPassBeginInfo& info) {
+    ensureRecording("beginRenderPass");
+    if (dynamicRendering_ || activeRenderPass_)
+        Log::fatal("VulkanCommandBuffer", "Rendering scopes cannot nest");
+    const auto& pass = device_.renderPass(info.renderPass);
+    const auto& fb = device_.framebuffer(info.framebuffer);
+    if (fb.desc().renderPass != info.renderPass ||
+        info.clearValues.size() != pass.desc().attachments.size() ||
+        info.renderArea.x < 0 || info.renderArea.y < 0 ||
+        static_cast<std::uint64_t>(info.renderArea.x) + info.renderArea.width > fb.desc().width ||
+        static_cast<std::uint64_t>(info.renderArea.y) + info.renderArea.height > fb.desc().height)
+        Log::fatal("VulkanCommandBuffer", "Invalid render pass begin info");
+    std::vector<VkClearValue> clears(info.clearValues.size());
+    for (std::size_t i = 0; i < clears.size(); ++i) {
+        if (isDepthFormat(pass.desc().attachments[i].format))
+            clears[i].depthStencil = {info.clearValues[i].depth, 0};
+        else {
+            const auto& c = info.clearValues[i].color;
+            clears[i].color = {{c.x, c.y, c.z, c.w}};
+        }
+    }
+    VkRenderPassBeginInfo native{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+    native.renderPass = pass.handle();
+    native.framebuffer = fb.handle();
+    native.renderArea = {{info.renderArea.x, info.renderArea.y},
+                         {info.renderArea.width, info.renderArea.height}};
+    native.clearValueCount = static_cast<std::uint32_t>(clears.size());
+    native.pClearValues = clears.data();
+    vkCmdBeginRenderPass(commandBuffer_, &native, VK_SUBPASS_CONTENTS_INLINE);
+    activeRenderPass_ = info.renderPass;
+    activeSubpass_ = 0;
+    boundPipelineLayout_ = VK_NULL_HANDLE;
+}
+
+void VulkanCommandBuffer::nextSubpass() {
+    ensureRecording("nextSubpass");
+    if (!activeRenderPass_ || activeSubpass_ + 1 >= device_.renderPass(activeRenderPass_).desc().subpasses.size())
+        Log::fatal("VulkanCommandBuffer", "No next subpass");
+    vkCmdNextSubpass(commandBuffer_, VK_SUBPASS_CONTENTS_INLINE);
+    ++activeSubpass_;
+    boundPipelineLayout_ = VK_NULL_HANDLE;
+}
+
+void VulkanCommandBuffer::endRenderPass() {
+    ensureRecording("endRenderPass");
+    if (!activeRenderPass_ || activeSubpass_ + 1 != device_.renderPass(activeRenderPass_).desc().subpasses.size())
+        Log::fatal("VulkanCommandBuffer", "Render pass must end in its last subpass");
+    vkCmdEndRenderPass(commandBuffer_);
+    activeRenderPass_ = {};
+    boundPipelineLayout_ = VK_NULL_HANDLE;
 }
 
 void VulkanCommandBuffer::setViewport(const Viewport& viewport) {
@@ -306,21 +336,25 @@ void VulkanCommandBuffer::setDepthCompareOp(CompareOp compare) {
 
 void VulkanCommandBuffer::setBlendState(BlendMode mode) {
     ensureRecording("setBlendState");
+    // These states are declared dynamic even for depth-only pipelines. Set benign
+    // defaults for slot zero so validation sees them initialized in every draw.
+    const auto count = std::max(1U, colorAttachmentCount_);
     VkColorBlendEquationEXT equation{};
     VkBool32 enable = VK_FALSE;
     toVulkanBlend(mode, equation, enable);
-    const VkBool32 enables[1] = {enable};
-    pfnSetColorBlendEnable_(commandBuffer_, 0, 1, enables);
+    const std::vector<VkBool32> enables(count, enable);
+    pfnSetColorBlendEnable_(commandBuffer_, 0, count, enables.data());
     // COLOR_BLEND_EQUATION_EXT is a pipeline dynamic state and must always be set
     // in the command buffer, even when blending is disabled.
-    const VkColorBlendEquationEXT equations[1] = {equation};
-    pfnSetColorBlendEquation_(commandBuffer_, 0, 1, equations);
+    const std::vector<VkColorBlendEquationEXT> equations(count, equation);
+    pfnSetColorBlendEquation_(commandBuffer_, 0, count, equations.data());
 }
 
 void VulkanCommandBuffer::setColorWriteMask(ColorWriteMask mask) {
     ensureRecording("setColorWriteMask");
-    const VkColorComponentFlags masks[1] = {toVulkan(mask)};
-    pfnSetColorWriteMask_(commandBuffer_, 0, 1, masks);
+    const auto count = std::max(1U, colorAttachmentCount_);
+    const std::vector<VkColorComponentFlags> masks(count, toVulkan(mask));
+    pfnSetColorWriteMask_(commandBuffer_, 0, count, masks.data());
 }
 
 void VulkanCommandBuffer::setPrimitiveTopology(PrimitiveTopology topology) {
@@ -340,7 +374,11 @@ void VulkanCommandBuffer::setFillMode(FillMode mode) {
 void VulkanCommandBuffer::bindPipeline(RID pipeline) {
     ensureRecording("bindPipeline");
     const ResolvedPipeline native = device_.resolvePipeline(pipeline);
+    if ((activeRenderPass_ && (native.renderPass != activeRenderPass_ || native.subpass != activeSubpass_)) ||
+        (dynamicRendering_ && native.renderPass))
+        Log::fatal("VulkanCommandBuffer", "Pipeline is incompatible with current rendering scope");
     boundPipelineLayout_ = native.layout;
+    colorAttachmentCount_ = native.colorAttachmentCount;
     vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, native.pipeline);
 }
 

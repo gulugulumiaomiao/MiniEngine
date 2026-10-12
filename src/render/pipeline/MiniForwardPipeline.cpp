@@ -38,7 +38,7 @@ void MiniForwardPipeline::render(RenderContext& context) {
     for (const std::unique_ptr<IRenderPass>& pass : passes_) {
         pass->execute(context, graph, drawList);
     }
-    graph.compile(context.rgTexturePool());
+    graph.compile(context.rgTexturePool(), context.rgRenderPassCache());
     if (shadowOutput_.castShadows && shadowOutput_.shadowMap.valid()) {
         FRAME_GPU_MANAGER.bindShadowMap(context.frameIndex(),
                                         graph.resolvedTextureView(shadowOutput_.shadowMap));

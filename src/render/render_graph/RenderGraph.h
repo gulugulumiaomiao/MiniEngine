@@ -1,6 +1,7 @@
 #pragma once
 
 #include "render/render_graph/RgTexturePool.h"
+#include "render/render_graph/RgRenderPassCache.h"
 #include "render/render_graph/RgTypes.h"
 #include "rhi/api/Command.h"
 
@@ -10,22 +11,24 @@
 
 namespace engine {
 
-// RenderGraph v2: declarative render-graph with transient textures, compilation and pooling.
+// Declarative render graph with transient textures and explicit render-pass groups.
 //
 // Recording phase:
 //   - importTexture() brings externally-owned textures into the graph.
 //   - createTexture() declares transient textures that will be allocated from an RgTexturePool.
-//   - addGraphicsPass() declares a pass and its resource usages.
+//   - addGraphicsPass() declares an independent dynamic-rendering pass.
+//   - addRasterGroup() declares a render pass containing one subpass per logical pass.
 //
 // Compile phase:
-//   - compile(pool) resolves every RgTextureHandle to actual RHI texture/view handles by
-//     acquiring transient textures from the pool.
+//   - compile(pool, cache) resolves every RgTextureHandle to actual RHI texture/view handles by
+//     acquiring transient textures from the pool, then builds grouping and synchronization.
 //
 // Execution phase:
-//   - execute(commandBuffer) emits barriers, calls beginRendering and runs each pass callback.
+//   - execute(commandBuffer) emits the compiled barriers and rendering scopes/callbacks.
 //
 // After execution the caller should call reset() (or let the destructor do it) so transient
 // textures are released back to the pool.
+// The shared RgRenderPassCache outlives frame-local graphs and their GPU submissions.
 class RenderGraph final {
 public:
     using ExecuteCallback = std::function<void(rhi::RID)>;
@@ -53,10 +56,29 @@ public:
 
     void addGraphicsPass(std::string name,
                          RgRenderingInfo rendering,
-                         std::vector<RgResourceUsage> resources,
+                         std::vector<RgResourceAccess> resources,
                          ExecuteCallback execute);
+    void addRasterGroup(std::string name, std::vector<RgRasterPass> subpasses);
+
+    struct CompiledSubpass {
+        std::string name;
+        rhi::RenderingInfo rendering;
+        std::vector<RgResourceAccess> resources;
+        std::function<void(const RgExecuteContext&)> execute;
+    };
+    struct CompiledGroup {
+        std::string name;
+        bool traditional{};
+        rhi::RenderPassDesc renderPassDesc;
+        rhi::RenderPassBeginInfo beginInfo;
+        std::vector<RgTextureHandle> attachmentTextures;
+        std::vector<CompiledSubpass> subpasses;
+        std::vector<rhi::TextureBarrier> preBarriers;
+    };
 
     void compile(RgTexturePool& pool);
+    // Grouped rendering requires a persistent cache that outlives submitted GPU work.
+    void compile(RgTexturePool& pool, RgRenderPassCache& cache);
     void execute(rhi::RID commandBuffer) const;
     void reset();
 
@@ -66,8 +88,10 @@ public:
     [[nodiscard]] rhi::RID resolvedTextureView(RgTextureHandle handle) const;
 
     [[nodiscard]] bool compiled() const { return compiled_; }
-    [[nodiscard]] std::size_t passCount() const { return passes_.size(); }
+    [[nodiscard]] std::size_t passCount() const;
     [[nodiscard]] std::size_t textureCount() const { return textures_.size(); }
+    [[nodiscard]] const std::vector<CompiledGroup>& compiledGroups() const { return compiledGroups_; }
+    [[nodiscard]] const std::vector<rhi::TextureBarrier>& finalBarriers() const { return finalBarriers_; }
 
 private:
     struct TextureNode {
@@ -89,27 +113,26 @@ private:
         RgTexturePool::PooledTexture* poolEntry{};
     };
 
-    struct GraphicsPass {
+    struct RecordedGroup {
         std::string name;
-        RgRenderingInfo rendering;
-        std::vector<RgResourceUsage> resources;
-        ExecuteCallback execute;
-    };
-
-    struct CompiledPass {
-        std::string name;
-        rhi::RenderingInfo rendering;
-        std::vector<RgResourceUsage> resources;
-        ExecuteCallback execute;
+        bool traditional{};
+        std::vector<RgRasterPass> subpasses;
     };
 
     [[nodiscard]] const TextureNode& resolveNode(RgTextureHandle handle) const;
     void releaseTransientTextures();
+    void ensureRecording() const;
+    [[nodiscard]] std::vector<RgResourceAccess> normalizeAccesses(const RgRasterPass& pass) const;
+    void compileRasterGroup(std::size_t groupIndex);
 
     std::vector<TextureNode> textures_;
-    std::vector<GraphicsPass> passes_;
-    std::vector<CompiledPass> compiledPasses_;
+    std::vector<RecordedGroup> groups_;
+    std::vector<CompiledGroup> compiledGroups_;
+    std::vector<rhi::TextureBarrier> finalBarriers_;
+    std::vector<rhi::ResourceState> finalStates_;
+    std::vector<rhi::AccessMode> finalAccesses_;
     RgTexturePool* pool_{};
+    RgRenderPassCache* renderPassCache_{};
     bool compiled_{false};
 };
 

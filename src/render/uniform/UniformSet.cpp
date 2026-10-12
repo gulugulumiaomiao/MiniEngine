@@ -89,6 +89,7 @@ bool UniformSet::setResourceAt(std::uint32_t binding, Ref<UniformResource> resou
     case rhi::ResourceType::StorageBuffer: expected = UniformResourceType::StorageBuffer; break;
     case rhi::ResourceType::CombinedImageSampler:
     case rhi::ResourceType::SampledImage:
+    case rhi::ResourceType::InputAttachment:
     case rhi::ResourceType::StorageImage: expected = UniformResourceType::Texture; break;
     case rhi::ResourceType::Sampler: expected = UniformResourceType::Sampler; break;
     }

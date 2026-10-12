@@ -580,17 +580,100 @@ RID VulkanDevice::pipeline_create(const GraphicsPipelineDesc& desc) {
         (desc.depthFormat != PixelFormat::Undefined && !isDepthFormat(desc.depthFormat))) {
         Log::fatal("VulkanDevice", "Invalid graphics pipeline description");
     }
+    VkRenderPass nativeRenderPass = VK_NULL_HANDLE;
+    if (desc.renderPass) {
+        const auto& pass = renderPass(desc.renderPass);
+        if (desc.subpass >= pass.desc().subpasses.size())
+            Log::fatal("VulkanDevice", "Pipeline subpass out of range");
+        const auto& subpass = pass.desc().subpasses[desc.subpass];
+        if (desc.colorFormats.size() != subpass.colors.size())
+            Log::fatal("VulkanDevice", "Pipeline color count does not match subpass");
+        for (std::size_t i = 0; i < subpass.colors.size(); ++i) {
+            const auto& a = pass.desc().attachments[subpass.colors[i].attachment];
+            if (desc.colorFormats[i] != a.format || desc.samples != a.samples)
+                Log::fatal("VulkanDevice", "Pipeline color format/samples do not match subpass");
+        }
+        const auto depth = subpass.depth.attachment;
+        if ((depth == kUnusedAttachment && desc.depthFormat != PixelFormat::Undefined) ||
+            (depth != kUnusedAttachment &&
+             (desc.depthFormat != pass.desc().attachments[depth].format ||
+              desc.samples != pass.desc().attachments[depth].samples)))
+            Log::fatal("VulkanDevice", "Pipeline depth format/samples do not match subpass");
+        nativeRenderPass = pass.handle();
+    } else if (desc.subpass != 0) {
+        Log::fatal("VulkanDevice", "Dynamic rendering has no subpass index");
+    }
     const VkPipelineLayout layout = resolvePipelineLayout(desc.pipelineLayout);
     return pipelines_.emplace(device_,
                               desc,
                               resolveShader(desc.vertexShader),
                               resolveShader(desc.fragmentShader),
                               layout,
-                              pipelineCache_);
+                              pipelineCache_, nativeRenderPass);
 }
 
 void VulkanDevice::pipeline_destroy(RID handle) {
     pipeline_release_rid(handle);
+}
+
+RID VulkanDevice::render_pass_create(const RenderPassDesc& desc) {
+    return renderPasses_.emplace(device_, desc);
+}
+
+void VulkanDevice::render_pass_destroy(RID handle) {
+    (void)renderPasses_.release(handle);
+}
+
+const VulkanRenderPass& VulkanDevice::renderPass(RID handle) const {
+    const auto* pass = renderPasses_.find(handle);
+    if (!pass) Log::fatal("VulkanDevice", "Invalid render pass handle");
+    return *pass;
+}
+
+const VulkanFramebuffer& VulkanDevice::framebuffer(RID handle) const {
+    const auto* result = framebuffers_.find(handle);
+    if (!result) Log::fatal("VulkanDevice", "Invalid framebuffer handle");
+    return *result;
+}
+
+TextureViewInfo VulkanDevice::texture_view_info(RID view) const {
+    if (!textureViews_.find(view)) Log::fatal("VulkanDevice", "Invalid texture view handle");
+    for (const auto& [textureKey, views] : viewDedup_) {
+        for (const auto& [desc, handle] : views) {
+            if (handle != view) continue;
+            const RID textureHandle{static_cast<std::uint32_t>(textureKey),
+                                    static_cast<std::uint32_t>(textureKey >> 32U)};
+            const auto* texture = textures_.find(textureHandle);
+            if (!texture) Log::fatal("VulkanDevice", "View has no live texture");
+            return {textureHandle, desc.format, texture->samples(), texture->usage(),
+                    std::max(1U, texture->width() >> desc.baseMip),
+                    std::max(1U, texture->height() >> desc.baseMip), desc.baseMip,
+                    desc.mipCount, desc.baseLayer, desc.layerCount};
+        }
+    }
+    Log::fatal("VulkanDevice", "View metadata not found");
+}
+
+RID VulkanDevice::framebuffer_create(const FramebufferDesc& desc) {
+    const auto& pass = renderPass(desc.renderPass);
+    if (desc.width == 0 || desc.height == 0 || desc.layers != 1 ||
+        desc.views.size() != pass.desc().attachments.size())
+        Log::fatal("VulkanDevice", "Invalid framebuffer description");
+    std::vector<VkImageView> views;
+    for (std::size_t i = 0; i < desc.views.size(); ++i) {
+        const auto info = texture_view_info(desc.views[i]);
+        const auto& attachment = pass.desc().attachments[i];
+        if (info.format != attachment.format || info.samples != attachment.samples ||
+            info.width < desc.width || info.height < desc.height || info.mipCount != 1 ||
+            info.layerCount < desc.layers)
+            Log::fatal("VulkanDevice", "Framebuffer view is incompatible with render pass");
+        views.push_back(resolveTextureView(desc.views[i]));
+    }
+    return framebuffers_.emplace(device_, desc, pass.handle(), views);
+}
+
+void VulkanDevice::framebuffer_destroy(RID handle) {
+    (void)framebuffers_.release(handle);
 }
 
 // ---------------------------------------------------------------------------
@@ -655,7 +738,9 @@ void VulkanDevice::descriptor_set_layout_build(RID handle, const DescriptorSetLa
         bindings.push_back({binding.binding,
                             toVulkan(binding.type),
                             1,
-                            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                            binding.type == ResourceType::InputAttachment
+                                ? VkShaderStageFlags{VK_SHADER_STAGE_FRAGMENT_BIT}
+                                : VkShaderStageFlags{VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT},
                             nullptr});
     }
     layout->initialize(device_, bindings);
@@ -769,6 +854,7 @@ void VulkanDevice::descriptor_set_update(RID handle, std::span<const DescriptorW
             vkWrite.pImageInfo = &imageInfos.back();
             break;
         case ResourceType::SampledImage:
+        case ResourceType::InputAttachment:
             imageInfos.push_back({VK_NULL_HANDLE,
                                   resolveTextureView(write.textureView),
                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
@@ -1013,7 +1099,8 @@ ResolvedPipeline VulkanDevice::resolvePipeline(RID handle) const {
     if (!resource) {
         Log::fatal("VulkanDevice", "Invalid or stale RHI graphics pipeline handle");
     }
-    return {resource->handle(), resource->layout()};
+    return {resource->handle(), resource->layout(), resource->renderPass(), resource->subpass(),
+            resource->colorAttachmentCount()};
 }
 
 RID VulkanDevice::texture_allocate_rid(VkImage image, const TextureDesc& desc) {
@@ -1096,6 +1183,8 @@ void VulkanDevice::clear() {
     // clear them first; owned wrappers free their VkCommandBuffer back to the pool.
     commandBuffers_.clear();
     pipelines_.clear();
+    framebuffers_.clear();
+    renderPasses_.clear();
     // New uniform-binding system: descriptor sets are freed implicitly when their pools are
     // destroyed; pipeline layouts must be destroyed before the set layouts they reference.
     descriptorSets_.clear();
