@@ -15,6 +15,12 @@ using namespace engine;
 class MockDevice final : public rhi::IDevice {
 public:
     rhi::RID buffer_allocate_rid(const rhi::BufferDesc& desc) override {
+        if (bufferAllocationsUntilFailure == 0) {
+            bufferAllocationsUntilFailure = -1;
+            return {};
+        }
+        if (bufferAllocationsUntilFailure > 0)
+            --bufferAllocationsUntilFailure;
         buffers.push_back(desc);
         return {static_cast<std::uint32_t>(buffers.size()), 1};
     }
@@ -98,6 +104,7 @@ public:
 
     void waitIdle() override {}
 
+    int bufferAllocationsUntilFailure{-1};
     std::vector<rhi::BufferDesc> buffers;
     std::vector<rhi::TextureDesc> textures;
     std::unordered_map<std::uint32_t, rhi::RID> defaultTextureViews;

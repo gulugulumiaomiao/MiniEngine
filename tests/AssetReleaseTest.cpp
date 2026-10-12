@@ -1,3 +1,4 @@
+#include "asset/runtime/MeshAssetResolver.h"
 #include "asset/importer/AssetImportPipeline.h"
 #include "core/filesystem/FileWatcher.h"
 #include "asset/types/MaterialAsset.h"

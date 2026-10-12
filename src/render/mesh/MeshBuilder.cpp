@@ -292,8 +292,7 @@ std::optional<GeneratedMesh> generate(const MeshPrimitive& primitive) {
 
 VertexLayout layoutFor(PrimitiveVertexLayout preset) {
     VertexLayout layout;
-    layout.streams.push_back(
-        {{VertexSemanticType::Position, 0}, VertexFormat::Vec3Float32, 0, 0});
+    layout.streams.push_back({{VertexSemanticType::Position, 0}, VertexFormat::Vec3Float32, 0, 0});
     if (preset != PrimitiveVertexLayout::Position) {
         layout.streams.push_back(
             {{VertexSemanticType::Normal, 0}, VertexFormat::Vec3Float32, 1, 1});
@@ -312,7 +311,7 @@ VertexLayout layoutFor(PrimitiveVertexLayout preset) {
 
 } // namespace
 
-std::optional<MeshBuildResult> MeshBuilder::build(const MeshBuildRecipe& recipe) {
+std::optional<MeshCreateInfo> MeshBuilder::build(const MeshBuildRecipe& recipe) {
     if (recipe.parts.empty() || recipe.parts.size() > 4096) {
         Log::error("MeshBuilder", "A build recipe must contain between 1 and 4096 parts");
         return std::nullopt;
@@ -398,15 +397,15 @@ std::optional<MeshBuildResult> MeshBuilder::build(const MeshBuildRecipe& recipe)
         indexType = IndexType::UInt16;
     }
 
-    MeshBuildResult result;
-    result.desc.debugName = recipe.name;
-    result.desc.vertexLayout = layoutFor(recipe.vertexLayout);
-    result.desc.indexType = indexType;
-    result.desc.usage = recipe.usage;
-    result.desc.topology = MeshTopology::TriangleList;
-    result.desc.subMeshes = std::move(subMeshes);
-    result.desc.bounds = calculateBounds(allPositions);
-    result.desc.keepCpuCopy = recipe.keepCpuCopy;
+    MeshCreateInfo result;
+    result.debugName = recipe.name;
+    result.vertexLayout = layoutFor(recipe.vertexLayout);
+    result.indexType = indexType;
+    result.usage = recipe.usage;
+    result.topology = MeshTopology::TriangleList;
+    result.subMeshes = std::move(subMeshes);
+    result.bounds = calculateBounds(allPositions);
+    result.keepCpuCopy = recipe.keepCpuCopy;
 
     const std::uint32_t vertexCount = static_cast<std::uint32_t>(vertices.size());
     std::vector<std::byte> positionBytes;
@@ -439,9 +438,8 @@ std::optional<MeshBuildResult> MeshBuilder::build(const MeshBuildRecipe& recipe)
                 std::memcpy(tangentBytes.data() + i * sizeof(math::Vec4),
                             &vertices[i].tangent,
                             sizeof(math::Vec4));
-                std::memcpy(uvBytes.data() + i * sizeof(math::Vec2),
-                            &vertices[i].uv,
-                            sizeof(math::Vec2));
+                std::memcpy(
+                    uvBytes.data() + i * sizeof(math::Vec2), &vertices[i].uv, sizeof(math::Vec2));
             }
             if (!result.data.setVertexData(2, vertexCount, tangentBytes) ||
                 !result.data.setVertexData(3, vertexCount, uvBytes)) {
@@ -451,9 +449,8 @@ std::optional<MeshBuildResult> MeshBuilder::build(const MeshBuildRecipe& recipe)
             std::vector<std::byte> uvBytes;
             uvBytes.resize(vertices.size() * sizeof(math::Vec2));
             for (std::size_t i = 0; i < vertices.size(); ++i) {
-                std::memcpy(uvBytes.data() + i * sizeof(math::Vec2),
-                            &vertices[i].uv,
-                            sizeof(math::Vec2));
+                std::memcpy(
+                    uvBytes.data() + i * sizeof(math::Vec2), &vertices[i].uv, sizeof(math::Vec2));
             }
             if (!result.data.setVertexData(2, vertexCount, uvBytes))
                 return std::nullopt;
@@ -469,21 +466,9 @@ std::optional<MeshBuildResult> MeshBuilder::build(const MeshBuildRecipe& recipe)
     } else if (!result.data.setIndexData(std::span{indices})) {
         return std::nullopt;
     }
-    if (!validateMesh(result.desc, result.data))
+    if (!validateMesh(result))
         return std::nullopt;
     return result;
-}
-
-Ref<MeshAsset> MeshBuilder::buildAsset(const MeshBuildRecipe& recipe) {
-    auto result = build(recipe);
-    if (!result)
-        return {};
-    Ref<MeshAsset> assetRef = makeRef<MeshAsset>();
-    MeshAsset& asset = *assetRef;
-    asset.desc = std::move(result->desc);
-    asset.meshData = std::move(result->data);
-    asset.buildRecipe = recipe;
-    return assetRef;
 }
 
 } // namespace engine

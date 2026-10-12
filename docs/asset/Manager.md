@@ -67,7 +67,7 @@ assets:// 路径
 
 ## 资产与运行时资源
 
-ShaderAsset 和 MaterialAsset 强持有各自唯一运行时实例，重复 instantiate 返回同一 Ref，运行时无资产回指。Material 通过资产层 resolveMaterialReference(path/id) 获取，不经过领域 Manager。资产关联由资产层扫描缓存查询，克隆及纯运行时对象没有源资产关联。详见 [MaterialSystem.md](../MaterialSystem.md)。
+ShaderAsset、MaterialAsset 和 MeshAsset 强持有各自唯一运行时实例，重复 instantiate 返回同一 Ref，运行时无资产回指。Material 通过资产层 resolveMaterialReference(path/id) 获取，不经过领域 Manager。资产关联由资产层扫描缓存查询，克隆及纯运行时对象没有源资产关联。详见 [MaterialSystem.md](../MaterialSystem.md)。
 
 ## 热重载
 
@@ -76,7 +76,7 @@ AssetManager 订阅 `AssetImportPipeline` 的导入通知，成功导入后：
 ```text
 通知（成功且未 Removed）
   -> Texture / Mesh / Shader / Material：reloadInPlace(path)——同一缓存 asset 重新 transfer，其读取分支
-     调用 syncInstance() 把新数据推送给唯一实例（保持活链接，不 invalidate）
+     Texture 调用 syncInstance 上传；Shader、Material、Mesh 对原实例执行完整 rebuild（保持活链接，不 invalidate）
      -> Shader 增加 revision，Material 使用时检查并迁移兼容属性
   -> 其它类型：invalidate(path)——从 Ref 缓存移除（释放强引用），下次 loadAsset 取新数据
   -> changeListener_：通用变更通知（编辑器等订阅方）

@@ -1,3 +1,5 @@
+#include "asset/runtime/MeshAssetResolver.h"
+#include "asset/types/MeshAsset.h"
 #include "render/mesh/Mesh.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/manager/AssetManager.h"
@@ -35,9 +37,9 @@ TEST_F(MeshGuidIdentityTest, ResolveSamePathReturnsSameInstance) {
     const Ref<MeshAsset> asset = ASSET_MANAGER.loadAsset<MeshAsset>(path);
     ASSERT_TRUE(asset);
     EXPECT_EQ(asset->instantiate(), first);
-    EXPECT_TRUE(first->isAssetBacked());
+    EXPECT_TRUE(static_cast<bool>(findMeshAsset(*first)));
     EXPECT_TRUE(first->isValid());
-    EXPECT_EQ(first->assetPath(), path);
+    EXPECT_EQ(meshAssetPath(*first), path);
 }
 
 TEST_F(MeshGuidIdentityTest, CloneReturnsDifferentObjectAndIsNotAssetBacked) {
@@ -46,15 +48,15 @@ TEST_F(MeshGuidIdentityTest, CloneReturnsDifferentObjectAndIsNotAssetBacked) {
     const Ref<Mesh> original = resolveMeshReference(path.string());
     ASSERT_TRUE(original);
 
-    const Ref<Mesh> cloned = original->clone();
+    const Ref<Mesh> cloned = findMeshAsset(*original)->clone();
     ASSERT_TRUE(cloned);
     EXPECT_NE(cloned, original);
-    EXPECT_TRUE(original->isAssetBacked());
-    EXPECT_FALSE(cloned->isAssetBacked());
+    EXPECT_TRUE(static_cast<bool>(findMeshAsset(*original)));
+    EXPECT_FALSE(static_cast<bool>(findMeshAsset(*cloned)));
     EXPECT_TRUE(cloned->isValid());
 }
 
-TEST_F(MeshGuidIdentityTest, LastRefReleasesGpuBuffers) {
+TEST_F(MeshGuidIdentityTest, AssetCacheRetainsInstanceUntilCleared) {
     using namespace engine;
     const VirtualPath path{"assets://meshes/procedural_showcase.mesh.json"};
     Ref<Mesh> mesh = resolveMeshReference(path.string());
@@ -63,8 +65,10 @@ TEST_F(MeshGuidIdentityTest, LastRefReleasesGpuBuffers) {
         static_cast<std::uint32_t>(mesh->vertexBuffers().size());
     const std::uint32_t destroyedBefore = device.destroyedBuffers;
 
-    // The asset only holds a raw instance_ observer, so this Ref is the sole owner.
+    // The asset cache keeps the canonical runtime instance alive.
     mesh.reset();
+    EXPECT_EQ(device.destroyedBuffers, destroyedBefore);
+    ASSET_MANAGER.clear();
 
     // Two-step destroy releases every vertex buffer plus the index buffer.
     EXPECT_EQ(device.destroyedBuffers, destroyedBefore + vertexBufferCount + 1);

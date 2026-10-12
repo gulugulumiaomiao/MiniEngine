@@ -1,3 +1,4 @@
+#include "asset/types/MeshComponentAsset.h"
 #pragma once
 
 #include "core/base/Ref.h"
@@ -119,10 +120,9 @@ public:
             Log::warn("Node", "TransformComponent cannot be removed");
             return false;
         }
-        const auto found =
-            std::ranges::find_if(components_, [](const Ref<Component>& component) {
-                return dynamic_cast<T*>(component.get()) != nullptr;
-            });
+        const auto found = std::ranges::find_if(components_, [](const Ref<Component>& component) {
+            return dynamic_cast<T*>(component.get()) != nullptr;
+        });
         if (found == components_.end())
             return false;
         (*found)->detach();

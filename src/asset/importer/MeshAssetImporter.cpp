@@ -1,3 +1,5 @@
+#include "asset/types/MeshAsset.h"
+#include "asset/runtime/MeshAssetResolver.h"
 #include "asset/importer/MeshAssetImporter.h"
 
 #include "asset/importer/AssetImportHelpers.h"
@@ -20,73 +22,73 @@ using Json = nlohmann::json;
 
 template <typename Enum> std::optional<Enum> enumValue(std::string_view) = delete;
 
-template <> std::optional<VertexSemanticType> enumValue(std::string_view value) {
+template <> std::optional<MeshAssetVertexSemanticType> enumValue(std::string_view value) {
     if (value == "position")
-        return VertexSemanticType::Position;
+        return MeshAssetVertexSemanticType::Position;
     if (value == "normal")
-        return VertexSemanticType::Normal;
+        return MeshAssetVertexSemanticType::Normal;
     if (value == "tangent")
-        return VertexSemanticType::Tangent;
+        return MeshAssetVertexSemanticType::Tangent;
     if (value == "color")
-        return VertexSemanticType::Color;
+        return MeshAssetVertexSemanticType::Color;
     if (value == "tex_coord")
-        return VertexSemanticType::TexCoord;
+        return MeshAssetVertexSemanticType::TexCoord;
     if (value == "joint_indices")
-        return VertexSemanticType::JointIndices;
+        return MeshAssetVertexSemanticType::JointIndices;
     if (value == "joint_weights")
-        return VertexSemanticType::JointWeights;
+        return MeshAssetVertexSemanticType::JointWeights;
     if (value == "custom")
-        return VertexSemanticType::Custom;
+        return MeshAssetVertexSemanticType::Custom;
     return std::nullopt;
 }
 
-template <> std::optional<VertexFormat> enumValue(std::string_view value) {
+template <> std::optional<MeshAssetVertexFormat> enumValue(std::string_view value) {
     if (value == "float32")
-        return VertexFormat::Float32;
+        return MeshAssetVertexFormat::Float32;
     if (value == "vec2_float32")
-        return VertexFormat::Vec2Float32;
+        return MeshAssetVertexFormat::Vec2Float32;
     if (value == "vec3_float32")
-        return VertexFormat::Vec3Float32;
+        return MeshAssetVertexFormat::Vec3Float32;
     if (value == "vec4_float32")
-        return VertexFormat::Vec4Float32;
+        return MeshAssetVertexFormat::Vec4Float32;
     if (value == "uint16x4")
-        return VertexFormat::UInt16x4;
+        return MeshAssetVertexFormat::UInt16x4;
     if (value == "uint8x4_normalized")
-        return VertexFormat::UInt8x4Normalized;
+        return MeshAssetVertexFormat::UInt8x4Normalized;
     return std::nullopt;
 }
 
-template <> std::optional<VertexInputRate> enumValue(std::string_view value) {
+template <> std::optional<MeshAssetVertexInputRate> enumValue(std::string_view value) {
     if (value == "vertex")
-        return VertexInputRate::Vertex;
+        return MeshAssetVertexInputRate::Vertex;
     if (value == "instance")
-        return VertexInputRate::Instance;
+        return MeshAssetVertexInputRate::Instance;
     return std::nullopt;
 }
 
-template <> std::optional<IndexType> enumValue(std::string_view value) {
+template <> std::optional<MeshAssetIndexType> enumValue(std::string_view value) {
     if (value == "uint16")
-        return IndexType::UInt16;
+        return MeshAssetIndexType::UInt16;
     if (value == "uint32")
-        return IndexType::UInt32;
+        return MeshAssetIndexType::UInt32;
     return std::nullopt;
 }
 
-template <> std::optional<MeshUsage> enumValue(std::string_view value) {
+template <> std::optional<MeshAssetUsage> enumValue(std::string_view value) {
     if (value == "static")
-        return MeshUsage::Static;
+        return MeshAssetUsage::Static;
     if (value == "dynamic")
-        return MeshUsage::Dynamic;
+        return MeshAssetUsage::Dynamic;
     if (value == "stream")
-        return MeshUsage::Stream;
+        return MeshAssetUsage::Stream;
     return std::nullopt;
 }
 
-template <> std::optional<MeshTopology> enumValue(std::string_view value) {
+template <> std::optional<MeshAssetTopology> enumValue(std::string_view value) {
     if (value == "triangle_list")
-        return MeshTopology::TriangleList;
+        return MeshAssetTopology::TriangleList;
     if (value == "line_list")
-        return MeshTopology::LineList;
+        return MeshAssetTopology::LineList;
     return std::nullopt;
 }
 
@@ -119,12 +121,12 @@ bool readBytes(const Json& values, std::vector<std::byte>& result) {
     return true;
 }
 
-std::optional<MeshBounds> calculateMeshBounds(const MeshAsset& asset) {
-    const VertexStreamLayout* position =
-        asset.desc.vertexLayout.find({VertexSemanticType::Position, 0});
-    const VertexStream* stream =
-        position ? asset.meshData.findVertexStream(position->binding) : nullptr;
-    if (!position || !stream || position->format != VertexFormat::Vec3Float32) {
+std::optional<MeshAssetBounds> calculateMeshBounds(const MeshAsset& asset) {
+    const MeshAssetVertexStreamLayout* position =
+        asset.data.desc.vertexLayout.find({MeshAssetVertexSemanticType::Position, 0});
+    const MeshAssetVertexStream* stream =
+        position ? asset.data.meshData.findVertexStream(position->binding) : nullptr;
+    if (!position || !stream || position->format != MeshAssetVertexFormat::Vec3Float32) {
         return std::nullopt;
     }
     const std::uint32_t stride = vertexFormatSize(position->format);
@@ -135,7 +137,7 @@ std::optional<MeshBounds> calculateMeshBounds(const MeshAsset& asset) {
             return std::nullopt;
         std::memcpy(&positions[index], stream->bytes.data() + offset, sizeof(math::Vec3));
     }
-    return calculateBounds(positions);
+    return toMeshAsset(calculateBounds(positions));
 }
 
 template <typename Vector>
@@ -154,7 +156,7 @@ bool readVector(
     return true;
 }
 
-bool readPrimitivePart(const Json& value, MeshPrimitivePart& part) {
+bool readPrimitivePart(const Json& value, MeshPrimitivePartAssetData& part) {
     if (!value.is_object() || !value.contains("type") || !value["type"].is_string())
         return false;
     const Json& parameters = value.value("parameters", Json::object());
@@ -162,14 +164,14 @@ bool readPrimitivePart(const Json& value, MeshPrimitivePart& part) {
         return false;
     const std::string& type = value["type"].get_ref<const std::string&>();
     if (type == "plane") {
-        PlaneGeometry geometry;
+        MeshAssetPlaneGeometry geometry;
         if (!readVector(parameters, "size", geometry.size, 2))
             return false;
         geometry.segmentsX = parameters.value("segments_x", geometry.segmentsX);
         geometry.segmentsZ = parameters.value("segments_z", geometry.segmentsZ);
         part.primitive = geometry;
     } else if (type == "box" || type == "cube") {
-        BoxGeometry geometry;
+        MeshAssetBoxGeometry geometry;
         if (!readVector(parameters, "size", geometry.size, 3))
             return false;
         geometry.segmentsX = parameters.value("segments_x", 1U);
@@ -177,7 +179,7 @@ bool readPrimitivePart(const Json& value, MeshPrimitivePart& part) {
         geometry.segmentsZ = parameters.value("segments_z", 1U);
         part.primitive = geometry;
     } else if (type == "uv_sphere" || type == "sphere") {
-        UvSphereGeometry geometry;
+        MeshAssetUvSphereGeometry geometry;
         geometry.radius = parameters.value("radius", geometry.radius);
         geometry.longitudeSegments =
             parameters.value("longitude_segments", geometry.longitudeSegments);
@@ -185,7 +187,7 @@ bool readPrimitivePart(const Json& value, MeshPrimitivePart& part) {
             parameters.value("latitude_segments", geometry.latitudeSegments);
         part.primitive = geometry;
     } else if (type == "cylinder") {
-        CylinderGeometry geometry;
+        MeshAssetCylinderGeometry geometry;
         geometry.bottomRadius = parameters.value("bottom_radius", geometry.bottomRadius);
         geometry.topRadius = parameters.value("top_radius", geometry.topRadius);
         geometry.height = parameters.value("height", geometry.height);
@@ -208,9 +210,8 @@ bool readPrimitivePart(const Json& value, MeshPrimitivePart& part) {
     return true;
 }
 
-Ref<MeshAsset>
-parseProceduralMesh(const VirtualPath& path, const Json& root, const Json& source) {
-    MeshBuildRecipe recipe;
+Ref<MeshAsset> parseProceduralMesh(const VirtualPath& path, const Json& root, const Json& source) {
+    MeshBuildRecipeAssetData recipe;
     recipe.name = root.value("name", path.filename());
     recipe.keepCpuCopy = root.value("keep_cpu_copy", false);
     if (!readEnum(root, "usage", recipe.usage, true))
@@ -218,31 +219,31 @@ parseProceduralMesh(const VirtualPath& path, const Json& root, const Json& sourc
     const std::string layout =
         source.value("vertex_layout", std::string{"position_normal_tangent_uv"});
     if (layout == "position") {
-        recipe.vertexLayout = PrimitiveVertexLayout::Position;
+        recipe.vertexLayout = MeshAssetPrimitiveVertexLayout::Position;
     } else if (layout == "position_normal_uv") {
-        recipe.vertexLayout = PrimitiveVertexLayout::PositionNormalUv;
+        recipe.vertexLayout = MeshAssetPrimitiveVertexLayout::PositionNormalUv;
     } else if (layout != "position_normal_tangent_uv") {
         return {};
     }
     const std::string policy = source.value("index_policy", std::string{"auto"});
     if (policy == "auto")
-        recipe.indexPolicy = MeshIndexPolicy::Auto;
+        recipe.indexPolicy = MeshIndexPolicyAssetData::Auto;
     else if (policy == "uint16")
-        recipe.indexPolicy = MeshIndexPolicy::UInt16;
+        recipe.indexPolicy = MeshIndexPolicyAssetData::UInt16;
     else if (policy == "uint32")
-        recipe.indexPolicy = MeshIndexPolicy::UInt32;
+        recipe.indexPolicy = MeshIndexPolicyAssetData::UInt32;
     else
         return {};
     const auto parts = source.find("parts");
     if (parts == source.end() || !parts->is_array())
         return {};
     for (const Json& value : *parts) {
-        MeshPrimitivePart part;
+        MeshPrimitivePartAssetData part;
         if (!readPrimitivePart(value, part))
             return {};
         recipe.parts.push_back(std::move(part));
     }
-    Ref<MeshAsset> built = MeshBuilder::buildAsset(recipe);
+    Ref<MeshAsset> built = buildMeshAsset(recipe);
     if (!built)
         return {};
     return built;
@@ -250,11 +251,11 @@ parseProceduralMesh(const VirtualPath& path, const Json& root, const Json& sourc
 
 Ref<MeshAsset> parseRawMesh(const VirtualPath& path, const Json& root) {
     auto asset = makeRef<MeshAsset>();
-    asset->desc.debugName = root.value("name", path.filename());
-    asset->desc.keepCpuCopy = root.value("keep_cpu_copy", false);
-    if (!readEnum(root, "index_type", asset->desc.indexType) ||
-        !readEnum(root, "usage", asset->desc.usage, true) ||
-        !readEnum(root, "topology", asset->desc.topology, true))
+    asset->data.desc.debugName = root.value("name", path.filename());
+    asset->data.desc.keepCpuCopy = root.value("keep_cpu_copy", false);
+    if (!readEnum(root, "index_type", asset->data.desc.indexType) ||
+        !readEnum(root, "usage", asset->data.desc.usage, true) ||
+        !readEnum(root, "topology", asset->data.desc.topology, true))
         return {};
 
     const auto streams = root.find("vertex_streams");
@@ -270,40 +271,39 @@ Ref<MeshAsset> parseRawMesh(const VirtualPath& path, const Json& root) {
             !value["semantic"].is_string() || !value.contains("format") ||
             !value["format"].is_string())
             return {};
-        VertexStreamLayout layout;
+        MeshAssetVertexStreamLayout layout;
         const auto semantic =
-            enumValue<VertexSemanticType>(value["semantic"].get_ref<const std::string&>());
+            enumValue<MeshAssetVertexSemanticType>(value["semantic"].get_ref<const std::string&>());
         if (!semantic || !readEnum(value, "format", layout.format))
             return {};
-        layout.semantic = {*semantic,
-                           static_cast<std::uint8_t>(value.value("semantic_index", 0U))};
+        layout.semantic = {*semantic, static_cast<std::uint8_t>(value.value("semantic_index", 0U))};
         layout.binding = value["binding"].get<std::uint32_t>();
         layout.location = value["location"].get<std::uint32_t>();
         if (!readEnum(value, "input_rate", layout.inputRate, true))
             return {};
-        asset->desc.vertexLayout.streams.push_back(layout);
+        asset->data.desc.vertexLayout.streams.push_back(layout);
     }
     for (const Json& value : *streams) {
         if (!value.is_object() || !value.contains("binding") ||
             !value["binding"].is_number_unsigned() || !value.contains("vertex_count") ||
             !value["vertex_count"].is_number_unsigned() || !value.contains("bytes"))
             return {};
-        VertexStream stream;
+        MeshAssetVertexStream stream;
         stream.binding = value["binding"].get<std::uint32_t>();
         stream.vertexCount = value["vertex_count"].get<std::uint32_t>();
         if (!readBytes(value["bytes"], stream.bytes))
             return {};
-        asset->meshData.vertexStreams.push_back(std::move(stream));
+        asset->data.meshData.vertexStreams.push_back(std::move(stream));
     }
 
-    if (asset->desc.indexType == IndexType::UInt16) {
+    if (asset->data.desc.indexType == MeshAssetIndexType::UInt16) {
         std::vector<std::uint16_t> values;
         for (const Json& value : *indices) {
             if (!value.is_number_unsigned() || value.get<std::uint32_t>() > 65535)
                 return {};
             values.push_back(static_cast<std::uint16_t>(value.get<std::uint32_t>()));
         }
-        if (!asset->meshData.setIndexData(std::span{values}))
+        if (!asset->data.meshData.setIndexData(std::span{values}))
             return {};
     } else {
         std::vector<std::uint32_t> values;
@@ -312,32 +312,32 @@ Ref<MeshAsset> parseRawMesh(const VirtualPath& path, const Json& root) {
                 return {};
             values.push_back(value.get<std::uint32_t>());
         }
-        if (!asset->meshData.setIndexData(std::span{values}))
+        if (!asset->data.meshData.setIndexData(std::span{values}))
             return {};
     }
 
     const auto bounds = calculateMeshBounds(*asset);
     if (!bounds)
         return {};
-    asset->desc.bounds = *bounds;
+    asset->data.desc.bounds = *bounds;
     const auto subMeshes = root.find("sub_meshes");
     if (subMeshes == root.end()) {
-        asset->desc.subMeshes.push_back({0, asset->meshData.indexCount, 0, 0, *bounds});
+        asset->data.desc.subMeshes.push_back({0, asset->data.meshData.indexCount, 0, 0, *bounds});
     } else if (subMeshes->is_array()) {
         for (const Json& value : *subMeshes) {
             if (!value.is_object())
                 return {};
-            SubMesh subMesh;
+            MeshAssetSubMesh subMesh;
             subMesh.firstIndex = value.value("first_index", 0U);
             subMesh.indexCount = value.value("index_count", 0U);
             subMesh.vertexOffset = value.value("vertex_offset", 0);
             subMesh.materialSlot = value.value("material_slot", 0U);
             subMesh.bounds = *bounds;
-            asset->desc.subMeshes.push_back(subMesh);
+            asset->data.desc.subMeshes.push_back(subMesh);
         }
     } else
         return {};
-    return validateMesh(asset->desc, asset->meshData) ? asset : nullptr;
+    return asset->buildRuntimeInfo().has_value() ? asset : nullptr;
 }
 
 Ref<MeshAsset> parseMesh(const VirtualPath& path, std::string_view text) {

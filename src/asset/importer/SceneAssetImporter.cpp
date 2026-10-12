@@ -1,3 +1,4 @@
+#include "asset/types/MeshComponentAsset.h"
 #include "asset/importer/SceneAssetImporter.h"
 
 #include "asset/database/AssetDatabase.h"
@@ -23,7 +24,7 @@ namespace {
                 [&dependencies](const auto& value) {
                     using T = std::decay_t<decltype(value)>;
                     if constexpr (std::is_same_v<T, MeshComponentAsset>) {
-                        if (value.sourceType == MeshComponentSourceType::Asset)
+                        if (value.sourceType == MeshComponentAssetSourceType::Asset)
                             dependencies.push_back(value.mesh);
                     } else if constexpr (std::is_same_v<T, MaterialComponentAsset>) {
                         dependencies.insert(
@@ -52,8 +53,8 @@ SceneAssetImporter::createDefaultSettings(const VirtualPath&) const {
     return std::make_unique<SceneImportSettings>();
 }
 
-std::vector<VirtualPath> SceneAssetImporter::gatherDependencies(
-    const AssetImportContext& context, const AssetImportSettings&) const {
+std::vector<VirtualPath> SceneAssetImporter::gatherDependencies(const AssetImportContext& context,
+                                                                const AssetImportSettings&) const {
     const auto source = FILE_SYSTEM.readText(context.sourcePath);
     if (!source) {
         return {};
@@ -86,8 +87,7 @@ AssetImportResult SceneAssetImporter::import(const AssetImportContext& context,
         return fail("Cannot parse SceneAsset: " + context.sourcePath.string());
     }
 
-    return writeAssetArtifact(
-        context, *scene, AssetType::Scene, collectSceneDependencies(*scene));
+    return writeAssetArtifact(context, *scene, AssetType::Scene, collectSceneDependencies(*scene));
 }
 
 } // namespace engine

@@ -8,7 +8,7 @@
 | Material set 1 | Material::uniformSet(program, frameIndex) |
 | 场景/对象/实例表/阴影 set 0 | FrameGpuManager |
 | 全局属性 set 2 | GlobalUniformGpuManager |
-| Mesh | Mesh 持有 vertex/index buffer RID |
+| Mesh | Mesh 持有 MeshGpuBuffers 快照，帧保活其 vertex/index RID |
 | Texture | Texture 持有 texture、默认 view、默认 sampler RID |
 
 资源经 rhi::IDevice 操作，不依赖 Vulkan 类型。后端负责 RID 池和底层生命周期。Pipeline key 包含 Program、顶点布局和 RT 格式，RenderState 由命令设置动态状态。
@@ -20,3 +20,5 @@ UniformSet 持有 Ubo、Texture 和 Sampler，FrameGpuManager 的通用 retained
 Texture/Mesh 由资产唯一实例复用。默认 Texture 按设备 uid 重建，Sampler 按描述去重。TextureDesc/SamplerDesc 不含序列化接口，资产序列化包装位于 asset/types/TextureAsset.h。
 
 关闭项目先等待 GPU 空闲，清空错误材质和程序/帧/全局资源，再释放资产和共享布局，最后关闭 Renderer/Device。设备 uid 防止旧对象析构时误释放新设备同号 RID，Device 析构清空其全部底层池。
+
+Mesh 的资产类型、完整重建、CPU 副本及克隆规则见 [Mesh.md](Mesh.md)。

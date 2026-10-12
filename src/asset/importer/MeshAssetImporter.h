@@ -1,3 +1,4 @@
+#include "asset/types/MeshAsset.h"
 #pragma once
 
 #include "asset/importer/AssetImporter.h"
@@ -20,8 +21,8 @@ public:
     [[nodiscard]] std::vector<VirtualPath>
     gatherDependencies(const AssetImportContext& context,
                        const AssetImportSettings& settings) const override;
-    [[nodiscard]] AssetImportResult
-    import(const AssetImportContext& context, const AssetImportSettings& settings) const override;
+    [[nodiscard]] AssetImportResult import(const AssetImportContext& context,
+                                           const AssetImportSettings& settings) const override;
 };
 
 } // namespace engine

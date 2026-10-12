@@ -1,4 +1,7 @@
-﻿#include "scene/scene/SceneAsset.h"
+#include "asset/types/MeshAsset.h"
+#include "asset/types/MeshComponentAsset.h"
+#include "asset/runtime/MeshAssetConversion.h"
+#include "scene/scene/SceneAsset.h"
 
 #include "asset/format/SceneAssetFormat.h"
 #include "core/logging/Log.h"
@@ -80,7 +83,7 @@ Ref<Scene> SceneAsset::instantiate(const SceneInstantiationContext& context) con
                         node->transform().setLocalScale(value.scale);
                     } else if constexpr (std::is_same_v<T, MeshComponentAsset>) {
                         MeshComponent* runtime = node->addComponent<MeshComponent>();
-                        if (value.sourceType == MeshComponentSourceType::Asset) {
+                        if (value.sourceType == MeshComponentAssetSourceType::Asset) {
                             if (!context.loadMesh)
                                 return false;
                             const Ref<Mesh> mesh = context.loadMesh(value.mesh);
@@ -88,7 +91,7 @@ Ref<Scene> SceneAsset::instantiate(const SceneInstantiationContext& context) con
                                 return false;
                             runtime->setAssetMesh(mesh);
                         } else {
-                            runtime->setPrimitiveRecipe(value.primitiveRecipe);
+                            runtime->setPrimitiveRecipe(toRuntimeMesh(value.primitiveRecipe));
                             if (!runtime->applyPrimitiveChanges())
                                 return false;
                         }

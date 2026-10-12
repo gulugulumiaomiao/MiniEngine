@@ -6,9 +6,9 @@
 
 `SceneNodeAsset`、`TransformComponentAsset`、`MeshComponentAsset`、`MaterialComponentAsset`、`CameraComponentAsset` 和 `LightComponentAsset` 都继承 `Transferable`，并分别覆盖 `transfer(Transfer&)`。因此 Scene 的所有复合数据节点都遵循同一套可传输接口。
 
-资产描述与对应运行时对象放在同一组文件中：`SceneNodeAsset` 位于
+MeshComponentAsset 独立位于 asset/types/MeshComponentAsset.h/.cpp，保存资产侧图元配方。其余资产描述与对应运行时对象放在同一组文件中：`SceneNodeAsset` 位于
 `Node.h/.cpp`，其余组件资产分别位于 `TransformComponent`、
-`MeshComponent`、`MaterialComponent`、`CameraComponent` 和
+`MaterialComponent`、`CameraComponent` 和
 `LightComponent` 的 `.h/.cpp` 文件中。`SceneAsset.h/.cpp` 只负责场景级
 数据、JSON 解析、验证和实例化流程。
 

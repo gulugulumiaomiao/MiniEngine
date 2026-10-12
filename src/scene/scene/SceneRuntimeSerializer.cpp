@@ -1,3 +1,6 @@
+#include "asset/types/MeshAsset.h"
+#include "asset/types/MeshComponentAsset.h"
+#include "asset/runtime/MeshAssetResolver.h"
 #include "scene/scene/SceneRuntimeSerializer.h"
 
 #include "asset/format/SceneAssetFormat.h"
@@ -40,14 +43,14 @@ bool isIdentityPartTransform(const MeshPrimitivePart& part) {
 
     if (component.sourceType() == MeshComponentSourceType::Asset) {
         const Mesh* mesh = component.mesh().get();
-        if (!mesh || !mesh->assetPath().valid() || mesh->assetPath().scheme() != "assets" ||
-            !mesh->assetPath().relativePath().ends_with(".mesh.json")) {
+        if (!mesh || !meshAssetPath(*mesh).valid() || meshAssetPath(*mesh).scheme() != "assets" ||
+            !meshAssetPath(*mesh).relativePath().ends_with(".mesh.json")) {
             error = "node '" + std::string{nodeName} +
                     "' has a Mesh component without a resolvable asset mesh";
             return false;
         }
-        result.sourceType = MeshComponentSourceType::Asset;
-        result.mesh = mesh->assetPath();
+        result.sourceType = MeshComponentAssetSourceType::Asset;
+        result.mesh = meshAssetPath(*mesh);
         return true;
     }
 
@@ -57,10 +60,10 @@ bool isIdentityPartTransform(const MeshPrimitivePart& part) {
                 "' has a primitive Mesh component that cannot be represented in scene JSON";
         return false;
     }
-    result.sourceType = MeshComponentSourceType::Primitive;
+    result.sourceType = MeshComponentAssetSourceType::Primitive;
     result.primitiveRecipe.name = "Scene Runtime Primitive";
-    result.primitiveRecipe.parts.push_back(recipe->parts.front().primitive);
-    result.primitiveRecipe.usage = MeshUsage::Dynamic;
+    result.primitiveRecipe.parts.push_back(toMeshAsset(recipe->parts.front().primitive));
+    result.primitiveRecipe.usage = MeshAssetUsage::Dynamic;
     result.primitiveRecipe.keepCpuCopy = true;
     return true;
 }

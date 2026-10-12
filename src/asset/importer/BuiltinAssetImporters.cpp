@@ -1,3 +1,4 @@
+#include "asset/types/MeshAsset.h"
 #include "asset/types/TextureAsset.h"
 #include "asset/importer/BuiltinAssetImporters.h"
 

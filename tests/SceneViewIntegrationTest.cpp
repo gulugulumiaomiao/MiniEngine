@@ -3,6 +3,8 @@
 #include "asset/types/ShaderAsset.h"
 #include "asset/types/MaterialAsset.h"
 #include "render/GraphicsPipelineStorage.h"
+#include "render/mesh/MeshBuilder.h"
+#include "render/gpu/frame/FrameGpuManager.h"
 #include "runtime/window/Window.h"
 #include "render/renderer/Renderer.h"
 #include "render/render_target/RenderTarget.h"
@@ -30,6 +32,8 @@ public:
     Ref<Shader> keywordShader;
     Ref<Material> survivingMaterial;
     Ref<UniformSet> survivingSet;
+    Ref<Mesh> survivingMesh;
+    Ref<MeshGpuBuffers> survivingMeshBuffers;
 
 private:
     void onStart() override {
@@ -40,6 +44,14 @@ private:
         }
         attach();
         checkKeywordPrograms();
+        MeshBuildRecipe recipe;
+        recipe.parts.emplace_back(PlaneGeometry{});
+        recipe.keepCpuCopy = true;
+        auto info = MeshBuilder::build(recipe);
+        ASSERT_TRUE(info);
+        survivingMesh = Mesh::create(std::move(*info));
+        ASSERT_TRUE(survivingMesh);
+        survivingMeshBuffers = survivingMesh->gpuBuffers();
     }
     void checkKeywordPrograms() {
         const auto owner = ASSET_MANAGER.loadAsset<ShaderAsset>(
@@ -127,6 +139,19 @@ private:
             ENGINE.requestQuit();
             return;
         }
+        if (frames == 4 || frames == 5) {
+            // Rebuild an actual rendered asset while another frame may still use its buffers.
+            const auto asset = ASSET_MANAGER.loadAsset<MeshAsset>(
+                VirtualPath{"assets://meshes/procedural_showcase.mesh.json"});
+            ASSERT_TRUE(asset);
+            const auto mesh = asset->instantiate();
+            ASSERT_TRUE(mesh);
+            const auto old = mesh->gpuBuffers();
+            auto info = asset->buildRuntimeInfo();
+            ASSERT_TRUE(info);
+            ASSERT_TRUE(mesh->rebuild(std::move(*info)));
+            EXPECT_NE(mesh->gpuBuffers(), old);
+        }
         if (frames == 3 || frames == 5) {
             const auto& camera = ENGINE.renderScene().camera();
             ASSERT_TRUE(camera.has_value());
@@ -151,6 +176,9 @@ private:
             ASSERT_TRUE(newSet);
             EXPECT_NE(newSet, survivingSet);
             survivingSet = newSet;
+            ASSERT_TRUE(survivingMesh->isValid());
+            EXPECT_NE(survivingMesh->gpuBuffers(), survivingMeshBuffers);
+            survivingMeshBuffers = survivingMesh->gpuBuffers();
         }
         if (frames == 13) {
             layer_.detach();

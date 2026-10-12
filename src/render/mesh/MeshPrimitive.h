@@ -1,7 +1,6 @@
 #pragma once
 
 #include "core/math/Math.h"
-#include "core/serialization/Transferable.h"
 
 #include <cstdint>
 #include <utility>
@@ -23,7 +22,7 @@ enum class PrimitiveVertexLayout : std::uint8_t {
     PositionNormalTangentUv,
 };
 
-struct PlaneGeometry final : public Transferable {
+struct PlaneGeometry final {
     PlaneGeometry() = default;
     PlaneGeometry(math::Vec2 size, std::uint32_t segmentsX, std::uint32_t segmentsZ)
         : size(size), segmentsX(segmentsX), segmentsZ(segmentsZ) {}
@@ -34,10 +33,9 @@ struct PlaneGeometry final : public Transferable {
     bool operator==(const PlaneGeometry& other) const {
         return size == other.size && segmentsX == other.segmentsX && segmentsZ == other.segmentsZ;
     }
-    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct BoxGeometry final : public Transferable {
+struct BoxGeometry final {
     BoxGeometry() = default;
     BoxGeometry(math::Vec3 size,
                 std::uint32_t segmentsX,
@@ -53,10 +51,9 @@ struct BoxGeometry final : public Transferable {
         return size == other.size && segmentsX == other.segmentsX && segmentsY == other.segmentsY &&
                segmentsZ == other.segmentsZ;
     }
-    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct UvSphereGeometry final : public Transferable {
+struct UvSphereGeometry final {
     UvSphereGeometry() = default;
     UvSphereGeometry(float radius, std::uint32_t longitudeSegments, std::uint32_t latitudeSegments)
         : radius(radius), longitudeSegments(longitudeSegments), latitudeSegments(latitudeSegments) {
@@ -69,10 +66,9 @@ struct UvSphereGeometry final : public Transferable {
         return radius == other.radius && longitudeSegments == other.longitudeSegments &&
                latitudeSegments == other.latitudeSegments;
     }
-    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct CylinderGeometry final : public Transferable {
+struct CylinderGeometry final {
     CylinderGeometry() = default;
     CylinderGeometry(float bottomRadius,
                      float topRadius,
@@ -98,10 +94,9 @@ struct CylinderGeometry final : public Transferable {
                heightSegments == other.heightSegments && capBottom == other.capBottom &&
                capTop == other.capTop;
     }
-    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct MeshPrimitive final : public Transferable {
+struct MeshPrimitive final {
     using Value = std::variant<PlaneGeometry, BoxGeometry, UvSphereGeometry, CylinderGeometry>;
 
     Value value{PlaneGeometry{}};
@@ -114,10 +109,9 @@ struct MeshPrimitive final : public Transferable {
 
     bool operator==(const MeshPrimitive& other) const { return value == other.value; }
     [[nodiscard]] MeshPrimitiveType type() const;
-    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
-struct MeshPrimitivePart final : public Transferable {
+struct MeshPrimitivePart final {
     MeshPrimitivePart() = default;
     MeshPrimitivePart(MeshPrimitive primitive,
                       math::Vec3 translation = math::Vec3{0.0F},
@@ -135,9 +129,9 @@ struct MeshPrimitivePart final : public Transferable {
 
     bool operator==(const MeshPrimitivePart& other) const {
         return primitive == other.primitive && translation == other.translation &&
-               rotation == other.rotation && scale == other.scale && materialSlot == other.materialSlot;
+               rotation == other.rotation && scale == other.scale &&
+               materialSlot == other.materialSlot;
     }
-    [[nodiscard]] bool transfer(Transfer& archive) override;
 };
 
 } // namespace engine

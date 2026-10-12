@@ -1,3 +1,4 @@
+#include "asset/runtime/MeshAssetResolver.h"
 #include "tools/editor/panels/InspectorPanel.h"
 
 #include "render/material/Material.h"
@@ -185,7 +186,8 @@ void InspectorPanel::drawMesh(Node& node) {
     if (mesh->sourceType() == MeshComponentSourceType::Asset) {
         const std::vector<VirtualPath> meshes = collectAssets(AssetType::Mesh);
         const Mesh* current = mesh->mesh().get();
-        const VirtualPath currentPath = current != nullptr ? current->assetPath() : VirtualPath{};
+        const VirtualPath currentPath =
+            current != nullptr ? meshAssetPath(*current) : VirtualPath{};
         VirtualPath chosen;
         if (assetCombo("Mesh Asset", meshes, currentPath, chosen)) {
             const Ref<Mesh> loaded = resolveMeshReference(chosen.string());

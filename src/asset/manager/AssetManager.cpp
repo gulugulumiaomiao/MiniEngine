@@ -1,3 +1,4 @@
+#include "asset/types/MeshAsset.h"
 #include "asset/types/TextureAsset.h"
 #include "asset/manager/AssetManager.h"
 #include "render/GraphicsPipelineStorage.h"
@@ -183,6 +184,16 @@ Ref<MaterialAsset> AssetManager::findMaterialAsset(const Material& material) con
     return {};
 }
 
+Ref<MeshAsset> AssetManager::findMeshAsset(const Mesh& mesh) const {
+    std::scoped_lock lock{mutex_};
+    for (const auto& [path, cached] : cache_) {
+        const auto asset = refDynamicCast<MeshAsset>(cached);
+        if (asset && asset->runtimeInstance().get() == &mesh)
+            return asset;
+    }
+    return {};
+}
+
 void AssetManager::invalidate(const VirtualPath& path) {
     std::scoped_lock lock{mutex_};
     cache_.erase(path.string());
@@ -212,6 +223,12 @@ void AssetManager::reloadInPlace(const VirtualPath& path) {
                 "AssetManager", "Invalid material payload for reload: %s", path.string().c_str());
             return;
         }
+    }
+    if (record->type == AssetType::Mesh) {
+        MeshAsset decoded;
+        BinaryReader preflight{artifact->payload};
+        if (!decoded.transfer(preflight) || !preflight.finished())
+            return;
     }
     BinaryReader reader{artifact->payload};
     if (!cached->transfer(reader) || !reader.finished()) {

@@ -1,3 +1,4 @@
+#include "asset/types/MeshAsset.h"
 #include "asset/types/TextureAsset.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/derived_data/AssetArtifact.h"
@@ -178,7 +179,7 @@ int main() {
     BinaryReader meshReader{meshArtifact ? meshArtifact->payload : std::span<const std::byte>{}};
     if (!meshResult.success || !meshArtifact || meshArtifact->assetType != AssetType::Mesh ||
         !mesh.transfer(meshReader) || !meshReader.finished() ||
-        mesh.desc.debugName != "ImporterMesh" || mesh.meshData.indexCount != 3) {
+        mesh.data.desc.debugName != "ImporterMesh" || mesh.data.meshData.indexCount != 3) {
         return 8;
     }
 
@@ -216,11 +217,11 @@ int main() {
                                                      : std::span<const std::byte>{}};
     if (!proceduralResult.success || !proceduralArtifact ||
         !proceduralMesh.transfer(proceduralReader) || !proceduralReader.finished() ||
-        !proceduralMesh.buildRecipe || proceduralMesh.buildRecipe->parts.size() != 2 ||
-        proceduralMesh.desc.subMeshes.size() != 2 ||
-        proceduralMesh.desc.subMeshes[0].materialSlot != 4 ||
-        proceduralMesh.desc.subMeshes[1].materialSlot != 7 ||
-        proceduralMesh.meshData.vertexStreams.front().vertexCount != 69) {
+        !proceduralMesh.data.buildRecipe || proceduralMesh.data.buildRecipe->parts.size() != 2 ||
+        proceduralMesh.data.desc.subMeshes.size() != 2 ||
+        proceduralMesh.data.desc.subMeshes[0].materialSlot != 4 ||
+        proceduralMesh.data.desc.subMeshes[1].materialSlot != 7 ||
+        proceduralMesh.data.meshData.vertexStreams.front().vertexCount != 69) {
         return 10;
     }
     ShaderAsset shader;

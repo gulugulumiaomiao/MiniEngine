@@ -16,3 +16,11 @@ remove the backwards-compatibility coverage.
 material by the Debug MiniAssetCooker executable before the Material split on
 2026-10-09. MaterialIsolationTest checks that the new asset schema rewrites the
 original v2 payload byte for byte. Keep this fixture unchanged.
+
+## Mesh compatibility fixture
+
+`mesh_legacy_v4.artifact` is the built-in procedural showcase mesh artifact copied
+from the pre-refactor Debug library on 2026-10-12 (before modifying Mesh sources).
+It contains the original v4 build recipe, description and baked mesh data.
+MeshIsolationTest rewrites its payload byte for byte; do not regenerate this
+fixture using the new serializer.

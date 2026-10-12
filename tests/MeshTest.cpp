@@ -1,4 +1,6 @@
-﻿#include "render/mesh/Mesh.h"
+#include "asset/runtime/MeshAssetResolver.h"
+#include "asset/types/MeshAsset.h"
+#include "render/mesh/Mesh.h"
 #include "core/serialization/BinaryTransfer.h"
 #include "core/serialization/JsonTransfer.h"
 #include "render/mesh/MeshBuilder.h"
@@ -66,29 +68,22 @@ public:
         return buffer_create(desc);
     }
 
-    engine::rhi::RID texture_create(const engine::rhi::TextureDesc&) override {
-        return {};
-    }
+    engine::rhi::RID texture_create(const engine::rhi::TextureDesc&) override { return {}; }
     void texture_destroy(engine::rhi::RID) override {}
     void texture_upload(engine::rhi::RID,
                         std::span<const engine::rhi::TextureUploadRegion>) override {}
-    engine::rhi::RID
-    texture_view_create(engine::rhi::RID, const engine::rhi::TextureViewDesc&) override {
+    engine::rhi::RID texture_view_create(engine::rhi::RID,
+                                         const engine::rhi::TextureViewDesc&) override {
         return {};
     }
-    engine::rhi::RID texture_default_view(engine::rhi::RID) override {
-        return {};
-    }
+    engine::rhi::RID texture_default_view(engine::rhi::RID) override { return {}; }
     void texture_view_destroy(engine::rhi::RID) override {}
-    engine::rhi::RID sampler_create(const engine::rhi::SamplerDesc&) override {
-        return {};
-    }
+    engine::rhi::RID sampler_create(const engine::rhi::SamplerDesc&) override { return {}; }
     void sampler_destroy(engine::rhi::RID) override {}
 
     engine::rhi::RID shader_create(const engine::rhi::ShaderDesc&) override { return {}; }
     void shader_destroy(engine::rhi::RID) override {}
-    engine::rhi::RID
-    pipeline_create(const engine::rhi::GraphicsPipelineDesc&) override {
+    engine::rhi::RID pipeline_create(const engine::rhi::GraphicsPipelineDesc&) override {
         return {};
     }
     void pipeline_destroy(engine::rhi::RID) override {}
@@ -102,7 +97,8 @@ public:
         return {};
     }
     void pipeline_layout_destroy(engine::rhi::RID) override {}
-    engine::rhi::RID descriptor_set_allocate(const engine::rhi::DescriptorSetAllocateInfo&) override {
+    engine::rhi::RID
+    descriptor_set_allocate(const engine::rhi::DescriptorSetAllocateInfo&) override {
         return {};
     }
     void descriptor_set_update(engine::rhi::RID,
@@ -148,19 +144,20 @@ int main() {
 
     MeshAsset source;
     source.setAssetPath(VirtualPath{"assets://meshes/test.mesh"});
-    source.desc.debugName = "MultiStreamTriangle";
-    source.desc.vertexLayout.streams = {
-        {{VertexSemanticType::Position, 0}, VertexFormat::Vec3Float32, 0, 0},
-        {{VertexSemanticType::Color, 0}, VertexFormat::Vec4Float32, 1, 1},
+    source.data.desc.debugName = "MultiStreamTriangle";
+    source.data.desc.vertexLayout.streams = {
+        {{MeshAssetVertexSemanticType::Position, 0}, MeshAssetVertexFormat::Vec3Float32, 0, 0},
+        {{MeshAssetVertexSemanticType::Color, 0}, MeshAssetVertexFormat::Vec4Float32, 1, 1},
     };
-    source.desc.indexType = IndexType::UInt16;
-    source.desc.usage = MeshUsage::Dynamic;
-    source.desc.bounds = calculateBounds(positions);
-    source.desc.subMeshes.push_back({0, 3, 0, 0, source.desc.bounds});
-    if (!source.meshData.setVertexData(0, std::span{positions}) ||
-        !source.meshData.setVertexData(1, std::span{colors}) ||
-        !source.meshData.setIndexData(std::span{indices}) ||
-        !validateMesh(source.desc, source.meshData)) {
+    source.data.desc.indexType = MeshAssetIndexType::UInt16;
+    source.data.desc.usage = MeshAssetUsage::Dynamic;
+    source.data.desc.keepCpuCopy = true;
+    source.data.desc.bounds = toMeshAsset(calculateBounds(positions));
+    source.data.desc.subMeshes.push_back({0, 3, 0, 0, source.data.desc.bounds});
+    if (!source.data.meshData.setVertexData(0, std::span{positions}) ||
+        !source.data.meshData.setVertexData(1, std::span{colors}) ||
+        !source.data.meshData.setIndexData(std::span{indices}) ||
+        !source.buildRuntimeInfo().has_value()) {
         return 1;
     }
 
@@ -177,11 +174,11 @@ int main() {
     Asset& asset = decoded;
     BinaryReader reader{binary};
     if (!asset.transfer(reader) || !reader.finished() || decoded.type() != AssetType::Mesh ||
-        decoded.desc.debugName != source.desc.debugName ||
-        decoded.desc.vertexLayout != source.desc.vertexLayout ||
-        decoded.meshData.vertexStreams != source.meshData.vertexStreams ||
-        decoded.meshData.indices != source.meshData.indices ||
-        decoded.meshData.indexCount != source.meshData.indexCount) {
+        decoded.data.desc.debugName != source.data.desc.debugName ||
+        decoded.data.desc.vertexLayout != source.data.desc.vertexLayout ||
+        decoded.data.meshData.vertexStreams != source.data.meshData.vertexStreams ||
+        decoded.data.meshData.indices != source.data.meshData.indices ||
+        decoded.data.meshData.indexCount != source.data.meshData.indexCount) {
         return 3;
     }
 
@@ -191,10 +188,11 @@ int main() {
     MeshAsset jsonDecoded;
     jsonDecoded.setAssetPath(source.assetPath());
     JsonReader jsonReader{jsonWriter.toString()};
-    if (!jsonDecoded.transfer(jsonReader) || jsonDecoded.desc.debugName != source.desc.debugName ||
-        jsonDecoded.desc.vertexLayout != source.desc.vertexLayout ||
-        jsonDecoded.meshData.vertexStreams != source.meshData.vertexStreams ||
-        jsonDecoded.meshData.indices != source.meshData.indices) {
+    if (!jsonDecoded.transfer(jsonReader) ||
+        jsonDecoded.data.desc.debugName != source.data.desc.debugName ||
+        jsonDecoded.data.desc.vertexLayout != source.data.desc.vertexLayout ||
+        jsonDecoded.data.meshData.vertexStreams != source.data.meshData.vertexStreams ||
+        jsonDecoded.data.meshData.indices != source.data.meshData.indices) {
         return 10;
     }
 
@@ -203,15 +201,14 @@ int main() {
     const std::uint32_t buffersBefore = fakeDevice.createdBuffers;
     const std::uint32_t uploadsBefore = fakeDevice.uploads;
     Ref<Mesh> runtime = decoded.instantiate();
-    if (!runtime || !runtime->isValid() || runtime->assetPath() != source.assetPath() ||
-        !runtime->isAssetBacked() || runtime->vertexBuffers().size() != 2 ||
-        !runtime->indexBuffer() || runtime->indexFormat() != rhi::IndexFormat::UInt16 ||
-        runtime->subMeshes().size() != 1 || runtime->usage() != MeshUsage::Dynamic ||
+    if (!runtime || !runtime->isValid() || runtime != decoded.runtimeInstance() ||
+        runtime->vertexBuffers().size() != 2 || !runtime->indexBuffer() ||
+        runtime->indexFormat() != rhi::IndexFormat::UInt16 || runtime->subMeshes().size() != 1 ||
+        runtime->usage() != MeshUsage::Dynamic ||
         runtime->topology() != MeshTopology::TriangleList) {
         return 4;
     }
-    if (fakeDevice.createdBuffers != buffersBefore + 3 ||
-        fakeDevice.uploads != uploadsBefore + 3) {
+    if (fakeDevice.createdBuffers != buffersBefore + 3 || fakeDevice.uploads != uploadsBefore + 3) {
         return 4;
     }
     // 复用唯一实例：再次 instantiate 返回同一对象，不再新建 buffer。
@@ -229,18 +226,19 @@ int main() {
     // --- clone：脱离 asset 的独立实例（新建 buffer，不登记、不链接 asset）---
     const std::uint32_t buffersBeforeClone = fakeDevice.createdBuffers;
     Ref<Mesh> cloned = runtime->clone();
-    if (!cloned || cloned == runtime || !cloned->isValid() || cloned->isAssetBacked() ||
-        cloned->assetPath().valid() || fakeDevice.createdBuffers != buffersBeforeClone + 3) {
+    if (!cloned || cloned == runtime || !cloned->isValid() ||
+        cloned->instanceId() == runtime->instanceId() ||
+        fakeDevice.createdBuffers != buffersBeforeClone + 3) {
         return 7;
     }
 
     // --- 无效 payload 不得破坏 asset，也不得触发上传 ---
     std::vector<std::byte> invalid = binary;
     invalid.front() = std::byte{0};
-    const std::string originalName = decoded.desc.debugName;
+    const std::string originalName = decoded.data.desc.debugName;
     const std::uint32_t uploadsBeforeInvalid = fakeDevice.uploads;
     BinaryReader invalidReader{invalid};
-    if (decoded.transfer(invalidReader) || decoded.desc.debugName != originalName ||
+    if (decoded.transfer(invalidReader) || decoded.data.desc.debugName != originalName ||
         fakeDevice.uploads != uploadsBeforeInvalid) {
         return 8;
     }
@@ -258,14 +256,14 @@ int main() {
     planeRecipe.parts.push_back({PlaneGeometry{{2.0F, 4.0F}, 1, 1}});
     const auto plane = MeshBuilder::build(planeRecipe);
     if (!plane || plane->data.vertexStreams[0].vertexCount != 4 || plane->data.indexCount != 6 ||
-        plane->desc.indexType != IndexType::UInt16 ||
-        !math::nearlyEqual(plane->desc.bounds.aabb.minimum.x, -1.0F) ||
-        !math::nearlyEqual(plane->desc.bounds.aabb.maximum.z, 2.0F)) {
+        plane->indexType != IndexType::UInt16 ||
+        !math::nearlyEqual(plane->bounds.aabb.minimum.x, -1.0F) ||
+        !math::nearlyEqual(plane->bounds.aabb.maximum.z, 2.0F)) {
         return 11;
     }
 
     // 运行时图元经 buildAsset → instantiate（取代已删除的 MeshResourceManager::createRuntime）。
-    const Ref<MeshAsset> planeAsset = MeshBuilder::buildAsset(planeRecipe);
+    const Ref<MeshAsset> planeAsset = buildMeshAsset(planeRecipe);
     Ref<Mesh> runtimePlane = planeAsset ? planeAsset->instantiate() : Ref<Mesh>{};
     if (!runtimePlane || !runtimePlane->isValid()) {
         return 20;
@@ -286,14 +284,14 @@ int main() {
     cylinderPart.translation = {2.0F, 0.0F, 0.0F};
     cylinderPart.materialSlot = 4;
     primitives.parts = {boxPart, spherePart, cylinderPart};
-    auto combined = MeshBuilder::buildAsset(primitives);
-    if (!combined || !combined->buildRecipe || combined->desc.subMeshes.size() != 3 ||
-        combined->desc.subMeshes[0].materialSlot != 2 ||
-        combined->desc.subMeshes[1].indexCount != 144 ||
-        combined->desc.subMeshes[2].indexCount != 96 ||
-        combined->meshData.vertexStreams[0].vertexCount != 24 + 45 + 38 ||
-        combined->desc.bounds.aabb.minimum.x > -2.49F ||
-        combined->desc.bounds.aabb.maximum.x < 2.49F) {
+    auto combined = buildMeshAsset(primitives);
+    if (!combined || !combined->data.buildRecipe || combined->data.desc.subMeshes.size() != 3 ||
+        combined->data.desc.subMeshes[0].materialSlot != 2 ||
+        combined->data.desc.subMeshes[1].indexCount != 144 ||
+        combined->data.desc.subMeshes[2].indexCount != 96 ||
+        combined->data.meshData.vertexStreams[0].vertexCount != 24 + 45 + 38 ||
+        combined->data.desc.bounds.aabb.minimum.x > -2.49F ||
+        combined->data.desc.bounds.aabb.maximum.x < 2.49F) {
         return 12;
     }
 
@@ -303,8 +301,10 @@ int main() {
     MeshAsset proceduralDecoded;
     BinaryReader proceduralReader{proceduralWriter.bytes()};
     if (!proceduralDecoded.transfer(proceduralReader) || !proceduralReader.finished() ||
-        !proceduralDecoded.buildRecipe || proceduralDecoded.buildRecipe->parts.size() != 3 ||
-        proceduralDecoded.buildRecipe->parts[1].primitive.type() != MeshPrimitiveType::UvSphere) {
+        !proceduralDecoded.data.buildRecipe ||
+        proceduralDecoded.data.buildRecipe->parts.size() != 3 ||
+        proceduralDecoded.data.buildRecipe->parts[1].primitive.type() !=
+            MeshPrimitiveTypeAssetData::UvSphere) {
         return 13;
     }
     // instantiate 后 Mesh 暴露 subMeshes（取代已删除的 Mesh::buildRecipe()）。
@@ -331,7 +331,7 @@ int main() {
     MeshBuildRecipe largeRecipe;
     largeRecipe.parts.push_back({PlaneGeometry{{1.0F, 1.0F}, 256, 256}});
     const auto large = MeshBuilder::build(largeRecipe);
-    if (!large || large->desc.indexType != IndexType::UInt32)
+    if (!large || large->indexType != IndexType::UInt32)
         return 16;
     largeRecipe.indexPolicy = MeshIndexPolicy::UInt16;
     if (MeshBuilder::build(largeRecipe))
@@ -348,17 +348,18 @@ int main() {
         return 18;
     MeshAsset v4Decoded;
     BinaryReader v4Reader{v4Writer.bytes()};
-    if (!v4Decoded.transfer(v4Reader) || !v4Reader.finished() || v4Decoded.buildRecipe ||
-        v4Decoded.desc.debugName != source.desc.debugName) {
+    if (!v4Decoded.transfer(v4Reader) || !v4Reader.finished() || v4Decoded.data.buildRecipe ||
+        v4Decoded.data.desc.debugName != source.data.desc.debugName) {
         return 18;
     }
 
-    // --- Stream：瞬态 orphan。每次 upload 获取新瞬态缓冲，旧的不被 Mesh 释放（设备 fence 池拥有）---
+    // --- Stream：瞬态 orphan。每次 upload 获取新瞬态缓冲，旧的不被 Mesh 释放（设备 fence
+    // 池拥有）---
     MeshBuildRecipe streamRecipe;
     streamRecipe.name = "Stream";
     streamRecipe.usage = MeshUsage::Stream;
     streamRecipe.parts.push_back({PlaneGeometry{}});
-    const Ref<MeshAsset> streamAsset = MeshBuilder::buildAsset(streamRecipe);
+    const Ref<MeshAsset> streamAsset = buildMeshAsset(streamRecipe);
     Ref<Mesh> streamMesh = streamAsset ? streamAsset->instantiate() : Ref<Mesh>{};
     if (!streamMesh || !streamMesh->isValid() || streamMesh->usage() != MeshUsage::Stream ||
         fakeDevice.transientBuffers == 0) {
@@ -368,7 +369,7 @@ int main() {
     const std::uint32_t createdBeforeStream = fakeDevice.createdBuffers;
     const std::uint32_t destroyedBeforeStream = fakeDevice.destroyedBuffers;
     // 模拟每帧生产者：再次 upload → 获取新瞬态缓冲（orphan 旧的，Mesh 不释放）。
-    streamMesh->upload(streamAsset->meshData);
+    streamMesh->upload(toRuntimeMesh(streamAsset->data.meshData));
     if (fakeDevice.transientBuffers == transientBefore ||
         fakeDevice.createdBuffers == createdBeforeStream ||
         fakeDevice.destroyedBuffers != destroyedBeforeStream) {

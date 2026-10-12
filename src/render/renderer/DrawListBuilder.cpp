@@ -145,6 +145,8 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
             Log::warn("DrawListBuilder", "Skipping Mesh without sub-meshes");
             continue;
         }
+        const auto buffers = meshInstance->gpuBuffers();
+        FRAME_GPU_MANAGER.retain(context.frameIndex(), buffers);
         const std::uint32_t objectIndex = static_cast<std::uint32_t>(drawList.objects.size());
         drawList.objects.push_back({object.transform});
 

@@ -1,3 +1,6 @@
+#include "asset/runtime/MeshAssetResolver.h"
+#include "asset/types/MeshAsset.h"
+#include "asset/types/MeshComponentAsset.h"
 #include "asset/runtime/ShaderAssetResolver.h"
 #include "TestAssetEnvironment.h"
 #include "TestRenderDevice.h"
@@ -30,31 +33,6 @@
 namespace {
 
 using namespace engine;
-
-[[nodiscard]] Ref<MeshAsset> makeTriangleMeshAsset() {
-    constexpr std::array positions{
-        math::Vec3{-1.0F, -1.0F, 0.0F},
-        math::Vec3{1.0F, -1.0F, 0.0F},
-        math::Vec3{0.0F, 1.0F, 0.0F},
-    };
-    constexpr std::array<std::uint16_t, 3> indices{0, 1, 2};
-
-    Ref<MeshAsset> source = makeRef<MeshAsset>();
-    source->setAssetPath(VirtualPath{"assets://meshes/triangle.mesh.json"});
-    source->desc.debugName = "ExportTriangle";
-    source->desc.vertexLayout.streams = {
-        {{VertexSemanticType::Position, 0}, VertexFormat::Vec3Float32, 0, 0},
-    };
-    source->desc.indexType = IndexType::UInt16;
-    source->desc.bounds = calculateBounds(positions);
-    source->desc.subMeshes.push_back({0, 3, 0, 0, source->desc.bounds});
-    if (!source->meshData.setVertexData(0, std::span{positions}) ||
-        !source->meshData.setIndexData(std::span{indices}) ||
-        !validateMesh(source->desc, source->meshData)) {
-        return {};
-    }
-    return source;
-}
 
 [[nodiscard]] Ref<Scene> buildExportScene(Ref<Mesh> mesh, Ref<Material> material) {
     Ref<Scene> scene = makeRef<Scene>("Export Roundtrip");
@@ -109,9 +87,9 @@ int main() {
     if (!test::initializeAssetEnvironment(MINI_TEST_ASSET_DIR))
         return 30;
 
-    // 持有 MeshAsset 存活：新 Mesh::assetPath() 委托给所链接的 asset，导出时需要它。
-    const Ref<MeshAsset> meshAsset = makeTriangleMeshAsset();
-    const Ref<Mesh> meshHandle = meshAsset ? meshAsset->instantiate() : Ref<Mesh>{};
+    // Use the cached asset instance so the asset adapter can resolve its export identity.
+    const Ref<Mesh> meshHandle =
+        resolveMeshReference("assets://meshes/procedural_showcase.mesh.json");
     if (!meshHandle)
         return 31;
 
@@ -144,8 +122,8 @@ int main() {
     const auto* worldMaterial = std::get_if<MaterialComponentAsset>(&worldAsset.components[2]);
     if (!worldTransform || worldTransform->position != math::Vec3{1.0F, 2.0F, 3.0F} ||
         worldTransform->scale != math::Vec3{2.0F} || !worldMesh ||
-        worldMesh->sourceType != MeshComponentSourceType::Asset ||
-        worldMesh->mesh != VirtualPath{"assets://meshes/triangle.mesh.json"} ||
+        worldMesh->sourceType != MeshComponentAssetSourceType::Asset ||
+        worldMesh->mesh != VirtualPath{"assets://meshes/procedural_showcase.mesh.json"} ||
         worldMesh->castShadow || worldMesh->layerMask != 3 || !worldMaterial ||
         worldMaterial->materials.size() != 1 ||
         worldMaterial->materials[0] !=
@@ -174,12 +152,12 @@ int main() {
     const SceneNodeAsset& primitiveAsset = asset->nodes[3];
     const auto* primitiveMesh = std::get_if<MeshComponentAsset>(&primitiveAsset.components[1]);
     if (primitiveAsset.id != 4 || primitiveAsset.parent || primitiveAsset.name != "Primitive Box" ||
-        !primitiveMesh || primitiveMesh->sourceType != MeshComponentSourceType::Primitive ||
+        !primitiveMesh || primitiveMesh->sourceType != MeshComponentAssetSourceType::Primitive ||
         primitiveMesh->primitiveRecipe.parts.size() != 1) {
         return 7;
     }
-    const auto* box =
-        std::get_if<BoxGeometry>(&primitiveMesh->primitiveRecipe.parts.front().primitive.value);
+    const auto* box = std::get_if<MeshAssetBoxGeometry>(
+        &primitiveMesh->primitiveRecipe.parts.front().primitive.value);
     if (!box || box->size != math::Vec3{1.0F, 2.0F, 3.0F} || box->segmentsX != 2 ||
         box->segmentsY != 3 || box->segmentsZ != 4) {
         return 8;
@@ -210,7 +188,7 @@ int main() {
     Ref<Scene> runtime = reparsed->instantiate(context);
     if (!runtime || runtime->name() != "Export Roundtrip" || runtime->nodeCount() != 5 ||
         requestedMeshes.size() != 1 || requestedMaterials.size() != 1 ||
-        requestedMeshes.front() != VirtualPath{"assets://meshes/triangle.mesh.json"} ||
+        requestedMeshes.front() != VirtualPath{"assets://meshes/procedural_showcase.mesh.json"} ||
         requestedMaterials.front() !=
             VirtualPath{"assets://materials/warm_vertex_color.material.json"}) {
         return 10;

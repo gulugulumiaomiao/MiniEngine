@@ -1,3 +1,5 @@
+#include "asset/runtime/MeshAssetResolver.h"
+#include "asset/types/MeshAsset.h"
 #include "asset/runtime/ShaderAssetResolver.h"
 #include "asset/database/AssetDatabase.h"
 #include "asset/importer/AssetImportPipeline.h"
@@ -185,7 +187,7 @@ int main() {
     const Ref<Mesh> meshHandle = resolveMeshReference(meshPath.string());
     const auto meshAsset = ASSET_MANAGER.loadAsset<MeshAsset>(meshPath);
     Mesh* runtimeMesh = meshHandle.get();
-    if (!meshHandle || !meshAsset || !runtimeMesh || runtimeMesh->assetPath() != meshPath ||
+    if (!meshHandle || !meshAsset || !runtimeMesh || meshAssetPath(*runtimeMesh) != meshPath ||
         !runtimeMesh->isValid()) {
         return 26;
     }

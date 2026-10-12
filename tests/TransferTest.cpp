@@ -1,3 +1,6 @@
+#include "asset/runtime/MeshAssetResolver.h"
+#include "asset/types/MeshAsset.h"
+#include "asset/types/MeshComponentAsset.h"
 #include "asset/types/TextureAsset.h"
 #include "asset/types/MaterialAsset.h"
 #include "asset/types/ShaderAsset.h"
@@ -97,62 +100,69 @@ bool testDerivedEquality() {
     if (!checkMemberComparison(&Type::Member, __VA_ARGS__, #Type "::" #Member))                    \
     return false
 
-    CHECK_MEMBER(VertexSemantic, type, VertexSemanticType::Color);
-    CHECK_MEMBER(VertexSemantic, index, 1);
-    CHECK_MEMBER(VertexStreamLayout, semantic, VertexSemantic{VertexSemanticType::Color, 0});
-    CHECK_MEMBER(VertexStreamLayout, format, VertexFormat::Vec4Float32);
-    CHECK_MEMBER(VertexStreamLayout, binding, 1);
-    CHECK_MEMBER(VertexStreamLayout, location, 1);
-    CHECK_MEMBER(VertexStreamLayout, inputRate, VertexInputRate::Instance);
-    CHECK_MEMBER(VertexLayout, streams, std::vector<VertexStreamLayout>{VertexStreamLayout{}});
-    CHECK_MEMBER(Aabb, minimum, math::Vec3{1.0F});
-    CHECK_MEMBER(Aabb, maximum, math::Vec3{1.0F});
-    CHECK_MEMBER(BoundingSphere, center, math::Vec3{1.0F});
-    CHECK_MEMBER(BoundingSphere, radius, 1.0F);
-    const MeshBounds bounds{Aabb{math::Vec3{-1.0F}, math::Vec3{1.0F}},
-                            BoundingSphere{math::Vec3{0.0F}, 1.0F}};
-    CHECK_MEMBER(MeshBounds, aabb, bounds.aabb);
-    CHECK_MEMBER(MeshBounds, sphere, bounds.sphere);
-    CHECK_MEMBER(SubMesh, firstIndex, 1);
-    CHECK_MEMBER(SubMesh, indexCount, 3);
-    CHECK_MEMBER(SubMesh, vertexOffset, -1);
-    CHECK_MEMBER(SubMesh, materialSlot, 1);
-    CHECK_MEMBER(SubMesh, bounds, bounds);
-    CHECK_MEMBER(VertexStream, binding, 1);
-    CHECK_MEMBER(VertexStream, vertexCount, 3);
-    CHECK_MEMBER(VertexStream, bytes, std::vector<std::byte>{std::byte{1}});
+    CHECK_MEMBER(MeshAssetVertexSemantic, type, MeshAssetVertexSemanticType::Color);
+    CHECK_MEMBER(MeshAssetVertexSemantic, index, 1);
+    CHECK_MEMBER(MeshAssetVertexStreamLayout,
+                 semantic,
+                 MeshAssetVertexSemantic{MeshAssetVertexSemanticType::Color, 0});
+    CHECK_MEMBER(MeshAssetVertexStreamLayout, format, MeshAssetVertexFormat::Vec4Float32);
+    CHECK_MEMBER(MeshAssetVertexStreamLayout, binding, 1);
+    CHECK_MEMBER(MeshAssetVertexStreamLayout, location, 1);
+    CHECK_MEMBER(MeshAssetVertexStreamLayout, inputRate, MeshAssetVertexInputRate::Instance);
+    CHECK_MEMBER(MeshAssetVertexLayout,
+                 streams,
+                 std::vector<MeshAssetVertexStreamLayout>{MeshAssetVertexStreamLayout{}});
+    CHECK_MEMBER(MeshAssetAabb, minimum, math::Vec3{1.0F});
+    CHECK_MEMBER(MeshAssetAabb, maximum, math::Vec3{1.0F});
+    CHECK_MEMBER(MeshAssetBoundingSphere, center, math::Vec3{1.0F});
+    CHECK_MEMBER(MeshAssetBoundingSphere, radius, 1.0F);
+    const MeshAssetBounds bounds{MeshAssetAabb{math::Vec3{-1.0F}, math::Vec3{1.0F}},
+                                 MeshAssetBoundingSphere{math::Vec3{0.0F}, 1.0F}};
+    CHECK_MEMBER(MeshAssetBounds, aabb, bounds.aabb);
+    CHECK_MEMBER(MeshAssetBounds, sphere, bounds.sphere);
+    CHECK_MEMBER(MeshAssetSubMesh, firstIndex, 1);
+    CHECK_MEMBER(MeshAssetSubMesh, indexCount, 3);
+    CHECK_MEMBER(MeshAssetSubMesh, vertexOffset, -1);
+    CHECK_MEMBER(MeshAssetSubMesh, materialSlot, 1);
+    CHECK_MEMBER(MeshAssetSubMesh, bounds, bounds);
+    CHECK_MEMBER(MeshAssetVertexStream, binding, 1);
+    CHECK_MEMBER(MeshAssetVertexStream, vertexCount, 3);
+    CHECK_MEMBER(MeshAssetVertexStream, bytes, std::vector<std::byte>{std::byte{1}});
 
-    CHECK_MEMBER(PlaneGeometry, size, math::Vec2{2.0F});
-    CHECK_MEMBER(PlaneGeometry, segmentsX, 2);
-    CHECK_MEMBER(PlaneGeometry, segmentsZ, 2);
-    CHECK_MEMBER(BoxGeometry, size, math::Vec3{2.0F});
-    CHECK_MEMBER(BoxGeometry, segmentsX, 2);
-    CHECK_MEMBER(BoxGeometry, segmentsY, 2);
-    CHECK_MEMBER(BoxGeometry, segmentsZ, 2);
-    CHECK_MEMBER(UvSphereGeometry, radius, 1.0F);
-    CHECK_MEMBER(UvSphereGeometry, longitudeSegments, 8);
-    CHECK_MEMBER(UvSphereGeometry, latitudeSegments, 4);
-    CHECK_MEMBER(CylinderGeometry, bottomRadius, 1.0F);
-    CHECK_MEMBER(CylinderGeometry, topRadius, 1.0F);
-    CHECK_MEMBER(CylinderGeometry, height, 2.0F);
-    CHECK_MEMBER(CylinderGeometry, radialSegments, 8);
-    CHECK_MEMBER(CylinderGeometry, heightSegments, 2);
-    CHECK_MEMBER(CylinderGeometry, capBottom, false);
-    CHECK_MEMBER(CylinderGeometry, capTop, false);
-    CHECK_MEMBER(MeshPrimitive, value, PlaneGeometry{math::Vec2{2.0F}, 1, 1});
-    CHECK_MEMBER(MeshPrimitive, value, BoxGeometry{});
-    CHECK_MEMBER(MeshPrimitivePart, primitive, MeshPrimitive{BoxGeometry{}});
-    CHECK_MEMBER(MeshPrimitivePart, translation, math::Vec3{1.0F});
+    CHECK_MEMBER(MeshAssetPlaneGeometry, size, math::Vec2{2.0F});
+    CHECK_MEMBER(MeshAssetPlaneGeometry, segmentsX, 2);
+    CHECK_MEMBER(MeshAssetPlaneGeometry, segmentsZ, 2);
+    CHECK_MEMBER(MeshAssetBoxGeometry, size, math::Vec3{2.0F});
+    CHECK_MEMBER(MeshAssetBoxGeometry, segmentsX, 2);
+    CHECK_MEMBER(MeshAssetBoxGeometry, segmentsY, 2);
+    CHECK_MEMBER(MeshAssetBoxGeometry, segmentsZ, 2);
+    CHECK_MEMBER(MeshAssetUvSphereGeometry, radius, 1.0F);
+    CHECK_MEMBER(MeshAssetUvSphereGeometry, longitudeSegments, 8);
+    CHECK_MEMBER(MeshAssetUvSphereGeometry, latitudeSegments, 4);
+    CHECK_MEMBER(MeshAssetCylinderGeometry, bottomRadius, 1.0F);
+    CHECK_MEMBER(MeshAssetCylinderGeometry, topRadius, 1.0F);
+    CHECK_MEMBER(MeshAssetCylinderGeometry, height, 2.0F);
+    CHECK_MEMBER(MeshAssetCylinderGeometry, radialSegments, 8);
+    CHECK_MEMBER(MeshAssetCylinderGeometry, heightSegments, 2);
+    CHECK_MEMBER(MeshAssetCylinderGeometry, capBottom, false);
+    CHECK_MEMBER(MeshAssetCylinderGeometry, capTop, false);
+    CHECK_MEMBER(MeshPrimitiveAssetData, value, MeshAssetPlaneGeometry{math::Vec2{2.0F}, 1, 1});
+    CHECK_MEMBER(MeshPrimitiveAssetData, value, MeshAssetBoxGeometry{});
+    CHECK_MEMBER(
+        MeshPrimitivePartAssetData, primitive, MeshPrimitiveAssetData{MeshAssetBoxGeometry{}});
+    CHECK_MEMBER(MeshPrimitivePartAssetData, translation, math::Vec3{1.0F});
     const math::Quat rotation{0.0F, 1.0F, 0.0F, 0.0F};
-    CHECK_MEMBER(MeshPrimitivePart, rotation, rotation);
-    CHECK_MEMBER(MeshPrimitivePart, scale, math::Vec3{2.0F});
-    CHECK_MEMBER(MeshPrimitivePart, materialSlot, 1);
-    CHECK_MEMBER(MeshBuildRecipe, name, "changed");
-    CHECK_MEMBER(MeshBuildRecipe, parts, std::vector<MeshPrimitivePart>{MeshPrimitivePart{}});
-    CHECK_MEMBER(MeshBuildRecipe, vertexLayout, PrimitiveVertexLayout::Position);
-    CHECK_MEMBER(MeshBuildRecipe, indexPolicy, MeshIndexPolicy::UInt16);
-    CHECK_MEMBER(MeshBuildRecipe, usage, MeshUsage::Dynamic);
-    CHECK_MEMBER(MeshBuildRecipe, keepCpuCopy, true);
+    CHECK_MEMBER(MeshPrimitivePartAssetData, rotation, rotation);
+    CHECK_MEMBER(MeshPrimitivePartAssetData, scale, math::Vec3{2.0F});
+    CHECK_MEMBER(MeshPrimitivePartAssetData, materialSlot, 1);
+    CHECK_MEMBER(MeshBuildRecipeAssetData, name, "changed");
+    CHECK_MEMBER(MeshBuildRecipeAssetData,
+                 parts,
+                 std::vector<MeshPrimitivePartAssetData>{MeshPrimitivePartAssetData{}});
+    CHECK_MEMBER(MeshBuildRecipeAssetData, vertexLayout, MeshAssetPrimitiveVertexLayout::Position);
+    CHECK_MEMBER(MeshBuildRecipeAssetData, indexPolicy, MeshIndexPolicyAssetData::UInt16);
+    CHECK_MEMBER(MeshBuildRecipeAssetData, usage, MeshAssetUsage::Dynamic);
+    CHECK_MEMBER(MeshBuildRecipeAssetData, keepCpuCopy, true);
 
     CHECK_MEMBER(TransformComponentAsset, position, math::Vec3{1.0F});
     CHECK_MEMBER(TransformComponentAsset, rotation, rotation);
@@ -180,9 +190,9 @@ bool testDerivedEquality() {
                  materials,
                  std::vector<VirtualPath>{VirtualPath{"assets://materials/test.material.json"}});
     CHECK_MEMBER(MaterialComponentAsset, enabled, false);
-    CHECK_MEMBER(MeshComponentAsset, sourceType, MeshComponentSourceType::Primitive);
+    CHECK_MEMBER(MeshComponentAsset, sourceType, MeshComponentAssetSourceType::Primitive);
     CHECK_MEMBER(MeshComponentAsset, mesh, VirtualPath{"assets://meshes/test.mesh.json"});
-    MeshBuildRecipe recipe;
+    MeshBuildRecipeAssetData recipe;
     recipe.keepCpuCopy = true;
     CHECK_MEMBER(MeshComponentAsset, primitiveRecipe, recipe);
     CHECK_MEMBER(MeshComponentAsset, enabled, false);
@@ -199,10 +209,10 @@ bool testDerivedEquality() {
 
 #undef CHECK_MEMBER
     // 容器长度不变时，布局和节点也必须能识别内部成员的变化。
-    VertexLayout layout;
-    layout.streams.push_back(VertexStreamLayout{});
-    VertexLayout changedLayout = layout;
-    changedLayout.streams[0].format = VertexFormat::Vec4Float32;
+    MeshAssetVertexLayout layout;
+    layout.streams.push_back(MeshAssetVertexStreamLayout{});
+    MeshAssetVertexLayout changedLayout = layout;
+    changedLayout.streams[0].format = MeshAssetVertexFormat::Vec4Float32;
     SceneNodeAsset node;
     node.components.push_back(CameraComponentAsset{});
     SceneNodeAsset changedNode = node;
@@ -297,23 +307,27 @@ bool testObjectScopes() {
     subShader.passes.push_back(pass);
     MeshComponentAsset mesh;
     mesh.mesh = VirtualPath{"assets://meshes/test.mesh.json"};
-    MeshBuildRecipe recipe;
-    recipe.parts.emplace_back(PlaneGeometry{});
+    MeshBuildRecipeAssetData recipe;
+    recipe.parts.emplace_back(MeshAssetPlaneGeometry{});
     // Asset subclasses are RefCounted/non-copyable now, so they cannot flow through
     // checkObjectScopes (which copies into containers); their transfer() scoping is covered
     // by the per-type round-trip tests (AssetImporter/SceneExport/ShaderAsset/MaterialInspector).
-    const Ref<MeshAsset> meshAsset = MeshBuilder::buildAsset(recipe);
+    const Ref<MeshAsset> meshAsset = buildMeshAsset(recipe);
     if (!meshAsset)
         return false;
-    return checkObjectScopes<Sample>() && checkObjectScopes<VertexSemantic>() &&
-           checkObjectScopes<VertexStreamLayout>() && checkObjectScopes<VertexLayout>() &&
-           checkObjectScopes<Aabb>() && checkObjectScopes<BoundingSphere>() &&
-           checkObjectScopes<MeshBounds>() && checkObjectScopes<SubMesh>() &&
-           checkObjectScopes<MeshDesc>() && checkObjectScopes<MeshBuildRecipe>() &&
-           checkObjectScopes<VertexStream>() && checkObjectScopes<MeshData>() &&
-           checkObjectScopes<PlaneGeometry>() && checkObjectScopes<BoxGeometry>() &&
-           checkObjectScopes<UvSphereGeometry>() && checkObjectScopes<CylinderGeometry>() &&
-           checkObjectScopes<MeshPrimitive>() && checkObjectScopes<MeshPrimitivePart>() &&
+    return checkObjectScopes<Sample>() && checkObjectScopes<MeshAssetVertexSemantic>() &&
+           checkObjectScopes<MeshAssetVertexStreamLayout>() &&
+           checkObjectScopes<MeshAssetVertexLayout>() && checkObjectScopes<MeshAssetAabb>() &&
+           checkObjectScopes<MeshAssetBoundingSphere>() && checkObjectScopes<MeshAssetBounds>() &&
+           checkObjectScopes<MeshAssetSubMesh>() && checkObjectScopes<MeshAssetDesc>() &&
+           checkObjectScopes<MeshBuildRecipeAssetData>() &&
+           checkObjectScopes<MeshAssetVertexStream>() && checkObjectScopes<MeshAssetBufferData>() &&
+           checkObjectScopes<MeshAssetPlaneGeometry>() &&
+           checkObjectScopes<MeshAssetBoxGeometry>() &&
+           checkObjectScopes<MeshAssetUvSphereGeometry>() &&
+           checkObjectScopes<MeshAssetCylinderGeometry>() &&
+           checkObjectScopes<MeshPrimitiveAssetData>() &&
+           checkObjectScopes<MeshPrimitivePartAssetData>() &&
            checkObjectScopes<TransformComponentAsset>() &&
            checkObjectScopes<CameraComponentAsset>() && checkObjectScopes<LightComponentAsset>() &&
            checkObjectScopes<MaterialComponentAsset>() && checkObjectScopes(mesh) &&
@@ -327,11 +341,11 @@ bool testObjectScopes() {
 
 bool testLegacyShapeAndFailureScope() {
     using namespace engine;
-    VertexStreamLayout layout{{VertexSemanticType::Position, 0},
-                              VertexFormat::Vec3Float32,
-                              1,
-                              2,
-                              VertexInputRate::Vertex};
+    MeshAssetVertexStreamLayout layout{{MeshAssetVertexSemanticType::Position, 0},
+                                       MeshAssetVertexFormat::Vec3Float32,
+                                       1,
+                                       2,
+                                       MeshAssetVertexInputRate::Vertex};
     JsonWriter writer;
     if (!layout.transfer(writer) || nlohmann::json::parse(writer.toString()) !=
                                         nlohmann::json{{"semantic", {{"type", 0}, {"index", 0}}},
@@ -352,14 +366,14 @@ bool testLegacyShapeAndFailureScope() {
     if (!layout.transfer(binary) || binary.bytes() != legacy)
         return false;
     BinaryReader binaryReader{legacy};
-    VertexStreamLayout decoded;
+    MeshAssetVertexStreamLayout decoded;
     if (!decoded.transfer(binaryReader) || !binaryReader.finished() || decoded != layout)
         return false;
 
     // 深层失败后命名字段必须恢复父作用域，显式清错才允许继续。
     JsonReader reader{
         R"json({"child":{"streams":[{"semantic":{"type":0,"index":0},"format":2,"binding":"bad","location":0,"input_rate":0}]},"after":29})json"};
-    VertexLayout vertexLayout;
+    MeshAssetVertexLayout vertexLayout;
     if (!reader.beginObject({}) || reader.transfer("child", vertexLayout) || reader.valid())
         return false;
     reader.clearError();

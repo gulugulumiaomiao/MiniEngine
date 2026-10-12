@@ -1,3 +1,4 @@
+#include "asset/types/MeshComponentAsset.h"
 #include "asset/format/SceneAssetFormat.h"
 
 #include "asset/base/AssetReference.h"
@@ -123,9 +124,8 @@ bool readRotation(const Json& object, math::Quat& result) {
     return finite(result);
 }
 
-VirtualPath readAssetPath(const VirtualPath& owner,
-                          const std::string& value,
-                          const GuidResolver* resolver) {
+VirtualPath
+readAssetPath(const VirtualPath& owner, const std::string& value, const GuidResolver* resolver) {
     const AssetReference reference{value};
     if (reference.isGuid()) {
         if (!resolver) {
@@ -142,7 +142,7 @@ VirtualPath readAssetPath(const VirtualPath& owner,
     return owner.parent().joined(value);
 }
 
-bool readPrimitive(const Json& source, MeshPrimitive& result) {
+bool readPrimitive(const Json& source, MeshPrimitiveAssetData& result) {
     if (!source.is_object())
         return false;
     const auto type = source.find("type");
@@ -153,14 +153,14 @@ bool readPrimitive(const Json& source, MeshPrimitive& result) {
     const Json& values = parameters == source.end() ? Json::object() : *parameters;
     const std::string& name = type->get_ref<const std::string&>();
     if (name == "plane") {
-        PlaneGeometry geometry;
+        MeshAssetPlaneGeometry geometry;
         if (!readVector(values, "size", geometry.size, 2) ||
             !readUInt(values, "segments_x", geometry.segmentsX) ||
             !readUInt(values, "segments_z", geometry.segmentsZ))
             return false;
         result = geometry;
     } else if (name == "box" || name == "cube") {
-        BoxGeometry geometry;
+        MeshAssetBoxGeometry geometry;
         if (!readVector(values, "size", geometry.size, 3) ||
             !readUInt(values, "segments_x", geometry.segmentsX) ||
             !readUInt(values, "segments_y", geometry.segmentsY) ||
@@ -168,14 +168,14 @@ bool readPrimitive(const Json& source, MeshPrimitive& result) {
             return false;
         result = geometry;
     } else if (name == "sphere" || name == "uv_sphere") {
-        UvSphereGeometry geometry;
+        MeshAssetUvSphereGeometry geometry;
         if (!readFloat(values, "radius", geometry.radius) ||
             !readUInt(values, "longitude_segments", geometry.longitudeSegments) ||
             !readUInt(values, "latitude_segments", geometry.latitudeSegments))
             return false;
         result = geometry;
     } else if (name == "cylinder") {
-        CylinderGeometry geometry;
+        MeshAssetCylinderGeometry geometry;
         if (!readFloat(values, "bottom_radius", geometry.bottomRadius) ||
             !readFloat(values, "top_radius", geometry.topRadius) ||
             !readFloat(values, "height", geometry.height) ||
@@ -191,16 +191,16 @@ bool readPrimitive(const Json& source, MeshPrimitive& result) {
     return true;
 }
 
-bool validRuntimePrimitiveRecipe(const MeshBuildRecipe& recipe) {
+bool validRuntimePrimitiveRecipe(const MeshBuildRecipeAssetData& recipe) {
     constexpr std::uint32_t maxSegments = 512;
     if (recipe.parts.empty() || recipe.parts.size() > 4096 ||
-        recipe.vertexLayout < PrimitiveVertexLayout::Position ||
-        recipe.vertexLayout > PrimitiveVertexLayout::PositionNormalTangentUv ||
-        recipe.indexPolicy < MeshIndexPolicy::Auto ||
-        recipe.indexPolicy > MeshIndexPolicy::UInt32 || recipe.usage < MeshUsage::Static ||
-        recipe.usage > MeshUsage::Stream)
+        recipe.vertexLayout < MeshAssetPrimitiveVertexLayout::Position ||
+        recipe.vertexLayout > MeshAssetPrimitiveVertexLayout::PositionNormalTangentUv ||
+        recipe.indexPolicy < MeshIndexPolicyAssetData::Auto ||
+        recipe.indexPolicy > MeshIndexPolicyAssetData::UInt32 ||
+        recipe.usage < MeshAssetUsage::Static || recipe.usage > MeshAssetUsage::Stream)
         return false;
-    return std::ranges::all_of(recipe.parts, [](const MeshPrimitivePart& part) {
+    return std::ranges::all_of(recipe.parts, [](const MeshPrimitivePartAssetData& part) {
         if (!finite(part.translation) || !finite(part.rotation) || !finite(part.scale) ||
             math::lengthSquared(part.rotation) <= math::kEpsilon * math::kEpsilon ||
             std::abs(part.scale.x) <= math::kEpsilon || std::abs(part.scale.y) <= math::kEpsilon ||
@@ -212,16 +212,16 @@ bool validRuntimePrimitiveRecipe(const MeshBuildRecipe& recipe) {
                 const auto segments = [](std::uint32_t value, std::uint32_t minimum) {
                     return value >= minimum && value <= maxSegments;
                 };
-                if constexpr (std::is_same_v<T, PlaneGeometry>) {
+                if constexpr (std::is_same_v<T, MeshAssetPlaneGeometry>) {
                     return finite(geometry.size) && geometry.size.x > 0.0F &&
                            geometry.size.y > 0.0F && segments(geometry.segmentsX, 1) &&
                            segments(geometry.segmentsZ, 1);
-                } else if constexpr (std::is_same_v<T, BoxGeometry>) {
+                } else if constexpr (std::is_same_v<T, MeshAssetBoxGeometry>) {
                     return finite(geometry.size) && geometry.size.x > 0.0F &&
                            geometry.size.y > 0.0F && geometry.size.z > 0.0F &&
                            segments(geometry.segmentsX, 1) && segments(geometry.segmentsY, 1) &&
                            segments(geometry.segmentsZ, 1);
-                } else if constexpr (std::is_same_v<T, UvSphereGeometry>) {
+                } else if constexpr (std::is_same_v<T, MeshAssetUvSphereGeometry>) {
                     return finite(geometry.radius) && geometry.radius > 0.0F &&
                            segments(geometry.longitudeSegments, 3) &&
                            segments(geometry.latitudeSegments, 2);
@@ -267,16 +267,16 @@ bool parseComponent(const VirtualPath& path,
         if (mesh != source.end()) {
             if (!mesh->is_string())
                 return false;
-            value.sourceType = MeshComponentSourceType::Asset;
+            value.sourceType = MeshComponentAssetSourceType::Asset;
             value.mesh = readAssetPath(path, mesh->get_ref<const std::string&>(), resolver);
         } else {
-            MeshPrimitive parsed;
+            MeshPrimitiveAssetData parsed;
             if (!readPrimitive(*primitive, parsed))
                 return false;
-            value.sourceType = MeshComponentSourceType::Primitive;
+            value.sourceType = MeshComponentAssetSourceType::Primitive;
             value.primitiveRecipe.name = "Scene Runtime Primitive";
             value.primitiveRecipe.parts.emplace_back(std::move(parsed));
-            value.primitiveRecipe.usage = MeshUsage::Dynamic;
+            value.primitiveRecipe.usage = MeshAssetUsage::Dynamic;
             value.primitiveRecipe.keepCpuCopy = true;
         }
         if (!readBool(source, "enabled", value.enabled) ||
@@ -432,9 +432,8 @@ Ref<SceneAsset> parseSceneAsset(const VirtualPath& path, std::string_view source
     return parseSceneAssetImpl(path, source, nullptr);
 }
 
-Ref<SceneAsset> parseSceneAsset(const VirtualPath& path,
-                                std::string_view source,
-                                const GuidResolver& resolver) {
+Ref<SceneAsset>
+parseSceneAsset(const VirtualPath& path, std::string_view source, const GuidResolver& resolver) {
     return parseSceneAssetImpl(path, source, &resolver);
 }
 
@@ -442,23 +441,23 @@ void writeVec3(Json& target, const char* key, const math::Vec3& value) {
     target[key] = Json::array({value.x, value.y, value.z});
 }
 
-void writePrimitiveParameters(Json& primitive, const MeshPrimitivePart& part) {
+void writePrimitiveParameters(Json& primitive, const MeshPrimitivePartAssetData& part) {
     std::visit(
         [&](const auto& geometry) {
             using T = std::decay_t<decltype(geometry)>;
             Json parameters;
-            if constexpr (std::is_same_v<T, PlaneGeometry>) {
+            if constexpr (std::is_same_v<T, MeshAssetPlaneGeometry>) {
                 primitive["type"] = "plane";
                 parameters["size"] = Json::array({geometry.size.x, geometry.size.y});
                 parameters["segments_x"] = geometry.segmentsX;
                 parameters["segments_z"] = geometry.segmentsZ;
-            } else if constexpr (std::is_same_v<T, BoxGeometry>) {
+            } else if constexpr (std::is_same_v<T, MeshAssetBoxGeometry>) {
                 primitive["type"] = "box";
                 writeVec3(parameters, "size", geometry.size);
                 parameters["segments_x"] = geometry.segmentsX;
                 parameters["segments_y"] = geometry.segmentsY;
                 parameters["segments_z"] = geometry.segmentsZ;
-            } else if constexpr (std::is_same_v<T, UvSphereGeometry>) {
+            } else if constexpr (std::is_same_v<T, MeshAssetUvSphereGeometry>) {
                 primitive["type"] = "sphere";
                 parameters["radius"] = geometry.radius;
                 parameters["longitude_segments"] = geometry.longitudeSegments;
@@ -499,20 +498,22 @@ std::string writeSceneAssetJson(const SceneAsset& asset, const GuidResolver& res
                     if constexpr (std::is_same_v<T, TransformComponentAsset>) {
                         serializedComponent["type"] = "Transform";
                         writeVec3(serializedComponent, "position", value.position);
-                        serializedComponent["rotation"] = Json::array(
-                            {value.rotation.x, value.rotation.y, value.rotation.z,
-                             value.rotation.w});
+                        serializedComponent["rotation"] = Json::array({value.rotation.x,
+                                                                       value.rotation.y,
+                                                                       value.rotation.z,
+                                                                       value.rotation.w});
                         writeVec3(serializedComponent, "scale", value.scale);
                     } else if constexpr (std::is_same_v<T, MeshComponentAsset>) {
                         serializedComponent["type"] = "Mesh";
-                        if (value.sourceType == MeshComponentSourceType::Asset) {
+                        if (value.sourceType == MeshComponentAssetSourceType::Asset) {
                             const auto meshGuid = resolver.findGuid(value.mesh);
-                            serializedComponent["mesh"] =
-                                meshGuid ? AssetReference{*meshGuid}.toString()
-                                         : value.mesh.string();
+                            serializedComponent["mesh"] = meshGuid
+                                                              ? AssetReference{*meshGuid}.toString()
+                                                              : value.mesh.string();
                         } else {
                             Json primitive;
-                            writePrimitiveParameters(primitive, value.primitiveRecipe.parts.front());
+                            writePrimitiveParameters(primitive,
+                                                     value.primitiveRecipe.parts.front());
                             serializedComponent["primitive"] = std::move(primitive);
                         }
                         serializedComponent["enabled"] = value.enabled;
@@ -525,8 +526,9 @@ std::string writeSceneAssetJson(const SceneAsset& asset, const GuidResolver& res
                         Json materials = Json::array();
                         for (const VirtualPath& material : value.materials) {
                             const auto materialGuid = resolver.findGuid(material);
-                            materials.push_back(materialGuid ? AssetReference{*materialGuid}.toString()
-                                                             : material.string());
+                            materials.push_back(materialGuid
+                                                    ? AssetReference{*materialGuid}.toString()
+                                                    : material.string());
                         }
                         serializedComponent["materials"] = std::move(materials);
                         serializedComponent["enabled"] = value.enabled;
@@ -539,9 +541,10 @@ std::string writeSceneAssetJson(const SceneAsset& asset, const GuidResolver& res
                         serializedComponent["orthographic_size"] = value.orthographicSize;
                         serializedComponent["near_plane"] = value.nearPlane;
                         serializedComponent["far_plane"] = value.farPlane;
-                        serializedComponent["clear_color"] = Json::array(
-                            {value.clearColor.x, value.clearColor.y, value.clearColor.z,
-                             value.clearColor.w});
+                        serializedComponent["clear_color"] = Json::array({value.clearColor.x,
+                                                                          value.clearColor.y,
+                                                                          value.clearColor.z,
+                                                                          value.clearColor.w});
                         serializedComponent["culling_mask"] = value.cullingMask;
                         serializedComponent["priority"] = value.priority;
                         serializedComponent["primary"] = value.primary;
@@ -552,12 +555,8 @@ std::string writeSceneAssetJson(const SceneAsset& asset, const GuidResolver& res
                         case LightType::Directional:
                             serializedComponent["light_type"] = "directional";
                             break;
-                        case LightType::Point:
-                            serializedComponent["light_type"] = "point";
-                            break;
-                        case LightType::Spot:
-                            serializedComponent["light_type"] = "spot";
-                            break;
+                        case LightType::Point: serializedComponent["light_type"] = "point"; break;
+                        case LightType::Spot: serializedComponent["light_type"] = "spot"; break;
                         }
                         writeVec3(serializedComponent, "color", value.color);
                         serializedComponent["intensity"] = value.intensity;
@@ -614,11 +613,11 @@ bool validateSceneAsset(const SceneAsset& asset, const VirtualPath& scenePath) {
                         return finite(value.position) && finite(value.rotation) &&
                                finite(value.scale) && lengthSquared > math::kEpsilon;
                     } else if constexpr (std::is_same_v<T, MeshComponentAsset>) {
-                        if (value.sourceType == MeshComponentSourceType::Asset) {
+                        if (value.sourceType == MeshComponentAssetSourceType::Asset) {
                             return value.mesh.valid() && value.mesh.scheme() == "assets" &&
                                    value.mesh.relativePath().ends_with(".mesh.json");
                         }
-                        return value.sourceType == MeshComponentSourceType::Primitive &&
+                        return value.sourceType == MeshComponentAssetSourceType::Primitive &&
                                !value.mesh.valid() &&
                                validRuntimePrimitiveRecipe(value.primitiveRecipe);
                     } else if constexpr (std::is_same_v<T, MaterialComponentAsset>) {

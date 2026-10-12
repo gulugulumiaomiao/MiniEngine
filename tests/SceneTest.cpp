@@ -41,14 +41,13 @@ bool near(const engine::math::Vec3& left, const engine::math::Vec3& right) {
     return engine::math::distance(left, right) < 0.0001F;
 }
 
-// Mesh 现为 GPU 资源持有者，构造需 active device。用 MeshBuilder 产出一个最小图元
-// MeshAsset 再 instantiate（缓冲落在 MockDevice 的假 RID 上）作为场景测试的占位网格。
+// Build a runtime-only mesh on the mock device; no asset is needed.
 engine::Ref<engine::Mesh> makeStubMesh() {
     engine::MeshBuildRecipe recipe;
     recipe.name = "Stub";
     recipe.parts.push_back({engine::PlaneGeometry{}});
-    const engine::Ref<engine::MeshAsset> asset = engine::MeshBuilder::buildAsset(recipe);
-    return asset ? asset->instantiate() : engine::Ref<engine::Mesh>{};
+    auto info = engine::MeshBuilder::build(recipe);
+    return info ? engine::Mesh::create(std::move(*info)) : engine::Ref<engine::Mesh>{};
 }
 
 } // namespace
@@ -196,6 +195,7 @@ int main() {
         !primitiveMesh->primitiveRecipe()) {
         return 20;
     }
+    const auto firstRevision = firstPrimitive->revision();
     MeshBuildRecipe* editedRecipe = primitiveMesh->editPrimitiveRecipe();
     if (!editedRecipe)
         return 21;
@@ -204,8 +204,9 @@ int main() {
     std::get<UvSphereGeometry>(editedRecipe->parts[0].primitive.value).longitudeSegments = 24;
     primitiveScene.update(0.0F);
     const Mesh* rebuiltPrimitive = primitiveMesh->mesh().get();
-    // 重建即替换：得到一个新的 Mesh 对象（旧对象仍被 primitiveHandle 持有），且新对象有效。
-    if (!rebuiltPrimitive || rebuiltPrimitive == firstPrimitive || !rebuiltPrimitive->isValid() ||
+    // Rebuilding keeps the runtime object and advances its revision.
+    if (!rebuiltPrimitive || rebuiltPrimitive != firstPrimitive ||
+        rebuiltPrimitive->revision() != firstRevision + 1 || !rebuiltPrimitive->isValid() ||
         !primitiveScene.destroyNode(primitiveNodeHandle)) {
         return 21;
     }

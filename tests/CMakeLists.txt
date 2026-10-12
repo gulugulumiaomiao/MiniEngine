@@ -85,6 +85,14 @@ mini_add_gtest(RefTest)
 mini_add_test(FrustumTest)
 mini_add_test(TransferTest)
 mini_add_test(MeshTest)
+mini_add_gtest(MeshIsolationTest)
+target_compile_definitions(MeshIsolationTest PRIVATE
+    MINI_TEST_MESH_ISOLATION_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+add_test(NAME MeshAssetBoundaryTest
+    COMMAND ${CMAKE_COMMAND}
+        -DMINI_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/MeshAssetBoundaryTest.cmake)
+
 mini_add_gtest(MeshGuidIdentityTest)
 target_compile_definitions(MeshGuidIdentityTest PRIVATE
     MINI_TEST_ASSET_DIR="${CMAKE_BINARY_DIR}/assets"

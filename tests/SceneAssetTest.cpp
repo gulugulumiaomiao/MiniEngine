@@ -1,3 +1,6 @@
+#include "asset/runtime/MeshAssetResolver.h"
+#include "asset/types/MeshAsset.h"
+#include "asset/types/MeshComponentAsset.h"
 #include "TestMaterial.h"
 #include "TestRenderDevice.h"
 #include "asset/derived_data/AssetArtifact.h"
@@ -205,12 +208,12 @@ int main() {
         return 4;
     }
     const auto* primitive = std::get_if<MeshComponentAsset>(&asset->nodes[3].components[1]);
-    if (!primitive || primitive->sourceType != MeshComponentSourceType::Primitive ||
+    if (!primitive || primitive->sourceType != MeshComponentAssetSourceType::Primitive ||
         primitive->mesh.valid() || primitive->primitiveRecipe.parts.size() != 1) {
         return 15;
     }
-    const auto* sphere =
-        std::get_if<UvSphereGeometry>(&primitive->primitiveRecipe.parts.front().primitive.value);
+    const auto* sphere = std::get_if<MeshAssetUvSphereGeometry>(
+        &primitive->primitiveRecipe.parts.front().primitive.value);
     if (!sphere || sphere->radius != 0.75F || sphere->longitudeSegments != 24 ||
         sphere->latitudeSegments != 12 || primitive->castShadow) {
         return 16;
@@ -234,7 +237,7 @@ int main() {
     MeshBuildRecipe stubRecipe;
     stubRecipe.name = "Stub";
     stubRecipe.parts.push_back({PlaneGeometry{}});
-    const Ref<MeshAsset> stubAsset = MeshBuilder::buildAsset(stubRecipe);
+    const Ref<MeshAsset> stubAsset = buildMeshAsset(stubRecipe);
     const Ref<Mesh> loadedMesh = stubAsset ? stubAsset->instantiate() : Ref<Mesh>{};
     const Ref<Material> loadedMaterial = makeRef<Material>(test::materialInfo());
     const SceneInstantiationContext context{

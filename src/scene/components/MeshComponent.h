@@ -1,7 +1,5 @@
 #pragma once
 
-#include "core/serialization/Transferable.h"
-#include "core/filesystem/VirtualPath.h"
 #include "core/base/RID.h"
 #include "render/mesh/Mesh.h"
 #include "scene/components/Component.h"
@@ -12,25 +10,6 @@
 namespace engine {
 
 enum class MeshComponentSourceType { Asset, Primitive };
-
-struct MeshComponentAsset final : public Transferable {
-    MeshComponentSourceType sourceType{MeshComponentSourceType::Asset};
-    VirtualPath mesh;
-    MeshBuildRecipe primitiveRecipe;
-    bool enabled{true};
-    bool visible{true};
-    bool castShadow{true};
-    bool receiveShadow{true};
-    std::uint32_t layerMask{1};
-
-    bool operator==(const MeshComponentAsset& other) const {
-        return sourceType == other.sourceType && mesh == other.mesh &&
-               primitiveRecipe == other.primitiveRecipe && enabled == other.enabled &&
-               visible == other.visible && castShadow == other.castShadow &&
-               receiveShadow == other.receiveShadow && layerMask == other.layerMask;
-    }
-    [[nodiscard]] bool transfer(Transfer& archive) override;
-};
 
 class MeshComponent final : public Component {
 public:
