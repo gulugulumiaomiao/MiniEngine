@@ -14,7 +14,8 @@
 
 ```text
 RenderGraph v2
-  importTexture(external)   → RgTextureHandle
+  importSwapchainTexture(swapchain)  → RgTextureHandle
+  importTexture(texture, view, ...)   → RgTextureHandle
   createTexture(transient)  → RgTextureHandle
   addGraphicsPass(name, RgRenderingInfo, usages, callback)
   compile(RgTexturePool&)   → 解析 RgTextureHandle → rhi::TextureHandle/View
@@ -39,20 +40,13 @@ src/render/render_graph/
 
 ```cpp
 RenderGraph graph;
-RgTextureHandle backBuffer = graph.importTexture({
-    .texture = swapchain.currentTexture(),
-    .view = swapchain.currentTextureView(),
-    .initialState = swapchain.currentTextureState(),
-    .finalState = ResourceState::Present,
-    .aspect = TextureAspect::Color,
-});
+RgTextureHandle backBuffer = graph.importSwapchainTexture(swapchain);
 
 RgTextureHandle shadowMap = graph.createTexture({
     .format = TextureFormat::Depth32Float,
     .width = 1024,
     .height = 1024,
     .usage = TextureUsage::DepthStencilAttachment | TextureUsage::Sampled,
-    .aspect = TextureAspect::Depth,
     .debugName = "ShadowMap",
 });
 ```
@@ -102,7 +96,7 @@ graph.reset();
 ### MiniForwardPipeline
 
 - `recordDrawCommands` 改用 `RgRenderingInfo` 与 `RgResourceAccess`。
-- 后缓冲与 forward depth 均通过 `importTexture` / `importDepth` 获得 handle。
+- 后缓冲与 forward depth 均通过 `importSwapchainTexture` / `importDepth` 获得 handle。
 - 在 `execute()` 前后分别调用 `compile(context.rgTexturePool())` 与 `graph.reset()`。
 
 ### Renderer / RenderContext

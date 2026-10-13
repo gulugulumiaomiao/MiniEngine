@@ -9,7 +9,7 @@ Renderer / Render Feature
     │ 描述尺寸、格式、clear/load/store
     ▼
 RenderTarget                    拥有 Texture + TextureView，处理 resize
-    │ RenderingInfo / ResourceUsage / ImportedTexture
+    │ RenderingInfo / RgResourceAccess / RgTextureHandle
     ▼
 RenderGraph                     决定 Pass 顺序与资源状态转换
     │

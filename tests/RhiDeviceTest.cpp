@@ -6,6 +6,7 @@
 #include "rhi/api/Command.h"
 #include "rhi/api/Device.h"
 #include "rhi/vulkan/VulkanDevice.h"
+#include "rhi/vulkan/VulkanSwapchain.h"
 #include "render/render_graph/RenderGraph.h"
 
 #include <gtest/gtest.h>
@@ -102,6 +103,57 @@ protected:
     HiddenWindow window_;
     std::unique_ptr<rhi::vulkan::VulkanDevice> device_;
 };
+
+TEST_F(RhiDeviceTest, RenderGraphImportsAcquiredSwapchainImageAndPresentsAfterResize) {
+    auto& d = device();
+    struct ValidationCapture {
+        std::ostringstream messages;
+        std::streambuf* previous{std::cerr.rdbuf(messages.rdbuf())};
+        ~ValidationCapture() { std::cerr.rdbuf(previous); }
+    } validation;
+    rhi::vulkan::VulkanSwapchain swapchain(d, {.width = 64, .height = 64, .vsync = false});
+    RgTexturePool pool;
+    bool sawPresentedImage = false;
+    for (int round = 0; round < 2; ++round) {
+        if (round != 0) {
+            d.waitIdle();
+            swapchain.resize(48, 48);
+        }
+        for (std::uint32_t frame = 0; frame < 2 * swapchain.imageCount() + 1; ++frame) {
+            ASSERT_EQ(swapchain.beginFrame(), rhi::FrameStatus::Ready);
+            pool.beginFrame(swapchain.frameIndex());
+            const auto texture = swapchain.currentTexture();
+            const auto view = swapchain.currentTextureView();
+            const auto before = swapchain.currentTextureState();
+            sawPresentedImage |= before == rhi::ResourceState::Present;
+            RenderGraph graph;
+            const auto backBuffer = graph.importSwapchainTexture(swapchain);
+            EXPECT_EQ(backBuffer, graph.importSwapchainTexture(swapchain));
+            EXPECT_EQ(graph.textureCount(), 1U);
+            RgRenderingInfo rendering;
+            rendering.renderArea = {0, 0, swapchain.width(), swapchain.height()};
+            rendering.colorAttachments.push_back({backBuffer, rhi::LoadOp::Clear, rhi::StoreOp::Store});
+            graph.addGraphicsPass("SwapchainClear", std::move(rendering), {}, [](rhi::RID) {});
+            graph.compile(pool);
+            EXPECT_EQ(graph.resolvedTextureView(backBuffer), view);
+            const auto& barriers = graph.compiledGroups()[0].preBarriers;
+            ASSERT_EQ(barriers.size(), 1U);
+            EXPECT_EQ(barriers[0].texture, texture);
+            EXPECT_EQ(barriers[0].aspect, rhi::TextureAspect::Color);
+            EXPECT_EQ(barriers[0].before, before);
+            EXPECT_EQ(barriers[0].after, rhi::ResourceState::ColorAttachment);
+            ASSERT_EQ(graph.finalBarriers().size(), 1U);
+            EXPECT_EQ(graph.finalBarriers()[0].texture, texture);
+            EXPECT_EQ(graph.finalBarriers()[0].after, rhi::ResourceState::Present);
+            graph.execute(swapchain.commandBuffer());
+            ASSERT_EQ(swapchain.endFrame(), rhi::FrameStatus::Ready);
+        }
+    }
+    d.waitIdle();
+    EXPECT_TRUE(sawPresentedImage);
+    EXPECT_EQ(validation.messages.str().find("Validation Error"), std::string::npos) << validation.messages.str();
+    EXPECT_EQ(validation.messages.str().find("SYNC-HAZARD"), std::string::npos) << validation.messages.str();
+}
 
 TEST_F(RhiDeviceTest, ResourceLifecycleAndDedup) {
     auto& d = device();
@@ -245,8 +297,8 @@ TEST_F(RhiDeviceTest, RenderGraphSubpassesReadInputAndReuseCaches) {
             .width = 16, .height = 16,
             .usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::InputAttachment,
             .debugName = "graph-gbuffer"});
-        const auto destination = graph.importTexture({output, outputView, outputState,
-            rhi::ResourceState::CopySource, rhi::TextureAspect::Color, &outputState});
+        const auto destination = graph.importTexture(output, outputView, outputState,
+            rhi::ResourceState::CopySource, rhi::TextureAspect::Color, &outputState);
         const auto normal = graph.createTexture({.format = rhi::PixelFormat::Rgba8Unorm,
             .width = 16, .height = 16, .usage = rhi::TextureUsage::ColorAttachment,
             .debugName = "graph-normal"});
@@ -379,7 +431,7 @@ TEST_F(RhiDeviceTest, RenderGraphDepthReadOnlyAndInputStoresAreSynchronized) {
         .width = 16, .height = 16,
         .usage = rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::InputAttachment |
                  rhi::TextureUsage::Sampled,
-        .aspect = rhi::TextureAspect::Depth, .debugName = "graph-depth-input"});
+        .debugName = "graph-depth-input"});
     const auto output = graph.createTexture({.format = rhi::PixelFormat::Rgba8Unorm,
         .width = 16, .height = 16, .usage = rhi::TextureUsage::ColorAttachment,
         .debugName = "graph-depth-output"});

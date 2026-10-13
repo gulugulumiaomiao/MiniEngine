@@ -21,7 +21,7 @@ struct RgTextureHandle {
     [[nodiscard]] bool operator!=(RgTextureHandle other) const { return index != other.index; }
 };
 
-// Description of a transient texture created by the RenderGraph.
+// Description of a transient texture created by the RenderGraph; format determines its aspect.
 struct RgTextureDesc {
     rhi::TextureType dimension{rhi::TextureType::Texture2D};
     rhi::PixelFormat format{rhi::PixelFormat::Undefined};
@@ -31,7 +31,6 @@ struct RgTextureDesc {
     std::uint32_t arrayLayers{1};
     std::uint32_t mipCount{1};
     rhi::TextureUsage usage{rhi::TextureUsage::None};
-    rhi::TextureAspect aspect{rhi::TextureAspect::Color};
     std::string debugName;
 };
 

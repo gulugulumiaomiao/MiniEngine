@@ -9,12 +9,17 @@
 #include <string>
 #include <vector>
 
+namespace engine::rhi {
+class ISwapchain;
+}
+
 namespace engine {
 
 // Declarative render graph with transient textures and explicit render-pass groups.
 //
 // Recording phase:
-//   - importTexture() brings externally-owned textures into the graph.
+//   - importSwapchainTexture() references the acquired swapchain image for presentation.
+//   - importTexture() brings other externally-owned textures into the graph.
 //   - createTexture() declares transient textures that will be allocated from an RgTexturePool.
 //   - addGraphicsPass() declares an independent dynamic-rendering pass.
 //   - addRasterGroup() declares a render pass containing one subpass per logical pass.
@@ -33,16 +38,6 @@ class RenderGraph final {
 public:
     using ExecuteCallback = std::function<void(rhi::RID)>;
 
-    struct ImportedTexture {
-        rhi::RID texture;
-        rhi::RID view;
-        rhi::ResourceState initialState{rhi::ResourceState::Undefined};
-        rhi::ResourceState finalState{rhi::ResourceState::Undefined};
-        rhi::TextureAspect aspect{rhi::TextureAspect::Color};
-        // When present, execute() writes finalState back after recording the final barrier.
-        rhi::ResourceState* trackedState{};
-    };
-
     RenderGraph() = default;
     ~RenderGraph();
 
@@ -51,7 +46,15 @@ public:
     RenderGraph(RenderGraph&&) = delete;
     RenderGraph& operator=(RenderGraph&&) = delete;
 
-    [[nodiscard]] RgTextureHandle importTexture(ImportedTexture texture);
+    // Call after beginFrame(); snapshots the current image/view/state and ends in Present.
+    [[nodiscard]] RgTextureHandle importSwapchainTexture(const rhi::ISwapchain& swapchain);
+    // When present, execute() writes the compiled final state to trackedState.
+    [[nodiscard]] RgTextureHandle importTexture(
+        rhi::RID texture, rhi::RID view,
+        rhi::ResourceState initialState = rhi::ResourceState::Undefined,
+        rhi::ResourceState finalState = rhi::ResourceState::Undefined,
+        rhi::TextureAspect aspect = rhi::TextureAspect::Color,
+        rhi::ResourceState* trackedState = nullptr);
     [[nodiscard]] RgTextureHandle createTexture(RgTextureDesc desc);
 
     void addGraphicsPass(std::string name,

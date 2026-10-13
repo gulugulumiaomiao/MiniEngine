@@ -16,6 +16,14 @@ resource aliasing, async compute, resolves and attachment feedback loops are def
 
 ## Declaring a group
 
+Import the acquired swapchain image after `beginFrame()` with
+`graph.importSwapchainTexture(swapchain)`. This snapshots its current texture, view
+and state and requests a final transition to `Present`. Other external textures use
+`importTexture(texture, view, initialState, finalState, aspect, trackedState)`;
+there is no `ImportedTexture` description type. Imported resources remain externally
+owned. A transient `RgTextureDesc` needs no aspect: the graph derives color or depth
+from its pixel format.
+
 Create a persistent `RgRenderPassCache` alongside the texture pool. `Renderer` owns
 both and exposes the cache through `RenderContext::rgRenderPassCache()`. A frame-local
 graph shares this cache with subsequent graphs:

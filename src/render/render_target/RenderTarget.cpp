@@ -240,26 +240,14 @@ void RenderTarget::import(RenderGraph& graph,
 RgTextureHandle
 RenderTarget::importColor(RenderGraph& graph, std::size_t index, rhi::ResourceState finalState) {
     Attachment& color = requireColor(index);
-    return graph.importTexture({
-        .texture = color.texture,
-        .view = color.view,
-        .initialState = color.state,
-        .finalState = finalState,
-        .aspect = rhi::TextureAspect::Color,
-        .trackedState = &color.state,
-    });
+    return graph.importTexture(color.texture, color.view, color.state, finalState,
+                               rhi::TextureAspect::Color, &color.state);
 }
 
 RgTextureHandle RenderTarget::importDepth(RenderGraph& graph, rhi::ResourceState finalState) {
     Attachment& depth = requireDepth();
-    return graph.importTexture({
-        .texture = depth.texture,
-        .view = depth.view,
-        .initialState = depth.state,
-        .finalState = finalState,
-        .aspect = rhi::TextureAspect::Depth,
-        .trackedState = &depth.state,
-    });
+    return graph.importTexture(depth.texture, depth.view, depth.state, finalState,
+                               rhi::TextureAspect::Depth, &depth.state);
 }
 
 } // namespace engine

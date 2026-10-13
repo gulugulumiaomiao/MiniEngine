@@ -143,6 +143,10 @@ void VulkanCommandBuffer::resourceBarriers(std::span<const TextureBarrier> barri
     for (const TextureBarrier& barrier : barriers) {
         VulkanState before = mapState(barrier.before);
         VulkanState after = mapState(barrier.after);
+        // Swapchain acquisition waits at color output. Even a discarded image must
+        // wait for that semaphore before its layout transition can write the image.
+        if (barrier.before == ResourceState::Undefined && barrier.after == ResourceState::ColorAttachment)
+            before.stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         // A stored attachment can finish in input-attachment layout. Its implicit
         // render-pass store is still a color/depth write, so include those scopes.
         if (barrier.before == ResourceState::InputAttachment &&

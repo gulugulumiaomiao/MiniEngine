@@ -59,6 +59,35 @@ TEST(RenderGraphTest, IndependentPassesKeepDynamicRenderingAndAutomaticUsages) {
     EXPECT_TRUE(graph.finalBarriers().empty());
 }
 
+TEST(RenderGraphTest, DepthFormatDerivesAspectForAttachmentsAndSampledReads) {
+    MockDevice device;
+    RgTexturePool pool;
+    RenderGraph graph;
+    const auto depth = graph.createTexture({.format = rhi::PixelFormat::Depth32Float,
+        .width = 16, .height = 16,
+        .usage = rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::Sampled});
+    RgRasterPass clear;
+    clear.name = "DepthClear";
+    clear.rendering.renderArea = {0, 0, 16, 16};
+    clear.rendering.depthAttachments.push_back({depth});
+    independent(graph, std::move(clear));
+    auto sample = writer("SampleDepth", color(graph));
+    sample.resources.push_back({depth, rhi::TextureAspect::Depth, ResourceState::ShaderRead});
+    independent(graph, std::move(sample));
+    graph.compile(pool);
+    const auto& first = graph.compiledGroups()[0].preBarriers;
+    ASSERT_EQ(first.size(), 1U);
+    EXPECT_EQ(first[0].aspect, rhi::TextureAspect::Depth);
+    EXPECT_EQ(first[0].before, ResourceState::Undefined);
+    EXPECT_EQ(first[0].after, ResourceState::DepthAttachment);
+    const auto& next = graph.compiledGroups()[1].preBarriers;
+    ASSERT_EQ(next.size(), 2U);
+    EXPECT_EQ(next[0].texture, first[0].texture);
+    EXPECT_EQ(next[0].aspect, rhi::TextureAspect::Depth);
+    EXPECT_EQ(next[0].before, ResourceState::DepthAttachment);
+    EXPECT_EQ(next[0].after, ResourceState::ShaderRead);
+}
+
 TEST(RenderGraphTest, OneGroupProducesTwoSubpassesAndInputDependency) {
     MockDevice device;
     RgTexturePool pool;
@@ -157,7 +186,7 @@ TEST(RenderGraphTest, ReadBeforeWriteHazardIsTracked) {
     const auto texture = device.texture_create({.format = rhi::PixelFormat::Rgba8Unorm,
         .width = 16, .height = 16, .usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled,
         .debugName = "graph-test"});
-    const auto source = graph.importTexture({texture, device.texture_default_view(texture), ResourceState::ShaderRead});
+    const auto source = graph.importTexture(texture, device.texture_default_view(texture), ResourceState::ShaderRead);
     auto reader = writer("Read", color(graph));
     reader.resources.push_back({source, rhi::TextureAspect::Color, ResourceState::ShaderRead});
     independent(graph, reader);
@@ -176,9 +205,9 @@ TEST(RenderGraphTest, RepeatedImportsShareStateAndResetClearsRecording) {
     RenderGraph graph;
     const auto texture = device.texture_create({.format = rhi::PixelFormat::Rgba8Unorm,
         .width = 16, .height = 16, .usage = rhi::TextureUsage::ColorAttachment, .debugName = "graph-test"});
-    RenderGraph::ImportedTexture imported{texture, device.texture_default_view(texture)};
-    const auto first = graph.importTexture(imported);
-    EXPECT_EQ(first, graph.importTexture(imported));
+    const auto view = device.texture_default_view(texture);
+    const auto first = graph.importTexture(texture, view);
+    EXPECT_EQ(first, graph.importTexture(texture, view));
     EXPECT_EQ(graph.textureCount(), 1U);
     independent(graph, writer("First", first));
     graph.compile(pool, cache);

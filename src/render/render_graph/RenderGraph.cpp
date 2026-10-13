@@ -50,29 +50,36 @@ void RenderGraph::ensureRecording() const {
     if (compiled_) Log::fatal("RenderGraph", "Cannot modify a compiled graph; call reset first");
 }
 
-RgTextureHandle RenderGraph::importTexture(ImportedTexture texture) {
+RgTextureHandle RenderGraph::importSwapchainTexture(const rhi::ISwapchain& swapchain) {
+    return importTexture(swapchain.currentTexture(), swapchain.currentTextureView(),
+                         swapchain.currentTextureState(), ResourceState::Present);
+}
+
+RgTextureHandle RenderGraph::importTexture(rhi::RID texture, rhi::RID view,
+                                         ResourceState initialState, ResourceState finalState,
+                                         rhi::TextureAspect aspect, ResourceState* trackedState) {
     ensureRecording();
-    if (!texture.texture || !texture.view)
+    if (!texture || !view)
         Log::fatal("RenderGraph", "Imported texture and view must both be valid");
     // One state record per physical image. Different views need subresource tracking.
     for (std::size_t i = 0; i < textures_.size(); ++i) {
         auto& node = textures_[i];
-        if (node.isTransient || node.texture != texture.texture) continue;
-        if (node.view != texture.view || node.initialState != texture.initialState ||
-            node.finalState != texture.finalState || node.aspect != texture.aspect ||
-            (node.trackedState && texture.trackedState && node.trackedState != texture.trackedState))
+        if (node.isTransient || node.texture != texture) continue;
+        if (node.view != view || node.initialState != initialState ||
+            node.finalState != finalState || node.aspect != aspect ||
+            (node.trackedState && trackedState && node.trackedState != trackedState))
             Log::fatal("RenderGraph", "Conflicting imports of the same texture");
-        if (texture.trackedState) node.trackedState = texture.trackedState;
+        if (trackedState) node.trackedState = trackedState;
         return {static_cast<std::uint32_t>(i)};
     }
     const RgTextureHandle handle{static_cast<std::uint32_t>(textures_.size())};
     TextureNode node;
-    node.texture = node.resolvedTexture = texture.texture;
-    node.view = node.resolvedView = texture.view;
-    node.initialState = texture.initialState;
-    node.finalState = texture.finalState;
-    node.aspect = texture.aspect;
-    node.trackedState = texture.trackedState;
+    node.texture = node.resolvedTexture = texture;
+    node.view = node.resolvedView = view;
+    node.initialState = initialState;
+    node.finalState = finalState;
+    node.aspect = aspect;
+    node.trackedState = trackedState;
     textures_.push_back(std::move(node));
     return handle;
 }
@@ -85,7 +92,7 @@ RgTextureHandle RenderGraph::createTexture(RgTextureDesc desc) {
         Log::fatal("RenderGraph", "Graph transient textures currently require one mip and layer");
     const RgTextureHandle handle{static_cast<std::uint32_t>(textures_.size())};
     TextureNode node;
-    node.aspect = desc.aspect;
+    node.aspect = rhi::isDepthFormat(desc.format) ? rhi::TextureAspect::Depth : rhi::TextureAspect::Color;
     node.desc = std::move(desc);
     node.isTransient = true;
     textures_.push_back(std::move(node));

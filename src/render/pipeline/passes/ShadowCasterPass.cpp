@@ -52,7 +52,6 @@ void ShadowCasterPass::execute(RenderContext& context,
         .depth = 1,
         .mipCount = 1,
         .usage = rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::Sampled,
-        .aspect = rhi::TextureAspect::Depth,
         .debugName = "ShadowMap",
     });
     if (output_) {

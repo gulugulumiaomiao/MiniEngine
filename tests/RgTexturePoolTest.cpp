@@ -86,7 +86,6 @@ engine::RgTextureDesc makeDesc(std::uint32_t width, std::uint32_t height) {
             .width = width,
             .height = height,
             .usage = engine::rhi::TextureUsage::ColorAttachment,
-            .aspect = engine::rhi::TextureAspect::Color,
             .debugName = "Pool"};
 }
 

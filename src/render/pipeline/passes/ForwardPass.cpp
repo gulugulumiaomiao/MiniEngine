@@ -70,13 +70,7 @@ void ForwardPass::execute(RenderContext& context,
     RenderTarget& forwardTarget = context.currentForwardTarget();
     const RgTextureHandle backBuffer = context.offscreenScene()
         ? forwardTarget.importColor(graph, 0, rhi::ResourceState::ShaderRead)
-        : graph.importTexture({
-            .texture = context.swapchain().currentTexture(),
-            .view = context.swapchain().currentTextureView(),
-            .initialState = context.swapchain().currentTextureState(),
-            .finalState = rhi::ResourceState::Present,
-            .aspect = rhi::TextureAspect::Color,
-        });
+        : graph.importSwapchainTexture(context.swapchain());
     const RgTextureHandle depthHandle = forwardTarget.importDepth(graph);
 
     RgRenderingInfo rendering;
