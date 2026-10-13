@@ -1,13 +1,11 @@
-﻿#include "render/pipeline/passes/ShadowCasterPass.h"
-#include "render/gpu/frame/FrameGpuManager.h"
-#include "render/gpu/global_uniform/GlobalUniformGpuManager.h"
+#include "render/pipeline/passes/ShadowCasterPass.h"
 #include "render/pipeline/RenderContext.h"
 #include "render/pipeline/passes/RenderPassUtils.h"
 #include "render/render_graph/RenderGraph.h"
 #include "render/scene/RenderScene.h"
 
 #include <algorithm>
-#include <vector>
+#include <utility>
 
 namespace engine {
 
@@ -16,34 +14,22 @@ ShadowCasterPass::ShadowCasterPass(ShadowCasterOutput* output,
                                    DrawFilter filter)
     : output_(output), shadowMapSize_(shadowMapSize), filter_(std::move(filter)) {}
 
-void ShadowCasterPass::execute(RenderContext& context,
-                               RenderGraph& graph,
-                               const DrawList& drawList) {
+void ShadowCasterPass::updateFrame(RenderContext& context, const DrawList& drawList) {
     const auto shadowCaster =
         std::ranges::find_if(context.scene().lights(), [](const RenderLight& light) {
             return light.type == LightType::Directional && light.castShadow;
         });
-    if (shadowCaster == context.scene().lights().end()) {
+    const bool enabled = shadowCaster != context.scene().lights().end();
+    if (output_) output_->castShadows = enabled;
+    if (!enabled) {
+        items_.clear();
         return;
     }
-    if (output_) {
-        output_->castShadows = true;
-    }
 
-    std::vector<DrawItem> items;
-    items.reserve(drawList.items.size());
-    for (const DrawItem& item : drawList.items) {
-        if (item.renderPhase != RenderPhase::ShadowCaster) {
-            continue;
-        }
-        const std::uint32_t objectIndex = item.arguments.firstInstance;
-        const std::uint32_t layerMask = objectIndex < context.scene().objects().size()
-                                            ? context.scene().objects()[objectIndex].layerMask
-                                            : 0xFFFFFFFFU;
-        if (filter_.accepts(item, layerMask)) {
-            items.push_back(item);
-        }
-    }
+    filterDrawItems(context, drawList, RenderPhase::ShadowCaster, filter_, items_);
+}
+
+void ShadowCasterPass::buildGraph(RenderContext& /*context*/, RenderGraph& graph) {
     const RgTextureHandle shadowMap = graph.createTexture({
         .dimension = rhi::TextureType::Texture2D,
         .format = rhi::PixelFormat::Depth32Float,
@@ -58,34 +44,16 @@ void ShadowCasterPass::execute(RenderContext& context,
         output_->shadowMap = shadowMap;
     }
 
-    RgRenderingInfo rendering;
-    rendering.renderArea = {0, 0, shadowMapSize_, shadowMapSize_};
-    rendering.depthAttachments.push_back(
+    RgRasterPass pass;
+    pass.name = "ShadowCaster";
+    pass.renderArea = {0, 0, shadowMapSize_, shadowMapSize_};
+    pass.depthAttachments.push_back(
         {shadowMap, rhi::LoadOp::Clear, rhi::StoreOp::Store, 1.0F});
 
-    std::vector<RgResourceAccess> resources;
-    resources.reserve(1);
-    resources.push_back(
-        {shadowMap, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment});
-
-    graph.addGraphicsPass(
-        "ShadowCaster",
-        std::move(rendering),
-        std::move(resources),
-        [items = std::move(items),
-         size = shadowMapSize_,
-         frameIndex = context.frameIndex(),
-         globalSet = GLOBAL_UNIFORM_GPU_MANAGER.resolve(context.frameIndex())](
-            rhi::RID commandBuffer) mutable {
-            rhi::setViewport(commandBuffer,
-                {0.0F, 0.0F, static_cast<float>(size), static_cast<float>(size), 0.0F, 1.0F});
-            rhi::setScissor(commandBuffer, {0, 0, size, size});
-            drawFilteredItems(frameIndex,
-                              items,
-                              FRAME_GPU_MANAGER.sceneUniformSet(frameIndex),
-                              globalSet,
-                              commandBuffer);
-        });
+    pass.execute = [this](const RgExecuteContext& execution) {
+        drawRasterItems(execution, items_);
+    };
+    graph.addGraphicsPass(std::move(pass));
 }
 
 } // namespace engine

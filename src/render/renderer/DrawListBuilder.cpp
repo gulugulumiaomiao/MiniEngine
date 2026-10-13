@@ -125,7 +125,8 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
     }
 
     drawList.objects.reserve(scene.objects().size());
-    for (const RenderObject& object : scene.objects()) {
+    for (std::size_t sceneIndex = 0; sceneIndex < scene.objects().size(); ++sceneIndex) {
+        const auto& object = scene.objects()[sceneIndex];
         if (scene.camera() && (object.layerMask & scene.camera()->cullingMask) == 0) {
             continue;
         }
@@ -198,6 +199,7 @@ DrawList DrawListBuilder::build(const RenderScene& scene, const RenderContext& c
                                   .vertexOffset = subMesh.vertexOffset,
                                   .firstInstance = objectIndex},
                     .renderQueue = material->effectiveRenderQueue(),
+                    .sceneObjectIndex = static_cast<std::uint32_t>(sceneIndex),
                 });
             }
         }

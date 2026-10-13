@@ -41,6 +41,8 @@ Renderer::~Renderer() {
     if (!device_)
         return;
     device_->waitIdle();
+    // Persistent pass objects retain the current draw data and graph callbacks.
+    pipeline_.reset();
     // Destroy graph framebuffers before their views and render passes while idle.
     rgRenderPassCache_.reset();
     // Transient pool entries call into the device on destruction; the implicit member

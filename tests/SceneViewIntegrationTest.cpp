@@ -7,6 +7,8 @@
 #include "render/gpu/frame/FrameGpuManager.h"
 #include "runtime/window/Window.h"
 #include "render/renderer/Renderer.h"
+#include "render/pipeline/MiniForwardPipeline.h"
+#include "render/pipeline/RenderContext.h"
 #include "render/render_target/RenderTarget.h"
 #include "rhi/vulkan/VulkanFactory.h"
 #include "tools/editor/backend/ImGuiLayer.h"
@@ -23,12 +25,59 @@
 namespace {
 using namespace engine;
 
+struct FrameProbeState {
+    int builds{}, updates{}, executions{};
+    bool sawEmpty{}, sawItems{};
+    std::uint32_t frameSlots{};
+};
+
+class FrameProbe final : public IRenderPass {
+public:
+    explicit FrameProbe(FrameProbeState& state) : state_(state) {}
+    void buildGraph(RenderContext&, RenderGraph& graph) override {
+        ++state_.builds;
+        RgRasterPass pass;
+        pass.name = "FrameProbe";
+        pass.renderAreaResolver = [](const RenderContext& context) {
+            return rhi::Rect{0, 0, context.sceneWidth(), context.sceneHeight()};
+        };
+        pass.execute = [this](const RgExecuteContext& execution) {
+            EXPECT_EQ(serial_, execution.frame.frameSerial());
+            EXPECT_EQ(execution.resources.groups()[2].rendering[0].depthAttachments[0].loadOp,
+                      rhi::LoadOp::Load); // Default Forward must retain the depth prepass.
+            EXPECT_EQ(itemCount_ == 0, execution.frame.scene().objects().empty());
+            state_.frameSlots |= 1U << execution.frame.frameIndex();
+            state_.sawEmpty |= itemCount_ == 0;
+            state_.sawItems |= itemCount_ != 0;
+            ++state_.executions;
+        };
+        graph.addGraphicsPass(std::move(pass));
+    }
+    void updateFrame(RenderContext& context, const DrawList& list) override {
+        for (const auto& item : list.items) {
+            ASSERT_LT(item.sceneObjectIndex, context.scene().objects().size());
+            ASSERT_LT(item.arguments.firstInstance, list.objects.size());
+            EXPECT_EQ(list.objects[item.arguments.firstInstance].transform,
+                      context.scene().objects()[item.sceneObjectIndex].transform);
+        }
+        serial_ = context.frameSerial();
+        itemCount_ = list.items.size();
+        ++state_.updates;
+    }
+private:
+    FrameProbeState& state_;
+    std::uint64_t serial_{};
+    std::size_t itemCount_{};
+};
+
 class SceneViewSession final : public Application {
 public:
     explicit SceneViewSession(std::filesystem::path project) : project_(std::move(project)) {}
     int frames{};
     bool drewGeometry{};
     bool resumed{};
+    FrameProbeState probe, addedProbe;
+    std::uint64_t graphCompiles{};
     Ref<Shader> keywordShader;
     Ref<Material> survivingMaterial;
     Ref<UniformSet> survivingSet;
@@ -43,6 +92,10 @@ private:
             return;
         }
         attach();
+        auto pipeline = std::make_unique<MiniForwardPipeline>();
+        pipeline_ = pipeline.get();
+        pipeline_->addPass(std::make_unique<FrameProbe>(probe));
+        ENGINE.renderer().setPipeline(std::move(pipeline));
         checkKeywordPrograms();
         MeshBuildRecipe recipe;
         recipe.parts.emplace_back(PlaneGeometry{});
@@ -139,6 +192,13 @@ private:
             ENGINE.requestQuit();
             return;
         }
+        if (frames > 1 && frames <= 5) EXPECT_EQ(pipeline_->graphCompileCount(), 1U);
+        if (frames == 5) pipeline_->addPass(std::make_unique<FrameProbe>(addedProbe));
+        if (frames >= 6 && frames <= 10) EXPECT_EQ(pipeline_->graphCompileCount(), 2U);
+        if (frames == 10) {
+            graphCompiles = pipeline_->graphCompileCount();
+            pipeline_ = nullptr; // openProject below recreates the renderer and its device.
+        }
         if (frames == 4 || frames == 5) {
             // Rebuild an actual rendered asset while another frame may still use its buffers.
             const auto asset = ASSET_MANAGER.loadAsset<MeshAsset>(
@@ -207,7 +267,10 @@ private:
         stats_.draw();
         layer_.endFrame();
     }
-    void onStop() override { layer_.detach(); }
+    void onStop() override {
+        layer_.detach();
+    }
+    MiniForwardPipeline* pipeline_{};
     std::filesystem::path project_;
     editor::ImGuiLayer layer_;
     editor::SceneDocument document_;
@@ -256,6 +319,14 @@ TEST_F(SceneViewIntegrationTest,
     EXPECT_EQ(application.frames, 19);
     EXPECT_TRUE(application.drewGeometry);
     EXPECT_TRUE(application.resumed);
+    EXPECT_EQ(application.graphCompiles, 2U); // One initial compile, one pass-list change.
+    EXPECT_EQ(application.probe.builds, 2);
+    EXPECT_EQ(application.probe.updates, application.probe.executions);
+    EXPECT_GE(application.probe.executions, 5);
+    EXPECT_TRUE(application.probe.sawEmpty);
+    EXPECT_TRUE(application.probe.sawItems);
+    EXPECT_EQ(application.probe.frameSlots, 3U);
+    EXPECT_EQ(application.addedProbe.builds, 1);
     ASSERT_TRUE(application.keywordShader);
     EXPECT_EQ(application.keywordShader->defaultSubShader().passes()[0].programCount(), 0U);
     EXPECT_EQ(validation.str().find("Validation Error"), std::string::npos) << validation.str();

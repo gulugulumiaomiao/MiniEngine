@@ -131,5 +131,45 @@ int main() {
         assert(items[1].arguments.firstInstance == 0);
     }
 
+    // Culling compacts GPU rows but sorting still needs each item's original scene position.
+    {
+        RenderScene scene;
+        scene.setCamera(RenderCamera{});
+        for (const float distance : {1000.0F, 5.0F, 10.0F}) {
+            RenderObject object;
+            object.transform[3] = math::Vec4{0.0F, 0.0F, distance, 1.0F};
+            scene.submit(object);
+        }
+        auto near = makeItem(kRenderQueueTransparent, 1, 1, 1, 0);
+        near.sceneObjectIndex = 1;
+        auto far = makeItem(kRenderQueueTransparent, 1, 1, 1, 1);
+        far.sceneObjectIndex = 2;
+        std::vector<DrawItem> items{near, far};
+        DrawSorter{}.sort(items, SortingCriteria::BackToFront, scene);
+        if (items[0].sceneObjectIndex != 2 || items[0].arguments.firstInstance != 1) return 1;
+    }
+    // Fractional distances must not collapse to one integer depth bucket.
+    {
+        RenderScene scene;
+        scene.setCamera(RenderCamera{});
+        for (const float distance : {5.1F, 5.9F}) {
+            RenderObject object;
+            object.transform[3] = math::Vec4{0.0F, 0.0F, distance, 1.0F};
+            scene.submit(object);
+        }
+        std::vector<DrawItem> items{makeItem(3000, 1, 1, 1, 0), makeItem(3000, 1, 1, 1, 1)};
+        DrawSorter{}.sort(items, SortingCriteria::BackToFront, scene);
+        if (items[0].arguments.firstInstance != 1) return 5;
+    }
+    // Full IDs must not spill into a higher-priority criterion's key bits.
+    {
+        RenderScene scene;
+        std::vector<DrawItem> items{makeItem(2001, 0, 0, 0), makeItem(2000, 256, 0, 0)};
+        DrawSorter{}.sort(items, SortingCriteria::RenderQueue | SortingCriteria::Pipeline, scene);
+        if (items[0].renderQueue != 2000) return 3;
+        items = {makeItem(2000, 1, 8192, 0), makeItem(2000, 2, 0, 0)};
+        DrawSorter{}.sort(items, SortingCriteria::Pipeline | SortingCriteria::Material, scene);
+        if (items[0].pipeline.index() != 1) return 4;
+    }
     return 0;
 }

@@ -1,53 +1,28 @@
 #include "render/pipeline/passes/ForwardPass.h"
 
-#include "render/gpu/frame/FrameGpuManager.h"
-#include "render/gpu/global_uniform/GlobalUniformGpuManager.h"
 #include "render/pipeline/RenderContext.h"
 #include "render/pipeline/passes/RenderPassUtils.h"
 #include "render/queue/RenderQueue.h"
 #include "render/render_graph/RenderGraph.h"
 #include "render/render_target/RenderTarget.h"
 #include "render/scene/RenderScene.h"
-#include "rhi/api/Device.h"
 
-#include <algorithm>
-#include <vector>
+#include <iterator>
+#include <utility>
 
 namespace engine {
 
-ForwardPass::ForwardPass(const ShadowCasterOutput* shadowOutput, DrawFilter filter)
-    : shadowOutput_(shadowOutput), filter_(std::move(filter)) {}
+ForwardPass::ForwardPass(const ShadowCasterOutput* shadowOutput, DrawFilter filter, rhi::LoadOp depthLoadOp)
+    : shadowOutput_(shadowOutput), filter_(std::move(filter)), depthLoadOp_(depthLoadOp) {}
 
-void ForwardPass::execute(RenderContext& context,
-                          RenderGraph& graph,
-                          const DrawList& drawList) {
-    std::vector<DrawItem> items;
-    items.reserve(drawList.items.size());
-    for (const DrawItem& item : drawList.items) {
-        if (item.renderPhase != RenderPhase::Forward) {
-            continue;
-        }
-        const std::uint32_t objectIndex = item.arguments.firstInstance;
-        const std::uint32_t layerMask = objectIndex < context.scene().objects().size()
-                                            ? context.scene().objects()[objectIndex].layerMask
-                                            : 0xFFFFFFFFU;
-        if (filter_.accepts(item, layerMask)) {
-            items.push_back(item);
-        }
-    }
-    if (items.empty() && !context.offscreenScene()) {
-        return;
-    }
-
-    if (!context.offscreenScene())
-        context.markBackBufferWritten();
-
+void ForwardPass::updateFrame(RenderContext& context, const DrawList& drawList) {
+    filterDrawItems(context, drawList, RenderPhase::Forward, filter_, items_);
     // Sort opaque front-to-back by queue/state, then transparent back-to-front by camera distance.
     std::vector<DrawItem> opaque;
     std::vector<DrawItem> transparent;
-    opaque.reserve(items.size());
-    transparent.reserve(items.size());
-    for (DrawItem& item : items) {
+    opaque.reserve(items_.size());
+    transparent.reserve(items_.size());
+    for (DrawItem& item : items_) {
         if (RenderQueueRange::opaque().contains(item.renderQueue)) {
             opaque.push_back(std::move(item));
         } else {
@@ -62,54 +37,46 @@ void ForwardPass::execute(RenderContext& context,
                 context.scene());
     sorter.sort(transparent, SortingCriteria::BackToFront, context.scene());
 
-    items.clear();
-    items.insert(items.end(), std::make_move_iterator(opaque.begin()), std::make_move_iterator(opaque.end()));
-    items.insert(items.end(),
+    items_.clear();
+    items_.insert(items_.end(), std::make_move_iterator(opaque.begin()), std::make_move_iterator(opaque.end()));
+    items_.insert(items_.end(),
                  std::make_move_iterator(transparent.begin()),
                  std::make_move_iterator(transparent.end()));
-    RenderTarget& forwardTarget = context.currentForwardTarget();
+    clearColor_ = drawList.clearColor;
+}
+
+void ForwardPass::buildGraph(RenderContext& context, RenderGraph& graph) {
     const RgTextureHandle backBuffer = context.offscreenScene()
-        ? forwardTarget.importColor(graph, 0, rhi::ResourceState::ShaderRead)
+        ? graph.importTexture("ForwardColor",
+            [](RenderContext& frame) { return frame.currentForwardTarget().colorBinding(0); },
+            rhi::ResourceState::ShaderRead)
         : graph.importSwapchainTexture(context.swapchain());
-    const RgTextureHandle depthHandle = forwardTarget.importDepth(graph);
+    const RgTextureHandle depthHandle = graph.importTexture("ForwardDepth",
+        [](RenderContext& frame) { return frame.currentForwardTarget().depthBinding(); },
+        rhi::ResourceState::DepthAttachment, rhi::TextureAspect::Depth);
 
-    RgRenderingInfo rendering;
-    rendering.renderArea = {0, 0, context.sceneWidth(), context.sceneHeight()};
-    rendering.colorAttachments.push_back(
-        {backBuffer, rhi::LoadOp::Clear, rhi::StoreOp::Store, drawList.clearColor});
-    rendering.depthAttachments.push_back(
-        {depthHandle, rhi::LoadOp::Clear, rhi::StoreOp::DontCare, 1.0F});
+    RgRasterPass pass;
+    pass.name = "Forward";
+    pass.renderAreaResolver = [](const RenderContext& frame) {
+        return rhi::Rect{0, 0, frame.sceneWidth(), frame.sceneHeight()};
+    };
+    pass.colorAttachments.push_back(
+        {backBuffer, rhi::LoadOp::Clear, rhi::StoreOp::Store, math::Vec4{0.0F}});
+    pass.depthAttachments.push_back(
+        {depthHandle, depthLoadOp_, rhi::StoreOp::DontCare, 1.0F});
 
-    std::vector<RgResourceAccess> resources;
-    resources.reserve(3);
-    resources.push_back({backBuffer, rhi::TextureAspect::Color, rhi::ResourceState::ColorAttachment});
-    resources.push_back({depthHandle, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment});
     if (shadowOutput_ && shadowOutput_->shadowMap.valid()) {
-        resources.push_back({shadowOutput_->shadowMap,
-                             rhi::TextureAspect::Depth,
-                             rhi::ResourceState::ShaderRead});
+        pass.sampledTextures.push_back(shadowOutput_->shadowMap);
     }
 
-    graph.addGraphicsPass("Forward",
-                          std::move(rendering),
-                          std::move(resources),
-                          [items = std::move(items), &context](
-                              rhi::RID commandBuffer) mutable {
-                              rhi::setViewport(commandBuffer,
-                                               {0.0F,
-                                                0.0F,
-                                                static_cast<float>(context.sceneWidth()),
-                                                static_cast<float>(context.sceneHeight()),
-                                                0.0F,
-                                                1.0F});
-                              rhi::setScissor(commandBuffer,
-                                              {0, 0, context.sceneWidth(), context.sceneHeight()});
-                              drawFilteredItems(context.frameIndex(),
-                                                items,
-                                                FRAME_GPU_MANAGER.sceneUniformSet(context.frameIndex()),
-                                                GLOBAL_UNIFORM_GPU_MANAGER.resolve(context.frameIndex()),
-                                                commandBuffer);
-                          });
+    pass.colorAttachments[0].clearColorResolver =
+        [this](const RenderContext&) { return clearColor_; };
+
+    pass.execute = [this](const RgExecuteContext& execution) {
+        if (!execution.frame.offscreenScene()) execution.frame.markBackBufferWritten();
+        drawRasterItems(execution, items_);
+    };
+    graph.addGraphicsPass(std::move(pass));
 }
 
 } // namespace engine

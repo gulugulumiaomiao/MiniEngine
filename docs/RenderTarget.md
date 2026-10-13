@@ -9,7 +9,7 @@ Renderer / Render Feature
     │ 描述尺寸、格式、clear/load/store
     ▼
 RenderTarget                    拥有 Texture + TextureView，处理 resize
-    │ RenderingInfo / RgResourceAccess / RgTextureHandle
+    │ RenderingInfo / RgTextureHandle
     ▼
 RenderGraph                     决定 Pass 顺序与资源状态转换
     │
@@ -62,23 +62,32 @@ desc.depthAttachment = RenderTargetDepthAttachmentDesc{
 
 ```cpp
 RenderGraph graph;
-target.import(graph, rhi::ResourceState::ShaderRead,
-              rhi::ResourceState::DepthAttachment);
-graph.addGraphicsPass("GBuffer",
-                      target.renderingInfo(),
-                      target.writeUsages(),
-                      recordDraws);
-graph.execute(commandBuffer);
+RgRasterPass pass;
+pass.name = "GBuffer";
+pass.renderArea = {0, 0, target.width(), target.height()};
+for (std::size_t i = 0; i < target.colorAttachmentCount(); ++i) {
+    pass.colorAttachments.push_back(
+        {target.importColor(graph, i, rhi::ResourceState::ShaderRead),
+         rhi::LoadOp::Clear, rhi::StoreOp::Store});
+}
+if (target.hasDepthAttachment()) {
+    pass.depthAttachments.push_back({target.importDepth(graph)});
+}
+pass.execute = recordDraws; // void(const RgExecuteContext&)
+graph.addGraphicsPass(std::move(pass));
+graph.compile(context);
+auto frame = graph.prepareFrame(context);
+graph.execute(context, frame, commandBuffer);
 ```
 
 - `import()` 声明附件的初始状态和整张图执行后的目标状态；
 - `renderingInfo()` 生成 Dynamic Rendering 所需的 view、范围和清除参数；
-- `writeUsages()` 声明颜色写入与深度写入状态；
 - RenderGraph 执行后把 final state 回写给 RenderTarget，下一帧不会错误地再次使用
   `Undefined` 作为旧 layout。
 
-从 `import()` 到 `execute()` 完成之前，不得 resize、release 或销毁 RenderTarget，因为
-RenderGraph 会暂时引用其状态槽。
+持久化图中，importColor/importDepth 注册具名 resolver，每次 prepareFrame 重新取得当前 texture/view 和状态槽。尺寸变化需要通过 pass.renderAreaResolver 更新范围；format/sample count 变化需要 invalidate 并重新 compile。
+
+prepareFrame 到 execute 完成且 frame 释放之前，不得 resize、release 或销毁 RenderTarget。图持有的 resolver 引用目标对象，所以目标对象必须在图使用期间有效。替换旧 view 前，应等待相关 GPU 工作完成，并用 RgRenderPassCache::invalidateFramebuffers(view) 清除旧 framebuffer。
 
 ## Forward 路径
 

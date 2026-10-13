@@ -1,5 +1,6 @@
 #include "render/pipeline/RenderContext.h"
 
+#include "core/logging/Log.h"
 #include "render/renderer/Renderer.h"
 #include "render/render_target/RenderTarget.h"
 #include "rhi/api/Device.h"
@@ -7,47 +8,57 @@
 namespace engine {
 
 bool RenderContext::offscreenScene() const {
-    return renderer_.offscreenScene();
+    return requireRenderer().offscreenScene();
 }
 std::uint32_t RenderContext::sceneWidth() const {
-    return renderer_.sceneWidth();
+    return requireRenderer().sceneWidth();
 }
 std::uint32_t RenderContext::sceneHeight() const {
-    return renderer_.sceneHeight();
+    return requireRenderer().sceneHeight();
 }
 rhi::PixelFormat RenderContext::sceneColorFormat() const {
     return offscreenScene() ? currentForwardTarget().colorFormat(0) : swapchain().format();
 }
 
 RenderContext::RenderContext(Renderer& renderer, const RenderScene& scene)
-    : renderer_(renderer), scene_(scene) {}
+    : renderer_(&renderer), scene_(scene), texturePool_(renderer.rgTexturePool()),
+      renderPassCache_(renderer.rgRenderPassCache()) {}
+
+RenderContext::RenderContext(RgTexturePool& texturePool, RgRenderPassCache& renderPassCache,
+                             const RenderScene& scene)
+    : scene_(scene), texturePool_(texturePool), renderPassCache_(renderPassCache) {}
+
+Renderer& RenderContext::requireRenderer() const {
+    if (!renderer_) Log::fatal("RenderContext", "This context has no renderer");
+    return *renderer_;
+}
 
 rhi::ISwapchain& RenderContext::swapchain() const {
-    return renderer_.swapchain();
+    return requireRenderer().swapchain();
 }
 
 rhi::RID RenderContext::commandBuffer() const {
-    return renderer_.swapchain().commandBuffer();
+    return swapchain().commandBuffer();
 }
 
 RenderTarget& RenderContext::currentForwardTarget() const {
-    return renderer_.currentForwardTarget();
+    return requireRenderer().currentForwardTarget();
 }
 
 RgTexturePool& RenderContext::rgTexturePool() const {
-    return renderer_.rgTexturePool();
+    return texturePool_;
 }
 
 RgRenderPassCache& RenderContext::rgRenderPassCache() const {
-    return renderer_.rgRenderPassCache();
+    return renderPassCache_;
 }
 
 std::uint32_t RenderContext::frameIndex() const {
-    return renderer_.swapchain().frameIndex();
+    return swapchain().frameIndex();
 }
 
 std::uint64_t RenderContext::frameSerial() const {
-    return renderer_.frameSerial();
+    return requireRenderer().frameSerial();
 }
 
 } // namespace engine

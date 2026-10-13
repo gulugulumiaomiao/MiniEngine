@@ -62,6 +62,12 @@ struct DrawItem {
     rhi::IndexFormat indexFormat{rhi::IndexFormat::UInt32};
     rhi::DrawIndexedArguments arguments;
     int renderQueue{2000};
+    // Scene provenance survives culling; firstInstance indexes the compact GPU object table.
+    static constexpr std::uint32_t kUnknownSceneObject = 0xFFFFFFFFU;
+    std::uint32_t sceneObjectIndex{kUnknownSceneObject};
+    [[nodiscard]] std::uint32_t sourceObjectIndex() const {
+        return sceneObjectIndex == kUnknownSceneObject ? arguments.firstInstance : sceneObjectIndex;
+    }
 };
 
 struct DrawList {

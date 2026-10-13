@@ -10,9 +10,8 @@ struct DrawList;
 
 // Abstract render pass used by programmable pipelines.
 //
-// A pass receives the full frame context and the prepared DrawList. It is responsible for
-// filtering the items it wants to draw, declaring its render-graph resources via the provided
-// RenderGraph, and emitting the actual draw commands inside the pass callback.
+// buildGraph declares persistent structure. updateFrame filters the current DrawList into
+// pass-owned data. Stable callbacks read that data and RgExecuteContext::frame at execution.
 //
 // Pass callbacks run during RenderGraph::execute, after compilation. They query the frame's
 // scene bind group from FRAME_GPU_MANAGER at execution time, so pipelines may rebuild the
@@ -22,8 +21,10 @@ public:
     virtual ~IRenderPass() = default;
 
     // Record the pass into the graph. The implementation may add graphics passes, import or
-    // create textures, and read from the prepared DrawList.
-    virtual void execute(RenderContext& context, RenderGraph& graph, const DrawList& drawList) = 0;
+    // create textures. Callbacks must not capture this call's local frame context.
+    virtual void buildGraph(RenderContext& context, RenderGraph& graph) = 0;
+    // Update draw data without changing the graph topology, including when it is empty.
+    virtual void updateFrame(RenderContext& context, const DrawList& drawList) = 0;
 };
 
 } // namespace engine

@@ -10,6 +10,9 @@
 
 namespace engine {
 
+class RenderContext;
+class RgFrameResources;
+
 // Opaque handle to a texture node inside a RenderGraph.
 struct RgTextureHandle {
     static constexpr std::uint32_t kInvalid = static_cast<std::uint32_t>(-1);
@@ -31,11 +34,14 @@ struct RgTextureDesc {
     std::uint32_t arrayLayers{1};
     std::uint32_t mipCount{1};
     rhi::TextureUsage usage{rhi::TextureUsage::None};
+    rhi::SampleCount samples{rhi::SampleCount::One};
+    // Optional runtime size; only width/height of the returned rectangle are used.
+    std::function<rhi::Rect(const RenderContext&)> extentResolver;
     std::string debugName;
 };
 
-// Resource access declared by a pass. Compilation derives synchronization and pass
-// dependencies from these declarations, and validates reads/writes and initialization.
+// Compiled resource access derived from a pass's attachments and sampled textures.
+// Used for synchronization, pass dependencies and initialization validation.
 struct RgResourceAccess {
     RgTextureHandle texture;
     rhi::TextureAspect aspect{rhi::TextureAspect::Color};
@@ -49,6 +55,7 @@ struct RgColorAttachment {
     rhi::LoadOp loadOp{rhi::LoadOp::Load};
     rhi::StoreOp storeOp{rhi::StoreOp::Store};
     math::Vec4 clearColor{0.0F};
+    std::function<math::Vec4(const RenderContext&)> clearColorResolver;
 };
 
 struct RgDepthAttachment {
@@ -57,27 +64,28 @@ struct RgDepthAttachment {
     rhi::StoreOp storeOp{rhi::StoreOp::Store};
     float clearDepth{1.0F};
     rhi::AccessMode access{rhi::AccessMode::ReadWrite};
+    std::function<float(const RenderContext&)> clearDepthResolver;
 };
 
-struct RgRenderingInfo {
-    rhi::Rect renderArea;
-    std::vector<RgColorAttachment> colorAttachments;
-    std::vector<RgDepthAttachment> depthAttachments;
-    std::vector<RgTextureHandle> inputAttachments;
-};
-
-// Passed to grouped-pass callbacks after compilation. Use renderPass/subpass when
+// Passed to raster-pass callbacks after compilation. Use renderPass/subpass when
 // creating or resolving a graphics pipeline; null renderPass means dynamic rendering.
 struct RgExecuteContext {
     rhi::RID commandBuffer;
     rhi::RID renderPass;
     std::uint32_t subpass{};
+    RenderContext& frame;
+    const RgFrameResources& resources;
+    rhi::Rect renderArea;
 };
 
 struct RgRasterPass {
     std::string name;
-    RgRenderingInfo rendering;
-    std::vector<RgResourceAccess> resources;
+    rhi::Rect renderArea;
+    std::function<rhi::Rect(const RenderContext&)> renderAreaResolver;
+    std::vector<RgColorAttachment> colorAttachments;
+    std::vector<RgDepthAttachment> depthAttachments;
+    std::vector<RgTextureHandle> inputAttachments;
+    std::vector<RgTextureHandle> sampledTextures;
     std::function<void(const RgExecuteContext&)> execute;
 };
 

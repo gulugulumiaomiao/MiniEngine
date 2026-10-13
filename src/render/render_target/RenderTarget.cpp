@@ -239,15 +239,24 @@ void RenderTarget::import(RenderGraph& graph,
 
 RgTextureHandle
 RenderTarget::importColor(RenderGraph& graph, std::size_t index, rhi::ResourceState finalState) {
-    Attachment& color = requireColor(index);
-    return graph.importTexture(color.texture, color.view, color.state, finalState,
-                               rhi::TextureAspect::Color, &color.state);
+    return graph.importTexture("RenderTarget." + std::to_string(reinterpret_cast<std::uintptr_t>(this)) +
+        ".Color" + std::to_string(index), [this, index](RenderContext&) { return colorBinding(index); },
+        finalState);
 }
 
 RgTextureHandle RenderTarget::importDepth(RenderGraph& graph, rhi::ResourceState finalState) {
-    Attachment& depth = requireDepth();
-    return graph.importTexture(depth.texture, depth.view, depth.state, finalState,
-                               rhi::TextureAspect::Depth, &depth.state);
+    return graph.importTexture("RenderTarget." + std::to_string(reinterpret_cast<std::uintptr_t>(this)) +
+        ".Depth", [this](RenderContext&) { return depthBinding(); }, finalState, rhi::TextureAspect::Depth);
+}
+
+RgTextureBinding RenderTarget::colorBinding(std::size_t index) {
+    auto& color = requireColor(index);
+    return {color.texture, color.view, color.state, rhi::AccessMode::Auto, &color.state};
+}
+
+RgTextureBinding RenderTarget::depthBinding() {
+    auto& depth = requireDepth();
+    return {depth.texture, depth.view, depth.state, rhi::AccessMode::Auto, &depth.state};
 }
 
 } // namespace engine

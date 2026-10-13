@@ -4,8 +4,8 @@ The render pass system splits the monolithic forward renderer into small, compos
 
 ## Core abstractions
 
-- `IRenderPass` (`render/pipeline/RenderPass.h`) is the base interface. A pass receives the frame `RenderContext`, the active `RenderGraph` and the prepared `DrawList`. It decides which items to draw and which resources to declare. Pass callbacks run during `RenderGraph::execute` and query the frame scene bind group from `FRAME_GPU_MANAGER` at execution time, so the pipeline may rebuild that bind group between `compile()` and `execute()` (e.g. to bind the resolved shadow map view).
-- `MiniForwardPipeline` (`render/pipeline/MiniForwardPipeline.h`) owns an ordered list of `IRenderPass` instances and executes them every frame after resolving material bind groups and uploading scene/object uniforms.
+- `IRenderPass` declares persistent resources/callbacks in `buildGraph(context, graph)`. `updateFrame(context, drawList)` updates pass-owned filtered draw data every frame. Callbacks capture stable pass objects and read the current `RgExecuteContext::frame`, bindings and render area.
+- `MiniForwardPipeline` owns its pass list and RenderGraph. It builds/compiles initially, then prepares bindings and executes every frame. Changes to passes or output mode rebuild structure; format/sample changes invalidate the plan; ordinary resizing and empty draw lists do not recompile.
 - `DrawListBuilder` (`render/renderer/DrawListBuilder.h`) builds the `DrawList` from the `RenderScene`. It resolves shader passes for the built-in phases `ShadowCaster`, `DepthOnly` and `Forward` and leaves GPU material bind group resolution to the pipeline.
 
 ## Render queue subsystem
@@ -24,23 +24,23 @@ The render pass system splits the monolithic forward renderer into small, compos
 - `RenderQueueRange` is an inclusive range with factory methods `all()`, `opaque()` and `transparent()`.
 - `DrawFilter` filters items by `RenderQueueRange`, layer mask and (future) render type.
 - `SortingCriteria` provides bit flags for `RenderQueue`, `Pipeline`, `Material`, `Mesh` and `BackToFront` sorting.
-- `DrawSorter` packs the requested criteria into a 64-bit sort key. `BackToFront` uses an inverted camera distance so farther transparent objects draw first.
+- `DrawSorter` compares the requested criteria lexicographically using complete resource IDs. `BackToFront` uses an inverted camera distance so farther transparent objects draw first. Draw items carry their original scene index separately from the compact GPU object-table index, so culling does not change layer filtering or distance lookup.
 
 ## Built-in passes
 
 ### ForwardPass
 
-Draws the `Forward` phase into the swapchain back-buffer and the forward depth target. It clears color and depth and stores the color attachment for presentation.
+Draws the `Forward` phase into the swapchain back-buffer and the forward depth target. It clears color and stores it for presentation. The default chain uses `Load` for depth to retain DepthOnly results; standalone ForwardPass defaults to `Clear`. Its constructor accepts the depth load operation.
 
 ### DepthOnlyPass
 
-Draws the `DepthOnly` phase into the forward depth target only. It is used as a z-prepass for opaque geometry. If no item matches the filter the pass does not record anything.
+Draws the `DepthOnly` phase into the forward depth target only. It is used as a z-prepass for opaque geometry. The depth clear remains active when no item matches the filter.
 
 ### ShadowCasterPass
 
-Draws the `ShadowCaster` phase into a transient depth shadow map allocated from the `RenderGraph` texture pool (default 1024x1024, `Depth32Float`, usage `DepthStencilAttachment | Sampled`, depth aspect). When the scene contains a shadow-casting directional light the pass always creates and clears the shadow map - a fully cleared map decodes as "no shadow" - and writes the handle plus a `castShadows` flag into the `ShadowCasterOutput` struct owned by the pipeline.
+Draws the `ShadowCaster` phase into a transient depth shadow map (default 1024x1024, `Depth32Float`, `DepthStencilAttachment | Sampled`). Its logical texture and pass always exist, so enabling/disabling shadow-casting directional lights updates draw data without rebuilding the graph. The pass clears the map even when there are no casters.
 
-`ForwardPass` receives the same `ShadowCasterOutput` pointer, declares the shadow map as a `ShaderRead` input, and the pipeline calls `FRAME_GPU_MANAGER.bindShadowMap(frameIndex, graph.resolvedTextureView(handle))` between `compile()` and `execute()` so set 0 binding 3 samples the resolved view. Because the pool buckets textures per frame index, the resolved view is stable across frames and the bind group is not rebuilt in steady state.
+`ForwardPass` declares a stable sampled dependency. Between frame preparation and execution, the pipeline binds `frame.textureView(handle)` when shadows are enabled. Frame-indexed pooling preserves physical state/access and prevents reuse by another in-flight frame slot.
 
 ## Composing a pipeline
 
@@ -49,11 +49,12 @@ The default `MiniForwardPipeline` constructor already installs the `ShadowCaster
 ```cpp
 ShadowCasterOutput shadowOutput;
 auto pipeline = std::make_unique<MiniForwardPipeline>();
-pipeline->setPasses({
-    std::make_unique<ShadowCasterPass>(&shadowOutput, 1024),
-    std::make_unique<DepthOnlyPass>(),
-    std::make_unique<ForwardPass>(&shadowOutput),
-});
+std::vector<std::unique_ptr<IRenderPass>> passes;
+passes.push_back(std::make_unique<ShadowCasterPass>(&shadowOutput, 1024));
+passes.push_back(std::make_unique<DepthOnlyPass>());
+passes.push_back(std::make_unique<ForwardPass>(
+    &shadowOutput, DrawFilter{RenderQueueRange::all()}, rhi::LoadOp::Load));
+pipeline->setPasses(std::move(passes));
 renderer.setPipeline(std::move(pipeline));
 ```
 

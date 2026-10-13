@@ -1,74 +1,37 @@
 #include "render/pipeline/passes/DepthOnlyPass.h"
 
-#include "render/gpu/frame/FrameGpuManager.h"
-#include "render/gpu/global_uniform/GlobalUniformGpuManager.h"
 #include "render/pipeline/RenderContext.h"
 #include "render/pipeline/passes/RenderPassUtils.h"
 #include "render/render_graph/RenderGraph.h"
 #include "render/render_target/RenderTarget.h"
-#include "render/scene/RenderScene.h"
-#include "rhi/api/Device.h"
 
-#include <algorithm>
-#include <vector>
+#include <utility>
 
 namespace engine {
 
 DepthOnlyPass::DepthOnlyPass(DrawFilter filter) : filter_(std::move(filter)) {}
 
-void DepthOnlyPass::execute(RenderContext& context,
-                            RenderGraph& graph,
-                            const DrawList& drawList) {
-    std::vector<DrawItem> items;
-    items.reserve(drawList.items.size());
-    for (const DrawItem& item : drawList.items) {
-        if (item.renderPhase != RenderPhase::DepthOnly) {
-            continue;
-        }
-        const std::uint32_t objectIndex = item.arguments.firstInstance;
-        const std::uint32_t layerMask = objectIndex < context.scene().objects().size()
-                                            ? context.scene().objects()[objectIndex].layerMask
-                                            : 0xFFFFFFFFU;
-        if (filter_.accepts(item, layerMask)) {
-            items.push_back(item);
-        }
-    }
-    if (items.empty()) {
-        return;
-    }
+void DepthOnlyPass::updateFrame(RenderContext& context, const DrawList& drawList) {
+    filterDrawItems(context, drawList, RenderPhase::DepthOnly, filter_, items_);
+}
 
-    RenderTarget& forwardTarget = context.currentForwardTarget();
-    const RgTextureHandle depthHandle = forwardTarget.importDepth(graph);
+void DepthOnlyPass::buildGraph(RenderContext& /*context*/, RenderGraph& graph) {
+    const RgTextureHandle depthHandle = graph.importTexture("ForwardDepth",
+        [](RenderContext& frame) { return frame.currentForwardTarget().depthBinding(); },
+        rhi::ResourceState::DepthAttachment, rhi::TextureAspect::Depth);
 
-    RgRenderingInfo rendering;
-    rendering.renderArea = {0, 0, context.sceneWidth(), context.sceneHeight()};
-    rendering.depthAttachments.push_back(
+    RgRasterPass pass;
+    pass.name = "DepthOnly";
+    pass.renderAreaResolver = [](const RenderContext& frame) {
+        return rhi::Rect{0, 0, frame.sceneWidth(), frame.sceneHeight()};
+    };
+    pass.depthAttachments.push_back(
         {depthHandle, rhi::LoadOp::Clear, rhi::StoreOp::Store, 1.0F});
 
-    std::vector<RgResourceAccess> resources;
-    resources.reserve(1);
-    resources.push_back({depthHandle, rhi::TextureAspect::Depth, rhi::ResourceState::DepthAttachment});
-
-    graph.addGraphicsPass("DepthOnly",
-                          std::move(rendering),
-                          std::move(resources),
-                          [items = std::move(items), &context](
-                              rhi::RID commandBuffer) mutable {
-                              rhi::setViewport(commandBuffer,
-                                               {0.0F,
-                                                0.0F,
-                                                static_cast<float>(context.sceneWidth()),
-                                                static_cast<float>(context.sceneHeight()),
-                                                0.0F,
-                                                1.0F});
-                              rhi::setScissor(commandBuffer,
-                                              {0, 0, context.sceneWidth(), context.sceneHeight()});
-                              drawFilteredItems(context.frameIndex(),
-                                                items,
-                                                FRAME_GPU_MANAGER.sceneUniformSet(context.frameIndex()),
-                                                GLOBAL_UNIFORM_GPU_MANAGER.resolve(context.frameIndex()),
-                                                commandBuffer);
-                          });
+    pass.execute = [this](const RgExecuteContext& execution) {
+        drawRasterItems(execution, items_);
+    };
+    graph.addGraphicsPass(std::move(pass));
 }
 
 } // namespace engine

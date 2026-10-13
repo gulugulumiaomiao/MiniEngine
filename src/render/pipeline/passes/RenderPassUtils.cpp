@@ -1,6 +1,10 @@
 #include "render/pipeline/passes/RenderPassUtils.h"
 
 #include "render/gpu/frame/FrameGpuManager.h"
+#include "render/gpu/global_uniform/GlobalUniformGpuManager.h"
+#include "render/pipeline/RenderContext.h"
+#include "render/queue/RenderQueue.h"
+#include "render/render_graph/RgTypes.h"
 #include "render/renderer/DrawBatcher.h"
 #include "render/shader/Shader.h"
 
@@ -80,6 +84,30 @@ void applyRenderState(rhi::RID commandBuffer, const RenderState& state) {
 }
 
 } // namespace
+
+void filterDrawItems(const RenderContext& context, const DrawList& drawList,
+                     RenderPhase phase, const DrawFilter& filter, std::vector<DrawItem>& result) {
+    result.clear();
+    result.reserve(drawList.items.size());
+    const auto& objects = context.scene().objects();
+    for (const auto& item : drawList.items) {
+        if (item.renderPhase != phase) continue;
+        const auto index = item.sourceObjectIndex();
+        const auto layer = index < objects.size() ? objects[index].layerMask : 0xFFFFFFFFU;
+        if (filter.accepts(item, layer)) result.push_back(item);
+    }
+}
+
+void drawRasterItems(const RgExecuteContext& execution, std::span<const DrawItem> items) {
+    const auto area = execution.renderArea;
+    const auto cmd = execution.commandBuffer;
+    const auto frameIndex = execution.frame.frameIndex();
+    rhi::setViewport(cmd, {static_cast<float>(area.x), static_cast<float>(area.y),
+        static_cast<float>(area.width), static_cast<float>(area.height), 0.0F, 1.0F});
+    rhi::setScissor(cmd, area);
+    drawFilteredItems(frameIndex, items, FRAME_GPU_MANAGER.sceneUniformSet(frameIndex),
+                      GLOBAL_UNIFORM_GPU_MANAGER.resolve(frameIndex), cmd);
+}
 
 void drawFilteredItems(std::uint32_t frameIndex,
                        std::span<const DrawItem> items,

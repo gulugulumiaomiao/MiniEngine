@@ -8,6 +8,7 @@
 #include "rhi/vulkan/VulkanDevice.h"
 #include "rhi/vulkan/VulkanSwapchain.h"
 #include "render/render_graph/RenderGraph.h"
+#include "render/pipeline/RenderContext.h"
 
 #include <gtest/gtest.h>
 
@@ -113,43 +114,66 @@ TEST_F(RhiDeviceTest, RenderGraphImportsAcquiredSwapchainImageAndPresentsAfterRe
     } validation;
     rhi::vulkan::VulkanSwapchain swapchain(d, {.width = 64, .height = 64, .vsync = false});
     RgTexturePool pool;
+    RgRenderPassCache cache;
+    RenderScene scene;
+    RenderContext renderContext(pool, cache, scene);
+    RenderGraph graph;
+    const auto backBuffer = graph.importSwapchainTexture(swapchain);
+    EXPECT_EQ(backBuffer, graph.importSwapchainTexture(swapchain));
+    RgRasterPass pass;
+    pass.name = "SwapchainClear";
+    pass.renderAreaResolver = [&](const RenderContext&) {
+        return rhi::Rect{0, 0, swapchain.width(), swapchain.height()};
+    };
+    pass.colorAttachments.push_back({backBuffer, rhi::LoadOp::Clear, rhi::StoreOp::Store});
+    pass.execute = [&](const RgExecuteContext& execution) {
+        EXPECT_EQ(execution.commandBuffer, swapchain.commandBuffer());
+        EXPECT_TRUE(execution.renderPass);
+        EXPECT_EQ(execution.subpass, 0U);
+        EXPECT_EQ(&execution.frame, &renderContext);
+        EXPECT_EQ(execution.resources.textureView(backBuffer), swapchain.currentTextureView());
+        EXPECT_EQ(execution.renderArea.width, swapchain.width());
+    };
+    graph.addRasterGroup("Present", {std::move(pass)});
     bool sawPresentedImage = false;
+    rhi::RID renderPass;
     for (int round = 0; round < 2; ++round) {
         if (round != 0) {
             d.waitIdle();
+            cache.clearFramebuffers();
             swapchain.resize(48, 48);
         }
-        for (std::uint32_t frame = 0; frame < 2 * swapchain.imageCount() + 1; ++frame) {
+        for (std::uint32_t iteration = 0; iteration < 2 * swapchain.imageCount() + 1; ++iteration) {
             ASSERT_EQ(swapchain.beginFrame(), rhi::FrameStatus::Ready);
             pool.beginFrame(swapchain.frameIndex());
             const auto texture = swapchain.currentTexture();
             const auto view = swapchain.currentTextureView();
             const auto before = swapchain.currentTextureState();
             sawPresentedImage |= before == rhi::ResourceState::Present;
-            RenderGraph graph;
-            const auto backBuffer = graph.importSwapchainTexture(swapchain);
-            EXPECT_EQ(backBuffer, graph.importSwapchainTexture(swapchain));
-            EXPECT_EQ(graph.textureCount(), 1U);
-            RgRenderingInfo rendering;
-            rendering.renderArea = {0, 0, swapchain.width(), swapchain.height()};
-            rendering.colorAttachments.push_back({backBuffer, rhi::LoadOp::Clear, rhi::StoreOp::Store});
-            graph.addGraphicsPass("SwapchainClear", std::move(rendering), {}, [](rhi::RID) {});
-            graph.compile(pool);
-            EXPECT_EQ(graph.resolvedTextureView(backBuffer), view);
-            const auto& barriers = graph.compiledGroups()[0].preBarriers;
+            if (!graph.compiled()) graph.compile(renderContext);
+            EXPECT_TRUE(graph.resourcesCompatible(renderContext));
+            auto frame = graph.prepareFrame(renderContext);
+            EXPECT_EQ(frame.textureView(backBuffer), view);
+            const auto& begin = frame.groups()[0].beginInfo;
+            if (renderPass) EXPECT_EQ(begin.renderPass, renderPass);
+            else renderPass = begin.renderPass;
+            EXPECT_EQ(begin.renderArea.width, swapchain.width());
+            const auto& barriers = frame.groups()[0].preBarriers;
             ASSERT_EQ(barriers.size(), 1U);
             EXPECT_EQ(barriers[0].texture, texture);
             EXPECT_EQ(barriers[0].aspect, rhi::TextureAspect::Color);
             EXPECT_EQ(barriers[0].before, before);
             EXPECT_EQ(barriers[0].after, rhi::ResourceState::ColorAttachment);
-            ASSERT_EQ(graph.finalBarriers().size(), 1U);
-            EXPECT_EQ(graph.finalBarriers()[0].texture, texture);
-            EXPECT_EQ(graph.finalBarriers()[0].after, rhi::ResourceState::Present);
-            graph.execute(swapchain.commandBuffer());
+            ASSERT_EQ(frame.finalBarriers().size(), 1U);
+            EXPECT_EQ(frame.finalBarriers()[0].texture, texture);
+            EXPECT_EQ(frame.finalBarriers()[0].after, rhi::ResourceState::Present);
+            graph.execute(renderContext, frame, swapchain.commandBuffer());
             ASSERT_EQ(swapchain.endFrame(), rhi::FrameStatus::Ready);
         }
     }
     d.waitIdle();
+    EXPECT_EQ(graph.compileCount(), 1U);
+    EXPECT_EQ(cache.renderPassCount(), 1U);
     EXPECT_TRUE(sawPresentedImage);
     EXPECT_EQ(validation.messages.str().find("Validation Error"), std::string::npos) << validation.messages.str();
     EXPECT_EQ(validation.messages.str().find("SYNC-HAZARD"), std::string::npos) << validation.messages.str();
@@ -288,46 +312,49 @@ TEST_F(RhiDeviceTest, RenderGraphSubpassesReadInputAndReuseCaches) {
     RgTexturePool pool;
     RgRenderPassCache cache;
     pool.beginFrame(0);
+    RenderScene scene;
+    RenderContext renderContext(pool, cache, scene);
     RenderGraph graph;
     rhi::RID pipelines[2];
     rhi::RID cachedPass, cachedFramebuffer;
     std::vector<std::uint32_t> callbackOrder;
+    const auto gbuffer = graph.createTexture({.format = rhi::PixelFormat::Rgba8Unorm,
+        .width = 16, .height = 16,
+        .usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::InputAttachment,
+        .debugName = "graph-gbuffer"});
+    const auto destination = graph.importTexture(output, outputView, outputState,
+        rhi::ResourceState::CopySource, rhi::TextureAspect::Color, &outputState);
+    const auto normal = graph.createTexture({.format = rhi::PixelFormat::Rgba8Unorm,
+        .width = 16, .height = 16, .usage = rhi::TextureUsage::ColorAttachment,
+        .debugName = "graph-normal"});
+    RgRasterPass first;
+    first.name = "GBuffer";
+    first.renderArea = {0, 0, 16, 16};
+    first.colorAttachments.push_back({gbuffer, rhi::LoadOp::Clear, rhi::StoreOp::DontCare});
+    first.colorAttachments.push_back({normal, rhi::LoadOp::Clear, rhi::StoreOp::DontCare});
+    first.execute = [&](const RgExecuteContext& context) {
+        EXPECT_EQ(context.renderPass, cachedPass);
+        callbackOrder.push_back(context.subpass);
+        configureGraphDraw(context.commandBuffer, pipelines[0]);
+        rhi::draw(context.commandBuffer, {3});
+    };
+    RgRasterPass second;
+    second.name = "Lighting";
+    second.renderArea = first.renderArea;
+    second.colorAttachments.push_back({destination, rhi::LoadOp::Clear, rhi::StoreOp::Store});
+    second.inputAttachments.push_back(gbuffer);
+    second.execute = [&](const RgExecuteContext& context) {
+        EXPECT_EQ(context.renderPass, cachedPass);
+        callbackOrder.push_back(context.subpass);
+        configureGraphDraw(context.commandBuffer, pipelines[1]);
+        rhi::bindDescriptorSet(context.commandBuffer, 0, inputSet);
+        rhi::draw(context.commandBuffer, {3});
+    };
+    graph.addRasterGroup("Deferred", {std::move(first), std::move(second)});
+    graph.compile(renderContext);
     const auto record = [&] {
-        const auto gbuffer = graph.createTexture({.format = rhi::PixelFormat::Rgba8Unorm,
-            .width = 16, .height = 16,
-            .usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::InputAttachment,
-            .debugName = "graph-gbuffer"});
-        const auto destination = graph.importTexture(output, outputView, outputState,
-            rhi::ResourceState::CopySource, rhi::TextureAspect::Color, &outputState);
-        const auto normal = graph.createTexture({.format = rhi::PixelFormat::Rgba8Unorm,
-            .width = 16, .height = 16, .usage = rhi::TextureUsage::ColorAttachment,
-            .debugName = "graph-normal"});
-        RgRasterPass first;
-        first.name = "GBuffer";
-        first.rendering.renderArea = {0, 0, 16, 16};
-        first.rendering.colorAttachments.push_back({gbuffer, rhi::LoadOp::Clear, rhi::StoreOp::DontCare});
-        first.rendering.colorAttachments.push_back({normal, rhi::LoadOp::Clear, rhi::StoreOp::DontCare});
-        first.execute = [&](const RgExecuteContext& context) {
-            EXPECT_EQ(context.renderPass, cachedPass);
-            callbackOrder.push_back(context.subpass);
-            configureGraphDraw(context.commandBuffer, pipelines[0]);
-            rhi::draw(context.commandBuffer, {3});
-        };
-        RgRasterPass second;
-        second.name = "Lighting";
-        second.rendering.renderArea = first.rendering.renderArea;
-        second.rendering.colorAttachments.push_back({destination, rhi::LoadOp::Clear, rhi::StoreOp::Store});
-        second.rendering.inputAttachments.push_back(gbuffer);
-        second.execute = [&](const RgExecuteContext& context) {
-            EXPECT_EQ(context.renderPass, cachedPass);
-            callbackOrder.push_back(context.subpass);
-            configureGraphDraw(context.commandBuffer, pipelines[1]);
-            rhi::bindDescriptorSet(context.commandBuffer, 0, inputSet);
-            rhi::draw(context.commandBuffer, {3});
-        };
-        graph.addRasterGroup("Deferred", {std::move(first), std::move(second)});
-        graph.compile(pool, cache);
-        const auto& group = graph.compiledGroups()[0];
+        auto frame = graph.prepareFrame(renderContext);
+        const auto& group = frame.groups()[0];
         if (cachedPass) {
             EXPECT_EQ(group.beginInfo.renderPass, cachedPass);
             EXPECT_EQ(group.beginInfo.framebuffer, cachedFramebuffer);
@@ -350,8 +377,9 @@ TEST_F(RhiDeviceTest, RenderGraphSubpassesReadInputAndReuseCaches) {
             EXPECT_EQ(d.resolvePipeline(pipelines[1]).subpass, 1U);
         }
         const rhi::DescriptorWrite write{.binding = 0, .type = rhi::ResourceType::InputAttachment,
-                                          .textureView = graph.resolvedTextureView(gbuffer)};
+                                          .textureView = frame.textureView(gbuffer)};
         d.descriptor_set_update(inputSet, std::span{&write, 1});
+        return frame;
     };
     VkBuffer readback{VK_NULL_HANDLE};
     VmaAllocation allocation{VK_NULL_HANDLE};
@@ -365,9 +393,9 @@ TEST_F(RhiDeviceTest, RenderGraphSubpassesReadInputAndReuseCaches) {
     ASSERT_EQ(vmaCreateBuffer(d.allocator(), &bufferInfo, &memoryInfo, &readback, &allocation, &allocationInfo), VK_SUCCESS);
     const auto cmd = d.command_buffer_create();
     for (int iteration = 0; iteration < 2; ++iteration) {
-        record();
+        auto frame = record();
         rhi::begin(cmd);
-        graph.execute(cmd);
+        graph.execute(renderContext, frame, cmd);
         EXPECT_EQ(outputState, rhi::ResourceState::CopySource);
         const auto native = d.command_buffer(cmd).nativeCommandBuffer();
         VkBufferImageCopy copy{};
@@ -394,7 +422,7 @@ TEST_F(RhiDeviceTest, RenderGraphSubpassesReadInputAndReuseCaches) {
             EXPECT_NEAR(pixel[i * 4 + 2], 64, 1);
             EXPECT_EQ(pixel[i * 4 + 3], 255);
         }
-        graph.reset();
+        EXPECT_EQ(graph.compileCount(), 1U);
     }
     EXPECT_EQ(callbackOrder, (std::vector<std::uint32_t>{0, 1, 0, 1}));
     EXPECT_EQ(pool.totalEntryCount(), 2U);
@@ -426,6 +454,8 @@ TEST_F(RhiDeviceTest, RenderGraphDepthReadOnlyAndInputStoresAreSynchronized) {
     } validation;
     RgTexturePool pool;
     RgRenderPassCache cache;
+    RenderScene scene;
+    RenderContext renderContext(pool, cache, scene);
     RenderGraph graph;
     const auto depth = graph.createTexture({.format = rhi::PixelFormat::Depth32Float,
         .width = 16, .height = 16,
@@ -437,30 +467,36 @@ TEST_F(RhiDeviceTest, RenderGraphDepthReadOnlyAndInputStoresAreSynchronized) {
         .debugName = "graph-depth-output"});
     RgRasterPass clear;
     clear.name = "ClearDepth";
-    clear.rendering.renderArea = {0, 0, 16, 16};
-    clear.rendering.depthAttachments.push_back({depth, rhi::LoadOp::Clear, rhi::StoreOp::Store, 0.5F});
+    clear.renderArea = {0, 0, 16, 16};
+    clear.depthAttachments.push_back({depth, rhi::LoadOp::Clear, rhi::StoreOp::Store, 0.5F});
     clear.execute = [](const RgExecuteContext&) {};
     RgRasterPass read = clear;
     read.name = "ReadOnlyDepth";
-    read.rendering.depthAttachments[0].loadOp = rhi::LoadOp::Load;
-    read.rendering.depthAttachments[0].access = rhi::AccessMode::Read;
+    read.depthAttachments[0].loadOp = rhi::LoadOp::Load;
+    read.depthAttachments[0].access = rhi::AccessMode::Read;
     RgRasterPass input;
     input.name = "DepthAsInput";
-    input.rendering.renderArea = clear.rendering.renderArea;
-    input.rendering.colorAttachments.push_back({output, rhi::LoadOp::Clear, rhi::StoreOp::Store});
-    input.rendering.inputAttachments = {depth};
+    input.renderArea = clear.renderArea;
+    input.colorAttachments.push_back({output, rhi::LoadOp::Clear, rhi::StoreOp::Store});
+    input.inputAttachments = {depth};
     input.execute = [](const RgExecuteContext&) {};
     graph.addRasterGroup("DepthGroup", {clear, read, input});
-    graph.addGraphicsPass("SampleDepth",
-        RgRenderingInfo{{0, 0, 16, 16}, {{output, rhi::LoadOp::Clear, rhi::StoreOp::Store}}, {}, {}},
-        {{depth, rhi::TextureAspect::Depth, rhi::ResourceState::ShaderRead}}, [](rhi::RID) {});
-    graph.compile(pool, cache);
+    graph.addGraphicsPass({
+        .name = "SampleDepth",
+        .renderArea = {0, 0, 16, 16},
+        .colorAttachments = {{output, rhi::LoadOp::Clear, rhi::StoreOp::Store}},
+        .sampledTextures = {depth},
+        .execute = [](const RgExecuteContext&) {},
+    });
+    graph.compile(renderContext);
+    auto frame = graph.prepareFrame(renderContext);
     const auto cmd = d.command_buffer_create();
     rhi::begin(cmd);
-    graph.execute(cmd);
+    graph.execute(renderContext, frame, cmd);
     rhi::end(cmd);
     d.submit(cmd, {});
     d.waitIdle();
+    frame.reset();
     graph.reset();
     d.command_buffer_destroy(cmd);
     EXPECT_EQ(validation.messages.str().find("Validation Error"), std::string::npos) << validation.messages.str();

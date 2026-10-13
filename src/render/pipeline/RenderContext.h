@@ -19,6 +19,8 @@ class ISwapchain;
 class RenderContext final {
 public:
     RenderContext(Renderer& renderer, const RenderScene& scene);
+    // A context for graph compilation/preparation without a renderer. The caller owns resources.
+    RenderContext(RgTexturePool& texturePool, RgRenderPassCache& renderPassCache, const RenderScene& scene);
 
     [[nodiscard]] rhi::ISwapchain& swapchain() const;
     [[nodiscard]] rhi::RID commandBuffer() const;
@@ -40,8 +42,12 @@ public:
     void markBackBufferWritten() { backBufferWritten_ = true; }
 
 private:
-    Renderer& renderer_;
+    [[nodiscard]] Renderer& requireRenderer() const;
+
+    Renderer* renderer_{};
     const RenderScene& scene_;
+    RgTexturePool& texturePool_;
+    RgRenderPassCache& renderPassCache_;
     bool backBufferWritten_{};
 };
 

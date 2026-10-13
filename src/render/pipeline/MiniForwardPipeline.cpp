@@ -1,13 +1,11 @@
 #include "render/pipeline/MiniForwardPipeline.h"
 
-#include "core/logging/Log.h"
 #include "render/gpu/frame/FrameGpuManager.h"
 #include "render/gpu/global_uniform/GlobalUniformGpuManager.h"
 #include "render/pipeline/RenderContext.h"
 #include "render/pipeline/passes/DepthOnlyPass.h"
 #include "render/pipeline/passes/ForwardPass.h"
 #include "render/pipeline/passes/ShadowCasterPass.h"
-#include "render/render_graph/RenderGraph.h"
 #include "render/renderer/DrawListBuilder.h"
 #include "render/scene/RenderScene.h"
 
@@ -18,7 +16,8 @@ namespace engine {
 MiniForwardPipeline::MiniForwardPipeline() {
     passes_.push_back(std::make_unique<ShadowCasterPass>(&shadowOutput_));
     passes_.push_back(std::make_unique<DepthOnlyPass>());
-    passes_.push_back(std::make_unique<ForwardPass>(&shadowOutput_));
+    passes_.push_back(std::make_unique<ForwardPass>(
+        &shadowOutput_, DrawFilter{RenderQueueRange::all()}, rhi::LoadOp::Load));
 }
 
 void MiniForwardPipeline::render(RenderContext& context) {
@@ -33,30 +32,35 @@ void MiniForwardPipeline::render(RenderContext& context) {
     GLOBAL_UNIFORM_GPU_MANAGER.beginFrame(context.frameIndex());
     FRAME_GPU_MANAGER.upload(context.frameIndex(), drawList);
 
-    RenderGraph graph;
-    shadowOutput_ = {};
-    for (const std::unique_ptr<IRenderPass>& pass : passes_) {
-        pass->execute(context, graph, drawList);
+    if (graphDirty_ || !graph_.compiled() || graphOffscreen_ != context.offscreenScene()) {
+        graph_.reset();
+        shadowOutput_ = {};
+        for (const auto& pass : passes_) pass->buildGraph(context, graph_);
+        graph_.compile(context);
+        graphDirty_ = false;
+        graphOffscreen_ = context.offscreenScene();
+    } else if (!graph_.resourcesCompatible(context)) {
+        graph_.invalidate();
+        graph_.compile(context);
     }
-    graph.compile(context.rgTexturePool(), context.rgRenderPassCache());
+    for (const auto& pass : passes_) pass->updateFrame(context, drawList);
+    auto frame = graph_.prepareFrame(context);
     if (shadowOutput_.castShadows && shadowOutput_.shadowMap.valid()) {
         FRAME_GPU_MANAGER.bindShadowMap(context.frameIndex(),
-                                        graph.resolvedTextureView(shadowOutput_.shadowMap));
+                                        frame.textureView(shadowOutput_.shadowMap));
     }
-    graph.execute(context.commandBuffer());
-    graph.reset();
+    graph_.execute(context, frame);
 }
 
 void MiniForwardPipeline::addPass(std::unique_ptr<IRenderPass> pass) {
     passes_.push_back(std::move(pass));
+    graphDirty_ = true;
 }
 
 void MiniForwardPipeline::setPasses(std::vector<std::unique_ptr<IRenderPass>> passes) {
+    graph_.reset();
     passes_ = std::move(passes);
-}
-
-void MiniForwardPipeline::onSwapchainChanged() {
-    // Forward targets remain owned by Renderer in stage A.
+    graphDirty_ = true;
 }
 
 } // namespace engine

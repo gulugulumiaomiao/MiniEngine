@@ -65,6 +65,8 @@ public:
     [[nodiscard]] rhi::RID depthTexture() const;
     [[nodiscard]] rhi::RID depthView() const;
     [[nodiscard]] rhi::PixelFormat depthFormat() const;
+    [[nodiscard]] RgTextureBinding colorBinding(std::size_t index);
+    [[nodiscard]] RgTextureBinding depthBinding();
 
     [[nodiscard]] rhi::RenderingInfo renderingInfo() const;
 

@@ -9,6 +9,15 @@
 
 namespace engine {
 
+class RenderContext;
+struct DrawFilter;
+struct RgExecuteContext;
+
+void filterDrawItems(const RenderContext& context, const DrawList& drawList,
+                     RenderPhase phase, const DrawFilter& filter, std::vector<DrawItem>& result);
+// Set the resolved viewport/scissor and bind this frame's scene/global uniforms.
+void drawRasterItems(const RgExecuteContext& execution, std::span<const DrawItem> items);
+
 // Draws a filtered subset of draw items using the provided scene/global uniform sets.
 // Consecutive items with identical GPU state are merged into instanced batches
 // backed by the per-frame instance table. The items are assumed to have already

@@ -3,6 +3,7 @@
 #include "render/renderer/DrawList.h"
 
 #include <cstdint>
+#include <tuple>
 #include <vector>
 
 namespace engine {
@@ -63,14 +64,15 @@ constexpr bool hasFlag(SortingCriteria value, SortingCriteria flag) {
     return (static_cast<std::uint32_t>(value) & static_cast<std::uint32_t>(flag)) != 0;
 }
 
-// Sorts draw items using a 64-bit key derived from the requested criteria.
+// Sorts lexicographically by the requested criteria, preserving complete resource IDs.
 // Distance is only used when BackToFront is set.
 class DrawSorter final {
 public:
     void sort(std::vector<DrawItem>& items, SortingCriteria criteria, const RenderScene& scene);
 
 private:
-    [[nodiscard]] std::uint64_t computeKey(const DrawItem& item,
+    using SortKey = std::tuple<float, int, std::uint32_t, std::uint64_t, std::uint32_t>;
+    [[nodiscard]] SortKey computeKey(const DrawItem& item,
                                            SortingCriteria criteria,
                                            const RenderScene& scene) const;
 };
