@@ -661,6 +661,12 @@ RID VulkanDevice::pipeline_create(const GraphicsPipelineDesc& desc) {
         Log::error("VulkanDevice", "Unsupported pipeline depth format or sample count");
         return {};
     }
+    const auto* fragment = shaders_.find(desc.fragmentShader);
+    if (!fragment) Log::fatal("VulkanDevice", "Invalid fragment shader handle");
+    if (!fragment->fragmentOutputsMatch(desc.fragmentEntry, desc.colorFormats)) {
+        Log::error("VulkanDevice", "Unsupported fragment output interface, entry point, or color attachment numeric type");
+        return {};
+    }
     VkRenderPass nativeRenderPass = VK_NULL_HANDLE;
     if (desc.renderPass) {
         const auto& pass = renderPass(desc.renderPass);

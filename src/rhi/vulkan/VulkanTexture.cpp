@@ -8,7 +8,7 @@ namespace engine::rhi::vulkan {
 VulkanTexture::VulkanTexture(VmaAllocator allocator, const TextureDesc& desc)
     : allocator_(allocator), format_(desc.format), type_(desc.dimension), width_(desc.width),
       height_(desc.height), arrayLayers_(desc.arrayLayers), mipLevels_(desc.mipCount),
-      samples_(desc.samples), usage_(desc.usage) {
+      samples_(desc.samples), usage_(desc.usage), tiling_(desc.tiling) {
     VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
     imageInfo.extent = {desc.width, desc.height, desc.depth};
@@ -35,7 +35,7 @@ VulkanTexture::VulkanTexture(VmaAllocator allocator, const TextureDesc& desc)
 VulkanTexture::VulkanTexture(VkImage externalImage, const TextureDesc& desc)
     : image_(externalImage), format_(desc.format), type_(desc.dimension), width_(desc.width),
       height_(desc.height), arrayLayers_(desc.arrayLayers), mipLevels_(desc.mipCount),
-      samples_(desc.samples), usage_(desc.usage), uploaded_(true) {
+      samples_(desc.samples), usage_(desc.usage), tiling_(desc.tiling), uploaded_(true) {
     if (image_ == VK_NULL_HANDLE)
         Log::fatal("VulkanTexture", "Cannot wrap a null external texture");
 }

@@ -42,7 +42,8 @@ interfaceValueType(const std::string& value, const VirtualPath& file, const std:
                                            {{"Float", ShaderAssetValueType::Float},
                                             {"Vec2", ShaderAssetValueType::Vec2},
                                             {"Vec3", ShaderAssetValueType::Vec3},
-                                            {"Vec4", ShaderAssetValueType::Vec4}},
+                                            {"Vec4", ShaderAssetValueType::Vec4},
+                                            {"Uint", ShaderAssetValueType::Uint}},
                                            file,
                                            path);
 }

@@ -152,7 +152,7 @@ int main() {
     const rhi::RenderingInfo rendering = target.renderingInfo();
     if (rendering.renderArea.width != 640 || rendering.renderArea.height != 360 ||
         rendering.colorAttachments.size() != 2 || rendering.depthAttachments.size() != 1 ||
-        rendering.colorAttachments[0].clearColor.x != 0.1F ||
+        std::get<math::Vec4>(rendering.colorAttachments[0].clearColor.value).x != 0.1F ||
         rendering.colorAttachments[1].loadOp != rhi::LoadOp::DontCare ||
         rendering.depthAttachments[0].clearDepth != 0.75F) {
         return 3;

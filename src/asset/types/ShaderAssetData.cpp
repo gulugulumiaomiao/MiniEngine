@@ -22,7 +22,7 @@ bool transferShaderEnum(Transfer& archive, std::string_view name, Enum& value, E
 bool ShaderInterfaceAssetData::transfer(Transfer& archive) {
     return archive.beginObject({}) && archive.transfer("name", name) &&
            archive.transfer("semantic", semantic) &&
-           transferShaderEnum(archive, "type", type, ShaderAssetValueType::Vec4) &&
+           transferShaderEnum(archive, "type", type, ShaderAssetValueType::Uint) &&
            archive.transfer("location", location) &&
            transferShaderEnum(
                archive, "interpolation", interpolation, ShaderAssetInterpolation::NoPerspective) &&

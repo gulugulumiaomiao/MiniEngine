@@ -38,6 +38,7 @@ public:
     [[nodiscard]] std::uint32_t mipCount() const { return mipLevels_; }
     [[nodiscard]] SampleCount samples() const { return samples_; }
     [[nodiscard]] TextureUsage usage() const { return usage_; }
+    [[nodiscard]] TextureTiling tiling() const { return tiling_; }
 
     [[nodiscard]] bool uploaded() const { return uploaded_; }
     void markUploaded() { uploaded_ = true; }
@@ -55,6 +56,7 @@ private:
     std::uint32_t mipLevels_{};
     SampleCount samples_{SampleCount::One};
     TextureUsage usage_{TextureUsage::None};
+    TextureTiling tiling_{TextureTiling::Optimal};
     bool uploaded_{};
 };
 

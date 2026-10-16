@@ -32,6 +32,23 @@ void toVulkanBlend(BlendMode mode, VkColorBlendEquationEXT& equation, VkBool32& 
         mode == BlendMode::Additive ? VK_BLEND_FACTOR_ONE : VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 }
 
+VkClearColorValue toClearColor(PixelFormat format, const ColorClearValue& clear) {
+    VkClearColorValue result{};
+    const auto numeric = formatInfo(format).numericType;
+    if (const auto* value = std::get_if<std::array<std::uint32_t, 4>>(&clear.value)) {
+        if (numeric != FormatNumericType::Uint)
+            Log::fatal("VulkanCommandBuffer", "Unsigned clear value requires an unsigned integer attachment");
+        std::copy(value->begin(), value->end(), result.uint32);
+    } else {
+        if (!isColorFormat(format) || numeric == FormatNumericType::Uint || numeric == FormatNumericType::Sint)
+            Log::fatal("VulkanCommandBuffer", "Float clear value requires a floating-point or normalized attachment");
+        const auto& floating = std::get<math::Vec4>(clear.value);
+        result.float32[0] = floating.x; result.float32[1] = floating.y;
+        result.float32[2] = floating.z; result.float32[3] = floating.w;
+    }
+    return result;
+}
+
 VkImageSubresourceLayers imageSubresource(PixelFormat format, std::uint32_t mipLevel,
                                          std::uint32_t arrayLayer) {
     if (!formatInfo(format).valid() || hasStencil(format))
@@ -92,7 +109,10 @@ void VulkanCommandBuffer::begin() {
     boundPipelineLayout_ = VK_NULL_HANDLE;
     dynamicRendering_ = false;
     activeRenderPass_ = {};
+    activeFramebuffer_ = {};
     activeSubpass_ = 0;
+    blendingEnabled_ = false;
+    attachmentBlendingSupported_ = true;
     VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     if (vkBeginCommandBuffer(commandBuffer_, &beginInfo) != VK_SUCCESS) {
@@ -118,6 +138,27 @@ void VulkanCommandBuffer::ensureRecording(const char* operation) {
         Log::fatal("VulkanCommandBuffer",
                    std::string(operation) + " requires a Recording command buffer");
     }
+}
+
+bool VulkanCommandBuffer::viewSupportsBlending(RID view) const {
+    const auto info = device_.texture_view_info(view);
+    const auto numeric = formatInfo(info.format).numericType;
+    return numeric != FormatNumericType::Uint && numeric != FormatNumericType::Sint &&
+        device_.texture_format_capabilities(info.format, device_.texture(info.texture).tiling()).colorAttachmentBlend;
+}
+
+bool VulkanCommandBuffer::subpassSupportsBlending(RID pass, RID framebuffer, std::uint32_t subpass) const {
+    const auto& views = device_.framebuffer(framebuffer).desc().views;
+    for (const auto& color : device_.renderPass(pass).desc().subpasses[subpass].colors) {
+        if (color.attachment != kUnusedAttachment && !viewSupportsBlending(views[color.attachment])) return false;
+    }
+    return true;
+}
+
+void VulkanCommandBuffer::validateDraw(const char* operation) {
+    ensureRecording(operation);
+    if (blendingEnabled_ && !attachmentBlendingSupported_)
+        Log::fatal("VulkanCommandBuffer", "Blending is unsupported for the active color attachments");
 }
 
 void VulkanCommandBuffer::resourceBarriers(std::span<const TextureBarrier> barriers) {
@@ -191,16 +232,16 @@ void VulkanCommandBuffer::beginRendering(const RenderingInfo& info) {
         Log::fatal("VulkanCommandBuffer", "Rendering scopes cannot nest");
     std::vector<VkRenderingAttachmentInfo> colors;
     colors.reserve(info.colorAttachments.size());
+    bool blendSupported = true;
     for (const ColorAttachment& attachment : info.colorAttachments) {
         VkRenderingAttachmentInfo native{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
         native.imageView = device_.resolveTextureView(attachment.view);
         native.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         native.loadOp = mapLoadOp(attachment.loadOp);
         native.storeOp = mapStoreOp(attachment.storeOp);
-        native.clearValue.color = {{attachment.clearColor.x,
-                                    attachment.clearColor.y,
-                                    attachment.clearColor.z,
-                                    attachment.clearColor.w}};
+        if (attachment.loadOp == LoadOp::Clear)
+            native.clearValue.color = toClearColor(device_.texture_view_info(attachment.view).format, attachment.clearColor);
+        blendSupported &= viewSupportsBlending(attachment.view);
         colors.push_back(native);
     }
     std::vector<VkRenderingAttachmentInfo> depths;
@@ -226,6 +267,7 @@ void VulkanCommandBuffer::beginRendering(const RenderingInfo& info) {
     native.pDepthAttachment = depths.empty() ? nullptr : depths.data();
     vkCmdBeginRendering(commandBuffer_, &native);
     dynamicRendering_ = true;
+    attachmentBlendingSupported_ = blendSupported;
 }
 
 void VulkanCommandBuffer::endRendering() {
@@ -233,6 +275,7 @@ void VulkanCommandBuffer::endRendering() {
     if (!dynamicRendering_) Log::fatal("VulkanCommandBuffer", "No dynamic rendering scope");
     vkCmdEndRendering(commandBuffer_);
     dynamicRendering_ = false;
+    attachmentBlendingSupported_ = true;
 }
 
 void VulkanCommandBuffer::beginRenderPass(const RenderPassBeginInfo& info) {
@@ -251,9 +294,8 @@ void VulkanCommandBuffer::beginRenderPass(const RenderPassBeginInfo& info) {
     for (std::size_t i = 0; i < clears.size(); ++i) {
         if (isDepthFormat(pass.desc().attachments[i].format))
             clears[i].depthStencil = {info.clearValues[i].depth, 0};
-        else {
-            const auto& c = info.clearValues[i].color;
-            clears[i].color = {{c.x, c.y, c.z, c.w}};
+        else if (pass.desc().attachments[i].loadOp == LoadOp::Clear) {
+            clears[i].color = toClearColor(pass.desc().attachments[i].format, info.clearValues[i].color);
         }
     }
     VkRenderPassBeginInfo native{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
@@ -265,6 +307,8 @@ void VulkanCommandBuffer::beginRenderPass(const RenderPassBeginInfo& info) {
     native.pClearValues = clears.data();
     vkCmdBeginRenderPass(commandBuffer_, &native, VK_SUBPASS_CONTENTS_INLINE);
     activeRenderPass_ = info.renderPass;
+    activeFramebuffer_ = info.framebuffer;
+    attachmentBlendingSupported_ = subpassSupportsBlending(info.renderPass, info.framebuffer, 0);
     activeSubpass_ = 0;
     boundPipelineLayout_ = VK_NULL_HANDLE;
 }
@@ -275,6 +319,7 @@ void VulkanCommandBuffer::nextSubpass() {
         Log::fatal("VulkanCommandBuffer", "No next subpass");
     vkCmdNextSubpass(commandBuffer_, VK_SUBPASS_CONTENTS_INLINE);
     ++activeSubpass_;
+    attachmentBlendingSupported_ = subpassSupportsBlending(activeRenderPass_, activeFramebuffer_, activeSubpass_);
     boundPipelineLayout_ = VK_NULL_HANDLE;
 }
 
@@ -284,6 +329,8 @@ void VulkanCommandBuffer::endRenderPass() {
         Log::fatal("VulkanCommandBuffer", "Render pass must end in its last subpass");
     vkCmdEndRenderPass(commandBuffer_);
     activeRenderPass_ = {};
+    activeFramebuffer_ = {};
+    attachmentBlendingSupported_ = true;
     boundPipelineLayout_ = VK_NULL_HANDLE;
 }
 
@@ -331,6 +378,7 @@ void VulkanCommandBuffer::setDepthCompareOp(CompareOp compare) {
 
 void VulkanCommandBuffer::setBlendState(BlendMode mode) {
     ensureRecording("setBlendState");
+    blendingEnabled_ = mode != BlendMode::Off;
     // These states are declared dynamic even for depth-only pipelines. Set benign
     // defaults for slot zero so validation sees them initialized in every draw.
     const auto count = std::max(1U, colorAttachmentCount_);
@@ -414,7 +462,7 @@ void VulkanCommandBuffer::bindDescriptorSet(std::uint32_t set, RID descriptorSet
 }
 
 void VulkanCommandBuffer::draw(const DrawArguments& arguments) {
-    ensureRecording("draw");
+    validateDraw("draw");
     vkCmdDraw(commandBuffer_,
               arguments.vertexCount,
               arguments.instanceCount,
@@ -423,7 +471,7 @@ void VulkanCommandBuffer::draw(const DrawArguments& arguments) {
 }
 
 void VulkanCommandBuffer::drawIndexed(const DrawIndexedArguments& arguments) {
-    ensureRecording("drawIndexed");
+    validateDraw("drawIndexed");
     vkCmdDrawIndexed(commandBuffer_,
                      arguments.indexCount,
                      arguments.instanceCount,

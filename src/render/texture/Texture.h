@@ -32,6 +32,7 @@ enum class TextureFormat {
     R16Float = 7, Rg16Float = 8, Rgba16Float = 9,
     R32Float = 10, Rg32Float = 11, Rgba32Float = 12,
     Depth16Unorm = 13,
+    R32Uint = 14,
 };
 enum class TextureColorSpace { Linear, Srgb };
 

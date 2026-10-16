@@ -45,6 +45,7 @@ const char* ShaderGenerator::glslType(ShaderValueType type) {
     case ShaderValueType::Vec2: return "vec2";
     case ShaderValueType::Vec3: return "vec3";
     case ShaderValueType::Vec4: return "vec4";
+    case ShaderValueType::Uint: return "uint";
     }
     Log::error("ShaderGenerator", "Unsupported Shader interface type");
     return nullptr;

@@ -14,7 +14,7 @@ constexpr TextureFormat kAssetFormats[]{
     TextureFormat::R8Unorm, TextureFormat::Rg8Unorm,
     TextureFormat::R16Float, TextureFormat::Rg16Float, TextureFormat::Rgba16Float,
     TextureFormat::R32Float, TextureFormat::Rg32Float, TextureFormat::Rgba32Float,
-    TextureFormat::Depth16Unorm, TextureFormat::Depth32Float};
+    TextureFormat::Depth16Unorm, TextureFormat::Depth32Float, TextureFormat::R32Uint};
 
 Ref<TextureAsset> makeTexture(TextureFormat format) {
     auto texture = makeRef<TextureAsset>();

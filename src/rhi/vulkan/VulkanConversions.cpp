@@ -25,6 +25,7 @@ VkFormat toVulkan(PixelFormat format) {
     case PixelFormat::Rg32Float: return VK_FORMAT_R32G32_SFLOAT;
     case PixelFormat::Rgba32Float: return VK_FORMAT_R32G32B32A32_SFLOAT;
     case PixelFormat::Depth16Unorm: return VK_FORMAT_D16_UNORM;
+    case PixelFormat::R32Uint: return VK_FORMAT_R32_UINT;
     case PixelFormat::Undefined: break;
     }
     Log::fatal(kLogSource, "Unsupported RHI pixel format");
@@ -46,6 +47,7 @@ PixelFormat toRhi(VkFormat format) {
     case VK_FORMAT_R32G32_SFLOAT: return PixelFormat::Rg32Float;
     case VK_FORMAT_R32G32B32A32_SFLOAT: return PixelFormat::Rgba32Float;
     case VK_FORMAT_D16_UNORM: return PixelFormat::Depth16Unorm;
+    case VK_FORMAT_R32_UINT: return PixelFormat::R32Uint;
     default: break;
     }
     Log::fatal(kLogSource, "Unsupported Vulkan format");

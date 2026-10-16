@@ -78,6 +78,8 @@ TEST(TextureFormatTest, ExtendedFormatsMapAcrossEngineRhiAndVulkan) {
         bool depth;
     };
     const FormatCase cases[]{
+        {engine::TextureFormat::R32Uint, PixelFormat::R32Uint, VK_FORMAT_R32_UINT,
+            4, 1, FormatNumericType::Uint, false},
         {engine::TextureFormat::R8Unorm, PixelFormat::R8Unorm, VK_FORMAT_R8_UNORM,
             1, 1, FormatNumericType::Unorm, false},
         {engine::TextureFormat::Rg8Unorm, PixelFormat::Rg8Unorm, VK_FORMAT_R8G8_UNORM,

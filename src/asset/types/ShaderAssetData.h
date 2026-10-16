@@ -31,7 +31,7 @@ enum class ShaderAssetFillMode { Solid, Wireframe };
 enum class ShaderAssetPrimitiveTopology { TriangleList, LineList };
 enum class ShaderAssetDepthCompare { Never, Less, LessEqual, Equal, Greater, GreaterEqual, Always };
 enum class ShaderAssetBlendMode { Off, Alpha, Additive, PremultipliedAlpha };
-enum class ShaderAssetValueType { Float, Vec2, Vec3, Vec4 };
+enum class ShaderAssetValueType { Float, Vec2, Vec3, Vec4, Uint };
 enum class ShaderAssetInterpolation { Smooth, Flat, NoPerspective };
 
 using ShaderAssetValue =

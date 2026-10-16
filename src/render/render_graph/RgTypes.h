@@ -54,8 +54,8 @@ struct RgColorAttachment {
     RgTextureHandle texture;
     rhi::LoadOp loadOp{rhi::LoadOp::Load};
     rhi::StoreOp storeOp{rhi::StoreOp::Store};
-    math::Vec4 clearColor{0.0F};
-    std::function<math::Vec4(const RenderContext&)> clearColorResolver;
+    rhi::ColorClearValue clearColor;
+    std::function<rhi::ColorClearValue(const RenderContext&)> clearColorResolver;
 };
 
 struct RgDepthAttachment {

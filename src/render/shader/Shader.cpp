@@ -46,13 +46,13 @@ bool validProperty(const ShaderPropertyInfo& property) {
     return false;
 }
 
-bool validInterface(std::span<const ShaderInterfaceVariable> variables) {
+bool validInterface(std::span<const ShaderInterfaceVariable> variables, bool allowUint = false) {
     std::set<std::string> names;
     std::set<std::uint32_t> locations;
     for (const auto& item : variables) {
         if (!validIdentifier(item.name) || !names.insert(item.name).second ||
             !locations.insert(item.location).second ||
-            !validEnum(item.type, ShaderValueType::Vec4) ||
+            !validEnum(item.type, allowUint ? ShaderValueType::Uint : ShaderValueType::Vec4) ||
             !validEnum(item.interpolation, ShaderInterpolation::NoPerspective))
             return false;
     }
@@ -114,7 +114,7 @@ bool validateShaderCreateInfo(const ShaderCreateInfo& info) {
             if (pass.name.empty() || !passNames.insert(pass.name).second ||
                 !validEnum(pass.type, ShaderPassType::ShadowCaster) ||
                 !pass.program.hasSourceProgram() || !validInterface(pass.vertexInput) ||
-                !validInterface(pass.varyings) || !validInterface(pass.fragmentOutputs) ||
+                !validInterface(pass.varyings) || !validInterface(pass.fragmentOutputs, true) ||
                 !validEnum(state.cull, CullMode::Back) ||
                 !validEnum(state.frontFace, FrontFace::CounterClockwise) ||
                 !validEnum(state.fill, FillMode::Wireframe) ||

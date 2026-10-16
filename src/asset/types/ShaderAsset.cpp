@@ -96,6 +96,7 @@ std::optional<ShaderValueType> convert(ShaderAssetValueType value) {
     case ShaderAssetValueType::Vec2: return ShaderValueType::Vec2;
     case ShaderAssetValueType::Vec3: return ShaderValueType::Vec3;
     case ShaderAssetValueType::Vec4: return ShaderValueType::Vec4;
+    case ShaderAssetValueType::Uint: return ShaderValueType::Uint;
     }
     return std::nullopt;
 }

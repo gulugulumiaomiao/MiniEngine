@@ -37,6 +37,7 @@ constexpr std::uint16_t kTextureVersion = 5;
     case TextureFormat::Rg32Float: return rhi::PixelFormat::Rg32Float;
     case TextureFormat::Rgba32Float: return rhi::PixelFormat::Rgba32Float;
     case TextureFormat::Depth16Unorm: return rhi::PixelFormat::Depth16Unorm;
+    case TextureFormat::R32Uint: return rhi::PixelFormat::R32Uint;
     }
     return rhi::PixelFormat::Undefined;
 }
@@ -160,7 +161,9 @@ void Texture::initializeGpu(const rhi::TextureDesc& deviceDesc, const SamplerDes
     if (rhi::hasFlag(deviceDesc.usage, rhi::TextureUsage::Sampled) &&
         deviceDesc.samples == rhi::SampleCount::One &&
         (sampler.filterMode != TextureFilterMode::Point || sampler.maxAnisotropy > 1.0F) &&
-        !device->texture_format_capabilities(deviceDesc.format, deviceDesc.tiling).linearFilter) {
+        (rhi::formatInfo(deviceDesc.format).numericType == rhi::FormatNumericType::Uint ||
+         rhi::formatInfo(deviceDesc.format).numericType == rhi::FormatNumericType::Sint ||
+         !device->texture_format_capabilities(deviceDesc.format, deviceDesc.tiling).linearFilter)) {
         Log::error("Texture", "Texture format does not support the requested sampler filtering");
         return;
     }
@@ -233,6 +236,9 @@ Ref<Texture> Texture::createRenderTexture(std::uint32_t width, std::uint32_t hei
     TextureDesc desc{TextureType::Texture2D, format, width, height};
     desc.usage = usage;
     desc.debugName = "RenderTexture";
+    const auto numeric = rhi::formatInfo(toRhi(format)).numericType;
+    if (numeric == rhi::FormatNumericType::Uint || numeric == rhi::FormatNumericType::Sint)
+        desc.sampler.filterMode = TextureFilterMode::Point;
     desc.sampler.addressModeU = TextureAddressMode::ClampToEdge;
     desc.sampler.addressModeV = TextureAddressMode::ClampToEdge;
     return create(desc);

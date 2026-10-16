@@ -4,6 +4,7 @@
 #include "core/math/Math.h"
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
@@ -11,6 +12,7 @@
 #include <span>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 // Single home for every backend-agnostic RHI descriptor, enumeration and plain-data
@@ -60,6 +62,7 @@ enum class PixelFormat {
     Rg32Float = 12,
     Rgba32Float = 13,
     Depth16Unorm = 14,
+    R32Uint = 15,
 };
 
 enum class FormatNumericType { Undefined, Unorm, Snorm, Uint, Sint, Float };
@@ -110,6 +113,8 @@ struct PixelFormatInfo {
         return {1, 1, 16, 4, FormatNumericType::Float, false, false, false};
     case PixelFormat::Depth16Unorm:
         return {1, 1, 2, 1, FormatNumericType::Unorm, false, true, false};
+    case PixelFormat::R32Uint:
+        return {1, 1, 4, 1, FormatNumericType::Uint, false, false, false};
     case PixelFormat::Undefined:
         break;
     }
@@ -681,11 +686,25 @@ struct Rect {
     std::uint32_t height{};
 };
 
+struct ColorClearValue {
+    std::variant<math::Vec4, std::array<std::uint32_t, 4>> value{math::Vec4{0.0F}};
+    ColorClearValue() = default;
+    ColorClearValue(math::Vec4 color) : value(color) {}
+    ColorClearValue(float r, float g, float b, float a) : value(math::Vec4{r, g, b, a}) {}
+    [[nodiscard]] static ColorClearValue uint32(std::uint32_t r, std::uint32_t g = 0,
+                                               std::uint32_t b = 0, std::uint32_t a = 0) {
+        ColorClearValue result;
+        result.value = std::array{r, g, b, a};
+        return result;
+    }
+    [[nodiscard]] bool operator==(const ColorClearValue&) const = default;
+};
+
 struct ColorAttachment {
     RID view;
     LoadOp loadOp{LoadOp::Load};
     StoreOp storeOp{StoreOp::Store};
-    math::Vec4 clearColor{0.0F};
+    ColorClearValue clearColor;
 };
 
 struct DepthAttachment {
@@ -702,7 +721,7 @@ struct RenderingInfo {
 };
 
 struct AttachmentClearValue {
-    math::Vec4 color{0.0F};
+    ColorClearValue color;
     float depth{1.0F};
 };
 

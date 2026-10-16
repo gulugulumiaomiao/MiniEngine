@@ -9,7 +9,7 @@ using namespace engine;
 TEST(TextureLayoutTest, OddMipChainsUseFormatByteSize) {
     for (auto format : {TextureFormat::R8Unorm, TextureFormat::Rg8Unorm,
                        TextureFormat::Rgba16Float, TextureFormat::R32Float,
-                       TextureFormat::Rgba32Float, TextureFormat::Depth16Unorm}) {
+                       TextureFormat::Rgba32Float, TextureFormat::Depth16Unorm, TextureFormat::R32Uint}) {
         const auto bytes = rhi::formatInfo(toRhi(format)).bytesPerBlock;
         TextureMipLayout layout;
         ASSERT_TRUE(computeTextureLayout(TextureDesc{TextureType::Texture2D, format, 5, 3, 3}, layout));

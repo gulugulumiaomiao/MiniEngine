@@ -35,6 +35,8 @@ ShaderValueType reflectValueType(const spirv_cross::SPIRType& type, const Virtua
         default: break;
         }
     }
+    if (type.basetype == spirv_cross::SPIRType::UInt && type.width == 32 &&
+        type.vecsize == 1 && type.columns == 1 && type.array.empty()) return ShaderValueType::Uint;
     reflectionFail("Unsupported interface type in: %s", path.string().c_str());
 }
 

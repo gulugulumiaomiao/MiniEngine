@@ -83,6 +83,9 @@ private:
     // Every record* entry point funnels through ensureRecording so an out-of-order
     // call fails fast instead of hitting Vulkan validation at submit time.
     void ensureRecording(const char* operation);
+    void validateDraw(const char* operation);
+    [[nodiscard]] bool viewSupportsBlending(RID view) const;
+    [[nodiscard]] bool subpassSupportsBlending(RID pass, RID framebuffer, std::uint32_t subpass) const;
 
     VkCommandBuffer commandBuffer_{VK_NULL_HANDLE};
     VulkanDevice& device_;
@@ -91,7 +94,10 @@ private:
     VkPipelineLayout boundPipelineLayout_{VK_NULL_HANDLE};
     bool dynamicRendering_{};
     RID activeRenderPass_;
+    RID activeFramebuffer_;
     std::uint32_t activeSubpass_{};
+    bool blendingEnabled_{};
+    bool attachmentBlendingSupported_{true};
     std::uint32_t colorAttachmentCount_{1};
     PFN_vkCmdSetColorBlendEnableEXT pfnSetColorBlendEnable_{nullptr};
     PFN_vkCmdSetColorBlendEquationEXT pfnSetColorBlendEquation_{nullptr};

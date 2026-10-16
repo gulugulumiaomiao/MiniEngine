@@ -21,7 +21,7 @@ enum class FillMode { Solid, Wireframe };
 enum class PrimitiveTopology { TriangleList, LineList };
 enum class DepthCompare { Never, Less, LessEqual, Equal, Greater, GreaterEqual, Always };
 enum class BlendMode { Off, Alpha, Additive, PremultipliedAlpha };
-enum class ShaderValueType { Float, Vec2, Vec3, Vec4 };
+enum class ShaderValueType { Float, Vec2, Vec3, Vec4, Uint };
 enum class ShaderInterpolation { Smooth, Flat, NoPerspective };
 
 // GLSL uniform reflection types; independent of asset serialization and RHI.

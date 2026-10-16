@@ -78,8 +78,8 @@ auto shadow = Texture::createShadowMap(2048, 2048, TextureFormat::Depth16Unorm);
 上述接口只分配纹理，不初始化像素。默认 view 使用纹理自身格式，深度格式使用 depth aspect。
 纹理资产使用版本 5，不再序列化 `color_space`，直接拒绝旧版本，无兼容读取或迁移代码。
 纹理导入器版本升为 3，旧缓存从源图片/KTX 重新导入后生成新版本资产。
-`computeTextureLayout` 和运行时 `Texture::upload` 支持当前全部 14 种非压缩格式；
-资产的 `validateTextureAsset` 接受当前全部 14 种非压缩格式，包括单/双通道、BGRA、HDR 和深度格式。
+`computeTextureLayout` 和运行时 `Texture::upload` 支持当前全部 15 种非压缩格式；
+资产的 `validateTextureAsset` 接受当前全部 15 种非压缩格式，包括单/双通道、BGRA、HDR、深度及 R32Uint 格式。
 原始像素必须符合目标格式，接口不会转换像素编码。现有图片/KTX 导入器仍只解码其原有 RGBA8 格式。
 
 CPU 像素按 mip 从大到小紧密排列，每级提供 `offsets`、`sizes`，`totalSize` 为总字节数。
@@ -114,5 +114,36 @@ if (device->texture_is_supported(desc)) {
 附件和 input attachment 不强制线性过滤；多采样图像也不以普通 sampler 的过滤能力判断。
 覆盖 sampler、直接 RHI 绑定以及动态混合模式仍由调用方依据能力选择，接口不会自动降低过滤或混合模式。
 图形管线与传统 renderpass 创建也检查附件格式和 sample 数；HDR 测试按 blend 能力选择测试范围。
+
+## 整数 ID 附件
+
+`TextureFormat::R32Uint` / `rhi::PixelFormat::R32Uint` 是单通道 32 位无符号整数，
+每像素 4 字节，色彩空间推导为 Linear。CPU mip 布局、上传和资产原始像素存储均支持该格式。
+源图片导入器仍保持原有解码范围，不会自动将普通图片转成整数 ID。
+
+```cpp
+auto ids = Texture::createColor(1280, 720, TextureFormat::R32Uint); // 工厂选择 Point。
+rhi::ColorAttachment attachment{ids->defaultView(), rhi::LoadOp::Clear,
+    rhi::StoreOp::Store, rhi::ColorClearValue::uint32(0xffffffffU)};
+// RenderGraph 的 RgColorAttachment.clearColor 和 clearColorResolver 使用同一个类型。
+```
+
+`ColorClearValue` 保存浮点颜色或四个 uint32 分量，不把整数转成 float。
+浮点颜色可继续使用 `math::Vec4` 或四个浮点分量；无符号整数显式使用 `uint32(...)`。
+实际执行 Clear 时检查类型：整数附件要求整数清屏，浮点/normalized 附件要求浮点清屏。
+Load/DontCare 不读取清屏值。动态渲染和传统 renderpass 均走同样的转换。
+
+Shader 源资产的 `fragmentOutputs` 支持 `"type": "Uint"`，生成 GLSL `uint` 输出，
+`FragmentMain` 中可写入 `outputValue.objectId = 0xf1234567u;`。
+本次只开放无符号标量片元输出，不开放整数 vertexInput/varyings。
+后端按选中的 fragment entry point 反射实际 SPIR-V，创建管线时检查输出的数值类型，
+拒绝 float 输出绑定 UINT 附件以及 uint 输出绑定浮点/normalized 附件。
+当前后端输出反射支持直接 location 的 32 位标量/向量；数组、矩阵、接口块、component/index 特殊布局明确拒绝。
+
+整数附件不能启用混合。当前 `setBlendState` 对全部颜色附件设置同一种模式，
+因此含整数附件的 MRT 也必须使用 Off。draw/drawIndexed 在发出 Vulkan draw 前，
+依据实际 view 的格式及 tiling 检查混合能力，并在换 pass/subpass 后重新判断。
+整数纹理的显式 TextureDesc 应选择 Point；请求线性过滤会失败。
+需要在着色器中采样时使用与 UINT 匹配的 `usampler2D`；现有材质的普通 `Texture2D` 声明仍生成浮点 sampler。
 
 Google Test 覆盖：内建默认纹理（互异、上传、可采样）、`instantiate` 单实例与 `clone` 脱离、`Sampler` 覆盖绑定、Material 按 Ref 持有、GUID 身份（同路径同实例）、最后 Ref 归零释放 GPU、`reloadInPlace` 活链接与未实现维度拒绝。完整验证必须同时执行 Debug/Release 构建与 CTest，并实跑引擎（含工程切换/设备重建的 `SceneViewIntegrationTest`、`ProjectConfigEditorTest`）检查资源缺失、shader、材质与 Vulkan validation 日志。

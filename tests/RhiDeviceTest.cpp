@@ -6,6 +6,11 @@
 #include "rhi/api/Command.h"
 #include "rhi/api/Device.h"
 #include "render/texture/Texture.h"
+#include "render/shader/ShaderCompilePipeline.h"
+#include "render/shader/ShaderGenerator.h"
+#include "asset/format/ShaderAssetFormat.h"
+#include "core/serialization/BinaryTransfer.h"
+#include "core/filesystem/FileSystem.h"
 #include "rhi/vulkan/VulkanDevice.h"
 #include "rhi/vulkan/VulkanConversions.h"
 #include "rhi/vulkan/VulkanSwapchain.h"
@@ -638,6 +643,7 @@ TEST_P(TextureUploadFormatTest, OddMipUploadAndSubregionUpdateReadBackExactly) {
             VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL, rhi::vulkan::toVulkan(usage), 0, &support) != VK_SUCCESS)
         GTEST_SKIP() << "Device does not support this format/usage combination";
     TextureDesc desc{TextureType::Texture2D, format, 5, 3, 3};
+    desc.sampler.filterMode = TextureFilterMode::Point;
     desc.usage = usage;
     TextureMipLayout packed, padded;
     ASSERT_TRUE(computeTextureLayout(desc, packed));
@@ -751,7 +757,7 @@ INSTANTIATE_TEST_SUITE_P(AllFormats, TextureUploadFormatTest,
         TextureFormat::Bgra8Unorm, TextureFormat::Bgra8Srgb, TextureFormat::Depth32Float,
         TextureFormat::R8Unorm, TextureFormat::Rg8Unorm, TextureFormat::R16Float,
         TextureFormat::Rg16Float, TextureFormat::Rgba16Float, TextureFormat::R32Float,
-        TextureFormat::Rg32Float, TextureFormat::Rgba32Float, TextureFormat::Depth16Unorm));
+        TextureFormat::Rg32Float, TextureFormat::Rgba32Float, TextureFormat::Depth16Unorm, TextureFormat::R32Uint));
 
 TEST_F(RhiDeviceTest, ImageUpdateRejectsInvalidRegionsBeforeAllocatingStaging) {
     auto& d = device();
@@ -841,7 +847,7 @@ TEST_F(RhiDeviceTest, FormatCapabilitiesMatchNativeFeaturesForEachTiling) {
          rhi::PixelFormat::Bgra8Unorm, rhi::PixelFormat::Bgra8Srgb, rhi::PixelFormat::Depth32Float,
          rhi::PixelFormat::R8Unorm, rhi::PixelFormat::Rg8Unorm, rhi::PixelFormat::R16Float,
          rhi::PixelFormat::Rg16Float, rhi::PixelFormat::Rgba16Float, rhi::PixelFormat::R32Float,
-         rhi::PixelFormat::Rg32Float, rhi::PixelFormat::Rgba32Float, rhi::PixelFormat::Depth16Unorm}) {
+         rhi::PixelFormat::Rg32Float, rhi::PixelFormat::Rgba32Float, rhi::PixelFormat::Depth16Unorm, rhi::PixelFormat::R32Uint}) {
         VkFormatProperties properties{};
         vkGetPhysicalDeviceFormatProperties(d.physicalDevice(), rhi::vulkan::toVulkan(format), &properties);
         for (auto tiling : {rhi::TextureTiling::Optimal, rhi::TextureTiling::Linear}) {
@@ -1129,5 +1135,250 @@ TEST_F(RhiDeviceTest, UnsupportedAttachmentSamplesAndTransferOnlyViewsReturnFail
     EXPECT_FALSE(Texture::create(desc));
     d.pipeline_layout_destroy(layout); d.shader_destroy(vertex); d.shader_destroy(fragment);
 }
+
+
+TEST(UintShaderTest, SourceAssetSerializationGeneratorAndSpirvReflectionPreserveUintOutput) {
+    const auto asset = format::parseShaderAsset(VirtualPath{"assets://id.shader.json"}, R"({
+        "$schemaVersion":1, "name":"Tests/Id", "subShaders":[{"passes":[{
+        "name":"Forward", "lightMode":"Forward", "program":{"vertex":"id.vert","frag":"id.frag"},
+        "fragmentOutputs":[{"name":"objectId","type":"Uint","location":0}]}]}]})");
+    ASSERT_TRUE(asset);
+    BinaryWriter writer;
+    ASSERT_TRUE(asset->transfer(writer));
+    BinaryReader reader(writer.bytes());
+    const auto decoded = makeRef<ShaderAsset>();
+    ASSERT_TRUE(decoded->transfer(reader));
+    const auto runtime = decoded->buildRuntimeInfo();
+    ASSERT_TRUE(runtime);
+    Shader shader{*runtime};
+    const auto& pass = shader.defaultSubShader().requirePass(ShaderPassType::Forward);
+    EXPECT_EQ(pass.fragmentOutputs()[0].type, ShaderValueType::Uint);
+    const auto generated = ShaderGenerator{}.generateStage(shader, pass, ShaderStage::Fragment,
+        "void FragmentMain(MiniVaryings inputValue, out MiniFragmentOutput outputValue) { outputValue.objectId = 0xf1234567u; }");
+    ASSERT_TRUE(generated);
+    EXPECT_NE(generated->find("out uint _MiniOut_objectId"), std::string::npos);
+    struct ShaderFiles {
+        std::filesystem::path root = std::filesystem::temp_directory_path() /
+            ("MiniEngineUintShaderTest-" + std::to_string(GetCurrentProcessId()));
+        ~ShaderFiles() {
+            (void)FILE_SYSTEM.unmount("assets"); (void)FILE_SYSTEM.unmount("shader-cache");
+            std::error_code error; std::filesystem::remove_all(root, error);
+        }
+    } files;
+    std::filesystem::create_directories(files.root / "assets");
+    ASSERT_TRUE(FILE_SYSTEM.mountDirectory("assets", files.root / "assets", false));
+    ASSERT_TRUE(FILE_SYSTEM.mountDirectory("shader-cache", files.root / "cache", false));
+    ASSERT_TRUE(FILE_SYSTEM.writeText(VirtualPath{"assets://id.vert"},
+        "void VertexMain(MiniVertexInput inputValue, out MiniVaryings outputValue) { gl_Position = vec4(0,0,0,1); }"));
+    ASSERT_TRUE(FILE_SYSTEM.writeText(VirtualPath{"assets://id.frag"},
+        "void FragmentMain(MiniVaryings inputValue, out MiniFragmentOutput outputValue) { outputValue.objectId = 0xf1234567u; }"));
+    ShaderCompilePipeline pipeline;
+    const auto program = pipeline.getOrCreate(shader, pass);
+    ASSERT_TRUE(program);
+    const auto& reflected = pipeline.resolveProgram(program).layout.fragmentOutputs;
+    ASSERT_EQ(reflected.size(), 1U);
+    EXPECT_EQ(reflected[0].type, ShaderValueType::Uint);
+    EXPECT_EQ(reflected[0].location, 0U);
+    auto invalid = *runtime;
+    invalid.subShaders[0].passes[0].vertexInput.push_back({"id", "", ShaderValueType::Uint, 0});
+    EXPECT_FALSE(validateShaderCreateInfo(invalid));
+}
+
+TEST_F(RhiDeviceTest, IntegerPipelineRejectsFloatOutputAndFloatPipelineRejectsUintOutput) {
+    auto& d = device();
+    const auto vertex = d.shader_create({rhi::ShaderStage::Vertex,
+        graphShaderBytes("render_graph_fullscreen.vert.spv"), "ID vertex"});
+    const auto uintFragment = d.shader_create({rhi::ShaderStage::Fragment,
+        graphShaderBytes("render_graph_uint.frag.spv"), "ID fragment"});
+    const auto floatFragment = d.shader_create({rhi::ShaderStage::Fragment,
+        graphShaderBytes("render_graph_gbuffer.frag.spv"), "float fragment"});
+    const auto layout = d.pipeline_layout_create({{}, "ID layout"});
+    rhi::GraphicsPipelineDesc desc;
+    desc.vertexShader = vertex; desc.fragmentShader = floatFragment; desc.pipelineLayout = layout;
+    desc.colorFormats = {rhi::PixelFormat::R32Uint};
+    EXPECT_FALSE(d.pipeline_create(desc));
+    desc.fragmentShader = uintFragment;
+    desc.colorFormats = {rhi::PixelFormat::Rgba8Unorm};
+    EXPECT_FALSE(d.pipeline_create(desc));
+    desc.colorFormats = {rhi::PixelFormat::R32Uint};
+    desc.fragmentEntry = "missing";
+    EXPECT_FALSE(d.pipeline_create(desc));
+    desc.fragmentEntry = "main";
+    const auto valid = d.pipeline_create(desc);
+    ASSERT_TRUE(valid);
+    d.pipeline_destroy(valid);
+    d.pipeline_layout_destroy(layout);
+    d.shader_destroy(vertex); d.shader_destroy(uintFragment); d.shader_destroy(floatFragment);
+}
+
+TEST_F(RhiDeviceTest, ClearValueNumericTypeMustMatchTheAttachmentWhenClearing) {
+    auto& d = device();
+    const auto integer = Texture::createColor(16, 16, TextureFormat::R32Uint);
+    const auto floating = Texture::createColor(16, 16, TextureFormat::Rgba16Float);
+    ASSERT_TRUE(integer); ASSERT_TRUE(floating);
+    const auto cmd = d.command_buffer_create();
+    rhi::begin(cmd);
+    rhi::RenderingInfo rendering{.renderArea = {0, 0, 16, 16}};
+    rendering.colorAttachments.push_back({integer->defaultView(), rhi::LoadOp::Clear, rhi::StoreOp::Store});
+    EXPECT_EXIT({
+        rhi::beginRendering(cmd, rendering);
+    }, ::testing::ExitedWithCode(EXIT_FAILURE), "Float clear value requires");
+    rendering.colorAttachments[0].view = floating->defaultView();
+    rendering.colorAttachments[0].clearColor = rhi::ColorClearValue::uint32(0xffffffffU);
+    EXPECT_EXIT({
+        rhi::beginRendering(cmd, rendering);
+    }, ::testing::ExitedWithCode(EXIT_FAILURE), "Unsigned clear value requires");
+    rhi::RenderPassDesc pass;
+    pass.attachments.push_back({rhi::PixelFormat::R32Uint, rhi::SampleCount::One,
+        rhi::LoadOp::Clear, rhi::StoreOp::Store, rhi::ResourceState::ColorAttachment, rhi::ResourceState::ColorAttachment});
+    rhi::SubpassDesc subpass;
+    subpass.colors.push_back({0, rhi::ResourceState::ColorAttachment});
+    pass.subpasses.push_back(subpass);
+    const auto nativePass = d.render_pass_create(pass);
+    const auto framebuffer = d.framebuffer_create({nativePass, {integer->defaultView()}, 16, 16, 1});
+    rhi::RenderPassBeginInfo begin{nativePass, framebuffer, {0, 0, 16, 16}, {{}}};
+    EXPECT_EXIT({
+        rhi::beginRenderPass(cmd, begin);
+    }, ::testing::ExitedWithCode(EXIT_FAILURE), "Float clear value requires");
+    d.command_buffer_destroy(cmd);
+    d.framebuffer_destroy(framebuffer); d.render_pass_destroy(nativePass);
+}
+
+class UintRenderGraphTest : public RhiDeviceTest, public ::testing::WithParamInterface<bool> {};
+
+TEST_P(UintRenderGraphTest, TypedClearAndIdDrawReadBackExactBitsAndRejectBlending) {
+    auto& d = device();
+    const bool traditional = GetParam();
+    struct ValidationCapture {
+        std::ostringstream messages;
+        std::streambuf* previous{std::cerr.rdbuf(messages.rdbuf())};
+        ~ValidationCapture() { std::cerr.rdbuf(previous); }
+    } validation;
+    RgTexturePool pool;
+    RgRenderPassCache cache;
+    RenderScene scene;
+    RenderContext context(pool, cache, scene);
+    RenderGraph graph;
+    TextureDesc textureDesc{TextureType::Texture2D, TextureFormat::R32Uint, 16, 16};
+    textureDesc.sampler.filterMode = TextureFilterMode::Point;
+    textureDesc.usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::TransferSource;
+    const auto output = graph.createTexture({.format = rhi::PixelFormat::R32Uint, .width = 16, .height = 16,
+        .usage = textureDesc.usage});
+    std::uint32_t clearId = 0xfedcba98U;
+    RgRasterPass clear;
+    clear.name = "Clear unsigned IDs";
+    clear.renderArea = {0, 0, 16, 16};
+    clear.colorAttachments.push_back({output, rhi::LoadOp::Clear, rhi::StoreOp::Store,
+        rhi::ColorClearValue::uint32(clearId)});
+    clear.colorAttachments[0].clearColorResolver = [&](const RenderContext&) {
+        return rhi::ColorClearValue::uint32(clearId);
+    };
+    clear.execute = [](const RgExecuteContext& execution) {
+        rhi::setBlendState(execution.commandBuffer, rhi::BlendMode::Alpha); // Legal until a draw.
+    };
+    rhi::RID pipeline;
+    int iteration = 0;
+    RgRasterPass draw = clear;
+    draw.name = "Draw unsigned IDs";
+    draw.colorAttachments[0].loadOp = rhi::LoadOp::Load;
+    draw.execute = [&](const RgExecuteContext& execution) {
+        if (iteration == 0) {
+            EXPECT_EXIT({
+                std::cerr.rdbuf(validation.previous);
+                rhi::draw(execution.commandBuffer, {3});
+            }, ::testing::ExitedWithCode(EXIT_FAILURE), "Blending is unsupported");
+        }
+        configureGraphDraw(execution.commandBuffer, pipeline);
+        rhi::setScissor(execution.commandBuffer, {8, 0, 8, 16});
+        if (iteration == 0) {
+            EXPECT_EXIT({
+                std::cerr.rdbuf(validation.previous);
+                rhi::setBlendState(execution.commandBuffer, rhi::BlendMode::Alpha);
+                rhi::draw(execution.commandBuffer, {3});
+            }, ::testing::ExitedWithCode(EXIT_FAILURE), "Blending is unsupported");
+            EXPECT_EXIT({
+                std::cerr.rdbuf(validation.previous);
+                rhi::setBlendState(execution.commandBuffer, rhi::BlendMode::Additive);
+                rhi::drawIndexed(execution.commandBuffer, {});
+            }, ::testing::ExitedWithCode(EXIT_FAILURE), "Blending is unsupported");
+        }
+        rhi::draw(execution.commandBuffer, {3});
+    };
+    if (traditional) graph.addRasterGroup("Unsigned ID subpasses", {clear, draw});
+    else { graph.addGraphicsPass(clear); graph.addGraphicsPass(draw); }
+    graph.compile(context);
+    const auto vertex = d.shader_create({rhi::ShaderStage::Vertex,
+        graphShaderBytes("render_graph_fullscreen.vert.spv"), "uint graph vertex"});
+    const auto fragment = d.shader_create({rhi::ShaderStage::Fragment,
+        graphShaderBytes("render_graph_uint.frag.spv"), "uint graph fragment"});
+    const auto layout = d.pipeline_layout_create({{}, "uint graph layout"});
+    const auto cmd = d.command_buffer_create();
+    rhi::RID firstTexture;
+    for (; iteration < 2; ++iteration) {
+        clearId = iteration ? 0xffffffffU : 0xfedcba98U;
+        pool.beginFrame(0);
+        auto frame = graph.prepareFrame(context);
+        if (iteration == 0) {
+            firstTexture = frame.texture(output);
+            rhi::GraphicsPipelineDesc desc;
+            desc.vertexShader = vertex; desc.fragmentShader = fragment; desc.pipelineLayout = layout;
+            desc.colorFormats = {rhi::PixelFormat::R32Uint};
+            desc.renderPass = frame.groups()[0].beginInfo.renderPass;
+            desc.subpass = traditional ? 1 : 0;
+            pipeline = d.pipeline_create(desc);
+            ASSERT_TRUE(pipeline);
+        } else EXPECT_EQ(frame.texture(output), firstTexture);
+        VkBuffer readback{};
+        VmaAllocation allocation{};
+        VmaAllocationInfo allocationInfo{};
+        VkBufferCreateInfo bufferInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+        bufferInfo.size = 16 * 16 * sizeof(std::uint32_t);
+        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        VmaAllocationCreateInfo memoryInfo{};
+        memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        ASSERT_EQ(vmaCreateBuffer(d.allocator(), &bufferInfo, &memoryInfo,
+            &readback, &allocation, &allocationInfo), VK_SUCCESS);
+        rhi::begin(cmd);
+        graph.execute(context, frame, cmd);
+        rhi::TextureBarrier barrier{frame.texture(output), rhi::TextureAspect::Color,
+            rhi::ResourceState::ColorAttachment, rhi::ResourceState::CopySource};
+        rhi::resourceBarriers(cmd, std::span{&barrier, 1});
+        const auto native = d.command_buffer(cmd).nativeCommandBuffer();
+        VkBufferImageCopy copy{};
+        copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        copy.imageExtent = {16, 16, 1};
+        vkCmdCopyImageToBuffer(native, d.resolveTexture(frame.texture(output)),
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, readback, 1, &copy);
+        barrier.before = rhi::ResourceState::CopySource; barrier.after = rhi::ResourceState::ColorAttachment;
+        rhi::resourceBarriers(cmd, std::span{&barrier, 1});
+        VkBufferMemoryBarrier host{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+        host.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; host.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+        host.srcQueueFamilyIndex = host.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        host.buffer = readback; host.size = VK_WHOLE_SIZE;
+        vkCmdPipelineBarrier(native, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
+            0, 0, nullptr, 1, &host, 0, nullptr);
+        rhi::end(cmd);
+        d.submit(cmd, {});
+        d.waitIdle();
+        ASSERT_EQ(vmaInvalidateAllocation(d.allocator(), allocation, 0, VK_WHOLE_SIZE), VK_SUCCESS);
+        const auto* ids = static_cast<const std::uint32_t*>(allocationInfo.pMappedData);
+        for (std::uint32_t y = 0; y < 16; ++y)
+            for (std::uint32_t x = 0; x < 16; ++x)
+                EXPECT_EQ(ids[y * 16 + x], x < 8 ? clearId : 0xf1234567U);
+        frame.reset();
+        vmaDestroyBuffer(d.allocator(), readback, allocation);
+        EXPECT_EQ(graph.compileCount(), 1U);
+    }
+    EXPECT_EQ(pool.totalEntryCount(), 1U);
+    graph.reset();
+    d.command_buffer_destroy(cmd); d.pipeline_destroy(pipeline);
+    d.pipeline_layout_destroy(layout); d.shader_destroy(vertex); d.shader_destroy(fragment);
+    cache.clear();
+    EXPECT_EQ(validation.messages.str().find("Validation Error"), std::string::npos) << validation.messages.str();
+    EXPECT_EQ(validation.messages.str().find("SYNC-HAZARD"), std::string::npos) << validation.messages.str();
+}
+
+INSTANTIATE_TEST_SUITE_P(RenderingModes, UintRenderGraphTest, ::testing::Bool());
 
 } // namespace

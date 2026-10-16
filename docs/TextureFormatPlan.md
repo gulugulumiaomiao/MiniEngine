@@ -53,4 +53,14 @@
 - 默认 sampler 的过滤能力不满足时返回创建失败；管线和传统 renderpass 检查附件格式/sample 支持。
 - HDR 验证覆盖 RGBA16Float、RGBA32Float、Depth16Unorm、Depth32Float，动态渲染与双 subpass、加法混合、逐像素回读、四帧复用和动态 resize；图只编译一次。
 - 验证：完整 Debug/Release 构建均通过，各配置全量 CTest 299/299 通过，无跳过；Debug 开启 Vulkan 同步验证，真实引擎 SceneView 集成用例也通过。
-- 状态：第五步已完成，等待用户确认后提交，第六步尚未开始。
+- 状态：第五步已提交，提交号 `fc59319`。
+
+## 第六步实现说明
+
+- 追加 R32Uint 格式，保持既有枚举值；贯通 engine/RHI/Vulkan、静态属性、布局、上传和原始像素资产序列化。
+- `ResourceDesc.h` 提供 `ColorClearValue`，区分浮点与 uint32 清屏；RenderGraph resolver、动态渲染和传统 renderpass 共用该类型。
+- Shader 源格式/序列化/生成器/反射支持 Uint 标量片元输出；后端反射选中入口的实际数值类型，创建管线时拒绝不匹配。
+- 根据实际附件 view 的格式和 tiling 检查混合，draw/drawIndexed 拦截误用；整数工厂默认 Point，显式线性过滤请求失败。
+- 整数 ID 测试覆盖动态渲染、双 subpass、动态清屏 resolver、两帧复用、超过 float 精确范围的完整 32 位回读，以及清屏类型、输出类型和混合约束的失败路径。
+- 验证：完整 Debug/Release 构建均通过，各配置全量 CTest 305/305 通过，无跳过；Debug 开启 Vulkan 同步验证，真实引擎 SceneView 集成用例通过。
+- 状态：第六步已完成并提交。六步实现计划已全部实施。

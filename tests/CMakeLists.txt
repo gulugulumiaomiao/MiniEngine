@@ -380,7 +380,8 @@ target_link_libraries(SwapchainLayoutTest PRIVATE user32)
 mini_add_gtest(RhiDeviceTest)
 set(MINI_RG_SHADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/render-graph-shaders")
 set(MINI_RG_SHADER_OUTPUTS)
-foreach(shader render_graph_fullscreen.vert render_graph_gbuffer.frag render_graph_lighting.frag)
+foreach(shader render_graph_fullscreen.vert render_graph_gbuffer.frag render_graph_lighting.frag
+               render_graph_uint.frag)
     set(output "${MINI_RG_SHADER_DIR}/${shader}.spv")
     add_custom_command(OUTPUT "${output}"
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${MINI_RG_SHADER_DIR}"
