@@ -234,6 +234,99 @@ TEST_F(TextureTest, MaterialRetainsTextureByRef) {
     EXPECT_TRUE(material.resolveSampler("mainTexture") == nullptr);
 }
 
+TEST_F(TextureTest, RenderTextureFactoriesCreateOwnedResourcesWithCorrectBindings) {
+    using namespace engine;
+    {
+        const auto color = Texture::createColor(64, 32, TextureFormat::Rgba8Srgb);
+        const auto depth = Texture::createDepth(64, 32);
+        const auto shadow = Texture::createShadowMap(1024, 1024);
+        ASSERT_TRUE(color);
+        ASSERT_TRUE(depth);
+        ASSERT_TRUE(shadow);
+        ASSERT_EQ(device.textureDescs.size(), 3U);
+        ASSERT_EQ(device.viewDescs.size(), 3U);
+        EXPECT_EQ(color->colorSpace(), TextureColorSpace::Srgb);
+        EXPECT_EQ(depth->format(), TextureFormat::Depth32Float);
+        EXPECT_EQ(shadow->width(), 1024U);
+        EXPECT_EQ(shadow->height(), 1024U);
+        EXPECT_EQ(device.textureDescs[0].usage,
+                  rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled);
+        EXPECT_EQ(device.textureDescs[1].usage, rhi::TextureUsage::DepthStencilAttachment);
+        EXPECT_EQ(device.textureDescs[2].usage,
+                  rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::Sampled);
+        EXPECT_EQ(device.textureDescs[2].format, rhi::PixelFormat::Depth32Float);
+        EXPECT_EQ(device.viewDescs[0].aspect, rhi::TextureAspect::Color);
+        EXPECT_EQ(device.viewDescs[1].aspect, rhi::TextureAspect::Depth);
+        EXPECT_EQ(device.viewDescs[2].aspect, rhi::TextureAspect::Depth);
+        EXPECT_EQ(device.samplerDescs[2].addressU, rhi::SamplerAddressMode::ClampToEdge);
+        EXPECT_EQ(device.samplerDescs[2].addressV, rhi::SamplerAddressMode::ClampToEdge);
+        EXPECT_EQ(shadow->binding().view, shadow->defaultView());
+        EXPECT_FALSE(shadow->isAssetBacked());
+        const std::vector<std::uint8_t> pixels(64U * 32U * 4U);
+        color->upload(pixels);
+        EXPECT_EQ(device.textureUploads, 0U);
+        EXPECT_EQ(device.destroyedTextures, 0U);
+    }
+    EXPECT_EQ(device.destroyedTextures, 3U);
+}
+
+TEST_F(TextureTest, RenderTextureFactoriesRejectInvalidInputsBeforeAllocating) {
+    using namespace engine;
+    EXPECT_FALSE(Texture::createColor(0, 32));
+    EXPECT_FALSE(Texture::createDepth(32, 0));
+    EXPECT_FALSE(Texture::createShadowMap(0, 0));
+    EXPECT_FALSE(Texture::createColor(32, 32, TextureFormat::Depth32Float));
+    EXPECT_EQ(device.createdTextures, 0U);
+}
+
+TEST_F(TextureTest, GeneralCreationPreservesFormatMipCountAndSamples) {
+    using namespace engine;
+    TextureDesc colorDesc{TextureType::Texture2D, TextureFormat::Bgra8Srgb,
+        TextureColorSpace::Srgb, 64, 32, 4};
+    colorDesc.debugName = "MipmappedColor";
+    colorDesc.sampler.addressModeU = TextureAddressMode::ClampToEdge;
+    const auto mipmapped = Texture::create(colorDesc);
+    TextureDesc depthDesc{TextureType::Texture2D, TextureFormat::Depth32Float,
+        TextureColorSpace::Linear, 64, 32};
+    depthDesc.usage = rhi::TextureUsage::DepthStencilAttachment;
+    depthDesc.samples = rhi::SampleCount::Four;
+    const auto multisampled = Texture::create(depthDesc);
+    ASSERT_TRUE(mipmapped);
+    ASSERT_TRUE(multisampled);
+    EXPECT_EQ(mipmapped->format(), TextureFormat::Bgra8Srgb);
+    EXPECT_EQ(mipmapped->pixelFormat(), rhi::PixelFormat::Bgra8Srgb);
+    EXPECT_EQ(mipmapped->colorSpace(), TextureColorSpace::Srgb);
+    EXPECT_EQ(mipmapped->mipCount(), 4U);
+    EXPECT_EQ(device.viewDescs[0].mipCount, 4U);
+    EXPECT_EQ(device.textureDescs[0].debugName, "MipmappedColor");
+    EXPECT_EQ(device.samplerDescs[0].addressU, rhi::SamplerAddressMode::ClampToEdge);
+    EXPECT_EQ(multisampled->samples(), rhi::SampleCount::Four);
+    EXPECT_EQ(device.textureDescs[1].samples, rhi::SampleCount::Four);
+    EXPECT_EQ(multisampled->tiling(), rhi::TextureTiling::Optimal);
+    depthDesc.mipCount = 2;
+    EXPECT_FALSE(Texture::create(depthDesc));
+    EXPECT_EQ(device.createdTextures, 2U);
+}
+
+TEST(TextureOwnershipTest, OldDeviceTextureNeverDestroysNewDeviceResources) {
+    using namespace engine;
+    Ref<Texture> old;
+    {
+        FakeDevice first;
+        old = Texture::create(TextureDesc{TextureType::Texture2D, TextureFormat::Rgba8Unorm,
+            TextureColorSpace::Linear, 16, 16});
+        ASSERT_TRUE(old);
+    }
+    FakeDevice second;
+    const auto current = Texture::createColor(16, 16);
+    ASSERT_TRUE(current);
+    const std::vector<std::uint8_t> pixels(16U * 16U * 4U);
+    old->upload(pixels);
+    old = {};
+    EXPECT_EQ(second.destroyedTextures, 0U);
+    EXPECT_EQ(second.textureUploads, 0U);
+}
+
 TEST_F(TextureTest, SamplerOverrideKeepsDefaultViewButSwapsSampler) {
     using namespace engine;
     const Ref<Texture> white = Texture::defaultWhite();
@@ -257,6 +350,19 @@ TEST(TextureValidationTest, RejectsUnimplementedTextureDimensions) {
         TextureType::Texture2DArray, TextureFormat::Rgba8Unorm, TextureColorSpace::Linear, 1, 1, 1};
     desc.arrayLayers = 2;
     const std::vector<std::uint8_t> pixels{0, 0, 0, 0};
+    EXPECT_FALSE(validateTexture(desc, pixels));
+}
+
+TEST(TextureValidationTest, AssetPayloadRejectsRuntimeOptionsItCannotSerialize) {
+    using namespace engine;
+    TextureDesc desc{TextureType::Texture2D, TextureFormat::Rgba8Unorm,
+        TextureColorSpace::Linear, 1, 1};
+    const std::vector<std::uint8_t> pixels(4);
+    EXPECT_TRUE(validateTexture(desc, pixels));
+    desc.usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled;
+    EXPECT_FALSE(validateTexture(desc, pixels));
+    desc.usage = rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferDestination;
+    desc.samples = rhi::SampleCount::Four;
     EXPECT_FALSE(validateTexture(desc, pixels));
 }
 

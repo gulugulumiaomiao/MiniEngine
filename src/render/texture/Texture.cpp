@@ -10,6 +10,7 @@
 #include "rhi/api/ResourceDesc.h"
 
 #include <algorithm>
+#include <bit>
 #include <limits>
 #include <string>
 #include <utility>
@@ -45,13 +46,6 @@ bool rgbaByteSize(std::uint32_t width, std::uint32_t height, std::size_t& result
     Log::fatal("Texture", "Unsupported Texture type");
 }
 
-[[nodiscard]] rhi::PixelFormat toRhi(TextureFormat format) {
-    switch (format) {
-    case TextureFormat::Rgba8Unorm: return rhi::PixelFormat::Rgba8Unorm;
-    case TextureFormat::Rgba8Srgb: return rhi::PixelFormat::Rgba8Srgb;
-    }
-    Log::fatal("Texture", "Unsupported Texture format");
-}
 
 [[nodiscard]] rhi::SwizzleComponent toRhiSwizzle(SwizzleChannel channel) {
     switch (channel) {
@@ -79,7 +73,8 @@ bool rgbaByteSize(std::uint32_t width, std::uint32_t height, std::size_t& result
     out.mipCount = view.mipCount;
     out.baseLayer = view.baseLayer;
     out.layerCount = view.layerCount;
-    out.aspect = rhi::TextureAspect::Color;
+    out.aspect = textureFormat == TextureFormat::Depth32Float
+        ? rhi::TextureAspect::Depth : rhi::TextureAspect::Color;
     out.swizzle = {toRhiSwizzle(view.swizzle.r),
                    toRhiSwizzle(view.swizzle.g),
                    toRhiSwizzle(view.swizzle.b),
@@ -88,6 +83,17 @@ bool rgbaByteSize(std::uint32_t width, std::uint32_t height, std::size_t& result
 }
 
 } // namespace
+
+rhi::PixelFormat toRhi(TextureFormat format) {
+    switch (format) {
+    case TextureFormat::Rgba8Unorm: return rhi::PixelFormat::Rgba8Unorm;
+    case TextureFormat::Rgba8Srgb: return rhi::PixelFormat::Rgba8Srgb;
+    case TextureFormat::Depth32Float: return rhi::PixelFormat::Depth32Float;
+    case TextureFormat::Bgra8Unorm: return rhi::PixelFormat::Bgra8Unorm;
+    case TextureFormat::Bgra8Srgb: return rhi::PixelFormat::Bgra8Srgb;
+    }
+    Log::fatal("Texture", "Unsupported Texture format");
+}
 
 bool computeTextureLayout(const TextureDesc& desc, TextureMipLayout& layout) {
     layout = {};
@@ -119,7 +125,9 @@ bool computeTextureLayout(const TextureDesc& desc, TextureMipLayout& layout) {
 }
 
 bool validateTexture(const TextureDesc& desc, std::span<const std::uint8_t> pixels) {
-    if ((desc.colorSpace != TextureColorSpace::Linear &&
+    if (desc.usage != (rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferDestination) ||
+        desc.samples != rhi::SampleCount::One || desc.tiling != rhi::TextureTiling::Optimal ||
+        (desc.colorSpace != TextureColorSpace::Linear &&
          desc.colorSpace != TextureColorSpace::Srgb) ||
         (desc.format == TextureFormat::Rgba8Srgb) != (desc.colorSpace == TextureColorSpace::Srgb) ||
         desc.sampler.maxAnisotropy < 1.0F) {
@@ -148,12 +156,7 @@ bool validateTexture(const TextureDesc& desc, std::span<const std::uint8_t> pixe
 Texture::Texture(const TextureDesc& desc)
     : type_(desc.type), format_(desc.format), colorSpace_(desc.colorSpace), width_(desc.width),
       height_(desc.height), depth_(desc.depth), arrayLayers_(desc.arrayLayers),
-      mipCount_(desc.mipCount) {
-    rhi::IDevice* device = rhi::IDevice::active();
-    if (!device) {
-        Log::error("Texture", "No active device for texture creation");
-        return;
-    }
+      mipCount_(desc.mipCount), usage_(desc.usage), samples_(desc.samples), tiling_(desc.tiling) {
     const rhi::TextureDesc deviceDesc{.dimension = toRhi(desc.type),
                                       .format = toRhi(desc.format),
                                       .width = desc.width,
@@ -161,9 +164,20 @@ Texture::Texture(const TextureDesc& desc)
                                       .depth = desc.depth,
                                       .arrayLayers = desc.arrayLayers,
                                       .mipCount = desc.mipCount,
-                                      .usage = rhi::TextureUsage::Sampled |
-                                               rhi::TextureUsage::TransferDestination,
-                                      .debugName = "Texture"};
+                                      .usage = usage_,
+                                      .tiling = desc.tiling,
+                                      .samples = desc.samples,
+                                      .debugName = desc.debugName};
+    initializeGpu(deviceDesc, desc.sampler);
+}
+
+void Texture::initializeGpu(const rhi::TextureDesc& deviceDesc, const SamplerDesc& sampler) {
+    rhi::IDevice* device = rhi::IDevice::active();
+    if (!device) {
+        Log::error("Texture", "No active device for texture creation");
+        return;
+    }
+    deviceUid_ = device->uid();
     texture_ = device->texture_create(deviceDesc);
     if (!texture_) {
         Log::error("Texture", "Failed to create RHI texture");
@@ -171,11 +185,11 @@ Texture::Texture(const TextureDesc& desc)
     }
     // 层2 拥有默认 view：用层2 TextureViewDesc（全范围、格式跟随纹理）翻译成层3 desc 后创建。
     TextureViewDesc viewDesc;
-    viewDesc.type = desc.type;
-    viewDesc.mipCount = desc.mipCount;
-    viewDesc.layerCount = desc.arrayLayers;
-    view_ = device->texture_view_create(texture_, toRhiView(viewDesc, desc.format));
-    sampler_ = device->sampler_create(toRhi(desc.sampler));
+    viewDesc.type = type_;
+    viewDesc.mipCount = mipCount_;
+    viewDesc.layerCount = arrayLayers_;
+    view_ = device->texture_view_create(texture_, toRhiView(viewDesc, format_));
+    sampler_ = device->sampler_create(toRhi(sampler));
     if (!view_ || !sampler_)
         Log::error("Texture", "Failed to create default view/sampler");
 }
@@ -190,7 +204,7 @@ Texture::~Texture() {
     // 层2 拥有默认 view：先毁 view 再毁 texture；默认 sampler 由设备去重持有、不在此销毁。
     // 跨设备安全：asset-backed 纹理在其设备仍 active 时销毁（工程 teardown 顺序保证）；内建纹理
     // 在设备切换时由静态方法先 detachFromDeadDevice() 置空句柄，故此处 view_/texture_ 为空即跳过。
-    if (rhi::IDevice* device = rhi::IDevice::active()) {
+    if (rhi::IDevice* device = rhi::IDevice::active(); device && device->uid() == deviceUid_) {
         if (view_)
             device->texture_view_destroy(view_);
         if (texture_)
@@ -200,6 +214,68 @@ Texture::~Texture() {
 
 Ref<Texture> Texture::adoptBinding(rhi::RID view, rhi::RID sampler) {
     return Ref<Texture>(new Texture(view, sampler));
+}
+
+rhi::PixelFormat Texture::pixelFormat() const { return toRhi(format_); }
+
+Ref<Texture> Texture::create(const TextureDesc& desc) {
+    const bool color = desc.format == TextureFormat::Rgba8Unorm || desc.format == TextureFormat::Rgba8Srgb ||
+        desc.format == TextureFormat::Bgra8Unorm || desc.format == TextureFormat::Bgra8Srgb;
+    const bool depth = desc.format == TextureFormat::Depth32Float;
+    const bool srgb = desc.format == TextureFormat::Rgba8Srgb || desc.format == TextureFormat::Bgra8Srgb;
+    if (!rhi::IDevice::active() || desc.type != TextureType::Texture2D || (!color && !depth) ||
+        (desc.colorSpace != TextureColorSpace::Linear && desc.colorSpace != TextureColorSpace::Srgb) ||
+        srgb != (desc.colorSpace == TextureColorSpace::Srgb) ||
+        desc.width == 0 || desc.height == 0 || desc.depth != 1 || desc.arrayLayers != 1 ||
+        desc.mipCount == 0 || desc.usage == rhi::TextureUsage::None ||
+        (desc.samples != rhi::SampleCount::One && desc.samples != rhi::SampleCount::Two &&
+         desc.samples != rhi::SampleCount::Four && desc.samples != rhi::SampleCount::Eight) ||
+        (desc.samples != rhi::SampleCount::One && desc.mipCount != 1) ||
+        desc.mipCount > std::bit_width(std::max(desc.width, desc.height)) ||
+        (desc.tiling != rhi::TextureTiling::Optimal && desc.tiling != rhi::TextureTiling::Linear) ||
+        (color && rhi::hasFlag(desc.usage, rhi::TextureUsage::DepthStencilAttachment)) ||
+        (depth && rhi::hasFlag(desc.usage, rhi::TextureUsage::ColorAttachment))) {
+        Log::error("Texture", "Invalid or unsupported texture description or no active device");
+        return {};
+    }
+    Ref<Texture> texture(new Texture(desc));
+    if (!texture->textureHandle() || !texture->defaultView() || !texture->defaultSampler())
+        return {};
+    return texture;
+}
+
+Ref<Texture> Texture::createRenderTexture(std::uint32_t width, std::uint32_t height,
+                                         TextureFormat format, rhi::TextureUsage usage) {
+    TextureDesc desc{TextureType::Texture2D, format,
+        format == TextureFormat::Rgba8Srgb || format == TextureFormat::Bgra8Srgb
+            ? TextureColorSpace::Srgb : TextureColorSpace::Linear,
+        width, height};
+    desc.usage = usage;
+    desc.debugName = "RenderTexture";
+    desc.sampler.addressModeU = TextureAddressMode::ClampToEdge;
+    desc.sampler.addressModeV = TextureAddressMode::ClampToEdge;
+    return create(desc);
+}
+
+Ref<Texture> Texture::createColor(std::uint32_t width, std::uint32_t height,
+                                 TextureFormat format) {
+    if (format != TextureFormat::Rgba8Unorm && format != TextureFormat::Rgba8Srgb &&
+        format != TextureFormat::Bgra8Unorm && format != TextureFormat::Bgra8Srgb) {
+        Log::error("Texture", "Color texture requires a color format");
+        return {};
+    }
+    return createRenderTexture(width, height, format,
+        rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled);
+}
+
+Ref<Texture> Texture::createDepth(std::uint32_t width, std::uint32_t height) {
+    return createRenderTexture(width, height, TextureFormat::Depth32Float,
+        rhi::TextureUsage::DepthStencilAttachment);
+}
+
+Ref<Texture> Texture::createShadowMap(std::uint32_t width, std::uint32_t height) {
+    return createRenderTexture(width, height, TextureFormat::Depth32Float,
+        rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::Sampled);
 }
 
 Texture::Texture(rhi::RID view, rhi::RID sampler)
@@ -225,8 +301,12 @@ rhi::TextureBinding Texture::binding(const Ref<Sampler>& sampler) const {
 void Texture::upload(std::span<const std::uint8_t> pixels) {
     if (!texture_)
         return;
+    if (!rhi::hasFlag(usage_, rhi::TextureUsage::TransferDestination) || samples_ != rhi::SampleCount::One) {
+        Log::error("Texture", "Texture was not created for pixel uploads");
+        return;
+    }
     rhi::IDevice* device = rhi::IDevice::active();
-    if (!device) {
+    if (!device || device->uid() != deviceUid_) {
         Log::error("Texture", "No active device for texture upload");
         return;
     }

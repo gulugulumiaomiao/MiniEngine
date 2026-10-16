@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -25,8 +26,10 @@ class IDevice;
 class TextureAsset;
 
 enum class TextureType { Texture2D, Texture2DArray, Texture3D, TextureCube, TextureCubeArray };
-enum class TextureFormat { Rgba8Unorm, Rgba8Srgb };
+enum class TextureFormat { Rgba8Unorm, Rgba8Srgb, Depth32Float, Bgra8Unorm, Bgra8Srgb };
 enum class TextureColorSpace { Linear, Srgb };
+
+[[nodiscard]] rhi::PixelFormat toRhi(TextureFormat format);
 
 // 层2 视图语义描述：自定义 Swizzle + 高层 format；构造层3 view 时由 toRhi 翻译成
 // rhi::TextureViewDesc（MatchTexture 解析为源纹理格式）。
@@ -69,6 +72,11 @@ struct TextureDesc {
     std::uint32_t arrayLayers{1};
     std::uint32_t mipCount{1};
     SamplerDesc sampler;
+    // Runtime allocation options; serialized texture assets use these defaults.
+    rhi::TextureUsage usage{rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferDestination};
+    rhi::SampleCount samples{rhi::SampleCount::One};
+    rhi::TextureTiling tiling{rhi::TextureTiling::Optimal};
+    std::string debugName{"Texture"};
 
     TextureDesc() = default;
     TextureDesc(TextureType type,
@@ -135,6 +143,10 @@ public:
     [[nodiscard]] std::uint32_t depth() const { return depth_; }
     [[nodiscard]] std::uint32_t arrayLayers() const { return arrayLayers_; }
     [[nodiscard]] std::uint32_t mipCount() const { return mipCount_; }
+    [[nodiscard]] rhi::TextureUsage usage() const { return usage_; }
+    [[nodiscard]] rhi::PixelFormat pixelFormat() const;
+    [[nodiscard]] rhi::SampleCount samples() const { return samples_; }
+    [[nodiscard]] rhi::TextureTiling tiling() const { return tiling_; }
 
     /// 三个层3 RID（均来自 IDevice）。
     [[nodiscard]] rhi::RID textureHandle() const { return texture_; }
@@ -152,6 +164,17 @@ public:
     /// 克隆一个脱离 asset 的独立纹理（与 `TextureAsset::clone` 同义，需 asset-backed）。
     [[nodiscard]] Ref<Texture> clone() const;
 
+    // General owning creation for supported 2D textures; no pixel upload.
+    [[nodiscard]] static Ref<Texture> create(const TextureDesc& desc);
+
+    // Uninitialized single-mip 2D render textures. Clear/render before sampling.
+    // Return an empty Ref for invalid parameters or GPU resource creation failure.
+    [[nodiscard]] static Ref<Texture> createColor(
+        std::uint32_t width, std::uint32_t height,
+        TextureFormat format = TextureFormat::Rgba8Unorm);
+    [[nodiscard]] static Ref<Texture> createDepth(std::uint32_t width, std::uint32_t height);
+    [[nodiscard]] static Ref<Texture> createShadowMap(std::uint32_t width, std::uint32_t height);
+
     /// 默认纹理（经 IDevice::active() 自建，非 asset-backed；设备切换后自动重建）。
     [[nodiscard]] static Ref<Texture> defaultWhite();
     [[nodiscard]] static Ref<Texture> defaultBlack();
@@ -167,6 +190,10 @@ private:
 
     /// 构造：按 desc 分配三个 RID（不上传数据）。
     explicit Texture(const TextureDesc& desc);
+    void initializeGpu(const rhi::TextureDesc& desc, const SamplerDesc& sampler);
+    [[nodiscard]] static Ref<Texture> createRenderTexture(
+        std::uint32_t width, std::uint32_t height, TextureFormat format,
+        rhi::TextureUsage usage);
     /// 采纳外部绑定构造（非拥有）：只记录 view+sampler，ownsGpu_ = false。
     Texture(rhi::RID view, rhi::RID sampler);
     /// 建立与 asset 的活链接（仅 instantiate 实例调用）。asset 为非拥有裸指针：
@@ -190,6 +217,10 @@ private:
     std::uint32_t depth_{1};
     std::uint32_t arrayLayers_{1};
     std::uint32_t mipCount_{1};
+    rhi::TextureUsage usage_{rhi::TextureUsage::None};
+    rhi::SampleCount samples_{rhi::SampleCount::One};
+    rhi::TextureTiling tiling_{rhi::TextureTiling::Optimal};
+    std::uint64_t deviceUid_{};
 
     rhi::RID texture_;
     rhi::RID view_;
