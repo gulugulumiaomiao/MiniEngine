@@ -59,52 +59,72 @@ void Renderer::renderFrame(const RenderScene& scene) {
     }
     GRAPHICS_PIPELINE_STORAGE.refreshShaders(frameSerial_,
                                              frameSerial_ + FrameGpuManager::kFramesInFlight);
-    if (swapchain_->beginFrame() == rhi::FrameStatus::OutOfDate) {
-        recreateSwapchain();
-        return;
+    bool frameStarted = false;
+    bool submitted = false;
+    try {
+        // beginFrame returns an acquired image itself if recording setup throws.
+        if (swapchain_->beginFrame() == rhi::FrameStatus::OutOfDate) {
+            recreateSwapchain();
+            return;
+        }
+        frameStarted = true;
+        rgTexturePool_->collect(device_->completedSubmission());
+        rgTexturePool_->trim(120, *rgRenderPassCache_);
+        rgTexturePool_->beginBatch(swapchain_->commandBuffer());
+        GRAPHICS_PIPELINE_STORAGE.collect(frameSerial_);
+        RenderContext context(*this, scene);
+        if (sceneWidth() != 0 && sceneHeight() != 0) {
+            prepareForwardTarget();
+            pipeline_->render(context);
+        }
+        if (overlay_) {
+            overlay_->recordOverlay(context);
+        } else if (!context.backBufferWritten()) {
+            // No overlay to guarantee a well-formed backbuffer: when the pipeline produced
+            // no draw items the acquired swapchain image was never transitioned and is
+            // still in the undefined layout. Presenting it unmodified trips the validation
+            // layer, so clear it into PRESENT_SRC ourselves.
+            const rhi::RID commandBuffer = swapchain_->commandBuffer();
+            const rhi::RID texture = swapchain_->currentTexture();
+            const rhi::TextureBarrier toAttachment{
+                .texture = texture,
+                .before = rhi::ResourceState::Undefined,
+                .after = rhi::ResourceState::ColorAttachment,
+            };
+            rhi::resourceBarriers(commandBuffer, std::span{&toAttachment, 1});
+            rhi::beginRendering(commandBuffer, {
+                .renderArea = {.width = swapchain_->width(), .height = swapchain_->height()},
+                .colorAttachments = {{
+                    .view = swapchain_->currentTextureView(),
+                    .loadOp = rhi::LoadOp::Clear,
+                }},
+            });
+            rhi::endRendering(commandBuffer);
+            const rhi::TextureBarrier toPresent{
+                .texture = texture,
+                .before = rhi::ResourceState::ColorAttachment,
+                .after = rhi::ResourceState::Present,
+            };
+            rhi::resourceBarriers(commandBuffer, std::span{&toPresent, 1});
+        }
+        const bool resized = window_.consumeResize();
+        const rhi::FrameStatus status = swapchain_->endFrame();
+        submitted = true;
+        // Present may report OutOfDate after successful queue submission.
+        rgTexturePool_->onSubmitted(device_->lastSubmitted());
+        ++frameSerial_;
+        if (status == rhi::FrameStatus::OutOfDate || resized)
+            recreateSwapchain();
+    } catch (...) {
+        if (frameStarted && !submitted) {
+            (void)swapchain_->cancelFrame();
+            ++frameSerial_;
+        }
+        if (rgTexturePool_->batchActive()) {
+            rgTexturePool_->cancelBatch();
+        }
+        throw;
     }
-    rgTexturePool_->beginFrame(swapchain_->frameIndex());
-    GRAPHICS_PIPELINE_STORAGE.collect(frameSerial_);
-    RenderContext context(*this, scene);
-    if (sceneWidth() != 0 && sceneHeight() != 0) {
-        prepareForwardTarget();
-        pipeline_->render(context);
-    }
-    if (overlay_) {
-        overlay_->recordOverlay(context);
-    } else if (!context.backBufferWritten()) {
-        // No overlay to guarantee a well-formed backbuffer: when the pipeline produced
-        // no draw items the acquired swapchain image was never transitioned and is
-        // still in the undefined layout. Presenting it unmodified trips the validation
-        // layer, so clear it into PRESENT_SRC ourselves.
-        const rhi::RID commandBuffer = swapchain_->commandBuffer();
-        const rhi::RID texture = swapchain_->currentTexture();
-        const rhi::TextureBarrier toAttachment{
-            .texture = texture,
-            .before = rhi::ResourceState::Undefined,
-            .after = rhi::ResourceState::ColorAttachment,
-        };
-        rhi::resourceBarriers(commandBuffer, std::span{&toAttachment, 1});
-        rhi::beginRendering(commandBuffer, {
-            .renderArea = {.width = swapchain_->width(), .height = swapchain_->height()},
-            .colorAttachments = {{
-                .view = swapchain_->currentTextureView(),
-                .loadOp = rhi::LoadOp::Clear,
-            }},
-        });
-        rhi::endRendering(commandBuffer);
-        const rhi::TextureBarrier toPresent{
-            .texture = texture,
-            .before = rhi::ResourceState::ColorAttachment,
-            .after = rhi::ResourceState::Present,
-        };
-        rhi::resourceBarriers(commandBuffer, std::span{&toPresent, 1});
-    }
-    const bool resized = window_.consumeResize();
-    const rhi::FrameStatus status = swapchain_->endFrame();
-    ++frameSerial_;
-    if (status == rhi::FrameStatus::OutOfDate || resized)
-        recreateSwapchain();
 }
 
 void Renderer::recreateSwapchain() {
@@ -113,6 +133,7 @@ void Renderer::recreateSwapchain() {
         return;
     const auto [width, height] = window_.framebufferSize();
     device_->waitIdle();
+    rgTexturePool_->collect(device_->completedSubmission());
     GRAPHICS_PIPELINE_STORAGE.clear();
     rgRenderPassCache_->clearFramebuffers();
     swapchain_->resize(width, height);
@@ -132,6 +153,7 @@ void Renderer::recreateSwapchain() {
 
 void Renderer::waitIdle() {
     device_->waitIdle();
+    rgTexturePool_->collect(device_->completedSubmission());
 }
 
 void Renderer::prepareForwardTarget() {

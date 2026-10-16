@@ -45,7 +45,7 @@ void MiniForwardPipeline::render(RenderContext& context) {
     }
     for (const auto& pass : passes_) pass->updateFrame(context, drawList);
     auto frame = graph_.prepareFrame(context);
-    if (shadowOutput_.castShadows && shadowOutput_.shadowMap.valid()) {
+    if (shadowOutput_.shadowMap.valid()) {
         FRAME_GPU_MANAGER.bindShadowMap(context.frameIndex(),
                                         frame.textureView(shadowOutput_.shadowMap));
     }

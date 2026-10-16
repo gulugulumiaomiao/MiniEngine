@@ -44,7 +44,7 @@ Mesh 持有 Ref<MeshGpuBuffers>，其中保存 vertex/index RID、容量及设�
 
 - Static 使用 DeviceLocal 持久缓冲，通常通过 rebuild 替换。
 - Dynamic 使用 Upload 内存；仍有外部快照或提交帧引用时，upload 创建新缓冲，避免覆盖正在使用的数据。
-- Stream 每次 upload 获取新的设备瞬态缓冲，旧缓冲由设备 fence 池回收，Mesh 不主动销毁。仍要求调用方每帧生产并上传数据，没有新增自动生产器。
+- Stream 每次 upload 获取新的设备瞬态缓冲，设备记录引用它的 command buffer，在所有相关提交完成且没有未提交的录制引用后回收；取消未提交的录制也会释放其独占缓冲。Mesh 不主动销毁，调用方仍需每帧生产并上传数据。
 
 关闭项目先等待 GPU 空闲再释放帧资源。缓冲仅在创建它的设备 UID 仍活动时释放，避免旧 RID 操作到新设备。
 

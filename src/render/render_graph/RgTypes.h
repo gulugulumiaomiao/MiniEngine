@@ -24,22 +24,6 @@ struct RgTextureHandle {
     [[nodiscard]] bool operator!=(RgTextureHandle other) const { return index != other.index; }
 };
 
-// Description of a transient texture created by the RenderGraph; format determines its aspect.
-struct RgTextureDesc {
-    rhi::TextureType dimension{rhi::TextureType::Texture2D};
-    rhi::PixelFormat format{rhi::PixelFormat::Undefined};
-    std::uint32_t width{};
-    std::uint32_t height{};
-    std::uint32_t depth{1};
-    std::uint32_t arrayLayers{1};
-    std::uint32_t mipCount{1};
-    rhi::TextureUsage usage{rhi::TextureUsage::None};
-    rhi::SampleCount samples{rhi::SampleCount::One};
-    // Optional runtime size; only width/height of the returned rectangle are used.
-    std::function<rhi::Rect(const RenderContext&)> extentResolver;
-    std::string debugName;
-};
-
 // Compiled resource access derived from a pass's attachments and sampled textures.
 // Used for synchronization, pass dependencies and initialization validation.
 struct RgResourceAccess {

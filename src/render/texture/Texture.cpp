@@ -100,7 +100,7 @@ rhi::PixelFormat toRhi(TextureFormat format) {
 bool computeTextureLayout(const TextureDesc& desc, TextureMipLayout& layout) {
     layout = {};
     if (desc.type != TextureType::Texture2D || desc.depth != 1 || desc.arrayLayers != 1 ||
-        desc.samples != rhi::SampleCount::One) {
+        desc.samples != 1) {
         return false;
     }
     return rhi::computeTextureLayout(tryToRhiTextureFormat(desc.format), desc.width, desc.height,
@@ -109,8 +109,7 @@ bool computeTextureLayout(const TextureDesc& desc, TextureMipLayout& layout) {
 
 bool validateTextureAsset(const TextureDesc& desc, std::span<const std::uint8_t> pixels) {
     // Asset files store tightly packed bytes for any supported non-compressed format.
-    if (desc.usage != (rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferDestination) ||
-        desc.samples != rhi::SampleCount::One || desc.tiling != rhi::TextureTiling::Optimal ||
+    if (desc.samples != 1 ||
         desc.sampler.maxAnisotropy < 1.0F) {
         return false;
     }
@@ -134,10 +133,10 @@ bool validateTextureAsset(const TextureDesc& desc, std::span<const std::uint8_t>
 
 // ---- Texture ----
 
-Texture::Texture(const TextureDesc& desc)
+Texture::Texture(const TextureDesc& desc, rhi::TextureUsage usage, rhi::SampleCount samples)
     : type_(desc.type), format_(desc.format), width_(desc.width),
       height_(desc.height), depth_(desc.depth), arrayLayers_(desc.arrayLayers),
-      mipCount_(desc.mipCount), usage_(desc.usage), samples_(desc.samples), tiling_(desc.tiling) {
+      mipCount_(desc.mipCount), usage_(usage), samples_(desc.samples) {
     const rhi::TextureDesc deviceDesc{.dimension = toRhi(desc.type),
                                       .format = toRhi(desc.format),
                                       .width = desc.width,
@@ -146,8 +145,8 @@ Texture::Texture(const TextureDesc& desc)
                                       .arrayLayers = desc.arrayLayers,
                                       .mipCount = desc.mipCount,
                                       .usage = usage_,
-                                      .tiling = desc.tiling,
-                                      .samples = desc.samples,
+                                      .tiling = rhi::TextureTiling::Optimal,
+                                      .samples = samples,
                                       .debugName = desc.debugName};
     initializeGpu(deviceDesc, desc.sampler);
 }
@@ -209,23 +208,35 @@ Ref<Texture> Texture::adoptBinding(rhi::RID view, rhi::RID sampler) {
 rhi::PixelFormat Texture::pixelFormat() const { return toRhi(format_); }
 
 Ref<Texture> Texture::create(const TextureDesc& desc) {
+    return createWithUsage(desc, rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferDestination);
+}
+
+Ref<Texture> Texture::createColor(const TextureDesc& desc) {
+    return createWithUsage(desc, rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled);
+}
+Ref<Texture> Texture::createDepth(const TextureDesc& desc) {
+    return createWithUsage(desc, rhi::TextureUsage::DepthStencilAttachment);
+}
+Ref<Texture> Texture::createShadowMap(const TextureDesc& desc) {
+    return createWithUsage(desc, rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::Sampled);
+}
+
+Ref<Texture> Texture::createWithUsage(const TextureDesc& desc, rhi::TextureUsage usage) {
+    const auto samples = toRhiSampleCount(desc.samples);
     const auto pixelFormat = tryToRhiTextureFormat(desc.format);
     const bool color = rhi::isColorFormat(pixelFormat);
     const bool depth = rhi::isDepthFormat(pixelFormat);
     if (!rhi::IDevice::active() || desc.type != TextureType::Texture2D || (!color && !depth) ||
         desc.width == 0 || desc.height == 0 || desc.depth != 1 || desc.arrayLayers != 1 ||
-        desc.mipCount == 0 || desc.usage == rhi::TextureUsage::None ||
-        (desc.samples != rhi::SampleCount::One && desc.samples != rhi::SampleCount::Two &&
-         desc.samples != rhi::SampleCount::Four && desc.samples != rhi::SampleCount::Eight) ||
-        (desc.samples != rhi::SampleCount::One && desc.mipCount != 1) ||
+        desc.mipCount == 0 || usage == rhi::TextureUsage::None || !samples ||
+        (desc.samples != 1 && desc.mipCount != 1) ||
         desc.mipCount > std::bit_width(std::max(desc.width, desc.height)) ||
-        (desc.tiling != rhi::TextureTiling::Optimal && desc.tiling != rhi::TextureTiling::Linear) ||
-        (color && rhi::hasFlag(desc.usage, rhi::TextureUsage::DepthStencilAttachment)) ||
-        (depth && rhi::hasFlag(desc.usage, rhi::TextureUsage::ColorAttachment))) {
+        (color && rhi::hasFlag(usage, rhi::TextureUsage::DepthStencilAttachment)) ||
+        (depth && rhi::hasFlag(usage, rhi::TextureUsage::ColorAttachment))) {
         Log::error("Texture", "Invalid or unsupported texture description or no active device");
         return {};
     }
-    Ref<Texture> texture(new Texture(desc));
+    Ref<Texture> texture(new Texture(desc, usage, *samples));
     if (!texture->textureHandle() || !texture->defaultView() || !texture->defaultSampler())
         return {};
     return texture;
@@ -234,14 +245,13 @@ Ref<Texture> Texture::create(const TextureDesc& desc) {
 Ref<Texture> Texture::createRenderTexture(std::uint32_t width, std::uint32_t height,
                                          TextureFormat format, rhi::TextureUsage usage) {
     TextureDesc desc{TextureType::Texture2D, format, width, height};
-    desc.usage = usage;
     desc.debugName = "RenderTexture";
     const auto numeric = rhi::formatInfo(toRhi(format)).numericType;
     if (numeric == rhi::FormatNumericType::Uint || numeric == rhi::FormatNumericType::Sint)
         desc.sampler.filterMode = TextureFilterMode::Point;
     desc.sampler.addressModeU = TextureAddressMode::ClampToEdge;
     desc.sampler.addressModeV = TextureAddressMode::ClampToEdge;
-    return create(desc);
+    return createWithUsage(desc, usage);
 }
 
 Ref<Texture> Texture::createColor(std::uint32_t width, std::uint32_t height,
@@ -288,7 +298,7 @@ void Texture::upload(std::span<const std::uint8_t> pixels) {
     if (!texture_)
         return;
     if (!rhi::hasFlag(usage_, rhi::TextureUsage::TransferDestination) ||
-        !rhi::hasFlag(usage_, rhi::TextureUsage::Sampled) || samples_ != rhi::SampleCount::One) {
+        !rhi::hasFlag(usage_, rhi::TextureUsage::Sampled) || samples_ != 1) {
         Log::error("Texture", "Texture was not created for pixel uploads");
         return;
     }
@@ -345,8 +355,8 @@ Ref<Texture> Texture::defaultWhite() {
             TextureType::Texture2D, TextureFormat::Rgba8Srgb, 1, 1, 1};
         if (instance)
             instance->detachFromDeadDevice(); // 旧设备已亡，弃置句柄避免 ~Texture 误销毁
-        instance = Ref<Texture>(new Texture(desc));
-        if (instance->textureHandle())
+        instance = Texture::create(desc);
+        if (instance)
             instance->upload(kPixels);
         ownerUid = device->uid();
     }
@@ -365,8 +375,8 @@ Ref<Texture> Texture::defaultBlack() {
             TextureType::Texture2D, TextureFormat::Rgba8Srgb, 1, 1, 1};
         if (instance)
             instance->detachFromDeadDevice(); // 旧设备已亡，弃置句柄避免 ~Texture 误销毁
-        instance = Ref<Texture>(new Texture(desc));
-        if (instance->textureHandle())
+        instance = Texture::create(desc);
+        if (instance)
             instance->upload(kPixels);
         ownerUid = device->uid();
     }
@@ -385,8 +395,8 @@ Ref<Texture> Texture::defaultNormal() {
             TextureType::Texture2D, TextureFormat::Rgba8Unorm, 1, 1, 1};
         if (instance)
             instance->detachFromDeadDevice(); // 旧设备已亡，弃置句柄避免 ~Texture 误销毁
-        instance = Ref<Texture>(new Texture(desc));
-        if (instance->textureHandle())
+        instance = Texture::create(desc);
+        if (instance)
             instance->upload(kPixels);
         ownerUid = device->uid();
     }
@@ -422,8 +432,8 @@ Ref<Texture> Texture::errorTexture() {
             TextureType::Texture2D, TextureFormat::Rgba8Srgb, 2, 2, 1};
         if (instance)
             instance->detachFromDeadDevice(); // 旧设备已亡，弃置句柄避免 ~Texture 误销毁
-        instance = Ref<Texture>(new Texture(desc));
-        if (instance->textureHandle())
+        instance = Texture::create(desc);
+        if (instance)
             instance->upload(kPixels);
         ownerUid = device->uid();
     }
@@ -468,8 +478,8 @@ bool TextureAsset::transfer(Transfer& archive) {
 Ref<Texture> TextureAsset::instantiate() {
     if (instance_)
         return Ref<Texture>(instance_); // 复用唯一实例（addRef）
-    Ref<Texture> texture(new Texture(desc));
-    if (!texture->textureHandle()) {
+    Ref<Texture> texture = Texture::create(desc);
+    if (!texture) {
         Log::error(
             "TextureAsset", "Failed to instantiate texture for %s", assetPath().string().c_str());
         return {};
@@ -481,8 +491,8 @@ Ref<Texture> TextureAsset::instantiate() {
 }
 
 Ref<Texture> TextureAsset::clone() {
-    Ref<Texture> texture(new Texture(desc));
-    if (!texture->textureHandle()) {
+    Ref<Texture> texture = Texture::create(desc);
+    if (!texture) {
         Log::error("TextureAsset", "Failed to clone texture for %s", assetPath().string().c_str());
         return {};
     }

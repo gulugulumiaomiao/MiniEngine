@@ -18,7 +18,7 @@ void DepthOnlyPass::updateFrame(RenderContext& context, const DrawList& drawList
 void DepthOnlyPass::buildGraph(RenderContext& /*context*/, RenderGraph& graph) {
     const RgTextureHandle depthHandle = graph.importTexture("ForwardDepth",
         [](RenderContext& frame) { return frame.currentForwardTarget().depthBinding(); },
-        rhi::ResourceState::DepthAttachment, rhi::TextureAspect::Depth);
+        rhi::ResourceState::DepthAttachment);
 
     RgRasterPass pass;
     pass.name = "DepthOnly";

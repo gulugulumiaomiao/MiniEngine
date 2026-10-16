@@ -95,7 +95,7 @@
 - 层1 `MeshAsset`：序列化源（desc + meshData + buildRecipe），由 `AssetManager` 强缓存常驻；`instantiate()` 出**唯一**运行时实例（重复调用复用，天然去重），`clone()` 出多个脱离实例；热重载经 `reloadInPlace` → `transfer` 读取分支 `syncInstance` 重上传唯一实例。
 - 层2 `Mesh`：GPU 资源持有者，只保留绘制必要属性（vertexLayout/indexFormat/topology/subMeshes/bounds/usage）+ vertex/index buffer 的 RHI RID，不持 desc/data/buildRecipe/version；构造经 `IDevice::active()` 三步创建（allocate_rid → allocate_memory → upload），`~Mesh` 两步销毁（free_memory → release_rid）；无独立 Manager，也无 gpu 层 `MeshStorage`。
 - `Mesh` 以 Ref 管理，Component 与 RenderScene 持 `Ref<Mesh>`；`MeshAsset` 与 `Mesh` 以裸指针互指（观察者），析构互清。
-- `MeshUsage` 决定 GPU 策略：Static→DeviceLocal 持久缓冲（staging 拷贝上传）；Dynamic→host-visible 持久缓冲（就地 memcpy）；Stream→host-visible 瞬态缓冲（每次 upload 经 `IDevice::buffer_acquire_transient` orphan 旧的，设备按帧 fence 回收，`~Mesh` 不释放；需每帧重传，尚无自动生产者）。
+- `MeshUsage` 决定 GPU 策略：Static→DeviceLocal 持久缓冲（staging 拷贝上传）；Dynamic→host-visible 持久缓冲（就地 memcpy）；Stream→host-visible 瞬态缓冲（每次 upload 经 `IDevice::buffer_acquire_transient` orphan 旧的，设备按引用它的 command buffer 和提交完成编号回收，`~Mesh` 不释放；需每帧重传，尚无自动生产者）。
 
 ### 6.3 Material
 - `Material` 持 `Ref<Shader>`、按属性名缓存的 `Ref<Texture>` 与可选 `Ref<Sampler>`（`setTexture(tex)` 用默认 sampler，`setTexture(tex, sampler)` 用指定 sampler），不持 Shader RID。

@@ -20,7 +20,6 @@ void ShadowCasterPass::updateFrame(RenderContext& context, const DrawList& drawL
             return light.type == LightType::Directional && light.castShadow;
         });
     const bool enabled = shadowCaster != context.scene().lights().end();
-    if (output_) output_->castShadows = enabled;
     if (!enabled) {
         items_.clear();
         return;
@@ -30,16 +29,10 @@ void ShadowCasterPass::updateFrame(RenderContext& context, const DrawList& drawL
 }
 
 void ShadowCasterPass::buildGraph(RenderContext& /*context*/, RenderGraph& graph) {
-    const RgTextureHandle shadowMap = graph.createTexture({
-        .dimension = rhi::TextureType::Texture2D,
-        .format = rhi::PixelFormat::Depth32Float,
-        .width = shadowMapSize_,
-        .height = shadowMapSize_,
-        .depth = 1,
-        .mipCount = 1,
-        .usage = rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::Sampled,
-        .debugName = "ShadowMap",
-    });
+    TextureDesc desc{TextureType::Texture2D, TextureFormat::Depth32Float,
+        shadowMapSize_, shadowMapSize_};
+    desc.debugName = "ShadowMap";
+    const RgTextureHandle shadowMap = graph.createTexture(std::move(desc));
     if (output_) {
         output_->shadowMap = shadowMap;
     }

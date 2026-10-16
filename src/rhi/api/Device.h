@@ -52,8 +52,8 @@ public:
                                std::span<const std::byte> data,
                                std::uint64_t offset = 0) = 0;
     // Transient (streaming) buffer: a host-visible buffer valid only for the current frame's
-    // recording, reclaimed automatically by the backend once the submitting frame's fence
-    // signals. Callers never free it; each acquire orphans the previous one. Backs
+    // recording, reclaimed automatically after all referencing submissions complete and no
+    // unsubmitted recording references it. Callers never free it. Backs
     // MeshUsage::Stream, whose data is regenerated every frame (orphan/rename semantics).
     [[nodiscard]] virtual RID buffer_acquire_transient(const BufferDesc& desc) = 0;
 
@@ -115,6 +115,9 @@ public:
     virtual void descriptor_set_destroy(RID handle) = 0;
 
     virtual void waitIdle() = 0;
+    [[nodiscard]] virtual SubmissionId lastSubmitted() const { return 0; }
+    // Highest completed prefix of graphics submissions; never waits.
+    [[nodiscard]] virtual SubmissionId completedSubmission() { return 0; }
 
 protected:
     IDevice() : uid_(nextDeviceUid()) { activeSlot() = this; }
@@ -143,6 +146,7 @@ public:
 
     [[nodiscard]] virtual FrameStatus beginFrame() = 0;
     [[nodiscard]] virtual FrameStatus endFrame() = 0;
+    [[nodiscard]] virtual FrameStatus cancelFrame() = 0;
     virtual void resize(std::uint32_t width, std::uint32_t height) = 0;
 
     // The frame command buffer; valid between beginFrame() and endFrame(). Recording starts

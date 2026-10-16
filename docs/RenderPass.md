@@ -40,7 +40,7 @@ Draws the `DepthOnly` phase into the forward depth target only. It is used as a 
 
 Draws the `ShadowCaster` phase into a transient depth shadow map (default 1024x1024, `Depth32Float`, `DepthStencilAttachment | Sampled`). Its logical texture and pass always exist, so enabling/disabling shadow-casting directional lights updates draw data without rebuilding the graph. The pass clears the map even when there are no casters.
 
-`ForwardPass` declares a stable sampled dependency. Between frame preparation and execution, the pipeline binds `frame.textureView(handle)` when shadows are enabled. Frame-indexed pooling preserves physical state/access and prevents reuse by another in-flight frame slot.
+`ForwardPass` declares a stable sampled dependency. Between frame preparation and execution, the pipeline binds the current `frame.textureView(handle)` whenever the shadow-map handle is valid. The map remains cleared when there are no casters, and `Scene.shadowParams.x` controls shader shadow strength. Global pooling preserves physical state/access at submission commit and prevents reuse until GPU completion and CPU lease release.
 
 ## Composing a pipeline
 

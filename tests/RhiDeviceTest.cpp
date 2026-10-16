@@ -1,3 +1,4 @@
+#include "TestTextureDesc.h"
 // Real-device coverage for the RID-only RHI: the per-type handle pools (create/destroy,
 // sampler/view dedup) and the command free-function surface that dispatches through the device
 // singleton. These replace the old mock-encoder tests: with commands defined only in the Vulkan
@@ -25,13 +26,44 @@
 #include <cstring>
 #include <numeric>
 #include <tuple>
+#include <atomic>
+#include <cstdlib>
+#include <new>
 #include <memory>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <span>
+#include <stdexcept>
 #include <vector>
+
+// Fault injection is confined to this test executable and disabled outside its guard.
+namespace {
+std::atomic<std::size_t> failAllocationSize{};
+std::atomic<bool> failAnyAllocation{};
+class FailNextAllocation final {
+public:
+    explicit FailNextAllocation(std::size_t size = 0) {
+        failAllocationSize = size;
+        failAnyAllocation = size == 0;
+    }
+    ~FailNextAllocation() { failAllocationSize = 0; failAnyAllocation = false; }
+};
+}
+void* operator new(std::size_t size) {
+    auto expected = size;
+    if (failAnyAllocation.exchange(false) ||
+        (size && failAllocationSize.compare_exchange_strong(expected, 0))) {
+        failAllocationSize = 0;
+        failAnyAllocation = false;
+        throw std::bad_alloc();
+    }
+    if (auto* result = std::malloc(size ? size : 1)) return result;
+    throw std::bad_alloc();
+}
+void operator delete(void* pointer) noexcept { std::free(pointer); }
+void operator delete(void* pointer, std::size_t) noexcept { std::free(pointer); }
 
 namespace {
 
@@ -154,7 +186,8 @@ TEST_F(RhiDeviceTest, RenderGraphImportsAcquiredSwapchainImageAndPresentsAfterRe
         }
         for (std::uint32_t iteration = 0; iteration < 2 * swapchain.imageCount() + 1; ++iteration) {
             ASSERT_EQ(swapchain.beginFrame(), rhi::FrameStatus::Ready);
-            pool.beginFrame(swapchain.frameIndex());
+            pool.collect(d.completedSubmission());
+            pool.beginBatch(swapchain.commandBuffer());
             const auto texture = swapchain.currentTexture();
             const auto view = swapchain.currentTextureView();
             const auto before = swapchain.currentTextureState();
@@ -178,6 +211,7 @@ TEST_F(RhiDeviceTest, RenderGraphImportsAcquiredSwapchainImageAndPresentsAfterRe
             EXPECT_EQ(frame.finalBarriers()[0].after, rhi::ResourceState::Present);
             graph.execute(renderContext, frame, swapchain.commandBuffer());
             ASSERT_EQ(swapchain.endFrame(), rhi::FrameStatus::Ready);
+            pool.onSubmitted(d.lastSubmitted());
         }
     }
     d.waitIdle();
@@ -225,6 +259,365 @@ TEST_F(RhiDeviceTest, ResourceLifecycleAndDedup) {
 
     d.buffer_destroy(buffer);
     d.texture_destroy(texture); // cascades the deduped default view
+}
+
+TEST_F(RhiDeviceTest, GlobalPoolCancellationAndSubmissionCommitPreserveActualGpuState) {
+    auto& d = device();
+    struct ValidationCapture {
+        std::ostringstream messages;
+        std::streambuf* previous{std::cerr.rdbuf(messages.rdbuf())};
+        ~ValidationCapture() { std::cerr.rdbuf(previous); }
+    } validation;
+    rhi::vulkan::VulkanSwapchain swapchain(d, {.width = 64, .height = 64, .vsync = false});
+    RgTexturePool pool; RgRenderPassCache cache; RenderScene scene;
+    RenderContext context(pool, cache, scene);
+    const auto output = d.texture_create({.format = rhi::PixelFormat::Rgba8Unorm,
+        .width = 16, .height = 16,
+        .usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled});
+    const auto outputView = d.texture_default_view(output);
+    rhi::ResourceState state = rhi::ResourceState::Undefined;
+    RenderGraph graph;
+    const TextureDesc transientDesc = test::textureDesc(TextureFormat::Rgba8Unorm, 16, 16);
+    const auto transient = graph.createTexture(transientDesc);
+    const auto external = graph.importTexture("Output", [&](RenderContext&) {
+        return RgTextureBinding{output, outputView, state, rhi::AccessMode::Auto, &state};
+    }, rhi::ResourceState::ShaderRead);
+    bool throwDuringPass = true;
+    graph.addGraphicsPass({.name = "Clear", .renderArea = {0, 0, 16, 16},
+        .colorAttachments = {{transient, rhi::LoadOp::Clear, rhi::StoreOp::Store},
+                             {external, rhi::LoadOp::Clear, rhi::StoreOp::Store}},
+        .execute = [&](const RgExecuteContext&) {
+            if (throwDuringPass) throw std::runtime_error("cancel recorded rendering");
+        }});
+    const auto backbuffer = graph.importSwapchainTexture(swapchain);
+    graph.addGraphicsPass({.name = "Present",
+        .renderAreaResolver = [&](const RenderContext&) {
+            return rhi::Rect{0, 0, swapchain.width(), swapchain.height()};
+        },
+        .colorAttachments = {{backbuffer, rhi::LoadOp::Clear, rhi::StoreOp::Store}},
+        .execute = [](const RgExecuteContext&) {}});
+    rhi::RID firstTexture;
+    for (int iteration = 0; iteration < 3; ++iteration) {
+        ASSERT_EQ(swapchain.beginFrame(), rhi::FrameStatus::Ready);
+        pool.collect(d.completedSubmission());
+        pool.beginBatch(swapchain.commandBuffer());
+        if (!graph.compiled()) graph.compile(context);
+        auto frame = graph.prepareFrame(context);
+        if (!firstTexture) firstTexture = frame.texture(transient);
+        EXPECT_EQ(frame.texture(transient), firstTexture);
+        EXPECT_EQ(state, rhi::ResourceState::Undefined);
+        if (iteration == 0) {
+            EXPECT_THROW(graph.execute(context, frame, swapchain.commandBuffer()), std::runtime_error);
+            throwDuringPass = false;
+        } else {
+            graph.execute(context, frame, swapchain.commandBuffer());
+            EXPECT_EQ(state, rhi::ResourceState::Undefined);
+            EXPECT_EQ(pool.trackedState(&state), rhi::ResourceState::ShaderRead);
+        }
+        const auto previous = d.lastSubmitted();
+        frame.reset();
+        if (iteration < 2) {
+            EXPECT_EQ(swapchain.cancelFrame(), rhi::FrameStatus::Ready);
+            pool.cancelBatch();
+            EXPECT_EQ(state, rhi::ResourceState::Undefined);
+        } else {
+            EXPECT_EQ(swapchain.endFrame(), rhi::FrameStatus::Ready);
+            pool.onSubmitted(d.lastSubmitted());
+            EXPECT_EQ(state, rhi::ResourceState::ShaderRead);
+        }
+        EXPECT_EQ(d.lastSubmitted(), previous + 1);
+        d.waitIdle();
+        EXPECT_EQ(d.completedSubmission(), d.lastSubmitted());
+        pool.collect(d.completedSubmission());
+    }
+    EXPECT_EQ(graph.compileCount(), 1U);
+    EXPECT_EQ(pool.totalEntryCount(), 1U);
+    auto* reused = pool.acquire(transientDesc, rhi::TextureUsage::ColorAttachment);
+    EXPECT_EQ(reused->texture->textureHandle(), firstTexture);
+    EXPECT_EQ(reused->lastState, rhi::ResourceState::ColorAttachment);
+    pool.release(reused);
+    cache.invalidateFramebuffers(outputView);
+    d.texture_destroy(output);
+    EXPECT_EQ(validation.messages.str().find("Validation Error"), std::string::npos) << validation.messages.str();
+    EXPECT_EQ(validation.messages.str().find("SYNC-HAZARD"), std::string::npos) << validation.messages.str();
+}
+
+TEST_F(RhiDeviceTest, PreparedGraphsRefreshSharedImportStateBeforeExecution) {
+    auto& d = device();
+    struct ValidationCapture {
+        std::ostringstream messages;
+        std::streambuf* previous{std::cerr.rdbuf(messages.rdbuf())};
+        ~ValidationCapture() { std::cerr.rdbuf(previous); }
+    } validation;
+    RgTexturePool pool; RgRenderPassCache cache; RenderScene scene;
+    RenderContext context(pool, cache, scene);
+    const auto texture = d.texture_create({.format = rhi::PixelFormat::Rgba8Unorm,
+        .width = 16, .height = 16,
+        .usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled});
+    const auto view = d.texture_default_view(texture);
+    auto state = rhi::ResourceState::Undefined;
+    RenderGraph first, second, unused;
+    const auto resolver = [&](RenderContext&) {
+        return RgTextureBinding{texture, view, state, rhi::AccessMode::Auto, &state};
+    };
+    const auto build = [&](RenderGraph& graph, rhi::ResourceState final, bool traditional) {
+        const auto handle = graph.importTexture("Shared", resolver, final);
+        RgRasterPass pass{.name = "Color", .renderArea = {0, 0, 16, 16},
+            .colorAttachments = {{handle, traditional ? rhi::LoadOp::Load : rhi::LoadOp::Clear,
+                                  rhi::StoreOp::Store}},
+            .execute = [](const RgExecuteContext&) {}};
+        if (traditional) graph.addRasterGroup("ColorGroup", {pass});
+        else graph.addGraphicsPass(pass);
+        graph.compile(context);
+    };
+    build(first, rhi::ResourceState::ShaderRead, false);
+    build(second, rhi::ResourceState::ColorAttachment, true);
+    (void)unused.importTexture("Shared", resolver);
+    unused.compile(context);
+    const auto cmd = d.command_buffer_create();
+    // The second iteration starts in ColorAttachment, reproducing the oldLayout error.
+    for (int iteration = 0; iteration < 2; ++iteration) {
+        auto a = first.prepareFrame(context), b = second.prepareFrame(context);
+        auto c = unused.prepareFrame(context);
+        rhi::begin(cmd); pool.beginBatch(cmd);
+        first.execute(context, a, cmd);
+        unused.execute(context, c, cmd); // Must not restore the snapshot of an unused import.
+        EXPECT_EQ(pool.trackedState(&state), rhi::ResourceState::ShaderRead);
+        second.execute(context, b, cmd);
+        ASSERT_EQ(b.groups()[0].preBarriers.size(), 1U);
+        EXPECT_EQ(b.groups()[0].preBarriers[0].before, rhi::ResourceState::ShaderRead);
+        rhi::end(cmd);
+        if (iteration == 0) EXPECT_EQ(state, rhi::ResourceState::Undefined);
+        pool.onSubmitted(d.submit(cmd, {}));
+        EXPECT_EQ(state, rhi::ResourceState::ColorAttachment);
+        d.waitIdle(); pool.collect(d.completedSubmission());
+    }
+    {
+        auto a = first.prepareFrame(context), b = second.prepareFrame(context);
+        rhi::begin(cmd); pool.beginBatch(cmd);
+        first.execute(context, a, cmd);
+        EXPECT_EQ(pool.trackedState(&state), rhi::ResourceState::ShaderRead);
+        d.command_buffer(cmd).discard();
+        pool.cancelBatch();
+        EXPECT_EQ(state, rhi::ResourceState::ColorAttachment);
+    }
+    EXPECT_EQ(first.compileCount(), 1U);
+    EXPECT_EQ(second.compileCount(), 1U);
+    cache.clear(); d.command_buffer_destroy(cmd); d.texture_destroy(texture);
+    EXPECT_EQ(validation.messages.str().find("Validation Error"), std::string::npos)
+        << validation.messages.str();
+    EXPECT_EQ(validation.messages.str().find("SYNC-HAZARD"), std::string::npos)
+        << validation.messages.str();
+}
+
+TEST_F(RhiDeviceTest, BeginFrameAllocationFailureReturnsImageAndKeepsFenceUsable) {
+    auto& d = device();
+    struct ValidationCapture {
+        std::ostringstream messages;
+        std::streambuf* previous{std::cerr.rdbuf(messages.rdbuf())};
+        ~ValidationCapture() { std::cerr.rdbuf(previous); }
+    } validation;
+    rhi::vulkan::VulkanSwapchain swapchain(d, {.width = 64, .height = 64, .vsync = false});
+    const auto before = d.lastSubmitted();
+    {
+        FailNextAllocation failure(sizeof(VkImageMemoryBarrier));
+        EXPECT_THROW((void)swapchain.beginFrame(), std::bad_alloc);
+    }
+    EXPECT_EQ(d.lastSubmitted(), before + 1); // Recovery presents a cleared image.
+    for (int frame = 0; frame < 5; ++frame) {
+        ASSERT_EQ(swapchain.beginFrame(), rhi::FrameStatus::Ready);
+        (void)swapchain.cancelFrame();
+    }
+    d.waitIdle();
+    EXPECT_EQ(validation.messages.str().find("Validation Error"), std::string::npos)
+        << validation.messages.str();
+    EXPECT_EQ(validation.messages.str().find("SYNC-HAZARD"), std::string::npos)
+        << validation.messages.str();
+}
+
+TEST_F(RhiDeviceTest, SubmissionTrackingAllocationFailureCanCancelAndReuseFrameFence) {
+    auto& d = device();
+    struct ValidationCapture {
+        std::ostringstream messages;
+        std::streambuf* previous{std::cerr.rdbuf(messages.rdbuf())};
+        ~ValidationCapture() { std::cerr.rdbuf(previous); }
+    } validation;
+    rhi::vulkan::VulkanSwapchain swapchain(d, {.width = 64, .height = 64, .vsync = false});
+    bool caught = false;
+    // deque grows periodically. Only endFrame's CPU submission tracking allocates here.
+    for (int attempt = 0; attempt < 128 && !caught; ++attempt) {
+        ASSERT_EQ(swapchain.beginFrame(), rhi::FrameStatus::Ready);
+        const rhi::TextureBarrier toPresent{.texture = swapchain.currentTexture(),
+            .before = swapchain.currentTextureState() == rhi::ResourceState::Undefined ?
+                rhi::ResourceState::ColorAttachment : swapchain.currentTextureState(),
+            .after = rhi::ResourceState::Present};
+        rhi::resourceBarriers(swapchain.commandBuffer(), std::span{&toPresent, 1});
+        const auto before = d.lastSubmitted();
+        try {
+            FailNextAllocation failure;
+            (void)swapchain.endFrame();
+        } catch (const std::bad_alloc&) {
+            caught = true;
+            EXPECT_EQ(d.lastSubmitted(), before);
+            (void)swapchain.cancelFrame();
+        }
+    }
+    ASSERT_TRUE(caught);
+    for (int frame = 0; frame < 5; ++frame) {
+        ASSERT_EQ(swapchain.beginFrame(), rhi::FrameStatus::Ready);
+        (void)swapchain.cancelFrame();
+    }
+    d.waitIdle();
+    EXPECT_EQ(validation.messages.str().find("Validation Error"), std::string::npos)
+        << validation.messages.str();
+    EXPECT_EQ(validation.messages.str().find("SYNC-HAZARD"), std::string::npos)
+        << validation.messages.str();
+}
+
+TEST_F(RhiDeviceTest, StagingUploadsRetireOnlyWithTheirOwnSubmission) {
+    auto& d = device();
+    struct ValidationCapture {
+        std::ostringstream messages;
+        std::streambuf* previous{std::cerr.rdbuf(messages.rdbuf())};
+        ~ValidationCapture() { std::cerr.rdbuf(previous); }
+    } validation;
+    rhi::vulkan::VulkanSwapchain swapchain(d, {.width = 64, .height = 64, .vsync = false});
+    const auto destination = d.buffer_create({16, rhi::BufferUsage::TransferDestination,
+        rhi::MemoryUsage::DeviceLocal, "delayed-upload"});
+    const auto image = d.texture_create({.format = rhi::PixelFormat::Rgba8Unorm,
+        .width = 2, .height = 2,
+        .usage = rhi::TextureUsage::TransferDestination | rhi::TextureUsage::Sampled});
+    const auto allocations = [&] {
+        VmaTotalStatistics statistics{};
+        vmaCalculateStatistics(d.allocator(), &statistics);
+        return statistics.total.statistics.allocationCount;
+    };
+    const auto baseline = allocations();
+    const auto delayed = d.command_buffer_create();
+    const std::vector<std::byte> bytes(16, std::byte{42});
+    rhi::begin(delayed);
+    rhi::updateBuffer(delayed, {destination, 0, bytes});
+    const rhi::TextureBarrier toCopy{.texture = image,
+        .before = rhi::ResourceState::Undefined, .after = rhi::ResourceState::CopyDestination};
+    rhi::resourceBarriers(delayed, std::span{&toCopy, 1});
+    rhi::updateImage(delayed, {.destination = image, .extent = {2, 2, 1}, .data = bytes});
+    rhi::end(delayed);
+    EXPECT_EQ(allocations(), baseline + 2);
+    ASSERT_EQ(swapchain.beginFrame(), rhi::FrameStatus::Ready);
+    (void)swapchain.cancelFrame();
+    d.waitIdle();
+    d.collectStagingBuffers();
+    EXPECT_EQ(allocations(), baseline + 2); // Both delayed copies still own their scratch.
+    d.submit(delayed, {}); // Also exercises retirement with a device-owned fence.
+    d.waitIdle();
+    d.collectStagingBuffers();
+    EXPECT_EQ(allocations(), baseline);
+    d.command_buffer_destroy(delayed);
+    d.texture_destroy(image);
+    d.buffer_destroy(destination);
+    EXPECT_EQ(validation.messages.str().find("Validation Error"), std::string::npos)
+        << validation.messages.str();
+    EXPECT_EQ(validation.messages.str().find("SYNC-HAZARD"), std::string::npos)
+        << validation.messages.str();
+}
+
+TEST_F(RhiDeviceTest, StagingDiscardResetAndSwapchainDestructionReleaseScratchSafely) {
+    auto& d = device();
+    struct ValidationCapture {
+        std::ostringstream messages;
+        std::streambuf* previous{std::cerr.rdbuf(messages.rdbuf())};
+        ~ValidationCapture() { std::cerr.rdbuf(previous); }
+    } validation;
+    const auto destination = d.buffer_create({16, rhi::BufferUsage::TransferDestination,
+        rhi::MemoryUsage::DeviceLocal, "cancelled-upload"});
+    const auto allocations = [&] {
+        VmaTotalStatistics statistics{};
+        vmaCalculateStatistics(d.allocator(), &statistics);
+        return statistics.total.statistics.allocationCount;
+    };
+    const auto baseline = allocations();
+    const std::vector<std::byte> bytes(16);
+    const auto cmd = d.command_buffer_create();
+    rhi::begin(cmd);
+    rhi::updateBuffer(cmd, {destination, 0, bytes});
+    d.command_buffer(cmd).discard();
+    EXPECT_EQ(allocations(), baseline);
+    rhi::begin(cmd);
+    rhi::updateBuffer(cmd, {destination, 0, bytes});
+    rhi::end(cmd);
+    rhi::begin(cmd); // Replacing an unsubmitted recording also releases its scratch.
+    EXPECT_EQ(allocations(), baseline);
+    rhi::updateBuffer(cmd, {destination, 0, bytes});
+    rhi::end(cmd);
+    d.command_buffer_destroy(cmd);
+    EXPECT_EQ(allocations(), baseline);
+    {
+        rhi::vulkan::VulkanSwapchain swapchain(d, {.width = 64, .height = 64, .vsync = false});
+        ASSERT_EQ(swapchain.beginFrame(), rhi::FrameStatus::Ready);
+        const auto frame = swapchain.commandBuffer();
+        rhi::updateBuffer(frame, {destination, 0, bytes});
+        const rhi::TextureBarrier toPresent{.texture = swapchain.currentTexture(),
+            .before = rhi::ResourceState::ColorAttachment, .after = rhi::ResourceState::Present};
+        rhi::resourceBarriers(frame, std::span{&toPresent, 1});
+        (void)swapchain.endFrame();
+    } // Destroys the borrowed fence before collecting the submitted upload.
+    d.collectStagingBuffers();
+    EXPECT_EQ(allocations(), baseline);
+    d.buffer_destroy(destination);
+    EXPECT_EQ(validation.messages.str().find("Validation Error"), std::string::npos)
+        << validation.messages.str();
+    EXPECT_EQ(validation.messages.str().find("SYNC-HAZARD"), std::string::npos)
+        << validation.messages.str();
+}
+
+TEST_F(RhiDeviceTest, TransientBufferSurvivesAllReferencingRecordingsAndSubmissions) {
+    auto& d = device();
+    struct ValidationCapture {
+        std::ostringstream messages;
+        std::streambuf* previous{std::cerr.rdbuf(messages.rdbuf())};
+        ~ValidationCapture() { std::cerr.rdbuf(previous); }
+    } validation;
+    const auto destination = d.buffer_create({16, rhi::BufferUsage::TransferDestination,
+        rhi::MemoryUsage::DeviceLocal, "shared-transient-copy"});
+    const auto allocations = [&] {
+        VmaTotalStatistics statistics{};
+        vmaCalculateStatistics(d.allocator(), &statistics);
+        return statistics.total.statistics.allocationCount;
+    };
+    const auto baseline = allocations();
+    const auto transient = d.buffer_acquire_transient({16, rhi::BufferUsage::TransferSource,
+        rhi::MemoryUsage::Upload, "shared-transient"});
+    const std::vector<std::byte> bytes(16);
+    d.buffer_upload(transient, bytes);
+    const auto first = d.command_buffer_create(), second = d.command_buffer_create();
+    for (const auto cmd : {first, second}) {
+        rhi::begin(cmd);
+        rhi::copyBuffer(cmd, {transient, destination, 0, 0, 16});
+        rhi::end(cmd);
+    }
+    d.submit(first, {});
+    d.waitIdle();
+    d.collectStagingBuffers();
+    EXPECT_EQ(allocations(), baseline + 1);
+    d.submit(second, {});
+    d.waitIdle();
+    d.collectStagingBuffers();
+    EXPECT_EQ(allocations(), baseline);
+    d.command_buffer_destroy(first);
+    d.command_buffer_destroy(second);
+    const auto cancelled = d.buffer_acquire_transient({16, rhi::BufferUsage::Vertex,
+        rhi::MemoryUsage::Upload, "cancelled-stream"});
+    const auto discarded = d.command_buffer_create();
+    rhi::begin(discarded);
+    rhi::bindVertexBuffer(discarded, 0, cancelled);
+    d.command_buffer(discarded).discard();
+    EXPECT_EQ(allocations(), baseline);
+    d.command_buffer_destroy(discarded);
+    d.buffer_destroy(destination);
+    EXPECT_EQ(validation.messages.str().find("Validation Error"), std::string::npos)
+        << validation.messages.str();
+    EXPECT_EQ(validation.messages.str().find("SYNC-HAZARD"), std::string::npos)
+        << validation.messages.str();
 }
 
 TEST_F(RhiDeviceTest, CommandRecordAndSubmit) {
@@ -320,22 +713,17 @@ TEST_F(RhiDeviceTest, RenderGraphSubpassesReadInputAndReuseCaches) {
     rhi::ResourceState outputState = rhi::ResourceState::Undefined;
     RgTexturePool pool;
     RgRenderPassCache cache;
-    pool.beginFrame(0);
     RenderScene scene;
     RenderContext renderContext(pool, cache, scene);
     RenderGraph graph;
     rhi::RID pipelines[2];
     rhi::RID cachedPass, cachedFramebuffer;
     std::vector<std::uint32_t> callbackOrder;
-    const auto gbuffer = graph.createTexture({.format = rhi::PixelFormat::Rgba8Unorm,
-        .width = 16, .height = 16,
-        .usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::InputAttachment,
-        .debugName = "graph-gbuffer"});
-    const auto destination = graph.importTexture(output, outputView, outputState,
-        rhi::ResourceState::CopySource, rhi::TextureAspect::Color, &outputState);
-    const auto normal = graph.createTexture({.format = rhi::PixelFormat::Rgba8Unorm,
-        .width = 16, .height = 16, .usage = rhi::TextureUsage::ColorAttachment,
-        .debugName = "graph-normal"});
+    const auto gbuffer = graph.createTexture(test::textureDesc(TextureFormat::Rgba8Unorm, 16, 16, "graph-gbuffer"));
+    const auto destination = graph.importTexture("Output", [&](RenderContext&) {
+        return RgTextureBinding{output, outputView, outputState, rhi::AccessMode::Auto, &outputState};
+    }, rhi::ResourceState::CopySource);
+    const auto normal = graph.createTexture(test::textureDesc(TextureFormat::Rgba8Unorm, 16, 16, "graph-normal"));
     RgRasterPass first;
     first.name = "GBuffer";
     first.renderArea = {0, 0, 16, 16};
@@ -402,10 +790,12 @@ TEST_F(RhiDeviceTest, RenderGraphSubpassesReadInputAndReuseCaches) {
     ASSERT_EQ(vmaCreateBuffer(d.allocator(), &bufferInfo, &memoryInfo, &readback, &allocation, &allocationInfo), VK_SUCCESS);
     const auto cmd = d.command_buffer_create();
     for (int iteration = 0; iteration < 2; ++iteration) {
+        pool.collect(d.completedSubmission());
+        pool.beginBatch(cmd);
         auto frame = record();
         rhi::begin(cmd);
         graph.execute(renderContext, frame, cmd);
-        EXPECT_EQ(outputState, rhi::ResourceState::CopySource);
+        EXPECT_EQ(pool.trackedState(&outputState), rhi::ResourceState::CopySource);
         const auto native = d.command_buffer(cmd).nativeCommandBuffer();
         VkBufferImageCopy copy{};
         copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -421,8 +811,10 @@ TEST_F(RhiDeviceTest, RenderGraphSubpassesReadInputAndReuseCaches) {
         vkCmdPipelineBarrier(native, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
                               0, 0, nullptr, 1, &host, 0, nullptr);
         rhi::end(cmd);
-        d.submit(cmd, {});
+        pool.onSubmitted(d.submit(cmd, {}));
+        EXPECT_EQ(outputState, rhi::ResourceState::CopySource);
         d.waitIdle();
+        pool.collect(d.completedSubmission());
         ASSERT_EQ(vmaInvalidateAllocation(d.allocator(), allocation, 0, VK_WHOLE_SIZE), VK_SUCCESS);
         const auto* pixel = static_cast<const std::uint8_t*>(allocationInfo.pMappedData);
         for (std::size_t i = 0; i < 16 * 16; ++i) {
@@ -466,14 +858,8 @@ TEST_F(RhiDeviceTest, RenderGraphDepthReadOnlyAndInputStoresAreSynchronized) {
     RenderScene scene;
     RenderContext renderContext(pool, cache, scene);
     RenderGraph graph;
-    const auto depth = graph.createTexture({.format = rhi::PixelFormat::Depth32Float,
-        .width = 16, .height = 16,
-        .usage = rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::InputAttachment |
-                 rhi::TextureUsage::Sampled,
-        .debugName = "graph-depth-input"});
-    const auto output = graph.createTexture({.format = rhi::PixelFormat::Rgba8Unorm,
-        .width = 16, .height = 16, .usage = rhi::TextureUsage::ColorAttachment,
-        .debugName = "graph-depth-output"});
+    const auto depth = graph.createTexture(test::textureDesc(TextureFormat::Depth32Float, 16, 16, "graph-depth-input"));
+    const auto output = graph.createTexture(test::textureDesc(TextureFormat::Rgba8Unorm, 16, 16, "graph-depth-output"));
     RgRasterPass clear;
     clear.name = "ClearDepth";
     clear.renderArea = {0, 0, 16, 16};
@@ -501,10 +887,12 @@ TEST_F(RhiDeviceTest, RenderGraphDepthReadOnlyAndInputStoresAreSynchronized) {
     auto frame = graph.prepareFrame(renderContext);
     const auto cmd = d.command_buffer_create();
     rhi::begin(cmd);
+    pool.beginBatch(cmd);
     graph.execute(renderContext, frame, cmd);
     rhi::end(cmd);
-    d.submit(cmd, {});
+    pool.onSubmitted(d.submit(cmd, {}));
     d.waitIdle();
+    pool.collect(d.completedSubmission());
     frame.reset();
     graph.reset();
     d.command_buffer_destroy(cmd);
@@ -644,7 +1032,6 @@ TEST_P(TextureUploadFormatTest, OddMipUploadAndSubregionUpdateReadBackExactly) {
         GTEST_SKIP() << "Device does not support this format/usage combination";
     TextureDesc desc{TextureType::Texture2D, format, 5, 3, 3};
     desc.sampler.filterMode = TextureFilterMode::Point;
-    desc.usage = usage;
     TextureMipLayout packed, padded;
     ASSERT_TRUE(computeTextureLayout(desc, packed));
     ASSERT_TRUE(rhi::computeTextureLayout(pixelFormat, 5, 3, 3, padded,
@@ -666,24 +1053,21 @@ TEST_P(TextureUploadFormatTest, OddMipUploadAndSubregionUpdateReadBackExactly) {
         for (std::size_t i = 0; i < pixels.size(); ++i)
             pixels[i] = static_cast<std::byte>((i * 37U + 19U) % 256U);
     }
-    auto texture = Texture::create(desc);
+    const auto texture = d.texture_create({.format = pixelFormat, .width = 5, .height = 3,
+        .mipCount = 3, .usage = usage});
     ASSERT_TRUE(texture);
-    if (format == TextureFormat::R8Unorm) {
-        // Also exercise arbitrary region order at the lower RHI boundary.
-        std::vector<rhi::TextureUploadRegion> regions;
-        for (auto mip : {2U, 0U, 1U}) {
-            rhi::TextureUploadRegion region;
-            region.mipLevel = mip;
-            region.width = std::max(1U, 5U >> mip);
-            region.height = std::max(1U, 3U >> mip);
-            region.data = std::span<const std::byte>{pixels}.subspan(packed.offsets[mip], packed.sizes[mip]);
-            regions.push_back(region);
-        }
-        d.texture_upload(texture->textureHandle(), regions);
-    } else {
-        texture->upload(std::span<const std::uint8_t>{
-            reinterpret_cast<const std::uint8_t*>(pixels.data()), pixels.size()});
+    // The raw RHI path explicitly requests TransferSource for this upload/readback test.
+    std::vector<rhi::TextureUploadRegion> regions;
+    const auto order = format == TextureFormat::R8Unorm ? std::array{2U, 0U, 1U} : std::array{0U, 1U, 2U};
+    for (auto mip : order) {
+        rhi::TextureUploadRegion region;
+        region.mipLevel = mip;
+        region.width = std::max(1U, 5U >> mip);
+        region.height = std::max(1U, 3U >> mip);
+        region.data = std::span<const std::byte>{pixels}.subspan(packed.offsets[mip], packed.sizes[mip]);
+        regions.push_back(region);
     }
+    d.texture_upload(texture, regions);
     VkBuffer readback{};
     VmaAllocation allocation{};
     VmaAllocationInfo allocationInfo{};
@@ -698,13 +1082,13 @@ TEST_P(TextureUploadFormatTest, OddMipUploadAndSubregionUpdateReadBackExactly) {
     const auto cmd = d.command_buffer_create();
     rhi::begin(cmd);
     const auto aspect = info.depth ? rhi::TextureAspect::Depth : rhi::TextureAspect::Color;
-    rhi::TextureBarrier barrier{texture->textureHandle(), aspect, rhi::ResourceState::ShaderRead,
+    rhi::TextureBarrier barrier{texture, aspect, rhi::ResourceState::ShaderRead,
                                 rhi::ResourceState::CopyDestination};
     barrier.mipCount = 3;
     rhi::resourceBarriers(cmd, std::span{&barrier, 1});
     // Replace the second texel of mip 1 with a valid texel from mip 0.
     const auto replacement = std::span<const std::byte>{pixels}.first(info.bytesPerBlock);
-    rhi::updateImage(cmd, {.destination = texture->textureHandle(), .mipLevel = 1,
+    rhi::updateImage(cmd, {.destination = texture, .mipLevel = 1,
         .offset = {1, 0, 0}, .extent = {1, 1, 1}, .data = replacement});
     std::memcpy(pixels.data() + packed.offsets[1] + info.bytesPerBlock,
                 replacement.data(), replacement.size());
@@ -715,7 +1099,7 @@ TEST_P(TextureUploadFormatTest, OddMipUploadAndSubregionUpdateReadBackExactly) {
     const auto destination = d.buffer_create({readbackSize, rhi::BufferUsage::TransferDestination |
         rhi::BufferUsage::TransferSource, rhi::MemoryUsage::Readback, "upload-roundtrip"});
     for (std::uint32_t mip = 0; mip < 3; ++mip) {
-        rhi::BufferImageCopy copy{destination, texture->textureHandle(), padded.offsets[mip],
+        rhi::BufferImageCopy copy{destination, texture, padded.offsets[mip],
             0, 0, mip, 0, {}, {std::max(1U, 5U >> mip), std::max(1U, 3U >> mip), 1}};
         rhi::copyImageToBuffer(cmd, copy);
     }
@@ -747,7 +1131,7 @@ TEST_P(TextureUploadFormatTest, OddMipUploadAndSubregionUpdateReadBackExactly) {
     d.command_buffer_destroy(cmd);
     d.buffer_destroy(destination);
     vmaDestroyBuffer(d.allocator(), readback, allocation);
-    texture.reset();
+    d.texture_destroy(texture);
     EXPECT_EQ(validation.messages.str().find("Validation Error"), std::string::npos) << validation.messages.str();
     EXPECT_EQ(validation.messages.str().find("SYNC-HAZARD"), std::string::npos) << validation.messages.str();
 }
@@ -955,11 +1339,7 @@ TEST_P(HdrRenderGraphTest, DrawsFloatAttachmentsAndReusesCompiledGraphAcrossFram
     const auto makeTexture = [&](TextureFormat format) {
         TextureDesc desc{TextureType::Texture2D, format, width, height};
         desc.sampler.filterMode = TextureFilterMode::Point;
-        desc.usage = (rhi::isDepthFormat(toRhi(format)) ? rhi::TextureUsage::DepthStencilAttachment :
-                                                       rhi::TextureUsage::ColorAttachment) |
-                     rhi::TextureUsage::TransferSource;
-        return graph.createTexture({.format = toRhi(format), .width = width, .height = height,
-            .usage = desc.usage, .extentResolver = extent});
+        return graph.createTexture(desc, extent, rhi::ResourceState::CopySource);
     };
     const RgTextureHandle handles[]{makeTexture(TextureFormat::Rgba16Float),
         makeTexture(TextureFormat::Rgba32Float), makeTexture(depthFormat)};
@@ -997,7 +1377,7 @@ TEST_P(HdrRenderGraphTest, DrawsFloatAttachmentsAndReusesCompiledGraphAcrossFram
     for (int iteration = 0; iteration < 4; ++iteration) {
         width = iteration == 2 ? 9U : 16U;
         height = iteration == 2 ? 7U : 8U;
-        pool.beginFrame(0);
+        pool.collect(d.completedSubmission());
         auto frame = graph.prepareFrame(context);
         if (iteration == 0) {
             for (int i = 0; i < 3; ++i) firstTextures[i] = frame.texture(handles[i]);
@@ -1037,22 +1417,16 @@ TEST_P(HdrRenderGraphTest, DrawsFloatAttachmentsAndReusesCompiledGraphAcrossFram
         ASSERT_EQ(vmaCreateBuffer(d.allocator(), &bufferInfo, &memoryInfo,
             &readback, &allocation, &allocationInfo), VK_SUCCESS);
         rhi::begin(cmd);
+        pool.beginBatch(cmd);
         graph.execute(context, frame, cmd);
         const auto native = d.command_buffer(cmd).nativeCommandBuffer();
         for (int i = 0; i < 3; ++i) {
-            const auto aspect = i == 2 ? rhi::TextureAspect::Depth : rhi::TextureAspect::Color;
-            const auto state = i == 2 ? rhi::ResourceState::DepthAttachment : rhi::ResourceState::ColorAttachment;
-            rhi::TextureBarrier barrier{frame.texture(handles[i]), aspect, state, rhi::ResourceState::CopySource};
-            rhi::resourceBarriers(cmd, std::span{&barrier, 1});
             VkBufferImageCopy copy{};
             copy.bufferOffset = offsets[i];
             copy.imageSubresource = {i == 2 ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
             copy.imageExtent = {width, height, 1};
             vkCmdCopyImageToBuffer(native, d.resolveTexture(frame.texture(handles[i])),
                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, readback, 1, &copy);
-            // Restore the graph's final state so its persistent pool tracking stays accurate.
-            barrier.before = rhi::ResourceState::CopySource; barrier.after = state;
-            rhi::resourceBarriers(cmd, std::span{&barrier, 1});
         }
         VkBufferMemoryBarrier host{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
         host.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; host.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
@@ -1061,8 +1435,9 @@ TEST_P(HdrRenderGraphTest, DrawsFloatAttachmentsAndReusesCompiledGraphAcrossFram
         vkCmdPipelineBarrier(native, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
             0, 0, nullptr, 1, &host, 0, nullptr);
         rhi::end(cmd);
-        d.submit(cmd, {});
+        pool.onSubmitted(d.submit(cmd, {}));
         d.waitIdle();
+        pool.collect(d.completedSubmission());
         ASSERT_EQ(vmaInvalidateAllocation(d.allocator(), allocation, 0, VK_WHOLE_SIZE), VK_SUCCESS);
         const auto* bytes = static_cast<const std::byte*>(allocationInfo.pMappedData);
         const std::uint16_t expectedHalf[]{0x4000, 0x4200, 0x4480, 0x4200}; // 2, 3, 4.5, 3
@@ -1131,8 +1506,7 @@ TEST_F(RhiDeviceTest, UnsupportedAttachmentSamplesAndTransferOnlyViewsReturnFail
     EXPECT_FALSE(d.texture_default_view(transfer));
     d.texture_destroy(transfer);
     TextureDesc desc{TextureType::Texture2D, TextureFormat::Rgba8Unorm, 4, 4};
-    desc.usage = rhi::TextureUsage::TransferDestination;
-    EXPECT_FALSE(Texture::create(desc));
+    EXPECT_TRUE(Texture::create(desc));
     d.pipeline_layout_destroy(layout); d.shader_destroy(vertex); d.shader_destroy(fragment);
 }
 
@@ -1261,9 +1635,7 @@ TEST_P(UintRenderGraphTest, TypedClearAndIdDrawReadBackExactBitsAndRejectBlendin
     RenderGraph graph;
     TextureDesc textureDesc{TextureType::Texture2D, TextureFormat::R32Uint, 16, 16};
     textureDesc.sampler.filterMode = TextureFilterMode::Point;
-    textureDesc.usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::TransferSource;
-    const auto output = graph.createTexture({.format = rhi::PixelFormat::R32Uint, .width = 16, .height = 16,
-        .usage = textureDesc.usage});
+    const auto output = graph.createTexture(textureDesc, {}, rhi::ResourceState::CopySource);
     std::uint32_t clearId = 0xfedcba98U;
     RgRasterPass clear;
     clear.name = "Clear unsigned IDs";
@@ -1316,7 +1688,7 @@ TEST_P(UintRenderGraphTest, TypedClearAndIdDrawReadBackExactBitsAndRejectBlendin
     rhi::RID firstTexture;
     for (; iteration < 2; ++iteration) {
         clearId = iteration ? 0xffffffffU : 0xfedcba98U;
-        pool.beginFrame(0);
+        pool.collect(d.completedSubmission());
         auto frame = graph.prepareFrame(context);
         if (iteration == 0) {
             firstTexture = frame.texture(output);
@@ -1340,18 +1712,14 @@ TEST_P(UintRenderGraphTest, TypedClearAndIdDrawReadBackExactBitsAndRejectBlendin
         ASSERT_EQ(vmaCreateBuffer(d.allocator(), &bufferInfo, &memoryInfo,
             &readback, &allocation, &allocationInfo), VK_SUCCESS);
         rhi::begin(cmd);
+        pool.beginBatch(cmd);
         graph.execute(context, frame, cmd);
-        rhi::TextureBarrier barrier{frame.texture(output), rhi::TextureAspect::Color,
-            rhi::ResourceState::ColorAttachment, rhi::ResourceState::CopySource};
-        rhi::resourceBarriers(cmd, std::span{&barrier, 1});
         const auto native = d.command_buffer(cmd).nativeCommandBuffer();
         VkBufferImageCopy copy{};
         copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
         copy.imageExtent = {16, 16, 1};
         vkCmdCopyImageToBuffer(native, d.resolveTexture(frame.texture(output)),
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, readback, 1, &copy);
-        barrier.before = rhi::ResourceState::CopySource; barrier.after = rhi::ResourceState::ColorAttachment;
-        rhi::resourceBarriers(cmd, std::span{&barrier, 1});
         VkBufferMemoryBarrier host{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
         host.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; host.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
         host.srcQueueFamilyIndex = host.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -1359,8 +1727,9 @@ TEST_P(UintRenderGraphTest, TypedClearAndIdDrawReadBackExactBitsAndRejectBlendin
         vkCmdPipelineBarrier(native, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
             0, 0, nullptr, 1, &host, 0, nullptr);
         rhi::end(cmd);
-        d.submit(cmd, {});
+        pool.onSubmitted(d.submit(cmd, {}));
         d.waitIdle();
+        pool.collect(d.completedSubmission());
         ASSERT_EQ(vmaInvalidateAllocation(d.allocator(), allocation, 0, VK_WHOLE_SIZE), VK_SUCCESS);
         const auto* ids = static_cast<const std::uint32_t*>(allocationInfo.pMappedData);
         for (std::uint32_t y = 0; y < 16; ++y)

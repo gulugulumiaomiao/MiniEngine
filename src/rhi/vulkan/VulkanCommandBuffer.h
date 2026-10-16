@@ -40,6 +40,8 @@ public:
 
     void begin();
     void end();
+    // Caller guarantees the buffer is not pending GPU execution.
+    void discard();
     [[nodiscard]] CommandState state() const { return state_; }
     [[nodiscard]] VkCommandBuffer nativeCommandBuffer() const { return commandBuffer_; }
 

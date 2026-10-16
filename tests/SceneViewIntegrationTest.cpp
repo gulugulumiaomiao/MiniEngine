@@ -21,6 +21,7 @@
 #include <filesystem>
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
 
 namespace {
 using namespace engine;
@@ -28,6 +29,7 @@ using namespace engine;
 struct FrameProbeState {
     int builds{}, updates{}, executions{};
     bool sawEmpty{}, sawItems{};
+    bool throwOnce{};
     std::uint32_t frameSlots{};
 };
 
@@ -50,6 +52,10 @@ public:
             state_.sawEmpty |= itemCount_ == 0;
             state_.sawItems |= itemCount_ != 0;
             ++state_.executions;
+            if (state_.throwOnce) {
+                state_.throwOnce = false;
+                throw std::runtime_error("cancel scene recording");
+            }
         };
         graph.addGraphicsPass(std::move(pass));
     }
@@ -76,6 +82,7 @@ public:
     int frames{};
     bool drewGeometry{};
     bool resumed{};
+    bool cancelledRecording{};
     FrameProbeState probe, addedProbe;
     std::uint64_t graphCompiles{};
     Ref<Shader> keywordShader;
@@ -193,6 +200,11 @@ private:
             return;
         }
         if (frames > 1 && frames <= 5) EXPECT_EQ(pipeline_->graphCompileCount(), 1U);
+        if (frames == 2) {
+            probe.throwOnce = true;
+            EXPECT_THROW(ENGINE.renderer().renderFrame(ENGINE.renderScene()), std::runtime_error);
+            cancelledRecording = !ENGINE.renderer().rgTexturePool().batchActive();
+        }
         if (frames == 5) pipeline_->addPass(std::make_unique<FrameProbe>(addedProbe));
         if (frames >= 6 && frames <= 10) EXPECT_EQ(pipeline_->graphCompileCount(), 2U);
         if (frames == 10) {
@@ -319,6 +331,7 @@ TEST_F(SceneViewIntegrationTest,
     EXPECT_EQ(application.frames, 19);
     EXPECT_TRUE(application.drewGeometry);
     EXPECT_TRUE(application.resumed);
+    EXPECT_TRUE(application.cancelledRecording);
     EXPECT_EQ(application.graphCompiles, 2U); // One initial compile, one pass-list change.
     EXPECT_EQ(application.probe.builds, 2);
     EXPECT_EQ(application.probe.updates, application.probe.executions);

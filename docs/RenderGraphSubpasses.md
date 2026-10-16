@@ -23,11 +23,12 @@ resource aliasing, async compute, resolves and attachment feedback loops are def
 
 Register the stable swapchain source with `graph.importSwapchainTexture(swapchain)`.
 `prepareFrame()` resolves its acquired texture, view and state after `beginFrame()`
-and requests a final transition to `Present`. Other fixed external textures use
-`importTexture(texture, view, initialState, finalState, aspect, trackedState)`;
-there is no `ImportedTexture` description type. Imported resources remain externally
-owned. A transient `RgTextureDesc` needs no aspect: the graph derives color or depth
-from its pixel format.
+and requests a final transition to `Present`. Other external textures use
+`importTexture(name, resolver, finalState)`; the resolver supplies a
+`RgTextureBinding` with the current texture, view, state/access and optional state slot.
+There is no `ImportedTexture` description type. Imported resources remain externally
+owned. Imported and transient textures need no aspect parameter: compile derives
+color or depth from the view format or transient pixel format.
 
 `Renderer` owns a persistent texture pool and `RgRenderPassCache` and exposes both
 through `RenderContext`. Pass the frame context to graph compilation:
@@ -83,7 +84,7 @@ pool/cache, resolves physical bindings and patches barriers using their actual s
 `RgFrameResources` owns the current leases and releases them on destruction/reset.
 It retains no context pointer; the pool and graph must outlive the frame, and cached
 objects must outlive GPU work. Only one CPU-prepared frame may be live per graph;
-multiple GPU submissions can remain in flight through the pool's frame buckets.
+multiple GPU submissions can remain in flight through the pool's submission retirement queue.
 
 For standalone graph compilation, construct `RenderContext(pool, cache, scene)`
 with externally owned resources. Renderer-dependent methods require a context
@@ -170,9 +171,9 @@ device that might have reused the same numeric handle values. A new device start
 fresh cache. Owners of imported views outside `Renderer` perform the same explicit
 framebuffer invalidation before destroying/replacing those views.
 
-Transient textures return to the frame-indexed pool when frame resources expire.
-Their physical layout and last access are updated after command recording and used by subsequent
-barriers. A newly declared virtual transient texture has undefined contents even when
+Transient textures release their CPU leases when frame resources expire. They return to the global
+pool only after their graphics submission completes. Physical layout and last access are committed
+after successful submission; cancelled batches preserve their original states. A newly declared virtual transient texture has undefined contents even when
 the physical allocation is reused. `invalidate()` preserves declarations and clears
 the plan; `reset()` also clears passes and virtual resources. Neither is per-frame work.
 Dynamic external imports can use a named resolver returning `RgTextureBinding`.
@@ -216,3 +217,6 @@ ctest --test-dir build/clang-debug -R "RenderGraph|RhiDevice" --output-on-failur
 $env:VK_LAYER_ENABLES = 'VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT'
 build/clang-debug/RhiDeviceTest.exe --gtest_filter=RhiDeviceTest.RenderGraph*:RhiDeviceTest.RenderObjectCreationDoesNotCacheAtDeviceLevel
 ```
+
+Standalone graph execution must begin a pool submission batch, commit it with the actual graphics
+SubmissionId, and collect device completion before reuse. See [RgTexturePool.md](RgTexturePool.md).

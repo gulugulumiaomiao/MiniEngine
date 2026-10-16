@@ -28,6 +28,19 @@ bool finalReadsContents(ResourceState state) {
     return state == ResourceState::ShaderRead || state == ResourceState::InputAttachment ||
            state == ResourceState::CopySource || state == ResourceState::Present;
 }
+rhi::TextureUsage usageFor(ResourceState state) {
+    switch (state) {
+    case ResourceState::ColorAttachment: return rhi::TextureUsage::ColorAttachment;
+    case ResourceState::DepthAttachment: return rhi::TextureUsage::DepthStencilAttachment;
+    case ResourceState::InputAttachment: return rhi::TextureUsage::InputAttachment;
+    case ResourceState::ShaderRead: return rhi::TextureUsage::Sampled;
+    case ResourceState::CopySource: return rhi::TextureUsage::TransferSource;
+    case ResourceState::CopyDestination: return rhi::TextureUsage::TransferDestination;
+    case ResourceState::Undefined:
+    case ResourceState::Present: return rhi::TextureUsage::None;
+    }
+    Log::fatal("RenderGraph", "Invalid texture resource state");
+}
 bool validArea(const rhi::Rect& a) { return a.x >= 0 && a.y >= 0 && a.width && a.height; }
 bool sameArea(const rhi::Rect& a, const rhi::Rect& b) {
     return a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height;
@@ -105,39 +118,14 @@ RgTextureHandle RenderGraph::importSwapchainTexture(const rhi::ISwapchain& swapc
                                     swapchain.currentTextureState()};
         }, ResourceState::Present);
 }
-RgTextureHandle RenderGraph::importTexture(rhi::RID texture, rhi::RID view,
-                                         ResourceState initialState, ResourceState finalState,
-                                         rhi::TextureAspect aspect, ResourceState* trackedState) {
-    ensureRecording();
-    if (!texture || !view) Log::fatal("RenderGraph", "Imported texture and view must both be valid");
-    for (std::size_t i = 0; i < textures_.size(); ++i) {
-        auto& node = textures_[i];
-        if (node.isTransient || node.resolver || node.texture != texture) continue;
-        if (node.view != view || node.initialState != initialState || node.finalState != finalState ||
-            node.aspect != aspect || (node.trackedState && trackedState && node.trackedState != trackedState))
-            Log::fatal("RenderGraph", "Conflicting imports of the same texture");
-        if (trackedState) node.trackedState = trackedState;
-        return {static_cast<std::uint32_t>(i)};
-    }
-    const RgTextureHandle handle{static_cast<std::uint32_t>(textures_.size())};
-    TextureNode node;
-    node.texture = texture;
-    node.view = view;
-    node.initialState = initialState;
-    node.finalState = finalState;
-    node.aspect = aspect;
-    node.trackedState = trackedState;
-    textures_.push_back(std::move(node));
-    return handle;
-}
 RgTextureHandle RenderGraph::importTexture(std::string name, TextureResolver resolver,
-                                         ResourceState finalState, rhi::TextureAspect aspect) {
+                                         ResourceState finalState) {
     ensureRecording();
     if (name.empty() || !resolver) Log::fatal("RenderGraph", "External texture source is empty");
     for (std::size_t i = 0; i < textures_.size(); ++i) {
         const auto& node = textures_[i];
         if (node.sourceName != name) continue;
-        if (node.finalState != finalState || node.aspect != aspect)
+        if (node.finalState != finalState)
             Log::fatal("RenderGraph", "Conflicting named texture sources");
         return {static_cast<std::uint32_t>(i)};
     }
@@ -146,30 +134,31 @@ RgTextureHandle RenderGraph::importTexture(std::string name, TextureResolver res
     node.sourceName = std::move(name);
     node.resolver = std::move(resolver);
     node.finalState = finalState;
-    node.aspect = aspect;
     textures_.push_back(std::move(node));
     return handle;
 }
 RgTextureBinding RenderGraph::resolveBinding(const TextureNode& node, RenderContext& context) const {
-    auto binding = node.resolver ? node.resolver(context) :
-        RgTextureBinding{node.texture, node.view, node.initialState, node.initialAccess, node.trackedState};
+    auto binding = node.resolver(context);
     if (!binding.texture || !binding.view)
         Log::fatal("RenderGraph", "Imported texture and view must both be valid");
-    if (binding.trackedState) binding.initialState = *binding.trackedState;
+    if (binding.trackedState) binding.initialState = context.rgTexturePool().trackedState(binding.trackedState);
     if (binding.initialAccess == AccessMode::Auto) binding.initialAccess =
         binding.initialState == ResourceState::InputAttachment ? AccessMode::ReadWrite : accessFor(binding.initialState);
     return binding;
 }
-RgTextureHandle RenderGraph::createTexture(RgTextureDesc desc) {
+RgTextureHandle RenderGraph::createTexture(TextureDesc desc, TextureExtentResolver extentResolver, ResourceState finalState) {
     ensureRecording();
-    if (desc.dimension != rhi::TextureType::Texture2D || desc.format == rhi::PixelFormat::Undefined ||
-        (!desc.extentResolver && (!desc.width || !desc.height)) ||
+    if (desc.type != TextureType::Texture2D ||
+        (!extentResolver && (!desc.width || !desc.height)) ||
         desc.mipCount != 1 || desc.arrayLayers != 1 || desc.depth != 1)
         Log::fatal("RenderGraph", "Graph transient textures currently require one mip and layer");
     const RgTextureHandle handle{static_cast<std::uint32_t>(textures_.size())};
     TextureNode node;
-    node.aspect = rhi::isDepthFormat(desc.format) ? rhi::TextureAspect::Depth : rhi::TextureAspect::Color;
     node.desc = std::move(desc);
+    node.extentResolver = std::move(extentResolver);
+    if (finalState == ResourceState::Present)
+        Log::fatal("RenderGraph", "Transient textures cannot be presented");
+    node.finalState = finalState;
     node.isTransient = true;
     textures_.push_back(std::move(node));
     return handle;
@@ -284,8 +273,10 @@ void RenderGraph::compile(RenderContext& context) {
     if (!device && !textures_.empty()) Log::fatal("RenderGraph", "No device for graph compilation");
     for (auto& node : textures_) {
         if (node.isTransient) {
-            node.metadata = {{}, node.desc.format, node.desc.samples, node.desc.usage,
-                node.desc.extentResolver ? 0U : node.desc.width, node.desc.extentResolver ? 0U : node.desc.height,
+            const auto samples = toRhiSampleCount(node.desc.samples);
+            if (!samples) Log::fatal("RenderGraph", "Unsupported texture sample count; expected 1, 2, 4 or 8");
+            node.metadata = {{}, toRhi(node.desc.format), *samples, usageFor(node.finalState),
+                node.extentResolver ? 0U : node.desc.width, node.extentResolver ? 0U : node.desc.height,
                 0, 1, 0, 1};
         } else {
             const auto binding = resolveBinding(node, context);
@@ -293,7 +284,8 @@ void RenderGraph::compile(RenderContext& context) {
             if (node.metadata.texture != binding.texture)
                 Log::fatal("RenderGraph", "Imported view does not reference its texture");
         }
-        validateView(node, node.metadata, node.finalState);
+        node.aspect = rhi::isDepthFormat(node.metadata.format) ?
+            rhi::TextureAspect::Depth : rhi::TextureAspect::Color;
     }
     compiledGroups_.reserve(groups_.size());
     for (const auto& recorded : groups_) {
@@ -305,7 +297,9 @@ void RenderGraph::compile(RenderContext& context) {
             rhi::SampleCount samples{};
             bool hasAttachment{};
             for (const auto& usage : subpass.resources) {
-                const auto& node = resolveNode(usage.texture);
+                (void)resolveNode(usage.texture);
+                auto& node = textures_[usage.texture.index];
+                if (node.isTransient) node.metadata.usage = node.metadata.usage | usageFor(usage.state);
                 validateView(node, node.metadata, usage.state, nullptr, usage.state == ResourceState::ShaderRead);
                 if (!attachmentState(usage.state)) continue;
                 if (hasAttachment && samples != node.metadata.samples)
@@ -318,6 +312,11 @@ void RenderGraph::compile(RenderContext& context) {
             group.subpasses.push_back(std::move(subpass));
         }
         compiledGroups_.push_back(std::move(group));
+    }
+    for (const auto& node : textures_) {
+        if (node.isTransient && node.metadata.usage == rhi::TextureUsage::None)
+            Log::fatal("RenderGraph", "Transient texture has no declared use");
+        validateView(node, node.metadata, node.finalState);
     }
     for (std::size_t i = 0; i < groups_.size(); ++i)
         if (groups_[i].traditional) compileRasterGroup(i);
@@ -372,7 +371,7 @@ void RenderGraph::compile(RenderContext& context) {
     for (std::size_t i = 0; i < textures_.size(); ++i) {
         const auto& node = textures_[i];
         const auto& state = states[i];
-        const auto final = !node.isTransient && node.finalState != ResourceState::Undefined ? node.finalState : state.state;
+        const auto final = node.finalState != ResourceState::Undefined ? node.finalState : state.state;
         const bool finalRead = node.finalState != ResourceState::Undefined && finalReadsContents(final);
         if (finalRead && state.contents == Contents::Invalid)
             Log::fatal("RenderGraph", "Final state reads undefined texture contents");
@@ -485,7 +484,7 @@ void RenderGraph::compileRasterGroup(std::size_t groupIndex) {
             }
         }
         const auto& node = resolveNode(handles[a]);
-        if (!foundLater && !node.isTransient && finalReadsContents(node.finalState)) needed = true;
+        if (!foundLater && finalReadsContents(node.finalState)) needed = true;
         if (needed) group.renderPassDesc.attachments[a].storeOp = rhi::StoreOp::Store;
     }
 }
@@ -503,13 +502,14 @@ RgFrameResources RenderGraph::prepareFrame(RenderContext& context) {
         RgFrameResources::Texture texture;
         if (node.isTransient) {
             auto desc = node.desc;
-            if (desc.extentResolver) {
-                const auto extent = desc.extentResolver(context);
+            if (node.extentResolver) {
+                const auto extent = node.extentResolver(context);
                 desc.width = extent.width;
                 desc.height = extent.height;
             }
-            texture.poolEntry = context.rgTexturePool().acquire(desc);
-            texture.binding = {texture.poolEntry->texture, texture.poolEntry->view,
+            texture.poolEntry = context.rgTexturePool().acquire(desc, node.metadata.usage);
+            texture.binding = {texture.poolEntry->texture->textureHandle(),
+                               texture.poolEntry->texture->defaultView(),
                                texture.poolEntry->lastState, texture.poolEntry->lastAccess};
         } else texture.binding = resolveBinding(node, context);
         texture.info = device->texture_view_info(texture.binding.view);
@@ -524,16 +524,6 @@ RgFrameResources RenderGraph::prepareFrame(RenderContext& context) {
                 Log::fatal("RenderGraph", "Multiple logical textures resolve to the same physical image");
         frame.textures_.push_back(std::move(texture));
     }
-    const auto materialize = [&](const BarrierPlan& plan, std::vector<rhi::TextureBarrier>& barriers, bool final) {
-        const auto& binding = frame.textures_[plan.texture.index].binding;
-        if (plan.needsContents && binding.initialState == ResourceState::Undefined)
-            Log::fatal("RenderGraph", "Pass reads undefined texture contents");
-        const auto before = plan.frameInitial ? binding.initialState : plan.before;
-        const auto source = plan.frameInitial ? binding.initialAccess : plan.sourceAccess;
-        if (before != plan.after || (!final && (writes(source) || writes(plan.destinationAccess))))
-            barriers.push_back(barrier(binding.texture, resolveNode(plan.texture).aspect,
-                                       before, plan.after, source, plan.destinationAccess));
-    };
     frame.groups_.reserve(groups_.size());
     for (std::size_t g = 0; g < groups_.size(); ++g) {
         const auto& plan = compiledGroups_[g];
@@ -580,9 +570,32 @@ RgFrameResources RenderGraph::prepareFrame(RenderContext& context) {
                 std::move(views), static_cast<std::uint32_t>(area.x) + area.width,
                 static_cast<std::uint32_t>(area.y) + area.height, 1});
         }
-        for (const auto& barrierPlan : plan.preBarriers) materialize(barrierPlan, group.preBarriers, false);
         frame.groups_.push_back(std::move(group));
     }
+    materializeFrameBarriers(frame, false);
+    return frame;
+}
+void RenderGraph::materializeFrameBarriers(RgFrameResources& frame, bool executing) const {
+    const auto materialize = [&](const BarrierPlan& plan, std::vector<rhi::TextureBarrier>& barriers, bool final) {
+        const auto& binding = frame.textures_[plan.texture.index].binding;
+        // Tracked imports can be initialized by another graph after this frame is prepared.
+        if (plan.needsContents && binding.initialState == ResourceState::Undefined &&
+            (executing || !binding.trackedState))
+            Log::fatal("RenderGraph", "Pass reads undefined texture contents");
+        const auto before = plan.frameInitial ? binding.initialState : plan.before;
+        const auto source = plan.frameInitial ? binding.initialAccess : plan.sourceAccess;
+        if (before != plan.after || (!final && (writes(source) || writes(plan.destinationAccess))))
+            barriers.push_back(barrier(binding.texture, resolveNode(plan.texture).aspect,
+                                       before, plan.after, source, plan.destinationAccess));
+    };
+    for (std::size_t g = 0; g < compiledGroups_.size(); ++g) {
+        auto& barriers = frame.groups_[g].preBarriers;
+        barriers.clear();
+        barriers.reserve(compiledGroups_[g].preBarriers.size());
+        for (const auto& plan : compiledGroups_[g].preBarriers) materialize(plan, barriers, false);
+    }
+    frame.finalBarriers_.clear();
+    frame.finalBarriers_.reserve(finalBarriers_.size());
     for (const auto& plan : finalBarriers_) materialize(plan, frame.finalBarriers_, true);
     frame.finalStates_ = finalStates_;
     frame.finalAccesses_ = finalAccesses_;
@@ -594,12 +607,27 @@ RgFrameResources RenderGraph::prepareFrame(RenderContext& context) {
         frame.finalAccesses_[i] = frame.finalStates_[i] == binding.initialState ?
             binding.initialAccess : accessFor(frame.finalStates_[i]);
     }
-    return frame;
 }
 void RenderGraph::execute(RenderContext& context, RgFrameResources& frame, rhi::RID commandBuffer) {
     if (!compiled_ || frame.owner_ != this || frame.executed_)
         Log::fatal("RenderGraph", "Invalid or already executed graph frame");
     if (!commandBuffer) commandBuffer = context.commandBuffer();
+    auto& pool = context.rgTexturePool();
+    pool.bindCommandBuffer(commandBuffer);
+    for (auto& texture : frame.textures_) {
+        auto& binding = texture.binding;
+        if (!binding.trackedState) continue;
+        binding.initialState = pool.trackedState(binding.trackedState);
+        // The state slot does not retain access mode. Conservatively include attachment
+        // stores, including stores performed after a final input-attachment read.
+        binding.initialAccess = binding.initialState == ResourceState::InputAttachment ?
+            AccessMode::ReadWrite : accessFor(binding.initialState);
+    }
+    materializeFrameBarriers(frame, true);
+    // Register before callbacks can throw, so cancelled recording retains all leases safely.
+    for (std::size_t i = 0; i < textures_.size(); ++i)
+        if (frame.textures_[i].poolEntry)
+            pool.recordUsage(frame.textures_[i].poolEntry, frame.finalStates_[i], frame.finalAccesses_[i]);
     for (std::size_t g = 0; g < compiledGroups_.size(); ++g) {
         const auto& plan = compiledGroups_[g];
         const auto& physical = frame.groups_[g];
@@ -621,16 +649,8 @@ void RenderGraph::execute(RenderContext& context, RgFrameResources& frame, rhi::
     rhi::resourceBarriers(commandBuffer, frame.finalBarriers_);
     for (std::size_t i = 0; i < textures_.size(); ++i) {
         const auto state = frame.finalStates_[i];
-        const auto access = frame.finalAccesses_[i];
         const auto& texture = frame.textures_[i];
-        if (texture.binding.trackedState) *texture.binding.trackedState = state;
-        if (texture.poolEntry) {
-            texture.poolEntry->lastState = state;
-            texture.poolEntry->lastAccess = access;
-        } else if (!textures_[i].resolver) {
-            textures_[i].initialState = state;
-            textures_[i].initialAccess = textures_[i].trackedState ? AccessMode::Auto : access;
-        }
+        if (texture.binding.trackedState) pool.recordState(texture.binding.trackedState, state);
     }
     frame.executed_ = true;
 }

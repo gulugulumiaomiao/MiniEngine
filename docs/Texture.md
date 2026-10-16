@@ -1,6 +1,47 @@
 # Texture 系统
 
-Texture 系统把资产数据、运行时 GPU 资源与采样状态拆成三层：`TextureAsset`（层1 序列化源）、`Texture` / `Sampler`（层2 运行时）、`rhi::RID`（层3；实例为 `VulkanDevice` 分类型池持有的 `VulkanTexture`/`VulkanTextureView`/`VulkanSampler`，`IRHITexture` 等抽象接口已删除）。当前 Vulkan 创建与上传路径只接受单层 `Texture2D`；`Texture2DArray`、`Texture3D`、`TextureCube`、`TextureCubeArray` 已进入数据模型，但在 `computeTextureLayout`/`validateTexture` 统一校验点被明确拒绝。
+## 常用渲染纹理工厂
+
+```cpp
+auto color = Texture::createColor(1280, 720); // RGBA8 Unorm，颜色附件 + 采样
+auto srgb = Texture::createColor(1280, 720, TextureFormat::Rgba8Srgb);
+auto depth = Texture::createDepth(1280, 720); // Depth32Float，深度附件
+auto shadow = Texture::createShadowMap(1024, 1024); // Depth32Float，深度附件 + 采样
+```
+
+这些静态函数返回拥有纹理及默认视图的 `Ref<Texture>`，默认采样器由设备管理。
+它们创建单 mip 的二维纹理，采用边缘钳制采样；创建后内容尚未初始化，需先清除或渲染再读取。
+宽高为零、颜色格式不合法、没有活动设备或创建失败时返回空引用。
+渲染纹理不支持 `upload()` 上传像素，也不关联资产；已有资产纹理的上传和克隆流程保持原有用法。
+`usage()` 可以查询创建时的能力声明。RenderGraph 的 transient 纹理仍通过图和资源池创建。
+
+`Texture::create(const engine::TextureDesc&)` 提供通用创建入口，
+支持当前 RHI 的二维纹理及全部非压缩格式、自定义 mip 和采样数。
+`pixelFormat()`、`samples()`、`tiling()` 查询实际创建属性；多采样纹理只支持单 mip。
+颜色、深度和 shadow map 工厂共用这条创建路径，资产像素支持当前所有非压缩格式的单采样纹理。
+Texture 记录创建时的设备 UID；设备不匹配时不会向当前设备上传或销毁旧句柄。
+
+RenderGraph::createTexture 和 RgTexturePool::acquire 同样使用 engine::TextureDesc。
+图的动态尺寸 resolver 作为 createTexture 的独立参数，不放入通用描述：
+
+```cpp
+TextureDesc desc{TextureType::Texture2D, TextureFormat::Rgba8Unorm, 0, 0};
+auto color = graph.createTexture(desc, [](const RenderContext& context) {
+    return rhi::Rect{0, 0, context.sceneWidth(), context.sceneHeight()};
+});
+```
+
+engine::TextureDesc 包含 `sampler`、`samples` 和 `debugName`，不暴露 usage、tiling。
+`samples` 为 `std::uint8_t`，默认 1；`toRhiSampleCount` 仅接受 1、2、4、8，
+显式映射到 RHI 枚举，其他值返回空 optional。Texture 创建及图编译均在转换时检查。
+引擎纹理固定使用 Optimal tiling；RHI 描述仍保留底层 usage、tiling 和 SampleCount。
+`Texture::create(desc)` 使用 Sampled | TransferDestination；`createColor(desc)` 使用
+ColorAttachment | Sampled；`createDepth(desc)` 使用 DepthStencilAttachment；
+`createShadowMap(desc)` 使用 DepthStencilAttachment | Sampled。
+RenderGraph 汇总所有 pass 的资源用途及 finalState，生成实际 usage；资源池按描述与实际 usage 匹配。
+资产文件格式不变，不保存运行时采样数，资产校验要求 samples 为 1。
+
+Texture 系统把资产数据、运行时 GPU 资源与采样状态拆成三层：`TextureAsset`（层1 序列化源）、`Texture` / `Sampler`（层2 运行时）、`rhi::RID`（层3；实例为 `VulkanDevice` 分类型池持有的 `VulkanTexture`/`VulkanTextureView`/`VulkanSampler`，`IRHITexture` 等抽象接口已删除）。当前 Vulkan 创建与上传路径只接受单层 `Texture2D`；`Texture2DArray`、`Texture3D`、`TextureCube`、`TextureCubeArray` 已进入数据模型，但在 `computeTextureLayout`/`validateTextureAsset` 统一校验点被明确拒绝。
 
 ## 1. 分层模型
 
@@ -109,7 +150,7 @@ if (device->texture_is_supported(desc)) {
 `texture_is_supported` 校验当前实现的二维单层范围、usage 组合、尺寸、mip 和 sample 数，
 再对照物理设备的 image format properties；未知枚举或不支持的描述返回 false。
 `texture_create` 在分配前执行该检查，描述不支持或原生分配失败时返回无效 RID。
-只有 transfer usage 的底层图像可以创建，但不能创建 view，因此 `engine::Texture::create` 会失败。
+只有 transfer usage 的底层图像可以创建，但不能创建 view。引擎通用创建入口始终包含 Sampled 用途。
 默认 sampler 请求线性过滤或各向异性而格式不支持时，`Texture::create` 返回空，调用方可显式改为 Point。
 附件和 input attachment 不强制线性过滤；多采样图像也不以普通 sampler 的过滤能力判断。
 覆盖 sampler、直接 RHI 绑定以及动态混合模式仍由调用方依据能力选择，接口不会自动降低过滤或混合模式。

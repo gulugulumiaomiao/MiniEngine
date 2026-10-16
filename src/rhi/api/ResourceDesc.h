@@ -576,6 +576,9 @@ enum class FrameStatus {
     OutOfDate,
 };
 
+// Monotonic submission identity on the device's graphics queue. Zero means no submission.
+using SubmissionId = std::uint64_t;
+
 struct SwapchainDesc {
     std::uint32_t width{};
     std::uint32_t height{};

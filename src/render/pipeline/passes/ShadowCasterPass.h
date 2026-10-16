@@ -9,13 +9,11 @@
 
 namespace engine {
 
-// Stable shadow-map handle from buildGraph and per-frame enabled flag from updateFrame.
-// The pipeline owns the
+// Stable shadow-map handle declared during buildGraph. The pipeline owns the
 // output structure, passes a pointer to ShadowCasterPass (writer) and ForwardPass (reader),
 // and uses the physical shadow-map view after RenderGraph::prepareFrame.
 struct ShadowCasterOutput {
     RgTextureHandle shadowMap;
-    bool castShadows{false};
 };
 
 // Shadow caster pass. Renders ShadowCaster phase items into a transient depth-only shadow

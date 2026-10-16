@@ -22,6 +22,7 @@ public:
 
     [[nodiscard]] FrameStatus beginFrame() override;
     [[nodiscard]] FrameStatus endFrame() override;
+    [[nodiscard]] FrameStatus cancelFrame() override;
     void resize(std::uint32_t width, std::uint32_t height) override;
 
     [[nodiscard]] RID commandBuffer() override;

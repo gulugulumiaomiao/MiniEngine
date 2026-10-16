@@ -19,6 +19,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <span>
 #include <unordered_map>
 #include <vector>
@@ -42,6 +43,7 @@ struct ResolvedPipeline {
 struct SubmitSync {
     VkSemaphore waitSemaphore{VK_NULL_HANDLE};
     VkSemaphore signalSemaphore{VK_NULL_HANDLE};
+    // Caller guarantees prior use completed; submit resets it after allocating tracking.
     VkFence signalFence{VK_NULL_HANDLE};
     VkPipelineStageFlags waitStage{VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 };
@@ -112,6 +114,8 @@ public:
     void descriptor_set_destroy(RID handle) override;
 
     void waitIdle() override;
+    [[nodiscard]] SubmissionId lastSubmitted() const override { return lastSubmitted_; }
+    [[nodiscard]] SubmissionId completedSubmission() override;
 
     // ---- Backend-native device accessors ----
     [[nodiscard]] VkSurfaceKHR surface() const { return surface_; }
@@ -148,7 +152,9 @@ public:
     [[nodiscard]] RID command_buffer_allocate_rid(VkCommandBuffer native, bool owned);
     void command_buffer_release_rid(RID handle);
     [[nodiscard]] VulkanCommandBuffer& command_buffer(RID handle);
-    void submit(RID command, const SubmitSync& sync);
+    // Borrowed fences must be collected before reset/destruction. A null fence
+    // creates a device-owned completion fence, retired by completedSubmission().
+    SubmissionId submit(RID command, const SubmitSync& sync);
 
     // ---- External (swapchain-owned) texture/view registration ----
     [[nodiscard]] RID texture_allocate_rid(VkImage image, const TextureDesc& desc);
@@ -156,13 +162,12 @@ public:
     texture_view_allocate_rid(RID texture, VkImageView view, const TextureViewDesc& desc);
 
     // ---- Transient buffer support (staging + MeshUsage::Stream) ----
-    // Transient buffers must outlive the recording that references them, so the device owns
-    // them: buffer_acquire_transient registers each one here, submit tags it with the submitting
-    // frame's fence, and it is destroyed once that fence has been signaled. acquireStagingBuffer
-    // is the TransferSource specialization used by command-buffer update* commands.
-    [[nodiscard]] RID acquireStagingBuffer(std::uint64_t size);
-    void tagPendingStagingBuffers(VkFence fence);
-    // Destroys transient buffers whose fence has been signaled. Called at frame boundaries.
+    // Transient buffers retain every unsubmitted recording that references them and retire
+    // after their last submission completes. Unsubmitted buffers retire on recording discard.
+    [[nodiscard]] RID acquireStagingBuffer(std::uint64_t size, VkCommandBuffer command);
+    void recordTransientBufferUsage(RID buffer, VkCommandBuffer command);
+    void discardTransientBufferUsage(VkCommandBuffer command);
+    // Uses submission progress, never borrowed frame-fence handles.
     void collectStagingBuffers();
 
 private:
@@ -202,13 +207,12 @@ private:
     void destroyDescriptorPools();
     void clear();
 
-    // Scratch buffer created for a command buffer staging upload; retired once the frame
-    // that recorded the copy has completed.
     struct StagingBuffer {
         RID handle;
-        VkFence fence{VK_NULL_HANDLE};
+        std::vector<VkCommandBuffer> recordings;
+        SubmissionId submission{};
     };
-    void retireStagingBuffers(std::vector<StagingBuffer>& pending);
+    void submitTransientBufferUsage(VkCommandBuffer command, SubmissionId submission);
 
     VkInstance instance_{VK_NULL_HANDLE};
     VkDebugUtilsMessengerEXT debugMessenger_{VK_NULL_HANDLE};
@@ -240,6 +244,14 @@ private:
     std::unordered_map<std::uint64_t, DescriptorPoolBucket> descriptorPools_;
 
     std::vector<StagingBuffer> pendingStagingBuffers_;
+    struct Submission {
+        SubmissionId id{};
+        VkFence fence{VK_NULL_HANDLE};
+        bool ownsFence{};
+    };
+    std::deque<Submission> submissions_;
+    SubmissionId lastSubmitted_{};
+    SubmissionId completedSubmission_{};
     // Samplers are pure value objects, so this map preserves identical-SamplerDesc sharing
     // (one VkSampler per distinct descriptor) on top of the sampler pool.
     std::unordered_map<SamplerDesc, RID, SamplerDescHash> samplerDedup_;

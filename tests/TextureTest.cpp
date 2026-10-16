@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -176,6 +177,43 @@ class TextureTest : public ::testing::Test {
 protected:
     FakeDevice device;
 };
+
+TEST(TextureValidationTest, SampleCountConversionAcceptsOnlySupportedNumericCounts) {
+    using namespace engine;
+    static_assert(std::is_same_v<decltype(TextureDesc::samples), std::uint8_t>);
+    EXPECT_EQ(TextureDesc{}.samples, 1);
+    for (unsigned value = 0; value <= 255; ++value) {
+        const auto result = toRhiSampleCount(static_cast<std::uint8_t>(value));
+        switch (value) {
+        case 1: ASSERT_TRUE(result); EXPECT_EQ(*result, rhi::SampleCount::One); break;
+        case 2: ASSERT_TRUE(result); EXPECT_EQ(*result, rhi::SampleCount::Two); break;
+        case 4: ASSERT_TRUE(result); EXPECT_EQ(*result, rhi::SampleCount::Four); break;
+        case 8: ASSERT_TRUE(result); EXPECT_EQ(*result, rhi::SampleCount::Eight); break;
+        default: EXPECT_FALSE(result) << value; break;
+        }
+    }
+}
+
+TEST_F(TextureTest, NumericSamplesAreCheckedBeforeAllocationAndConvertedForRhi) {
+    using namespace engine;
+    TextureDesc desc{TextureType::Texture2D, TextureFormat::Depth32Float, 16, 16};
+    for (const auto samples : {0, 3, 16, 255}) {
+        desc.samples = static_cast<std::uint8_t>(samples);
+        EXPECT_FALSE(Texture::createDepth(desc));
+    }
+    EXPECT_EQ(device.createdTextures, 0U);
+    for (const auto samples : {1, 2, 4, 8}) {
+        desc.samples = static_cast<std::uint8_t>(samples);
+        const auto texture = Texture::createDepth(desc);
+        ASSERT_TRUE(texture);
+        EXPECT_EQ(texture->samples(), samples);
+        EXPECT_EQ(device.textureDescs.back().samples, *toRhiSampleCount(desc.samples));
+        EXPECT_EQ(device.textureDescs.back().tiling, rhi::TextureTiling::Optimal);
+    }
+    desc.mipCount = 2;
+    EXPECT_FALSE(Texture::createDepth(desc));
+    EXPECT_EQ(device.createdTextures, 4U);
+}
 
 TEST_F(TextureTest, BuiltinsAreDistinctUploadedAndSampleable) {
     using namespace engine;
@@ -352,9 +390,8 @@ TEST_F(TextureTest, GeneralCreationPreservesFormatMipCountAndSamples) {
     const auto mipmapped = Texture::create(colorDesc);
     TextureDesc depthDesc{TextureType::Texture2D, TextureFormat::Depth32Float,
         64, 32};
-    depthDesc.usage = rhi::TextureUsage::DepthStencilAttachment;
-    depthDesc.samples = rhi::SampleCount::Four;
-    const auto multisampled = Texture::create(depthDesc);
+    depthDesc.samples = 4;
+    const auto multisampled = Texture::createDepth(depthDesc);
     ASSERT_TRUE(mipmapped);
     ASSERT_TRUE(multisampled);
     EXPECT_EQ(mipmapped->format(), TextureFormat::Bgra8Srgb);
@@ -364,11 +401,11 @@ TEST_F(TextureTest, GeneralCreationPreservesFormatMipCountAndSamples) {
     EXPECT_EQ(device.viewDescs[0].mipCount, 4U);
     EXPECT_EQ(device.textureDescs[0].debugName, "MipmappedColor");
     EXPECT_EQ(device.samplerDescs[0].addressU, rhi::SamplerAddressMode::ClampToEdge);
-    EXPECT_EQ(multisampled->samples(), rhi::SampleCount::Four);
+    EXPECT_EQ(multisampled->samples(), 4);
     EXPECT_EQ(device.textureDescs[1].samples, rhi::SampleCount::Four);
     EXPECT_EQ(multisampled->tiling(), rhi::TextureTiling::Optimal);
     depthDesc.mipCount = 2;
-    EXPECT_FALSE(Texture::create(depthDesc));
+    EXPECT_FALSE(Texture::createDepth(depthDesc));
     EXPECT_EQ(device.createdTextures, 2U);
 }
 
@@ -423,10 +460,7 @@ TEST(TextureValidationTest, AssetPayloadRejectsRuntimeOptionsItCannotSerialize) 
         1, 1};
     const std::vector<std::uint8_t> pixels(4);
     EXPECT_TRUE(validateTextureAsset(desc, pixels));
-    desc.usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled;
-    EXPECT_FALSE(validateTextureAsset(desc, pixels));
-    desc.usage = rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferDestination;
-    desc.samples = rhi::SampleCount::Four;
+    desc.samples = 4;
     EXPECT_FALSE(validateTextureAsset(desc, pixels));
 }
 
@@ -480,8 +514,7 @@ TEST_F(TextureTest, RuntimeUploadUsesFormatSizedMipSlicesAndRejectsWrongLengths)
         EXPECT_EQ(device.textureUploads, previousUploads + 1U);
     }
     TextureDesc attachment{TextureType::Texture2D, TextureFormat::R8Unorm, 1, 1};
-    attachment.usage = rhi::TextureUsage::TransferDestination;
-    const auto texture = Texture::create(attachment);
+    const auto texture = Texture::createColor(attachment);
     ASSERT_TRUE(texture);
     const auto previousUploads = device.textureUploads;
     texture->upload(std::vector<std::uint8_t>{0});
@@ -502,8 +535,8 @@ TEST_F(TextureTest, UnsupportedLinearFilteringFailsBeforeAllocationAndPointStill
     EXPECT_FALSE(Texture::create(desc));
     EXPECT_EQ(device.createdTextures, 1U);
     // A non-sampled attachment does not impose any sampler filtering requirement.
-    desc.usage = rhi::TextureUsage::ColorAttachment;
-    EXPECT_TRUE(Texture::create(desc));
+    desc.format = TextureFormat::Depth32Float;
+    EXPECT_TRUE(Texture::createDepth(desc));
     EXPECT_EQ(device.createdTextures, 2U);
 }
 

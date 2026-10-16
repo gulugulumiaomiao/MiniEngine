@@ -1,3 +1,4 @@
+#include "TestTextureDesc.h"
 #include "render/render_graph/RgTexturePool.h"
 #include "rhi/api/Device.h"
 
@@ -55,7 +56,7 @@ public:
         if (handle)
             destroyedViews.push_back(handle);
     }
-    engine::rhi::RID sampler_create(const engine::rhi::SamplerDesc&) override { return {}; }
+    engine::rhi::RID sampler_create(const engine::rhi::SamplerDesc&) override { return {1, 1}; }
     void sampler_destroy(engine::rhi::RID) override {}
     engine::rhi::RID shader_create(const engine::rhi::ShaderDesc&) override { return {}; }
     void shader_destroy(engine::rhi::RID) override {}
@@ -87,70 +88,85 @@ public:
     std::vector<engine::rhi::RID> destroyedViews;
 };
 
-engine::RgTextureDesc makeDesc(std::uint32_t width, std::uint32_t height) {
-    return {.format = engine::rhi::PixelFormat::Rgba8Unorm,
-            .width = width,
-            .height = height,
-            .usage = engine::rhi::TextureUsage::ColorAttachment,
-            .debugName = "Pool"};
+engine::TextureDesc makeDesc(std::uint32_t width, std::uint32_t height) {
+    return engine::test::textureDesc(engine::TextureFormat::Rgba8Unorm, width, height, "Pool");
 }
 
 } // namespace
 
 int main() {
     using namespace engine;
-
+    using Status = RgTexturePool::Status;
     FakeDevice device;
-    RgTexturePool pool{2};
-
-    if (pool.framesInFlight() != 2 || pool.totalEntryCount() != 0 || pool.inUseCount() != 0) {
-        return 1;
-    }
-
-    pool.beginFrame(0);
-    RgTexturePool::PooledTexture* a = pool.acquire(makeDesc(128, 128));
-    if (!a || a->texture.index() != 1 || a->view.index() != 1 || pool.inUseCount() != 1 ||
-        pool.totalEntryCount() != 1) {
-        return 2;
-    }
-
-    // Release and re-acquire: the same entry should be reused.
+    RgTexturePool pool;
+    auto desc = makeDesc(128, 128);
+    auto* a = pool.acquire(desc, rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled);
+    if (!a || !a->texture || pool.totalEntryCount() != 1 || pool.inUseCount() != 1) return 1;
     pool.release(a);
-    RgTexturePool::PooledTexture* b = pool.acquire(makeDesc(128, 128));
-    if (b != a || pool.inUseCount() != 1 || pool.totalEntryCount() != 1) {
-        return 3;
-    }
+    auto* b = pool.acquire(desc, rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled);
+    if (b != a || b->status() != Status::Leased) return 2;
 
-    // Different size: new entry.
-    RgTexturePool::PooledTexture* c = pool.acquire(makeDesc(256, 256));
-    if (c == b || c->texture.index() != 2 || pool.inUseCount() != 2 || pool.totalEntryCount() != 2) {
-        return 4;
-    }
-
+    pool.beginBatch();
+    pool.recordUsage(b, rhi::ResourceState::ShaderRead, rhi::AccessMode::Read);
     pool.release(b);
+    if (b->status() != Status::PendingSubmit || b->lastState != rhi::ResourceState::Undefined) return 3;
+    auto* c = pool.acquire(desc, rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled);
+    if (c == b || pool.totalEntryCount() != 2) return 4;
     pool.release(c);
-    if (pool.inUseCount() != 0) {
-        return 5;
-    }
+    pool.onSubmitted(1);
+    if (b->status() != Status::InFlight || b->lastState != rhi::ResourceState::ShaderRead) return 5;
+    pool.collect(0);
+    auto* beforeCompletion = pool.acquire(desc, rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled);
+    if (beforeCompletion == b) return 6;
+    pool.release(beforeCompletion);
+    pool.collect(1);
+    auto* reused = pool.acquire(desc, rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled);
+    if (reused != b || reused->lastState != rhi::ResourceState::ShaderRead) return 7;
 
-    // Next frame uses bucket 1, so it cannot reuse the entry from frame 0 (bucket 0).
-    pool.beginFrame(1);
-    if (pool.inUseCount() != 0) {
-        return 6;
-    }
+    pool.beginBatch();
+    pool.recordUsage(reused, rhi::ResourceState::ColorAttachment, rhi::AccessMode::Write);
+    pool.onSubmitted(2);
+    pool.collect(2); // GPU completion alone cannot release the CPU lease.
+    auto* stillLeased = pool.acquire(desc, rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled);
+    if (stillLeased == reused) return 8;
+    pool.release(stillLeased);
+    pool.release(reused);
+    auto* completedAndReleased = pool.acquire(desc, rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled);
+    if (completedAndReleased != reused) return 9;
 
-    RgTexturePool::PooledTexture* d = pool.acquire(makeDesc(128, 128));
-    if (d == b || d->texture.index() != 3 || pool.inUseCount() != 1 || pool.totalEntryCount() != 3) {
-        return 7;
-    }
+    pool.beginBatch();
+    rhi::ResourceState imported = rhi::ResourceState::Undefined;
+    pool.recordUsage(completedAndReleased, rhi::ResourceState::ShaderRead, rhi::AccessMode::Read);
+    pool.recordState(&imported, rhi::ResourceState::ShaderRead);
+    if (imported != rhi::ResourceState::Undefined || pool.trackedState(&imported) != rhi::ResourceState::ShaderRead) return 10;
+    pool.release(completedAndReleased);
+    pool.cancelBatch();
+    if (completedAndReleased->status() != Status::Available ||
+        completedAndReleased->lastState != rhi::ResourceState::ColorAttachment ||
+        imported != rhi::ResourceState::Undefined) return 11;
 
-    // Two frames later: bucket 0 is available again.
-    pool.release(d);
-    pool.beginFrame(2);
-    RgTexturePool::PooledTexture* e = pool.acquire(makeDesc(128, 128));
-    if (e != b || pool.inUseCount() != 1 || pool.totalEntryCount() != 3) {
-        return 8;
-    }
+    pool.beginBatch();
+    pool.recordState(&imported, rhi::ResourceState::CopySource);
+    pool.onSubmitted(3);
+    if (imported != rhi::ResourceState::CopySource) return 12;
+    pool.collect(3);
 
-    return 0;
+    auto multisampled = desc;
+    multisampled.samples = 4;
+    auto* msaa = pool.acquire(multisampled, rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled);
+    auto sampled = desc;
+    auto* sampledEntry = pool.acquire(sampled, rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferSource);
+    if (msaa == b || sampledEntry == b || msaa == sampledEntry) return 13;
+    pool.release(msaa); pool.release(sampledEntry);
+
+    // Many new hash groups must not invalidate an entry/bin used by release.
+    auto* stable = pool.acquire(desc, rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled);
+    for (std::uint32_t size = 16; size < 512; ++size) {
+        auto* other = pool.acquire(makeDesc(size, 32), rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled);
+        pool.release(other);
+    }
+    pool.release(stable);
+    if (pool.acquire(desc, rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled) != stable) return 14;
+    pool.release(stable);
+    return pool.inUseCount() == 0 ? 0 : 15;
 }

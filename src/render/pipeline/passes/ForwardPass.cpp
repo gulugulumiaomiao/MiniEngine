@@ -53,7 +53,7 @@ void ForwardPass::buildGraph(RenderContext& context, RenderGraph& graph) {
         : graph.importSwapchainTexture(context.swapchain());
     const RgTextureHandle depthHandle = graph.importTexture("ForwardDepth",
         [](RenderContext& frame) { return frame.currentForwardTarget().depthBinding(); },
-        rhi::ResourceState::DepthAttachment, rhi::TextureAspect::Depth);
+        rhi::ResourceState::DepthAttachment);
 
     RgRasterPass pass;
     pass.name = "Forward";

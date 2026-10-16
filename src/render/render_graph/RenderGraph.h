@@ -3,6 +3,7 @@
 #include "render/render_graph/RgTexturePool.h"
 #include "render/render_graph/RgRenderPassCache.h"
 #include "render/render_graph/RgTypes.h"
+#include "render/texture/Texture.h"
 #include "rhi/api/Command.h"
 
 #include <functional>
@@ -55,7 +56,7 @@ private:
     struct Texture {
         RgTextureBinding binding;
         rhi::TextureViewInfo info;
-        RgTexturePool::PooledTexture* poolEntry{};
+        RgTexturePool::Entry* poolEntry{};
     };
     RenderGraph* owner_{};
     bool executed_{};
@@ -72,6 +73,8 @@ private:
 class RenderGraph final {
 public:
     using TextureResolver = std::function<RgTextureBinding(RenderContext&)>;
+    // Graph-specific runtime sizing; TextureDesc remains independent of RenderContext.
+    using TextureExtentResolver = std::function<rhi::Rect(const RenderContext&)>;
     RenderGraph() = default;
     ~RenderGraph();
     RenderGraph(const RenderGraph&) = delete;
@@ -81,18 +84,13 @@ public:
 
     // Registers a stable source; acquisition is resolved again for every frame.
     [[nodiscard]] RgTextureHandle importSwapchainTexture(const rhi::ISwapchain& swapchain);
-    [[nodiscard]] RgTextureHandle importTexture(
-        rhi::RID texture, rhi::RID view,
-        rhi::ResourceState initialState = rhi::ResourceState::Undefined,
-        rhi::ResourceState finalState = rhi::ResourceState::Undefined,
-        rhi::TextureAspect aspect = rhi::TextureAspect::Color,
-        rhi::ResourceState* trackedState = nullptr);
-    // Named sources allow multiple passes to share one logical frame-local attachment.
+    // Named sources share one logical attachment; compile derives aspect from the view format.
     [[nodiscard]] RgTextureHandle importTexture(
         std::string name, TextureResolver resolver,
-        rhi::ResourceState finalState = rhi::ResourceState::Undefined,
-        rhi::TextureAspect aspect = rhi::TextureAspect::Color);
-    [[nodiscard]] RgTextureHandle createTexture(RgTextureDesc desc);
+        rhi::ResourceState finalState = rhi::ResourceState::Undefined);
+    // Usage is inferred from passes and finalState; CopySource exports a texture for readback.
+    [[nodiscard]] RgTextureHandle createTexture(TextureDesc desc, TextureExtentResolver extentResolver = {},
+        rhi::ResourceState finalState = rhi::ResourceState::Undefined);
     void addGraphicsPass(RgRasterPass pass);
     void addRasterGroup(std::string name, std::vector<RgRasterPass> subpasses);
 
@@ -135,14 +133,10 @@ public:
 private:
     friend class RgFrameResources;
     struct TextureNode {
-        // One pair for static imports. Resolved/transient pairs belong to the frame.
-        rhi::RID texture, view;
-        rhi::ResourceState initialState{rhi::ResourceState::Undefined};
-        rhi::AccessMode initialAccess{rhi::AccessMode::Auto};
         rhi::ResourceState finalState{rhi::ResourceState::Undefined};
         rhi::TextureAspect aspect{rhi::TextureAspect::Color};
-        rhi::ResourceState* trackedState{};
-        RgTextureDesc desc;
+        TextureDesc desc;
+        TextureExtentResolver extentResolver;
         bool isTransient{};
         std::string sourceName;
         TextureResolver resolver;
@@ -155,6 +149,7 @@ private:
     void ensureNoFrames() const;
     [[nodiscard]] std::vector<RgResourceAccess> normalizeAccesses(const RgRasterPass& pass) const;
     void compileRasterGroup(std::size_t groupIndex);
+    void materializeFrameBarriers(RgFrameResources& frame, bool executing) const;
     void validateView(const TextureNode& node, const rhi::TextureViewInfo& info,
                       rhi::ResourceState state, const rhi::Rect* area = nullptr,
                       bool sampledAccess = false) const;

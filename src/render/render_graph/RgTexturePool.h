@@ -1,72 +1,101 @@
 #pragma once
 
-#include "render/render_graph/RgTypes.h"
-#include "rhi/api/ResourceDesc.h"
+#include "render/texture/Texture.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 namespace engine {
+class RgRenderPassCache;
 
-// Frame-indexed texture pool for RenderGraph transient textures.
-//
-// One bucket per in-flight frame. Reuse a bucket only after its fence completes
-// and all CPU leases are released.
+// Global pool for one device's graphics queue. CPU release and GPU completion
+// are independent. The pool and external tracked-state owners outlive batches.
 class RgTexturePool final {
+    struct Bin;
 public:
-    struct PooledTexture {
-        rhi::RID texture;
-        rhi::RID view;
-        rhi::PixelFormat format{rhi::PixelFormat::Undefined};
-        std::uint32_t width{};
-        std::uint32_t height{};
-        std::uint32_t depth{1};
-        std::uint32_t arrayLayers{1};
-        std::uint32_t mipCount{1};
-        rhi::TextureUsage usage{rhi::TextureUsage::None};
-        rhi::SampleCount samples{rhi::SampleCount::One};
-        bool inUse{false};
+    enum class Status { Available, Leased, PendingSubmit, InFlight };
+    struct Entry {
+        Ref<Texture> texture;
+        bool inUse{};
         rhi::ResourceState lastState{rhi::ResourceState::Undefined};
         rhi::AccessMode lastAccess{rhi::AccessMode::Read};
+        [[nodiscard]] Status status() const { return status_; }
+    private:
+        friend class RgTexturePool;
+        RgTexturePool* owner_{};
+        Bin* bin_{};
+        Status status_{Status::Available};
+        rhi::ResourceState pendingState_{rhi::ResourceState::Undefined};
+        rhi::AccessMode pendingAccess_{rhi::AccessMode::Read};
+        std::uint64_t lastUsedEpoch_{};
     };
 
-    explicit RgTexturePool(std::uint32_t framesInFlight = 2);
+    RgTexturePool() = default;
     ~RgTexturePool();
-
     RgTexturePool(const RgTexturePool&) = delete;
     RgTexturePool& operator=(const RgTexturePool&) = delete;
     RgTexturePool(RgTexturePool&&) = delete;
     RgTexturePool& operator=(RgTexturePool&&) = delete;
 
-    // Call after the slot's fence completes and all of its leases are released.
-    void beginFrame(std::uint32_t frameIndex);
+    [[nodiscard]] Entry* acquire(const TextureDesc& desc, rhi::TextureUsage usage);
+    static void release(Entry* entry);
 
-    // Acquire a pooled texture matching the description for the current frame.
-    [[nodiscard]] PooledTexture* acquire(const RgTextureDesc& desc);
+    // One batch records one graphics command buffer. Allocates its retirement
+    // record before GPU submission, so onSubmitted cannot fail allocation.
+    void beginBatch(rhi::RID commandBuffer = {});
+    void bindCommandBuffer(rhi::RID commandBuffer);
+    void recordUsage(Entry* entry, rhi::ResourceState state, rhi::AccessMode access);
+    void recordState(rhi::ResourceState* trackedState, rhi::ResourceState state);
+    [[nodiscard]] rhi::ResourceState trackedState(rhi::ResourceState* state) const;
+    void onSubmitted(rhi::SubmissionId submission);
+    // Call only after discarding the batch's recorded commands.
+    void cancelBatch();
+    void collect(rhi::SubmissionId completed);
+    // Only completed/unleased entries are evicted; invalidates native framebuffers first.
+    void trim(std::uint64_t maxIdleBatches, RgRenderPassCache& cache);
 
-    // Release a live entry without retaining its pool instance. Safe with nullptr.
-    static void release(PooledTexture* entry);
-
-    [[nodiscard]] std::uint32_t framesInFlight() const { return framesInFlight_; }
-    [[nodiscard]] std::uint32_t currentFrameIndex() const { return currentFrameIndex_; }
-    [[nodiscard]] std::size_t totalEntryCount() const;
-    [[nodiscard]] std::size_t inUseCount() const;
+    [[nodiscard]] bool batchActive() const { return batchActive_; }
+    [[nodiscard]] std::size_t totalEntryCount() const { return entryCount_; }
+    [[nodiscard]] std::size_t inUseCount() const { return activeLeases_; }
 
 private:
-    struct Bucket {
-        std::vector<std::unique_ptr<PooledTexture>> entries;
+    struct Key {
+        TextureType type;
+        TextureFormat format;
+        std::uint32_t width, height, depth, arrayLayers, mipCount;
+        rhi::TextureUsage usage;
+        std::uint8_t samples;
+        SamplerDesc sampler;
+        bool operator==(const Key&) const = default;
     };
-
-    [[nodiscard]] Bucket& currentBucket();
+    struct KeyHash { std::size_t operator()(const Key& key) const; };
+    struct Bin {
+        std::vector<std::unique_ptr<Entry>> entries;
+        std::vector<Entry*> freeEntries;
+    };
+    struct Batch {
+        rhi::SubmissionId submission{}; // zero while recording
+        std::vector<Entry*> entries;
+    };
     void bindActiveDevice();
-    [[nodiscard]] static bool matches(const PooledTexture& entry, const RgTextureDesc& desc);
-    [[nodiscard]] std::unique_ptr<PooledTexture> createEntry(const RgTextureDesc& desc);
+    void makeAvailable(Entry& entry);
+    void releaseEntry(Entry& entry);
+    [[nodiscard]] std::unique_ptr<Entry> createEntry(const TextureDesc& desc, rhi::TextureUsage usage, Bin& bin);
 
-    std::uint32_t framesInFlight_{2};
-    std::uint32_t currentFrameIndex_{0};
-    std::vector<Bucket> buckets_;
+    std::unordered_map<Key, Bin, KeyHash> bins_;
+    std::deque<Batch> batches_;
+    std::unordered_map<rhi::ResourceState*, rhi::ResourceState> pendingStates_;
+    rhi::RID batchCommandBuffer_{};
+    bool batchActive_{};
+    std::size_t entryCount_{};
+    std::size_t activeLeases_{};
     std::uint64_t deviceUid_{};
+    std::uint64_t epoch_{};
+    rhi::SubmissionId lastSubmitted_{};
+    rhi::SubmissionId completed_{};
 };
-
 } // namespace engine

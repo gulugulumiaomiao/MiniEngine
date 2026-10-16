@@ -91,6 +91,7 @@ VulkanCommandBuffer::~VulkanCommandBuffer() {
     if (owned_ && commandBuffer_ != VK_NULL_HANDLE) {
         vkFreeCommandBuffers(device_.device(), device_.commandPool(), 1, &commandBuffer_);
     }
+    device_.discardTransientBufferUsage(commandBuffer_);
 }
 
 void VulkanCommandBuffer::begin() {
@@ -105,6 +106,7 @@ void VulkanCommandBuffer::begin() {
         if (vkResetCommandBuffer(commandBuffer_, 0) != VK_SUCCESS) {
             Log::fatal("VulkanCommandBuffer", "vkResetCommandBuffer failed");
         }
+        device_.discardTransientBufferUsage(commandBuffer_);
     }
     boundPipelineLayout_ = VK_NULL_HANDLE;
     dynamicRendering_ = false;
@@ -131,6 +133,20 @@ void VulkanCommandBuffer::end() {
         Log::fatal("VulkanCommandBuffer", "vkEndCommandBuffer failed");
     }
     state_ = CommandState::Executable;
+}
+
+void VulkanCommandBuffer::discard() {
+    if (vkResetCommandBuffer(commandBuffer_, 0) != VK_SUCCESS)
+        Log::fatal("VulkanCommandBuffer", "vkResetCommandBuffer(discard) failed");
+    device_.discardTransientBufferUsage(commandBuffer_);
+    state_ = CommandState::Initial;
+    boundPipelineLayout_ = VK_NULL_HANDLE;
+    dynamicRendering_ = false;
+    activeRenderPass_ = {};
+    activeFramebuffer_ = {};
+    activeSubpass_ = 0;
+    blendingEnabled_ = false;
+    attachmentBlendingSupported_ = true;
 }
 
 void VulkanCommandBuffer::ensureRecording(const char* operation) {
@@ -429,6 +445,7 @@ void VulkanCommandBuffer::bindVertexBuffer(std::uint32_t slot,
                                            RID buffer,
                                            std::uint64_t offset) {
     ensureRecording("bindVertexBuffer");
+    device_.recordTransientBufferUsage(buffer, commandBuffer_);
     const VkBuffer native = device_.resolveBuffer(buffer);
     const VkDeviceSize nativeOffset = offset;
     vkCmdBindVertexBuffers(commandBuffer_, slot, 1, &native, &nativeOffset);
@@ -438,6 +455,7 @@ void VulkanCommandBuffer::bindIndexBuffer(RID buffer,
                                           std::uint64_t offset,
                                           IndexFormat format) {
     ensureRecording("bindIndexBuffer");
+    device_.recordTransientBufferUsage(buffer, commandBuffer_);
     vkCmdBindIndexBuffer(commandBuffer_,
                          device_.resolveBuffer(buffer),
                          offset,
@@ -514,6 +532,8 @@ void VulkanCommandBuffer::endDebugLabel() {
 
 void VulkanCommandBuffer::copyBuffer(const BufferCopy& copy) {
     ensureRecording("copyBuffer");
+    device_.recordTransientBufferUsage(copy.source, commandBuffer_);
+    device_.recordTransientBufferUsage(copy.destination, commandBuffer_);
     const VkBufferCopy native{copy.sourceOffset, copy.destinationOffset, copy.size};
     vkCmdCopyBuffer(commandBuffer_,
                     device_.resolveBuffer(copy.source),
@@ -543,6 +563,7 @@ void VulkanCommandBuffer::copyImage(const ImageCopy& copy) {
 
 void VulkanCommandBuffer::copyBufferToImage(const BufferImageCopy& copy) {
     ensureRecording("copyBufferToImage");
+    device_.recordTransientBufferUsage(copy.buffer, commandBuffer_);
     VkBufferImageCopy native{};
     native.bufferOffset = copy.bufferOffset;
     native.bufferRowLength = copy.bufferRowLength;
@@ -560,6 +581,7 @@ void VulkanCommandBuffer::copyBufferToImage(const BufferImageCopy& copy) {
 
 void VulkanCommandBuffer::copyImageToBuffer(const BufferImageCopy& copy) {
     ensureRecording("copyImageToBuffer");
+    device_.recordTransientBufferUsage(copy.buffer, commandBuffer_);
     VkBufferImageCopy native{};
     native.bufferOffset = copy.bufferOffset;
     native.bufferRowLength = copy.bufferRowLength;
@@ -582,7 +604,7 @@ void VulkanCommandBuffer::updateBuffer(const BufferUpdate& update) {
     }
     // Vulkan has no arbitrary-size in-command update, so stage the payload in a
     // host-visible scratch buffer owned by the device and copy from there.
-    const RID staging = device_.acquireStagingBuffer(update.data.size_bytes());
+    const RID staging = device_.acquireStagingBuffer(update.data.size_bytes(), commandBuffer_);
     device_.buffer_upload(staging, update.data);
     const BufferCopy copy{staging, update.destination, 0, update.offset, update.data.size_bytes()};
     copyBuffer(copy);
@@ -606,7 +628,7 @@ void VulkanCommandBuffer::updateImage(const ImageUpdate& update) {
         update.data.size_bytes() != expectedSize) {
         Log::fatal("VulkanCommandBuffer", "Image update data does not match the extent");
     }
-    const RID staging = device_.acquireStagingBuffer(update.data.size_bytes());
+    const RID staging = device_.acquireStagingBuffer(update.data.size_bytes(), commandBuffer_);
     device_.buffer_upload(staging, update.data);
     const BufferImageCopy copy{staging,
                                update.destination,

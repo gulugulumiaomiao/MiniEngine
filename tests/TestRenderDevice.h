@@ -65,8 +65,10 @@ public:
     void texture_upload(rhi::RID, std::span<const rhi::TextureUploadRegion>) override {
         ++textureUploads;
     }
-    rhi::RID texture_view_create(rhi::RID, const rhi::TextureViewDesc&) override {
-        return {++views, 1};
+    rhi::RID texture_view_create(rhi::RID texture, const rhi::TextureViewDesc&) override {
+        const rhi::RID view{++views, 1};
+        textureViewSources.emplace(view.index(), texture);
+        return view;
     }
     rhi::RID texture_default_view(rhi::RID texture) override {
         const auto found = defaultTextureViews.find(texture.index());
@@ -107,6 +109,11 @@ public:
         renderObjectDestructionOrder.push_back("Framebuffer");
     }
     rhi::TextureViewInfo texture_view_info(rhi::RID view) const override {
+        if (const auto found = textureViewSources.find(view.index()); found != textureViewSources.end()) {
+            const auto& d = textures[found->second.index() - 1];
+            return {found->second, d.format, d.samples, d.usage, d.width, d.height,
+                    0, d.mipCount, 0, d.arrayLayers};
+        }
         for (const auto& [index, handle] : defaultTextureViews) {
             if (view != handle) continue;
             const auto& d = textures[index - 1];
@@ -153,6 +160,7 @@ public:
     std::unordered_map<std::uint32_t, std::vector<std::byte>> uploadedBuffers;
     std::unordered_map<std::uint32_t, std::vector<rhi::DescriptorWrite>> descriptorWrites;
     std::uint32_t views{};
+    std::unordered_map<std::uint32_t, rhi::RID> textureViewSources;
     std::uint32_t textureUploads{};
     int destroyedBuffers{};
     int destroyedTextures{};

@@ -69,7 +69,7 @@ TEST(TextureLayoutTest, EngineLayoutRejectsUnsupportedShapesAndSamples) {
     desc.depth = 2;
     EXPECT_FALSE(computeTextureLayout(desc, layout));
     desc.depth = 1;
-    desc.samples = rhi::SampleCount::Four;
+    desc.samples = 4;
     EXPECT_FALSE(computeTextureLayout(desc, layout));
 }
 } // namespace

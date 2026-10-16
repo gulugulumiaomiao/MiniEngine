@@ -1,3 +1,4 @@
+#include "TestTextureDesc.h"
 #include "TestRenderDevice.h"
 #include "render/render_graph/RenderGraph.h"
 #include "render/pipeline/RenderContext.h"
@@ -19,9 +20,8 @@ using rhi::ResourceState;
 using rhi::LoadOp;
 using rhi::StoreOp;
 
-RgTextureHandle color(RenderGraph& graph, rhi::TextureUsage extra = rhi::TextureUsage::None) {
-    return graph.createTexture({.format = rhi::PixelFormat::Rgba8Unorm, .width = 16, .height = 16,
-        .usage = rhi::TextureUsage::ColorAttachment | extra, .debugName = "graph-test"});
+RgTextureHandle color(RenderGraph& graph) {
+    return graph.createTexture(test::textureDesc(TextureFormat::Rgba8Unorm, 16, 16, "graph-test"));
 }
 RgRasterPass writer(const char* name, RgTextureHandle handle,
                     LoadOp load = LoadOp::Clear, StoreOp store = StoreOp::Store) {
@@ -48,7 +48,7 @@ TEST(RenderGraphTest, IndependentPassesKeepDynamicRenderingAndAutomaticUsages) {
     RgTexturePool pool;
     RgRenderPassCache cache;
     RenderGraph graph;
-    const auto gbuffer = color(graph, rhi::TextureUsage::Sampled);
+    const auto gbuffer = color(graph);
     const auto output = color(graph);
     independent(graph, writer("GBuffer", gbuffer));
     auto lighting = writer("Lighting", output);
@@ -71,6 +71,40 @@ TEST(RenderGraphTest, IndependentPassesKeepDynamicRenderingAndAutomaticUsages) {
     EXPECT_EQ(barriers[0].before, ResourceState::ColorAttachment);
     EXPECT_EQ(barriers[0].after, ResourceState::ShaderRead);
     EXPECT_TRUE(resources.finalBarriers().empty());
+    EXPECT_EQ(device.texture_view_info(resources.textureView(gbuffer)).usage,
+        rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled);
+    EXPECT_EQ(device.texture_view_info(resources.textureView(output)).usage,
+        rhi::TextureUsage::ColorAttachment);
+}
+
+TEST(RenderGraphTest, TransientExportInfersTransferUsageAndPreservesStore) {
+    MockDevice device; RgTexturePool pool; RgRenderPassCache cache;
+    for (const bool traditional : {false, true}) {
+        RenderGraph graph;
+        const auto handle = graph.createTexture(
+            test::textureDesc(TextureFormat::Rgba8Unorm, 16, 16), {}, ResourceState::CopySource);
+        auto pass = writer("Readback", handle, LoadOp::Clear,
+            traditional ? StoreOp::DontCare : StoreOp::Store);
+        if (traditional) graph.addRasterGroup("Export", {pass});
+        else graph.addGraphicsPass(pass);
+        auto frame = compileGraph(graph, pool, cache);
+        EXPECT_EQ(device.texture_view_info(frame.textureView(handle)).usage,
+            rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::TransferSource);
+        ASSERT_EQ(frame.finalBarriers().size(), 1U);
+        EXPECT_EQ(frame.finalBarriers()[0].after, ResourceState::CopySource);
+        if (traditional)
+            EXPECT_EQ(graph.compiledGroups()[0].renderPassDesc.attachments[0].storeOp, StoreOp::Store);
+    }
+}
+
+TEST(RenderGraphDeathTest, RejectsInvalidNumericSampleCountsBeforeAllocation) {
+    EXPECT_EXIT({
+        MockDevice device; RgTexturePool pool; RgRenderPassCache cache; RenderGraph graph;
+        auto desc = test::textureDesc(TextureFormat::Rgba8Unorm, 16, 16);
+        desc.samples = 3;
+        graph.addGraphicsPass(writer("InvalidSamples", graph.createTexture(desc)));
+        compileGraph(graph, pool, cache);
+    }, ::testing::ExitedWithCode(EXIT_FAILURE), "expected 1, 2, 4 or 8");
 }
 
 TEST(RenderGraphTest, DepthFormatDerivesAspectForAttachmentsAndSampledReads) {
@@ -78,9 +112,7 @@ TEST(RenderGraphTest, DepthFormatDerivesAspectForAttachmentsAndSampledReads) {
     RgTexturePool pool;
     RgRenderPassCache cache;
     RenderGraph graph;
-    const auto depth = graph.createTexture({.format = rhi::PixelFormat::Depth32Float,
-        .width = 16, .height = 16,
-        .usage = rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::Sampled});
+    const auto depth = graph.createTexture(test::textureDesc(TextureFormat::Depth32Float, 16, 16));
     RgRasterPass clear;
     clear.name = "DepthClear";
     clear.renderArea = {0, 0, 16, 16};
@@ -110,12 +142,49 @@ TEST(RenderGraphTest, DepthFormatDerivesAspectForAttachmentsAndSampledReads) {
     EXPECT_EQ(next[0].after, ResourceState::ShaderRead);
 }
 
+TEST(RenderGraphTest, ImportedFormatsDeriveAspectAfterRecompilation) {
+    MockDevice device; RgTexturePool pool; RgRenderPassCache cache; RenderGraph graph;
+    RenderScene scene; RenderContext context(pool, cache, scene);
+    const auto depth = device.texture_create({.format = rhi::PixelFormat::Depth32Float,
+        .width = 16, .height = 16,
+        .usage = rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::Sampled});
+    const auto colorTexture = device.texture_create({.format = rhi::PixelFormat::Rgba8Unorm,
+        .width = 16, .height = 16,
+        .usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled});
+    auto current = depth;
+    auto initialState = ResourceState::DepthAttachment;
+    const auto source = graph.importTexture("Source", [&](RenderContext&) {
+        return RgTextureBinding{current, device.texture_default_view(current), initialState};
+    });
+    auto pass = writer("SampleImported", color(graph));
+    pass.sampledTextures = {source};
+    graph.addGraphicsPass(std::move(pass));
+    for (int iteration = 0; iteration < 2; ++iteration) {
+        if (iteration != 0) {
+            current = colorTexture;
+            initialState = ResourceState::ColorAttachment;
+            EXPECT_FALSE(graph.resourcesCompatible(context));
+            graph.invalidate();
+        }
+        graph.compile(context);
+        auto frame = graph.prepareFrame(context);
+        const auto expected = iteration == 0 ? rhi::TextureAspect::Depth : rhi::TextureAspect::Color;
+        EXPECT_EQ(graph.compiledGroups()[0].subpasses[0].resources[0].aspect, expected);
+        ASSERT_FALSE(frame.groups()[0].preBarriers.empty());
+        EXPECT_EQ(frame.groups()[0].preBarriers[0].texture, current);
+        EXPECT_EQ(frame.groups()[0].preBarriers[0].aspect, expected);
+        EXPECT_EQ(frame.groups()[0].preBarriers[0].before, initialState);
+        EXPECT_EQ(frame.groups()[0].preBarriers[0].after, ResourceState::ShaderRead);
+    }
+    EXPECT_EQ(graph.compileCount(), 2U);
+}
+
 TEST(RenderGraphTest, OneGroupProducesTwoSubpassesAndInputDependency) {
     MockDevice device;
     RgTexturePool pool;
     RgRenderPassCache cache;
     RenderGraph graph;
-    const auto gbuffer = color(graph, rhi::TextureUsage::InputAttachment);
+    const auto gbuffer = color(graph);
     const auto output = color(graph);
     auto lighting = writer("Lighting", output);
     lighting.inputAttachments = {gbuffer};
@@ -149,7 +218,7 @@ TEST(RenderGraphTest, PreservesAttachmentAcrossUnusedSubpass) {
     RgTexturePool pool;
     RgRenderPassCache cache;
     RenderGraph graph;
-    const auto gbuffer = color(graph, rhi::TextureUsage::InputAttachment);
+    const auto gbuffer = color(graph);
     const auto temporary = color(graph);
     const auto output = color(graph);
     auto lighting = writer("Lighting", output);
@@ -167,8 +236,8 @@ TEST(RenderGraphTest, MixedGroupsUpgradeStoreAndSynchronizeImplicitStore) {
     RgTexturePool pool;
     RgRenderPassCache cache;
     RenderGraph graph;
-    const auto gbuffer = color(graph, rhi::TextureUsage::InputAttachment | rhi::TextureUsage::Sampled);
-    const auto lit = color(graph, rhi::TextureUsage::Sampled);
+    const auto gbuffer = color(graph);
+    const auto lit = color(graph);
     const auto output = color(graph);
     auto lighting = writer("Lighting", lit);
     lighting.inputAttachments = {gbuffer};
@@ -208,7 +277,10 @@ TEST(RenderGraphTest, ReadBeforeWriteHazardIsTracked) {
     const auto texture = device.texture_create({.format = rhi::PixelFormat::Rgba8Unorm,
         .width = 16, .height = 16, .usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled,
         .debugName = "graph-test"});
-    const auto source = graph.importTexture(texture, device.texture_default_view(texture), ResourceState::ShaderRead);
+    const auto source = graph.importTexture("Source",
+        [texture, view = device.texture_default_view(texture)](RenderContext&) {
+            return RgTextureBinding{texture, view, ResourceState::ShaderRead};
+        });
     auto reader = writer("Read", color(graph));
     reader.sampledTextures = {source};
     independent(graph, reader);
@@ -228,8 +300,9 @@ TEST(RenderGraphTest, RepeatedImportsShareStateAndResetClearsRecording) {
     const auto texture = device.texture_create({.format = rhi::PixelFormat::Rgba8Unorm,
         .width = 16, .height = 16, .usage = rhi::TextureUsage::ColorAttachment, .debugName = "graph-test"});
     const auto view = device.texture_default_view(texture);
-    const auto first = graph.importTexture(texture, view);
-    EXPECT_EQ(first, graph.importTexture(texture, view));
+    const auto resolver = [texture, view](RenderContext&) { return RgTextureBinding{texture, view}; };
+    const auto first = graph.importTexture("Target", resolver);
+    EXPECT_EQ(first, graph.importTexture("Target", resolver));
     EXPECT_EQ(graph.textureCount(), 1U);
     independent(graph, writer("First", first));
     auto resources = compileGraph(graph, pool, cache);
@@ -422,8 +495,7 @@ TEST(RenderGraphTest, DynamicExtentAndClearValuesChangeWithoutRecompilation) {
     std::uint32_t size = 16;
     math::Vec4 clear{0.25F};
     const auto extent = [&](const RenderContext&) { return rhi::Rect{0, 0, size, size}; };
-    const auto target = graph.createTexture({.format = rhi::PixelFormat::Rgba8Unorm,
-        .usage = rhi::TextureUsage::ColorAttachment, .extentResolver = extent});
+    const auto target = graph.createTexture(test::textureDesc(TextureFormat::Rgba8Unorm, 0, 0), extent);
     auto pass = writer("Resize", target);
     pass.renderAreaResolver = extent;
     pass.colorAttachments[0].clearColorResolver = [&](const RenderContext&) { return clear; };
@@ -514,12 +586,11 @@ TEST(RenderGraphTest, ExternalBindingsTrackCurrentImageStateAndFormatChanges) {
 TEST(RenderGraphTest, TexturePoolsRetireOldDeviceEntriesWithoutTouchingNewRids) {
     auto orphaned = std::make_unique<RgTexturePool>();
     auto reused = std::make_unique<RgTexturePool>();
-    const RgTextureDesc desc{.format = rhi::PixelFormat::Rgba8Unorm, .width = 16, .height = 16,
-                            .usage = rhi::TextureUsage::ColorAttachment};
+    const TextureDesc desc = test::textureDesc(TextureFormat::Rgba8Unorm, 16, 16);
     {
         MockDevice first;
-        auto* a = orphaned->acquire(desc);
-        auto* b = reused->acquire(desc);
+        auto* a = orphaned->acquire(desc, rhi::TextureUsage::ColorAttachment);
+        auto* b = reused->acquire(desc, rhi::TextureUsage::ColorAttachment);
         RgTexturePool::release(a);
         RgTexturePool::release(b);
     }
@@ -529,14 +600,121 @@ TEST(RenderGraphTest, TexturePoolsRetireOldDeviceEntriesWithoutTouchingNewRids) 
     orphaned.reset();
     EXPECT_EQ(second.destroyedTextures, 0U);
     EXPECT_TRUE(second.texture_default_view(original));
-    auto* fresh = reused->acquire(desc);
+    auto* fresh = reused->acquire(desc, rhi::TextureUsage::ColorAttachment);
     EXPECT_EQ(second.textures.size(), 2U);
-    EXPECT_NE(fresh->texture, original);
-    EXPECT_EQ(second.texture_view_info(fresh->view).texture, fresh->texture);
+    EXPECT_NE(fresh->texture->textureHandle(), original);
+    EXPECT_EQ(second.texture_view_info(fresh->texture->defaultView()).texture,
+              fresh->texture->textureHandle());
     RgTexturePool::release(fresh);
     reused.reset();
     EXPECT_EQ(second.destroyedTextures, 1U);
     EXPECT_TRUE(second.texture_default_view(original));
+}
+
+TEST(RenderGraphTest, PoolTextureReferencesKeepResourcesAliveAfterPoolDestruction) {
+    MockDevice device;
+    Ref<Texture> retained;
+    {
+        RgTexturePool pool;
+        auto* entry = pool.acquire(test::textureDesc(TextureFormat::Bgra8Unorm, 16, 16), rhi::TextureUsage::ColorAttachment);
+        retained = entry->texture;
+        RgTexturePool::release(entry);
+    }
+    ASSERT_TRUE(retained);
+    EXPECT_EQ(retained->pixelFormat(), rhi::PixelFormat::Bgra8Unorm);
+    EXPECT_EQ(device.destroyedTextures, 0U);
+    retained = {};
+    EXPECT_EQ(device.destroyedTextures, 1U);
+}
+
+TEST(RenderGraphTest, GlobalPoolTrimsOnlyCompletedUnleasedTexturesAndInvalidatesFramebuffers) {
+    MockDevice device;
+    RgTexturePool pool;
+    RgRenderPassCache cache;
+    auto* entry = pool.acquire(test::textureDesc(TextureFormat::Rgba8Unorm, 16, 16), rhi::TextureUsage::ColorAttachment);
+    rhi::RenderPassDesc desc;
+    desc.attachments.push_back({rhi::PixelFormat::Rgba8Unorm, rhi::SampleCount::One,
+        LoadOp::Clear, StoreOp::Store, ResourceState::ColorAttachment, ResourceState::ColorAttachment});
+    rhi::SubpassDesc subpass;
+    subpass.colors.push_back({0, ResourceState::ColorAttachment});
+    desc.subpasses.push_back(subpass);
+    const auto pass = cache.getOrCreateRenderPass(desc);
+    const auto framebuffer = cache.getOrCreateFramebuffer({pass, {entry->texture->defaultView()}, 16, 16, 1});
+    pool.beginBatch();
+    pool.recordUsage(entry, ResourceState::ColorAttachment, rhi::AccessMode::Write);
+    pool.release(entry);
+    pool.trim(0, cache); // CPU release does not retire recorded work.
+    EXPECT_EQ(cache.framebufferCount(), 1U);
+    pool.onSubmitted(1);
+    pool.trim(0, cache); // GPU work still owns the texture.
+    EXPECT_EQ(pool.totalEntryCount(), 1U);
+    pool.collect(1);
+    pool.trim(0, cache);
+    EXPECT_EQ(pool.totalEntryCount(), 0U);
+    EXPECT_EQ(cache.framebufferCount(), 0U);
+    EXPECT_EQ(device.destroyedTextures, 1U);
+    EXPECT_EQ(device.destroyedFramebuffers, (std::vector<rhi::RID>{framebuffer}));
+    EXPECT_EQ(cache.renderPassCount(), 1U);
+}
+
+TEST(RenderGraphTest, GlobalPoolIdleAgeUsesBatchEpochAndPreservesRetainedReferences) {
+    MockDevice device; RgTexturePool pool; RgRenderPassCache cache;
+    auto* entry = pool.acquire(test::textureDesc(TextureFormat::Rgba8Unorm, 16, 16), rhi::TextureUsage::ColorAttachment);
+    Ref<Texture> retained = entry->texture;
+    pool.release(entry);
+    pool.beginBatch(); pool.cancelBatch();
+    pool.trim(2, cache);
+    EXPECT_EQ(pool.totalEntryCount(), 1U);
+    pool.beginBatch(); pool.cancelBatch();
+    pool.trim(2, cache);
+    EXPECT_EQ(pool.totalEntryCount(), 1U); // An external owning reference remains.
+    retained = {};
+    pool.trim(2, cache);
+    EXPECT_EQ(pool.totalEntryCount(), 0U);
+}
+
+TEST(RenderGraphTest, GlobalPoolMatchesSamplerAndUsageButIgnoresDebugName) {
+    MockDevice device;
+    RgTexturePool pool;
+    const auto usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled;
+    auto desc = test::textureDesc(TextureFormat::Rgba8Unorm, 16, 16, "Original");
+    auto* original = pool.acquire(desc, usage);
+    pool.release(original);
+    desc.debugName = "Renamed";
+    auto* renamed = pool.acquire(desc, usage);
+    EXPECT_EQ(renamed, original);
+    pool.release(renamed);
+
+    auto changed = desc;
+    changed.sampler.addressModeU = TextureAddressMode::ClampToEdge;
+    auto* clamped = pool.acquire(changed, usage);
+    EXPECT_NE(clamped, original);
+    EXPECT_EQ(device.samplers.back().addressU, rhi::SamplerAddressMode::ClampToEdge);
+    pool.release(clamped);
+    changed = desc;
+    changed.sampler.filterMode = TextureFilterMode::Point;
+    auto* point = pool.acquire(changed, usage);
+    EXPECT_NE(point, original);
+    EXPECT_NE(point, clamped);
+    EXPECT_EQ(device.samplers.back().minFilter, rhi::SamplerFilter::Nearest);
+    pool.release(point);
+    changed = desc;
+    changed.sampler.maxAnisotropy = 4.0F;
+    auto* anisotropic = pool.acquire(changed, usage);
+    EXPECT_NE(anisotropic, original);
+    EXPECT_EQ(device.samplers.back().maxAnisotropy, 4.0F);
+    pool.release(anisotropic);
+    changed = desc;
+    auto* transfer = pool.acquire(changed, usage | rhi::TextureUsage::TransferSource);
+    EXPECT_NE(transfer, original);
+    EXPECT_TRUE(rhi::hasFlag(transfer->texture->usage(), rhi::TextureUsage::TransferSource));
+    EXPECT_EQ(device.textures.back().tiling, rhi::TextureTiling::Optimal);
+    pool.release(transfer);
+    changed.debugName = "TransferReuse";
+    auto* again = pool.acquire(changed, usage | rhi::TextureUsage::TransferSource);
+    EXPECT_EQ(again, transfer);
+    pool.release(again);
+    EXPECT_EQ(pool.totalEntryCount(), 5U);
 }
 
 TEST(RenderGraphTest, FinalInputAndShaderReadLayoutsPreserveStoredContents) {
@@ -546,8 +724,10 @@ TEST(RenderGraphTest, FinalInputAndShaderReadLayoutsPreserveStoredContents) {
         const auto texture = device.texture_create({.format = rhi::PixelFormat::Rgba8Unorm,
             .width = 16, .height = 16,
             .usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::InputAttachment});
-        const auto handle = graph.importTexture(texture, device.texture_default_view(texture),
-            ResourceState::Undefined, final);
+        const auto handle = graph.importTexture("Output",
+            [texture, view = device.texture_default_view(texture)](RenderContext&) {
+                return RgTextureBinding{texture, view};
+            }, final);
         graph.addRasterGroup("Export", {writer("Color", handle, LoadOp::Clear, StoreOp::DontCare)});
         auto frame = compileGraph(graph, pool, cache);
         EXPECT_EQ(graph.compiledGroups()[0].renderPassDesc.attachments[0].storeOp, StoreOp::Store);
@@ -556,16 +736,18 @@ TEST(RenderGraphTest, FinalInputAndShaderReadLayoutsPreserveStoredContents) {
     }
 }
 
-TEST(RenderGraphDeathTest, TexturePoolRejectsZeroSlotsAndResetWithLiveLeases) {
+TEST(RenderGraphDeathTest, TexturePoolRejectsNestedBatchesAndDuplicateRelease) {
     EXPECT_EXIT({
-        RgTexturePool pool(0);
-    }, ::testing::ExitedWithCode(EXIT_FAILURE), "At least one frame slot");
+        MockDevice device; RgTexturePool pool;
+        pool.beginBatch(); pool.beginBatch();
+    }, ::testing::ExitedWithCode(EXIT_FAILURE), "batch is already active");
     EXPECT_EXIT({
         MockDevice device; RgTexturePool pool; RgRenderPassCache cache; RenderGraph graph;
         graph.addGraphicsPass(writer("Color", color(graph)));
         auto frame = compileGraph(graph, pool, cache);
-        pool.beginFrame(0); // Must not make frame's live lease available to another graph.
-    }, ::testing::ExitedWithCode(EXIT_FAILURE), "Release texture leases");
+        auto* entry = pool.acquire(test::textureDesc(TextureFormat::Rgba8Unorm, 16, 16), rhi::TextureUsage::ColorAttachment);
+        RgTexturePool::release(entry); RgTexturePool::release(entry);
+    }, ::testing::ExitedWithCode(EXIT_FAILURE), "lease already released");
 }
 
 TEST(RenderGraphDeathTest, RejectsInvalidFinalStatesAndDiscardedFinalContents) {
@@ -573,8 +755,10 @@ TEST(RenderGraphDeathTest, RejectsInvalidFinalStatesAndDiscardedFinalContents) {
         MockDevice device; RgTexturePool pool; RgRenderPassCache cache; RenderGraph graph;
         const auto texture = device.texture_create({.format = rhi::PixelFormat::Rgba8Unorm,
             .width = 16, .height = 16, .usage = rhi::TextureUsage::ColorAttachment});
-        const auto handle = graph.importTexture(texture, device.texture_default_view(texture),
-            ResourceState::Undefined, ResourceState::CopySource);
+        const auto handle = graph.importTexture("Output",
+            [texture, view = device.texture_default_view(texture)](RenderContext&) {
+                return RgTextureBinding{texture, view};
+            }, ResourceState::CopySource);
         graph.addGraphicsPass(writer("Color", handle));
         auto frame = compileGraph(graph, pool, cache);
     }, ::testing::ExitedWithCode(EXIT_FAILURE), "view/usage/extent");
@@ -583,8 +767,10 @@ TEST(RenderGraphDeathTest, RejectsInvalidFinalStatesAndDiscardedFinalContents) {
         const auto texture = device.texture_create({.format = rhi::PixelFormat::Rgba8Unorm,
             .width = 16, .height = 16,
             .usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled});
-        const auto handle = graph.importTexture(texture, device.texture_default_view(texture),
-            ResourceState::Undefined, ResourceState::ShaderRead);
+        const auto handle = graph.importTexture("Output",
+            [texture, view = device.texture_default_view(texture)](RenderContext&) {
+                return RgTextureBinding{texture, view};
+            }, ResourceState::ShaderRead);
         graph.addGraphicsPass(writer("Discard", handle, LoadOp::Clear, StoreOp::DontCare));
         auto frame = compileGraph(graph, pool, cache);
     }, ::testing::ExitedWithCode(EXIT_FAILURE), "Final state reads undefined");
@@ -592,8 +778,10 @@ TEST(RenderGraphDeathTest, RejectsInvalidFinalStatesAndDiscardedFinalContents) {
         MockDevice device; RgTexturePool pool; RgRenderPassCache cache; RenderGraph graph;
         const auto texture = device.texture_create({.format = rhi::PixelFormat::Rgba8Unorm,
             .width = 16, .height = 16, .usage = rhi::TextureUsage::Sampled});
-        (void)graph.importTexture(texture, device.texture_default_view(texture),
-            ResourceState::Undefined, ResourceState::ShaderRead);
+        (void)graph.importTexture("Output",
+            [texture, view = device.texture_default_view(texture)](RenderContext&) {
+                return RgTextureBinding{texture, view};
+            }, ResourceState::ShaderRead);
         auto frame = compileGraph(graph, pool, cache);
     }, ::testing::ExitedWithCode(EXIT_FAILURE), "reads undefined texture contents");
 }
@@ -602,9 +790,7 @@ TEST(RenderGraphDeathTest, RejectsDynamicRenderingAttachmentsWithDifferentSample
     EXPECT_EXIT({
         MockDevice device; RgTexturePool pool; RgRenderPassCache cache; RenderGraph graph;
         auto pass = writer("MixedSamples", color(graph));
-        const auto depth = graph.createTexture({.format = rhi::PixelFormat::Depth32Float,
-            .width = 16, .height = 16, .usage = rhi::TextureUsage::DepthStencilAttachment,
-            .samples = rhi::SampleCount::Four});
+        const auto depth = graph.createTexture(test::textureDesc(TextureFormat::Depth32Float, 16, 16, "", 4));
         pass.depthAttachments.push_back({depth});
         graph.addGraphicsPass(std::move(pass));
         auto frame = compileGraph(graph, pool, cache);
@@ -631,7 +817,7 @@ TEST(RenderGraphDeathTest, RejectsResetAndOverlappingPreparationWhileFrameIsLive
 TEST(RenderGraphDeathTest, RejectsSamplingAttachmentInsideGroup) {
     EXPECT_EXIT({
         MockDevice device; RgTexturePool pool; RgRenderPassCache cache; RenderGraph graph;
-        const auto source = color(graph, rhi::TextureUsage::Sampled);
+        const auto source = color(graph);
         auto lighting = writer("Lighting", color(graph));
         lighting.sampledTextures = {source};
         graph.addRasterGroup("Invalid", {writer("GBuffer", source), lighting});
@@ -673,22 +859,47 @@ TEST(RenderGraphDeathTest, RejectsRepeatedClearAndMismatchedAreas) {
     }, ::testing::ExitedWithCode(EXIT_FAILURE), "render areas must match");
 }
 
+TEST(RenderGraphDeathTest, TrackedImportMustBeInitializedByExecutionTime) {
+    EXPECT_EXIT({
+        MockDevice device; RgTexturePool pool; RgRenderPassCache cache; RenderGraph graph;
+        RenderScene scene; RenderContext context(pool, cache, scene);
+        const auto texture = device.texture_create({.format = rhi::PixelFormat::Rgba8Unorm,
+            .width = 16, .height = 16, .usage = rhi::TextureUsage::ColorAttachment});
+        auto state = ResourceState::Undefined;
+        const auto handle = graph.importTexture("Uninitialized", [&](RenderContext&) {
+            return RgTextureBinding{texture, device.texture_default_view(texture), state,
+                                    rhi::AccessMode::Auto, &state};
+        });
+        graph.addGraphicsPass(writer("Load", handle, LoadOp::Load));
+        graph.compile(context);
+        auto frame = graph.prepareFrame(context); // An earlier graph could still initialize it.
+        const auto command = rhi::RID(0, 1);
+        pool.beginBatch(command);
+        graph.execute(context, frame, command);
+    }, ::testing::ExitedWithCode(EXIT_FAILURE), "reads undefined texture contents");
+}
+
 TEST(RenderGraphDeathTest, RejectsUndefinedInputAndMissingUsage) {
     EXPECT_EXIT({
         MockDevice device; RgTexturePool pool; RgRenderPassCache cache; RenderGraph graph;
         auto pass = writer("UndefinedSample", color(graph));
-        pass.sampledTextures = {color(graph, rhi::TextureUsage::Sampled)};
+        pass.sampledTextures = {color(graph)};
         independent(graph, std::move(pass)); compileGraph(graph, pool, cache);
     }, ::testing::ExitedWithCode(EXIT_FAILURE), "reads undefined texture contents");
     EXPECT_EXIT({
         MockDevice device; RgTexturePool pool; RgRenderPassCache cache; RenderGraph graph;
         auto lighting = writer("Lighting", color(graph));
-        lighting.inputAttachments = {color(graph, rhi::TextureUsage::InputAttachment)};
+        lighting.inputAttachments = {color(graph)};
         graph.addRasterGroup("Invalid", {lighting}); compileGraph(graph, pool, cache);
     }, ::testing::ExitedWithCode(EXIT_FAILURE), "reads undefined texture contents");
     EXPECT_EXIT({
         MockDevice device; RgTexturePool pool; RgRenderPassCache cache; RenderGraph graph;
-        const auto source = color(graph);
+        const auto texture = device.texture_create({.format = rhi::PixelFormat::Rgba8Unorm,
+            .width = 16, .height = 16, .usage = rhi::TextureUsage::ColorAttachment});
+        const auto source = graph.importTexture("MissingInputUsage",
+            [texture, view = device.texture_default_view(texture)](RenderContext&) {
+                return RgTextureBinding{texture, view};
+            });
         auto lighting = writer("Lighting", color(graph)); lighting.inputAttachments = {source};
         graph.addRasterGroup("Invalid", {writer("First", source), lighting}); compileGraph(graph, pool, cache);
     }, ::testing::ExitedWithCode(EXIT_FAILURE), "attachment view/usage/extent");
@@ -697,13 +908,13 @@ TEST(RenderGraphDeathTest, RejectsUndefinedInputAndMissingUsage) {
 TEST(RenderGraphDeathTest, RejectsFeedbackAndModificationAfterCompile) {
     EXPECT_EXIT({
         MockDevice device; RgTexturePool pool; RgRenderPassCache cache; RenderGraph graph;
-        const auto source = color(graph, rhi::TextureUsage::Sampled);
+        const auto source = color(graph);
         auto pass = writer("SampledFeedback", source); pass.sampledTextures = {source};
         independent(graph, std::move(pass)); compileGraph(graph, pool, cache);
     }, ::testing::ExitedWithCode(EXIT_FAILURE), "Attachment feedback or conflicting usage");
     EXPECT_EXIT({
         MockDevice device; RgTexturePool pool; RgRenderPassCache cache; RenderGraph graph;
-        const auto source = color(graph, rhi::TextureUsage::InputAttachment);
+        const auto source = color(graph);
         auto pass = writer("Invalid", source); pass.inputAttachments = {source};
         graph.addRasterGroup("Invalid", {pass}); compileGraph(graph, pool, cache);
     }, ::testing::ExitedWithCode(EXIT_FAILURE), "Duplicate attachment binding");

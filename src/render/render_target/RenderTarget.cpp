@@ -246,7 +246,7 @@ RenderTarget::importColor(RenderGraph& graph, std::size_t index, rhi::ResourceSt
 
 RgTextureHandle RenderTarget::importDepth(RenderGraph& graph, rhi::ResourceState finalState) {
     return graph.importTexture("RenderTarget." + std::to_string(reinterpret_cast<std::uintptr_t>(this)) +
-        ".Depth", [this](RenderContext&) { return depthBinding(); }, finalState, rhi::TextureAspect::Depth);
+        ".Depth", [this](RenderContext&) { return depthBinding(); }, finalState);
 }
 
 RgTextureBinding RenderTarget::colorBinding(std::size_t index) {

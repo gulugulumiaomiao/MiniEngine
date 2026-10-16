@@ -16,6 +16,7 @@ struct SamplerDesc {
     TextureAddressMode addressModeU{TextureAddressMode::Repeat};
     TextureAddressMode addressModeV{TextureAddressMode::Repeat};
     float maxAnisotropy{1.0F};
+    [[nodiscard]] bool operator==(const SamplerDesc&) const = default;
 
     SamplerDesc() = default;
     SamplerDesc(TextureFilterMode filterMode,

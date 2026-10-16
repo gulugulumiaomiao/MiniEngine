@@ -207,6 +207,8 @@ FrameStatus VulkanSwapchain::beginFrame() {
         Log::fatal("VulkanSwapchain", "A frame is already open");
     Frame& frame = frames_[currentFrame_];
     check(vkWaitForFences(device(), 1, &frame.inFlight, VK_TRUE, UINT64_MAX), "vkWaitForFences");
+    // Consume completion before the borrowed fence is reset for another submission.
+    (void)device_.completedSubmission();
     // The fence we just waited on proves that this slot's previous submission finished,
     // so its command buffer staging buffers can be destroyed safely.
     device_.collectStagingBuffers();
@@ -217,27 +219,24 @@ FrameStatus VulkanSwapchain::beginFrame() {
     if (acquire != VK_SUCCESS && acquire != VK_SUBOPTIMAL_KHR) {
         check(acquire, "vkAcquireNextImageKHR");
     }
-    check(vkResetFences(device(), 1, &frame.inFlight), "vkResetFences");
     // The pooled VkCommandBuffer is registered in the device's command-buffer pool; begin()
     // resets and reopens it for this frame's recording.
     commandBufferRid_ = frame.commandBufferRid;
-    VulkanCommandBuffer& cmd = device_.command_buffer(commandBufferRid_);
-    cmd.begin();
-
-    // On first use, transition from UNDEFINED to COLOR_ATTACHMENT_OPTIMAL
-    if (!imageInitialized_[imageIndex_]) {
-        const TextureBarrier toColorAttachment{currentTexture(),
-                                               TextureAspect::Color,
-                                               ResourceState::Undefined,
-                                               ResourceState::ColorAttachment,
-                                               0,
-                                               1,
-                                               0,
-                                               1};
-        cmd.resourceBarriers(std::span{&toColorAttachment, 1});
-    }
-
+    // Once acquired, the image must be returned even if recording setup throws.
     frameOpen_ = true;
+    try {
+        VulkanCommandBuffer& cmd = device_.command_buffer(commandBufferRid_);
+        cmd.begin();
+        // On first use, transition from UNDEFINED to COLOR_ATTACHMENT_OPTIMAL.
+        if (!imageInitialized_[imageIndex_]) {
+            const TextureBarrier toColorAttachment{currentTexture(), TextureAspect::Color,
+                ResourceState::Undefined, ResourceState::ColorAttachment, 0, 1, 0, 1};
+            cmd.resourceBarriers(std::span{&toColorAttachment, 1});
+        }
+    } catch (...) {
+        (void)cancelFrame();
+        throw;
+    }
     return FrameStatus::Ready;
 }
 
@@ -247,9 +246,6 @@ FrameStatus VulkanSwapchain::endFrame() {
     Frame& frame = frames_[currentFrame_];
     // Note: Layout transition to PRESENT_SRC_KHR is handled by RenderGraph
     device_.command_buffer(commandBufferRid_).end();
-    // Command buffer staging buffers recorded this frame retire once this submission's
-    // fence is signaled; tag them before submitting so collection sees the fence.
-    device_.tagPendingStagingBuffers(frame.inFlight);
     device_.submit(commandBufferRid_,
                    SubmitSync{frame.imageAvailable,
                               renderFinished_[imageIndex_],
@@ -282,6 +278,23 @@ void VulkanSwapchain::resize(std::uint32_t width, std::uint32_t height) {
     desc_.height = height;
     destroy();
     create();
+}
+
+FrameStatus VulkanSwapchain::cancelFrame() {
+    if (!frameOpen_) Log::fatal("VulkanSwapchain", "No frame to cancel");
+    auto& cmd = device_.command_buffer(commandBufferRid_);
+    cmd.discard();
+    cmd.begin();
+    const TextureBarrier toColor{.texture = currentTexture(),
+        .before = currentTextureState(), .after = ResourceState::ColorAttachment};
+    cmd.resourceBarriers(std::span{&toColor, 1});
+    cmd.beginRendering({.renderArea = {0, 0, width(), height()},
+        .colorAttachments = {{currentTextureView(), LoadOp::Clear, StoreOp::Store}}});
+    cmd.endRendering();
+    const TextureBarrier toPresent{.texture = currentTexture(),
+        .before = ResourceState::ColorAttachment, .after = ResourceState::Present};
+    cmd.resourceBarriers(std::span{&toPresent, 1});
+    return endFrame();
 }
 
 RID VulkanSwapchain::commandBuffer() {

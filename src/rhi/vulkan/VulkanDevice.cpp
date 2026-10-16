@@ -1072,7 +1072,7 @@ VulkanCommandBuffer& VulkanDevice::command_buffer(RID handle) {
     return *command;
 }
 
-void VulkanDevice::submit(RID command, const SubmitSync& sync) {
+SubmissionId VulkanDevice::submit(RID command, const SubmitSync& sync) {
     VulkanCommandBuffer& recorded = command_buffer(command);
     if (recorded.state() != CommandState::Executable) {
         Log::fatal("VulkanDevice",
@@ -1091,52 +1091,106 @@ void VulkanDevice::submit(RID command, const SubmitSync& sync) {
     submitInfo.pSignalSemaphores = signalSemaphore != VK_NULL_HANDLE ? &signalSemaphore : nullptr;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &nativeCommandBuffer;
-    check(vkQueueSubmit(graphicsQueue_, 1, &submitInfo, sync.signalFence), "vkQueueSubmit");
+    VkFence fence = sync.signalFence;
+    const bool ownsFence = fence == VK_NULL_HANDLE;
+    if (ownsFence) {
+        VkFenceCreateInfo info{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+        check(vkCreateFence(device_, &info, nullptr, &fence), "vkCreateFence(submission)");
+    }
+    // Allocate tracking before submission, so allocation failure cannot lose GPU work.
+    try {
+        submissions_.push_back({lastSubmitted_ + 1, fence, ownsFence});
+    } catch (...) {
+        if (ownsFence) vkDestroyFence(device_, fence, nullptr);
+        throw;
+    }
+    // Keep a borrowed frame fence signaled until all throwing CPU preparation succeeds.
+    if (!ownsFence) check(vkResetFences(device_, 1, &fence), "vkResetFences(submission)");
+    check(vkQueueSubmit(graphicsQueue_, 1, &submitInfo, fence), "vkQueueSubmit");
+    const auto submission = ++lastSubmitted_;
+    submitTransientBufferUsage(nativeCommandBuffer, submission);
+    return submission;
+}
+
+SubmissionId VulkanDevice::completedSubmission() {
+    while (!submissions_.empty()) {
+        const auto& submission = submissions_.front();
+        const VkResult status = vkGetFenceStatus(device_, submission.fence);
+        if (status == VK_NOT_READY) break;
+        check(status, "vkGetFenceStatus(submission)");
+        completedSubmission_ = submission.id;
+        if (submission.ownsFence) vkDestroyFence(device_, submission.fence, nullptr);
+        submissions_.pop_front();
+    }
+    return completedSubmission_;
 }
 
 void VulkanDevice::waitIdle() {
     if (device_ != VK_NULL_HANDLE) {
         check(vkDeviceWaitIdle(device_), "vkDeviceWaitIdle");
+        (void)completedSubmission();
     }
 }
 
 RID VulkanDevice::buffer_acquire_transient(const BufferDesc& desc) {
-    // A transient buffer is a normal host-visible buffer whose lifetime the device owns: it is
-    // registered here, tagged with the submitting frame's fence at submit, and destroyed by
-    // collectStagingBuffers() once that fence signals. Callers never free it (orphan semantics).
     const RID handle = buffer_create(desc);
-    pendingStagingBuffers_.push_back(StagingBuffer{handle, VK_NULL_HANDLE});
+    try {
+        pendingStagingBuffers_.push_back(StagingBuffer{handle, {}});
+    } catch (...) {
+        buffer_destroy(handle);
+        throw;
+    }
     return handle;
 }
 
-RID VulkanDevice::acquireStagingBuffer(std::uint64_t size) {
+RID VulkanDevice::acquireStagingBuffer(std::uint64_t size, VkCommandBuffer command) {
     if (size == 0) {
         Log::fatal("VulkanDevice", "Staging buffer size must be positive");
     }
-    return buffer_acquire_transient(
+    const auto handle = buffer_create(
         {size, BufferUsage::TransferSource, MemoryUsage::Upload, "command buffer staging"});
+    try {
+        pendingStagingBuffers_.push_back({handle, {command}});
+    } catch (...) {
+        buffer_destroy(handle);
+        throw;
+    }
+    return handle;
 }
 
-void VulkanDevice::tagPendingStagingBuffers(VkFence fence) {
-    for (StagingBuffer& staging : pendingStagingBuffers_) {
-        if (staging.fence == VK_NULL_HANDLE) {
-            staging.fence = fence;
-        }
+void VulkanDevice::recordTransientBufferUsage(RID buffer, VkCommandBuffer command) {
+    for (auto& entry : pendingStagingBuffers_) {
+        if (entry.handle != buffer) continue;
+        if (std::ranges::find(entry.recordings, command) == entry.recordings.end())
+            entry.recordings.push_back(command);
+        return;
     }
 }
 
-void VulkanDevice::collectStagingBuffers() {
-    retireStagingBuffers(pendingStagingBuffers_);
+void VulkanDevice::submitTransientBufferUsage(VkCommandBuffer command, SubmissionId submission) {
+    // No allocation after vkQueueSubmit succeeds.
+    for (auto& entry : pendingStagingBuffers_) {
+        if (std::erase(entry.recordings, command)) entry.submission = submission;
+    }
 }
 
-void VulkanDevice::retireStagingBuffers(std::vector<StagingBuffer>& pending) {
-    for (auto entry = pending.begin(); entry != pending.end();) {
-        // Untagged entries belong to a command buffer that has not been submitted yet;
-        // leave them to the device teardown (which waits idle first).
-        if (entry->fence != VK_NULL_HANDLE &&
-            vkGetFenceStatus(device_, entry->fence) == VK_SUCCESS) {
+void VulkanDevice::discardTransientBufferUsage(VkCommandBuffer command) {
+    std::erase_if(pendingStagingBuffers_, [&](StagingBuffer& entry) {
+        const bool referenced = std::erase(entry.recordings, command) != 0;
+        if (referenced && !entry.submission && entry.recordings.empty()) {
+            buffer_destroy(entry.handle);
+            return true;
+        }
+        return false;
+    });
+}
+
+void VulkanDevice::collectStagingBuffers() {
+    const auto completed = completedSubmission();
+    for (auto entry = pendingStagingBuffers_.begin(); entry != pendingStagingBuffers_.end();) {
+        if (entry->submission && entry->submission <= completed && entry->recordings.empty()) {
             buffer_destroy(entry->handle);
-            entry = pending.erase(entry);
+            entry = pendingStagingBuffers_.erase(entry);
             continue;
         }
         ++entry;
