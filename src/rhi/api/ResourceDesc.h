@@ -3,11 +3,14 @@
 #include "core/base/RID.h"
 #include "core/math/Math.h"
 
+#include <algorithm>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 // Single home for every backend-agnostic RHI descriptor, enumeration and plain-data
@@ -128,6 +131,60 @@ struct PixelFormatInfo {
 
 [[nodiscard]] constexpr bool hasStencil(PixelFormat format) {
     return formatInfo(format).stencil;
+}
+
+// Tightly packed source data. This describes bytes, not a device image's memory layout.
+[[nodiscard]] constexpr bool computeTextureByteSize(PixelFormat format, std::uint32_t width,
+    std::uint32_t height, std::uint32_t depth, std::size_t& size) {
+    size = 0;
+    const auto info = formatInfo(format);
+    if (!info.valid() || !width || !height || !depth) return false;
+    const std::size_t blocksWide = 1 + (static_cast<std::size_t>(width) - 1) / info.blockWidth;
+    const std::size_t blocksHigh = 1 + (static_cast<std::size_t>(height) - 1) / info.blockHeight;
+    constexpr auto maximum = std::numeric_limits<std::size_t>::max();
+    if (blocksHigh > maximum / blocksWide) return false;
+    const auto plane = blocksWide * blocksHigh;
+    if (depth > maximum / plane) return false;
+    const auto volume = plane * depth;
+    if (info.bytesPerBlock > maximum / volume) return false;
+    size = volume * info.bytesPerBlock;
+    return true;
+}
+
+struct TextureMipLayout {
+    std::vector<std::size_t> offsets;
+    std::vector<std::size_t> sizes;
+    std::size_t totalSize{};
+};
+
+// Single-layer 2D mip chain. Alignment 1 packs CPU payloads; larger alignment
+// inserts padding between staging regions without including padding in mip sizes.
+[[nodiscard]] inline bool computeTextureLayout(PixelFormat format, std::uint32_t width,
+    std::uint32_t height, std::uint32_t mipCount, TextureMipLayout& layout,
+    std::size_t alignment = 1) {
+    layout = {};
+    if (!formatInfo(format).valid() || !width || !height || !mipCount || !alignment ||
+        mipCount > static_cast<std::uint32_t>(std::bit_width(std::max(width, height)))) return false;
+    TextureMipLayout result;
+    result.offsets.reserve(mipCount);
+    result.sizes.reserve(mipCount);
+    constexpr auto maximum = std::numeric_limits<std::size_t>::max();
+    for (std::uint32_t mip = 0; mip < mipCount; ++mip) {
+        std::size_t size{};
+        if (!computeTextureByteSize(format, width, height, 1, size)) return false;
+        const auto remainder = result.totalSize % alignment;
+        const auto padding = remainder ? alignment - remainder : 0;
+        if (padding > maximum - result.totalSize) return false;
+        const auto offset = result.totalSize + padding;
+        if (size > maximum - offset) return false;
+        result.offsets.push_back(offset);
+        result.sizes.push_back(size);
+        result.totalSize = offset + size;
+        width = std::max(1U, width / 2U);
+        height = std::max(1U, height / 2U);
+    }
+    layout = std::move(result);
+    return true;
 }
 
 enum class VertexFormat {

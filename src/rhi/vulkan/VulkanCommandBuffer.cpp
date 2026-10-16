@@ -32,16 +32,12 @@ void toVulkanBlend(BlendMode mode, VkColorBlendEquationEXT& equation, VkBool32& 
         mode == BlendMode::Additive ? VK_BLEND_FACTOR_ONE : VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 }
 
-std::uint32_t bytesPerPixel(PixelFormat format) {
-    const auto info = formatInfo(format);
-    if (info.valid() && info.blockWidth == 1 && info.blockHeight == 1)
-        return info.bytesPerBlock;
-    Log::fatal("VulkanCommandBuffer", "Unsupported RHI texture format");
-}
-
-VkImageSubresourceLayers imageSubresource(std::uint32_t mipLevel, std::uint32_t arrayLayer) {
+VkImageSubresourceLayers imageSubresource(PixelFormat format, std::uint32_t mipLevel,
+                                         std::uint32_t arrayLayer) {
+    if (!formatInfo(format).valid() || hasStencil(format))
+        Log::fatal("VulkanCommandBuffer", "Unsupported image copy format");
     VkImageSubresourceLayers subresource{};
-    subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    subresource.aspectMask = isDepthFormat(format) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
     subresource.mipLevel = mipLevel;
     subresource.baseArrayLayer = arrayLayer;
     subresource.layerCount = 1;
@@ -483,9 +479,9 @@ void VulkanCommandBuffer::copyImage(const ImageCopy& copy) {
     // Callers are responsible for transitioning the images to CopySource/CopyDestination
     // states (via resourceBarriers) before recording the copy.
     VkImageCopy native{};
-    native.srcSubresource = imageSubresource(copy.sourceMipLevel, copy.sourceArrayLayer);
+    native.srcSubresource = imageSubresource(device_.textureFormat(copy.source), copy.sourceMipLevel, copy.sourceArrayLayer);
     native.srcOffset = toVulkan(copy.sourceOffset);
-    native.dstSubresource = imageSubresource(copy.destinationMipLevel, copy.destinationArrayLayer);
+    native.dstSubresource = imageSubresource(device_.textureFormat(copy.destination), copy.destinationMipLevel, copy.destinationArrayLayer);
     native.dstOffset = toVulkan(copy.destinationOffset);
     native.extent = toVulkan(copy.extent);
     vkCmdCopyImage(commandBuffer_,
@@ -503,7 +499,7 @@ void VulkanCommandBuffer::copyBufferToImage(const BufferImageCopy& copy) {
     native.bufferOffset = copy.bufferOffset;
     native.bufferRowLength = copy.bufferRowLength;
     native.bufferImageHeight = copy.bufferImageHeight;
-    native.imageSubresource = imageSubresource(copy.mipLevel, copy.arrayLayer);
+    native.imageSubresource = imageSubresource(device_.textureFormat(copy.texture), copy.mipLevel, copy.arrayLayer);
     native.imageOffset = toVulkan(copy.textureOffset);
     native.imageExtent = toVulkan(copy.extent);
     vkCmdCopyBufferToImage(commandBuffer_,
@@ -520,7 +516,7 @@ void VulkanCommandBuffer::copyImageToBuffer(const BufferImageCopy& copy) {
     native.bufferOffset = copy.bufferOffset;
     native.bufferRowLength = copy.bufferRowLength;
     native.bufferImageHeight = copy.bufferImageHeight;
-    native.imageSubresource = imageSubresource(copy.mipLevel, copy.arrayLayer);
+    native.imageSubresource = imageSubresource(device_.textureFormat(copy.texture), copy.mipLevel, copy.arrayLayer);
     native.imageOffset = toVulkan(copy.textureOffset);
     native.imageExtent = toVulkan(copy.extent);
     vkCmdCopyImageToBuffer(commandBuffer_,
@@ -546,14 +542,20 @@ void VulkanCommandBuffer::updateBuffer(const BufferUpdate& update) {
 
 void VulkanCommandBuffer::updateImage(const ImageUpdate& update) {
     ensureRecording("updateImage");
-    if (update.extent.width == 0 || update.extent.height == 0 || update.extent.depth == 0) {
-        Log::fatal("VulkanCommandBuffer", "Image update extent must not be empty");
-    }
-    const std::uint64_t pixelCount = static_cast<std::uint64_t>(update.extent.width) *
-                                     update.extent.height * update.extent.depth;
-    const std::uint64_t expectedSize =
-        pixelCount * bytesPerPixel(device_.textureFormat(update.destination));
-    if (update.data.size_bytes() != expectedSize) {
+    const auto& image = device_.texture(update.destination);
+    if (update.mipLevel >= image.mipCount() || update.arrayLayer >= image.arrayLayers() ||
+        image.samples() != SampleCount::One || !hasFlag(image.usage(), TextureUsage::TransferDestination) ||
+        update.extent.depth != 1 || update.offset.z ||
+        !update.extent.width || !update.extent.height)
+        Log::fatal("VulkanCommandBuffer", "Invalid image update region");
+    const auto width = std::max(1U, image.width() >> update.mipLevel);
+    const auto height = std::max(1U, image.height() >> update.mipLevel);
+    if (update.offset.x > width || update.offset.y > height ||
+        update.extent.width > width - update.offset.x || update.extent.height > height - update.offset.y)
+        Log::fatal("VulkanCommandBuffer", "Invalid image update region");
+    std::size_t expectedSize{};
+    if (!computeTextureByteSize(image.format(), update.extent.width, update.extent.height, 1, expectedSize) ||
+        update.data.size_bytes() != expectedSize) {
         Log::fatal("VulkanCommandBuffer", "Image update data does not match the extent");
     }
     const RID staging = device_.acquireStagingBuffer(update.data.size_bytes());

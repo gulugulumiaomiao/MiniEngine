@@ -291,7 +291,7 @@ AssetImportResult TextureAssetImporter::import(const AssetImportContext& context
                                         textureSettings->wrapModeV,
                                         textureSettings->anisoLevel};
 
-    if (!validateTexture(texture->desc, texture->pixels))
+    if (!validateTextureAsset(texture->desc, texture->pixels))
         return fail("Unsupported or invalid Texture: " + context.sourcePath.string());
     return writeAssetArtifact(context, *texture, AssetType::Texture);
 }

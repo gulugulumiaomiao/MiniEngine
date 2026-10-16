@@ -61,12 +61,8 @@ struct TextureViewDesc {
     [[nodiscard]] bool operator==(const TextureViewDesc&) const = default;
 };
 
-// Byte offset of every mip level inside a tightly packed pixel blob, plus the total blob
-// size. Levels run 0..mipCount-1 with no padding; only RGBA8 2D textures are supported.
-struct TextureMipLayout {
-    std::vector<std::size_t> offsets;
-    std::size_t totalSize{};
-};
+// Byte offsets and sizes for a tightly packed CPU mip chain, with no GPU staging padding.
+using TextureMipLayout = rhi::TextureMipLayout;
 
 struct TextureDesc {
     TextureType type{TextureType::Texture2D};
@@ -240,6 +236,8 @@ private:
 
 /// 层1 纹理资产：序列化源（desc + 扁平像素）。可 instantiate 出唯一运行时 Texture，
 /// 或 clone 出多个脱离实例。
-[[nodiscard]] bool validateTexture(const TextureDesc& desc, std::span<const std::uint8_t> pixels);
+// Validates serializable allocation/sampler options and tightly packed mip bytes
+// for all supported formats. Source image decoding capabilities are independent.
+[[nodiscard]] bool validateTextureAsset(const TextureDesc& desc, std::span<const std::uint8_t> pixels);
 
 } // namespace engine

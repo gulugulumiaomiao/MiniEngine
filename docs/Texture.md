@@ -34,7 +34,7 @@ Texture 系统把资产数据、运行时 GPU 资源与采样状态拆成三层�
 ## 3. 去重与生命周期
 
 - **去重**：无管理器时，"每个 `TextureAsset` 只 `instantiate()` 出一个运行时实例"天然承担去重——`resolveTextureReference` → 缓存 asset → `instantiate()` 命中同一实例。`clone()` 产出互不影响、不随 asset 变化的脱离实例（不继承 asset 链接）。
-- **两步初始化**：构造只分配 RID（不上传）；`initialize`/`upload(pixels)` 上传，可在热重载时重复调用。
+- **两步初始化**：构造只分配 RID（不上传）；`initialize`/`upload(pixels)` 完成首次上传。已有图像的更新需显式同步；当前热重载的重复上传路径尚需单独调整。
 - **所有权**：层2 `Texture` 经 `createTextureView` 创建并**拥有**默认 view（`~Texture` 先 `destroyTextureView` 再 `destroyTexture`）；view 去重与级联释放在 `VulkanDevice`（设备级 `(textureRID, rhi::TextureViewDesc)→RID`，`destroyTexture` 释放该纹理全部 view）；默认 sampler 由设备按 desc 去重持有，`~Texture` 不销毁它。
 - **跨设备**：`IDevice` 有进程内单调、永不复用的 `uid()`。`~Texture` 用 `IDevice::active()` + 空检查销毁 GPU 资源（asset-backed 纹理在其设备仍 active 时析构，由工程 teardown 顺序保证）；静态内建纹理按 `uid` 检测设备切换，重建前对旧实例调 `detachFromDeadDevice()` 置空三 RID，使旧实例析构跳过销毁（旧设备已亡、资源随之消失）。这取代了裸指针比较（地址复用会误判）与旧的 `retainPixels` 补丁。
 - **双向观察者**：`TextureAsset` 以裸指针 `instance_` 观察唯一实例，实例以裸指针 `asset_` 回指 asset（asset 由 `AssetManager` 强缓存常驻）；`~Texture` 与 `~TextureAsset` 互相清空对方指针，任一方先销毁都安全（无 UAF）。
@@ -78,7 +78,17 @@ auto shadow = Texture::createShadowMap(2048, 2048, TextureFormat::Depth16Unorm);
 上述接口只分配纹理，不初始化像素。默认 view 使用纹理自身格式，深度格式使用 depth aspect。
 纹理资产使用版本 5，不再序列化 `color_space`，直接拒绝旧版本，无兼容读取或迁移代码。
 纹理导入器版本升为 3，旧缓存从源图片/KTX 重新导入后生成新版本资产。
-资产的 `validateTexture/computeTextureLayout/upload` 仍仅接受现有 RGBA8 编码；新增格式的
-通用 mip 数据布局和上传支持将在后续步骤实现。具体设备的格式/usage 支持也仍需检查。
+`computeTextureLayout` 和运行时 `Texture::upload` 支持当前全部 14 种非压缩格式；
+资产的 `validateTextureAsset` 接受当前全部 14 种非压缩格式，包括单/双通道、BGRA、HDR 和深度格式。
+原始像素必须符合目标格式，接口不会转换像素编码。现有图片/KTX 导入器仍只解码其原有 RGBA8 格式。
+
+CPU 像素按 mip 从大到小紧密排列，每级提供 `offsets`、`sizes`，`totalSize` 为总字节数。
+尺寸逐级除以 2 并至少为 1；按格式块字节数计算，拒绝非法 mip 数和字节数溢出。
+Vulkan staging 单独将每级偏移对齐到 `lcm(4, bytesPerBlock)`，填充不属于调用方像素数据。
+RHI 上传 region 可以乱序，但必须恰好覆盖所有 mip，尺寸和字节数必须一致，不能重复。
+上传仅用于尚未初始化的单层二维、单采样纹理，要求 `Sampled | TransferDestination`，
+同步完成后处于 `ShaderRead`。需要更新已有内容时，调用方负责转换状态并使用 `updateImage`；
+该接口验证 mip、layer、区域边界和精确数据长度，copy 接口从格式推导 color/depth aspect。
+具体设备的格式/usage 支持检查安排在下一步。
 
 Google Test 覆盖：内建默认纹理（互异、上传、可采样）、`instantiate` 单实例与 `clone` 脱离、`Sampler` 覆盖绑定、Material 按 Ref 持有、GUID 身份（同路径同实例）、最后 Ref 归零释放 GPU、`reloadInPlace` 活链接与未实现维度拒绝。完整验证必须同时执行 Debug/Release 构建与 CTest，并实跑引擎（含工程切换/设备重建的 `SceneViewIntegrationTest`、`ProjectConfigEditorTest`）检查资源缺失、shader、材质与 Vulkan validation 日志。

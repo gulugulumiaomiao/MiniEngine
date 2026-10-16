@@ -60,6 +60,9 @@ public:
     // Textures and texture views. Views are deduped and owned at the device level.
     [[nodiscard]] virtual RID texture_create(const TextureDesc& desc) = 0;
     virtual void texture_destroy(RID handle) = 0;
+    // First upload of the complete mip chain into a single-sample 2D texture with
+    // Sampled | TransferDestination usage. Regions contain tightly packed source
+    // bytes; the backend inserts staging padding. Ends in ShaderRead state.
     virtual void texture_upload(RID destination,
                                 std::span<const TextureUploadRegion> regions) = 0;
     [[nodiscard]] virtual RID texture_view_create(RID texture, const TextureViewDesc& desc) = 0;

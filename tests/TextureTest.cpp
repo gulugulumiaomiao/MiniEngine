@@ -99,8 +99,11 @@ public:
         ++textureUploads;
         uploadedMipCounts.push_back(static_cast<std::uint32_t>(regions.size()));
         uploadedByteCounts.push_back(0);
-        for (const engine::rhi::TextureUploadRegion& region : regions)
+        uploadedMipSizes.emplace_back();
+        for (const engine::rhi::TextureUploadRegion& region : regions) {
             uploadedByteCounts.back() += region.data.size_bytes();
+            uploadedMipSizes.back().push_back(region.data.size_bytes());
+        }
     }
     engine::rhi::RID texture_view_create(engine::rhi::RID texture,
                                          const engine::rhi::TextureViewDesc& desc) override {
@@ -152,6 +155,7 @@ public:
     std::vector<engine::rhi::SamplerDesc> samplerDescs;
     std::vector<std::uint32_t> uploadedMipCounts;
     std::vector<std::size_t> uploadedByteCounts;
+    std::vector<std::vector<std::size_t>> uploadedMipSizes;
     std::uint32_t createdTextures{};
     std::uint32_t destroyedTextures{};
     std::uint32_t createdViews{};
@@ -403,7 +407,7 @@ TEST(TextureValidationTest, RejectsUnimplementedTextureDimensions) {
         TextureType::Texture2DArray, TextureFormat::Rgba8Unorm, 1, 1, 1};
     desc.arrayLayers = 2;
     const std::vector<std::uint8_t> pixels{0, 0, 0, 0};
-    EXPECT_FALSE(validateTexture(desc, pixels));
+    EXPECT_FALSE(validateTextureAsset(desc, pixels));
 }
 
 TEST(TextureValidationTest, AssetPayloadRejectsRuntimeOptionsItCannotSerialize) {
@@ -411,22 +415,70 @@ TEST(TextureValidationTest, AssetPayloadRejectsRuntimeOptionsItCannotSerialize) 
     TextureDesc desc{TextureType::Texture2D, TextureFormat::Rgba8Unorm,
         1, 1};
     const std::vector<std::uint8_t> pixels(4);
-    EXPECT_TRUE(validateTexture(desc, pixels));
+    EXPECT_TRUE(validateTextureAsset(desc, pixels));
     desc.usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled;
-    EXPECT_FALSE(validateTexture(desc, pixels));
+    EXPECT_FALSE(validateTextureAsset(desc, pixels));
     desc.usage = rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferDestination;
     desc.samples = rhi::SampleCount::Four;
-    EXPECT_FALSE(validateTexture(desc, pixels));
+    EXPECT_FALSE(validateTextureAsset(desc, pixels));
 }
 
-TEST(TextureValidationTest, ExtendedRuntimeFormatsDoNotAcceptRgba8AssetPayloads) {
+TEST(TextureValidationTest, RejectsByteCountsThatDoNotMatchTheAssetFormat) {
     using namespace engine;
     const std::vector<std::uint8_t> rgbaBytes(16U * 16U * 4U);
     for (const auto format : {TextureFormat::R8Unorm, TextureFormat::Rgba16Float,
                               TextureFormat::Depth16Unorm}) {
         TextureDesc desc{TextureType::Texture2D, format, 16, 16};
-        EXPECT_FALSE(validateTexture(desc, rgbaBytes));
+        EXPECT_FALSE(validateTextureAsset(desc, rgbaBytes));
     }
+}
+
+TEST(TextureValidationTest, AssetsAcceptAllCurrentFormatsWithTheirExactMipPayload) {
+    using namespace engine;
+    for (auto format : {TextureFormat::Rgba8Unorm, TextureFormat::Rgba8Srgb,
+            TextureFormat::Bgra8Unorm, TextureFormat::Bgra8Srgb,
+            TextureFormat::R8Unorm, TextureFormat::Rg8Unorm,
+            TextureFormat::R16Float, TextureFormat::Rg16Float, TextureFormat::Rgba16Float,
+            TextureFormat::R32Float, TextureFormat::Rg32Float, TextureFormat::Rgba32Float,
+            TextureFormat::Depth16Unorm, TextureFormat::Depth32Float}) {
+        TextureDesc desc{TextureType::Texture2D, format, 5, 3, 3};
+        TextureMipLayout layout;
+        ASSERT_TRUE(computeTextureLayout(desc, layout));
+        std::vector<std::uint8_t> pixels(layout.totalSize);
+        EXPECT_TRUE(validateTextureAsset(desc, pixels));
+        pixels.push_back(0);
+        EXPECT_FALSE(validateTextureAsset(desc, pixels));
+    }
+    TextureDesc invalid{TextureType::Texture2D, static_cast<TextureFormat>(999), 1, 1};
+    EXPECT_FALSE(validateTextureAsset(invalid, std::vector<std::uint8_t>{0}));
+}
+
+
+TEST_F(TextureTest, RuntimeUploadUsesFormatSizedMipSlicesAndRejectsWrongLengths) {
+    using namespace engine;
+    for (auto format : {TextureFormat::R8Unorm, TextureFormat::Rg8Unorm, TextureFormat::Rgba16Float}) {
+        TextureDesc desc{TextureType::Texture2D, format, 5, 3, 3};
+        const auto texture = Texture::create(desc);
+        ASSERT_TRUE(texture);
+        const auto bytes = rhi::formatInfo(toRhi(format)).bytesPerBlock;
+        std::vector<std::uint8_t> pixels(18U * bytes);
+        const auto previousUploads = device.textureUploads;
+        texture->upload(pixels);
+        ASSERT_EQ(device.textureUploads, previousUploads + 1U);
+        EXPECT_EQ(device.uploadedByteCounts.back(), pixels.size());
+        EXPECT_EQ(device.uploadedMipSizes.back(),
+                  (std::vector<std::size_t>{15U * bytes, 2U * bytes, bytes}));
+        pixels.pop_back();
+        texture->upload(pixels);
+        EXPECT_EQ(device.textureUploads, previousUploads + 1U);
+    }
+    TextureDesc attachment{TextureType::Texture2D, TextureFormat::R8Unorm, 1, 1};
+    attachment.usage = rhi::TextureUsage::TransferDestination;
+    const auto texture = Texture::create(attachment);
+    ASSERT_TRUE(texture);
+    const auto previousUploads = device.textureUploads;
+    texture->upload(std::vector<std::uint8_t>{0});
+    EXPECT_EQ(device.textureUploads, previousUploads);
 }
 
 } // namespace

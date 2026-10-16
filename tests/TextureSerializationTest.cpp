@@ -8,12 +8,25 @@
 namespace {
 using namespace engine;
 
+constexpr TextureFormat kAssetFormats[]{
+    TextureFormat::Rgba8Unorm, TextureFormat::Rgba8Srgb,
+    TextureFormat::Bgra8Unorm, TextureFormat::Bgra8Srgb,
+    TextureFormat::R8Unorm, TextureFormat::Rg8Unorm,
+    TextureFormat::R16Float, TextureFormat::Rg16Float, TextureFormat::Rgba16Float,
+    TextureFormat::R32Float, TextureFormat::Rg32Float, TextureFormat::Rgba32Float,
+    TextureFormat::Depth16Unorm, TextureFormat::Depth32Float};
+
 Ref<TextureAsset> makeTexture(TextureFormat format) {
     auto texture = makeRef<TextureAsset>();
-    texture->desc = TextureDesc{TextureType::Texture2D, format, 2, 1};
+    texture->desc = TextureDesc{TextureType::Texture2D, format, 5, 3, 3};
     texture->desc.sampler.filterMode = TextureFilterMode::Point;
     texture->desc.sampler.addressModeU = TextureAddressMode::ClampToEdge;
-    texture->pixels = {10, 20, 30, 255, 40, 50, 60, 128};
+    TextureMipLayout layout;
+    if (computeTextureLayout(texture->desc, layout)) {
+        texture->pixels.resize(layout.totalSize);
+        for (std::size_t i = 0; i < texture->pixels.size(); ++i)
+            texture->pixels[i] = static_cast<std::uint8_t>((i * 37U + 19U) % 256U);
+    }
     return texture;
 }
 
@@ -31,7 +44,7 @@ void expectSamePayload(const TextureAsset& actual, const TextureAsset& expected)
 }
 
 TEST(TextureSerializationTest, BinaryRoundTripPreservesFormatSamplerAndPixels) {
-    for (const auto format : {TextureFormat::Rgba8Unorm, TextureFormat::Rgba8Srgb}) {
+    for (const auto format : kAssetFormats) {
         const auto source = makeTexture(format);
         BinaryWriter writer;
         ASSERT_TRUE(source->transfer(writer));
@@ -44,7 +57,7 @@ TEST(TextureSerializationTest, BinaryRoundTripPreservesFormatSamplerAndPixels) {
 }
 
 TEST(TextureSerializationTest, JsonRoundTripUsesVersionFiveWithoutColorSpaceField) {
-    for (const auto format : {TextureFormat::Rgba8Unorm, TextureFormat::Rgba8Srgb}) {
+    for (const auto format : kAssetFormats) {
         const auto source = makeTexture(format);
         JsonWriter writer;
         ASSERT_TRUE(source->transfer(writer));
@@ -91,5 +104,28 @@ TEST(TextureSerializationTest, BinaryRejectsThePreviousColorSpaceLayout) {
     EXPECT_FALSE(destination->transfer(reader));
     EXPECT_EQ(destination->desc.format, TextureFormat::Rgba8Unorm);
     EXPECT_EQ(destination->pixels, source->pixels);
+}
+
+TEST(TextureSerializationTest, RejectsMismatchedPayloadLengthsOnWriteAndRead) {
+    for (auto format : kAssetFormats) {
+        const auto source = makeTexture(format);
+        JsonWriter writer;
+        ASSERT_TRUE(source->transfer(writer));
+        auto json = nlohmann::json::parse(writer.toString());
+        json["description"]["width"] = 6;
+        JsonReader reader(json.dump());
+        const auto destination = makeTexture(TextureFormat::Rgba8Srgb);
+        const auto previousPixels = destination->pixels;
+        EXPECT_FALSE(destination->transfer(reader));
+        EXPECT_EQ(destination->desc.format, TextureFormat::Rgba8Srgb);
+        EXPECT_EQ(destination->desc.width, 5U);
+        EXPECT_EQ(destination->desc.height, 3U);
+        EXPECT_EQ(destination->desc.mipCount, 3U);
+        EXPECT_EQ(destination->pixels, previousPixels);
+
+        source->pixels.pop_back();
+        BinaryWriter invalidWriter;
+        EXPECT_FALSE(source->transfer(invalidWriter));
+    }
 }
 } // namespace

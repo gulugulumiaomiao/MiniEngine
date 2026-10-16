@@ -11,7 +11,6 @@
 
 #include <algorithm>
 #include <bit>
-#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -21,19 +20,6 @@ namespace {
 
 constexpr std::uint32_t kTextureMagic = 0x52584554U;
 constexpr std::uint16_t kTextureVersion = 5;
-
-bool rgbaByteSize(std::uint32_t width, std::uint32_t height, std::size_t& result) {
-    constexpr std::size_t channels = 4;
-    if (width == 0 || height == 0 ||
-        static_cast<std::size_t>(width) > std::numeric_limits<std::size_t>::max() / height) {
-        return false;
-    }
-    const std::size_t pixels = static_cast<std::size_t>(width) * height;
-    if (pixels > std::numeric_limits<std::size_t>::max() / channels)
-        return false;
-    result = pixels * channels;
-    return true;
-}
 
 [[nodiscard]] rhi::PixelFormat tryToRhiTextureFormat(TextureFormat format) {
     switch (format) {
@@ -112,34 +98,16 @@ rhi::PixelFormat toRhi(TextureFormat format) {
 
 bool computeTextureLayout(const TextureDesc& desc, TextureMipLayout& layout) {
     layout = {};
-    // The complete type model is serialized now, but this rollout intentionally supports only
-    // single-layer 2D textures until upload and barrier paths handle every dimension.
     if (desc.type != TextureType::Texture2D || desc.depth != 1 || desc.arrayLayers != 1 ||
-        desc.mipCount == 0 ||
-        (desc.format != TextureFormat::Rgba8Unorm && desc.format != TextureFormat::Rgba8Srgb)) {
+        desc.samples != rhi::SampleCount::One) {
         return false;
     }
-    layout.offsets.reserve(desc.mipCount);
-    std::uint32_t width = desc.width;
-    std::uint32_t height = desc.height;
-    std::size_t offset{};
-    for (std::uint32_t level = 0; level < desc.mipCount; ++level) {
-        std::size_t levelSize{};
-        if (!rgbaByteSize(width, height, levelSize) ||
-            offset > std::numeric_limits<std::size_t>::max() - levelSize) {
-            layout = {};
-            return false;
-        }
-        layout.offsets.push_back(offset);
-        offset += levelSize;
-        width = std::max(1U, width / 2U);
-        height = std::max(1U, height / 2U);
-    }
-    layout.totalSize = offset;
-    return true;
+    return rhi::computeTextureLayout(tryToRhiTextureFormat(desc.format), desc.width, desc.height,
+                                     desc.mipCount, layout);
 }
 
-bool validateTexture(const TextureDesc& desc, std::span<const std::uint8_t> pixels) {
+bool validateTextureAsset(const TextureDesc& desc, std::span<const std::uint8_t> pixels) {
+    // Asset files store tightly packed bytes for any supported non-compressed format.
     if (desc.usage != (rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferDestination) ||
         desc.samples != rhi::SampleCount::One || desc.tiling != rhi::TextureTiling::Optimal ||
         desc.sampler.maxAnisotropy < 1.0F) {
@@ -306,7 +274,8 @@ rhi::TextureBinding Texture::binding(const Ref<Sampler>& sampler) const {
 void Texture::upload(std::span<const std::uint8_t> pixels) {
     if (!texture_)
         return;
-    if (!rhi::hasFlag(usage_, rhi::TextureUsage::TransferDestination) || samples_ != rhi::SampleCount::One) {
+    if (!rhi::hasFlag(usage_, rhi::TextureUsage::TransferDestination) ||
+        !rhi::hasFlag(usage_, rhi::TextureUsage::Sampled) || samples_ != rhi::SampleCount::One) {
         Log::error("Texture", "Texture was not created for pixel uploads");
         return;
     }
@@ -323,23 +292,19 @@ void Texture::upload(std::span<const std::uint8_t> pixels) {
     desc.depth = depth_;
     desc.arrayLayers = arrayLayers_;
     desc.mipCount = mipCount_;
-    if (!validateTexture(desc, pixels)) {
+    TextureMipLayout layout;
+    if (!computeTextureLayout(desc, layout) || pixels.size() != layout.totalSize) {
         Log::error("Texture", "Pixel data does not match the texture layout");
         return;
     }
-    TextureMipLayout layout;
-    if (!computeTextureLayout(desc, layout))
-        return;
     std::vector<rhi::TextureUploadRegion> uploads;
     uploads.reserve(layout.offsets.size());
     std::uint32_t mipWidth = width_;
     std::uint32_t mipHeight = height_;
     for (std::uint32_t level = 0; level < layout.offsets.size(); ++level) {
         const std::size_t begin = layout.offsets[level];
-        const std::size_t end =
-            level + 1U < layout.offsets.size() ? layout.offsets[level + 1U] : layout.totalSize;
         const std::span<const std::byte> data{
-            reinterpret_cast<const std::byte*>(pixels.data() + begin), end - begin};
+            reinterpret_cast<const std::byte*>(pixels.data() + begin), layout.sizes[level]};
         uploads.push_back({level, 0, mipWidth, mipHeight, data});
         mipWidth = std::max(1U, mipWidth / 2U);
         mipHeight = std::max(1U, mipHeight / 2U);
@@ -468,12 +433,12 @@ bool TextureAsset::transfer(Transfer& archive) {
     std::vector<std::uint8_t> decodedPixels;
     TextureAssetDesc& targetDesc = archive.reading() ? decodedDesc : desc;
     std::vector<std::uint8_t>& targetPixels = archive.reading() ? decodedPixels : pixels;
-    if ((archive.writing() && !validateTexture(desc, pixels)) || !archive.beginObject({}) ||
+    if ((archive.writing() && !validateTextureAsset(desc, pixels)) || !archive.beginObject({}) ||
         !archive.transfer("magic", magic) || magic != kTextureMagic ||
         !archive.transfer("version", version) || version != kTextureVersion ||
         !archive.transfer("description", targetDesc) || !archive.transfer("pixels", targetPixels) ||
         !archive.endObject() ||
-        (archive.reading() && !validateTexture(decodedDesc, decodedPixels))) {
+        (archive.reading() && !validateTextureAsset(decodedDesc, decodedPixels))) {
         Log::error(
             "TextureAsset", "Invalid TextureAsset payload: %s", assetPath().string().c_str());
         return false;

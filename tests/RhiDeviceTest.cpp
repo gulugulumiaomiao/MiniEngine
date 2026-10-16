@@ -18,6 +18,7 @@
 #include <vulkan/vulkan.h>
 
 #include <cstring>
+#include <numeric>
 #include <memory>
 #include <filesystem>
 #include <fstream>
@@ -595,7 +596,7 @@ INSTANTIATE_TEST_SUITE_P(NonCompressedFormats, ExtendedTextureFormatTest,
         TextureFormat::R32Float, TextureFormat::Rg32Float, TextureFormat::Rgba32Float,
         TextureFormat::Depth16Unorm));
 
-TEST_F(RhiDeviceTest, AssetUploadRejectsNewFormatsBeforeRecordingAnInvalidCopy) {
+TEST_F(RhiDeviceTest, TextureUploadRejectsMismatchedFormatByteCount) {
     auto& d = device();
     VkImageFormatProperties support{};
     if (vkGetPhysicalDeviceImageFormatProperties(d.physicalDevice(), VK_FORMAT_R16G16B16A16_SFLOAT,
@@ -611,7 +612,225 @@ TEST_F(RhiDeviceTest, AssetUploadRejectsNewFormatsBeforeRecordingAnInvalidCopy) 
         upload.width = upload.height = 4;
         upload.data = rgbaBytes;
         d.texture_upload(image, std::span{&upload, 1});
-    }, ::testing::ExitedWithCode(EXIT_FAILURE), "Texture upload currently requires an RGBA8 or BGRA8 format");
+    }, ::testing::ExitedWithCode(EXIT_FAILURE), "Texture upload region does not match the mip level");
+}
+
+
+// Upload bytes are packed on the CPU, but each GPU buffer copy has an aligned offset.
+class TextureUploadFormatTest : public RhiDeviceTest,
+                                public ::testing::WithParamInterface<TextureFormat> {};
+
+TEST_P(TextureUploadFormatTest, OddMipUploadAndSubregionUpdateReadBackExactly) {
+    auto& d = device();
+    struct ValidationCapture {
+        std::ostringstream messages;
+        std::streambuf* previous{std::cerr.rdbuf(messages.rdbuf())};
+        ~ValidationCapture() { std::cerr.rdbuf(previous); }
+    } validation;
+    const auto format = GetParam();
+    const auto pixelFormat = toRhi(format);
+    const auto info = rhi::formatInfo(pixelFormat);
+    const auto usage = rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferDestination |
+                       rhi::TextureUsage::TransferSource;
+    VkImageFormatProperties support{};
+    if (vkGetPhysicalDeviceImageFormatProperties(d.physicalDevice(), rhi::vulkan::toVulkan(pixelFormat),
+            VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL, rhi::vulkan::toVulkan(usage), 0, &support) != VK_SUCCESS)
+        GTEST_SKIP() << "Device does not support this format/usage combination";
+    TextureDesc desc{TextureType::Texture2D, format, 5, 3, 3};
+    desc.usage = usage;
+    TextureMipLayout packed, padded;
+    ASSERT_TRUE(computeTextureLayout(desc, packed));
+    ASSERT_TRUE(rhi::computeTextureLayout(pixelFormat, 5, 3, 3, padded,
+        std::lcm(std::size_t{4}, static_cast<std::size_t>(info.bytesPerBlock))));
+    std::vector<std::byte> pixels(packed.totalSize);
+    // Finite, exactly representable float and depth values survive a raw transfer.
+    if (info.numericType == rhi::FormatNumericType::Float) {
+        const auto componentBytes = info.bytesPerBlock / info.channelCount;
+        for (std::size_t offset = 0; offset < pixels.size(); offset += componentBytes) {
+            if (componentBytes == 2) {
+                const std::uint16_t value = static_cast<std::uint16_t>(0x3400U + (offset % 4U) * 0x200U);
+                std::memcpy(pixels.data() + offset, &value, 2);
+            } else {
+                const float value = 0.25F * static_cast<float>(1 + (offset / 4U) % 4U);
+                std::memcpy(pixels.data() + offset, &value, 4);
+            }
+        }
+    } else {
+        for (std::size_t i = 0; i < pixels.size(); ++i)
+            pixels[i] = static_cast<std::byte>((i * 37U + 19U) % 256U);
+    }
+    auto texture = Texture::create(desc);
+    ASSERT_TRUE(texture);
+    if (format == TextureFormat::R8Unorm) {
+        // Also exercise arbitrary region order at the lower RHI boundary.
+        std::vector<rhi::TextureUploadRegion> regions;
+        for (auto mip : {2U, 0U, 1U}) {
+            rhi::TextureUploadRegion region;
+            region.mipLevel = mip;
+            region.width = std::max(1U, 5U >> mip);
+            region.height = std::max(1U, 3U >> mip);
+            region.data = std::span<const std::byte>{pixels}.subspan(packed.offsets[mip], packed.sizes[mip]);
+            regions.push_back(region);
+        }
+        d.texture_upload(texture->textureHandle(), regions);
+    } else {
+        texture->upload(std::span<const std::uint8_t>{
+            reinterpret_cast<const std::uint8_t*>(pixels.data()), pixels.size()});
+    }
+    VkBuffer readback{};
+    VmaAllocation allocation{};
+    VmaAllocationInfo allocationInfo{};
+    VkBufferCreateInfo bufferInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    const auto readbackSize = (padded.totalSize + 3U) / 4U * 4U;
+    bufferInfo.size = readbackSize;
+    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    VmaAllocationCreateInfo memoryInfo{};
+    memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
+    memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    ASSERT_EQ(vmaCreateBuffer(d.allocator(), &bufferInfo, &memoryInfo, &readback, &allocation, &allocationInfo), VK_SUCCESS);
+    const auto cmd = d.command_buffer_create();
+    rhi::begin(cmd);
+    const auto aspect = info.depth ? rhi::TextureAspect::Depth : rhi::TextureAspect::Color;
+    rhi::TextureBarrier barrier{texture->textureHandle(), aspect, rhi::ResourceState::ShaderRead,
+                                rhi::ResourceState::CopyDestination};
+    barrier.mipCount = 3;
+    rhi::resourceBarriers(cmd, std::span{&barrier, 1});
+    // Replace the second texel of mip 1 with a valid texel from mip 0.
+    const auto replacement = std::span<const std::byte>{pixels}.first(info.bytesPerBlock);
+    rhi::updateImage(cmd, {.destination = texture->textureHandle(), .mipLevel = 1,
+        .offset = {1, 0, 0}, .extent = {1, 1, 1}, .data = replacement});
+    std::memcpy(pixels.data() + packed.offsets[1] + info.bytesPerBlock,
+                replacement.data(), replacement.size());
+    barrier.before = rhi::ResourceState::CopyDestination;
+    barrier.after = rhi::ResourceState::CopySource;
+    rhi::resourceBarriers(cmd, std::span{&barrier, 1});
+    // Use the public RHI image-to-buffer helper, including its depth aspect inference.
+    const auto destination = d.buffer_create({readbackSize, rhi::BufferUsage::TransferDestination |
+        rhi::BufferUsage::TransferSource, rhi::MemoryUsage::Readback, "upload-roundtrip"});
+    for (std::uint32_t mip = 0; mip < 3; ++mip) {
+        rhi::BufferImageCopy copy{destination, texture->textureHandle(), padded.offsets[mip],
+            0, 0, mip, 0, {}, {std::max(1U, 5U >> mip), std::max(1U, 3U >> mip), 1}};
+        rhi::copyImageToBuffer(cmd, copy);
+    }
+    const auto native = d.command_buffer(cmd).nativeCommandBuffer();
+    VkMemoryBarrier transfer{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    transfer.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    transfer.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    vkCmdPipelineBarrier(native, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 1, &transfer, 0, nullptr, 0, nullptr);
+    VkBufferCopy bufferCopy{0, 0, readbackSize};
+    vkCmdCopyBuffer(native, d.resolveBuffer(destination), readback, 1, &bufferCopy);
+    VkBufferMemoryBarrier host{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+    host.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    host.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+    host.srcQueueFamilyIndex = host.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    host.buffer = readback;
+    host.size = VK_WHOLE_SIZE;
+    vkCmdPipelineBarrier(native, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
+        0, 0, nullptr, 1, &host, 0, nullptr);
+    rhi::end(cmd);
+    d.submit(cmd, {});
+    d.waitIdle();
+    ASSERT_EQ(vmaInvalidateAllocation(d.allocator(), allocation, 0, VK_WHOLE_SIZE), VK_SUCCESS);
+    const auto* actual = static_cast<const std::byte*>(allocationInfo.pMappedData);
+    for (std::uint32_t mip = 0; mip < 3; ++mip) {
+        EXPECT_EQ(std::memcmp(actual + padded.offsets[mip], pixels.data() + packed.offsets[mip],
+                              packed.sizes[mip]), 0) << "mip " << mip;
+    }
+    d.command_buffer_destroy(cmd);
+    d.buffer_destroy(destination);
+    vmaDestroyBuffer(d.allocator(), readback, allocation);
+    texture.reset();
+    EXPECT_EQ(validation.messages.str().find("Validation Error"), std::string::npos) << validation.messages.str();
+    EXPECT_EQ(validation.messages.str().find("SYNC-HAZARD"), std::string::npos) << validation.messages.str();
+}
+
+INSTANTIATE_TEST_SUITE_P(AllFormats, TextureUploadFormatTest,
+    ::testing::Values(TextureFormat::Rgba8Unorm, TextureFormat::Rgba8Srgb,
+        TextureFormat::Bgra8Unorm, TextureFormat::Bgra8Srgb, TextureFormat::Depth32Float,
+        TextureFormat::R8Unorm, TextureFormat::Rg8Unorm, TextureFormat::R16Float,
+        TextureFormat::Rg16Float, TextureFormat::Rgba16Float, TextureFormat::R32Float,
+        TextureFormat::Rg32Float, TextureFormat::Rgba32Float, TextureFormat::Depth16Unorm));
+
+TEST_F(RhiDeviceTest, ImageUpdateRejectsInvalidRegionsBeforeAllocatingStaging) {
+    auto& d = device();
+    const auto image = d.texture_create({.format = rhi::PixelFormat::R8Unorm,
+        .width = 5, .height = 3, .mipCount = 3,
+        .usage = rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferDestination});
+    const auto cmd = d.command_buffer_create();
+    rhi::begin(cmd);
+    const std::vector<std::byte> bytes(1);
+    for (int scenario = 0; scenario < 8; ++scenario) {
+        EXPECT_EXIT({
+            rhi::ImageUpdate update;
+            update.destination = image;
+            update.extent.width = update.extent.height = update.extent.depth = 1;
+            update.data = bytes;
+            switch (scenario) {
+            case 0: update.mipLevel = 3; break;
+            case 1: update.arrayLayer = 1; break;
+            case 2: update.offset.x = 5; break;
+            case 3: update.offset.x = UINT32_MAX; break;
+            case 4: update.extent.height = 4; break;
+            case 5: update.extent.depth = 2; break;
+            case 6: update.extent.width = 0; break;
+            case 7: update.offset.z = 1; break;
+            }
+            rhi::updateImage(cmd, update);
+        }, ::testing::ExitedWithCode(EXIT_FAILURE), "Invalid image update region");
+    }
+    EXPECT_EXIT({
+        rhi::ImageUpdate update;
+        update.destination = image;
+        update.extent.width = update.extent.height = 2;
+        update.extent.depth = 1;
+        update.data = bytes;
+        rhi::updateImage(cmd, update);
+    }, ::testing::ExitedWithCode(EXIT_FAILURE), "Image update data does not match the extent");
+    d.command_buffer_destroy(cmd);
+    d.texture_destroy(image);
+}
+
+
+TEST_F(RhiDeviceTest, TextureUploadRejectsIncompleteDuplicateAndMalformedMipRegions) {
+    auto& d = device();
+    const auto image = d.texture_create({.format = rhi::PixelFormat::R8Unorm,
+        .width = 5, .height = 3, .mipCount = 3,
+        .usage = rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferDestination});
+    const std::vector<std::byte> bytes(18);
+    std::vector<rhi::TextureUploadRegion> regions;
+    for (std::uint32_t mip = 0; mip < 3; ++mip) {
+        rhi::TextureUploadRegion region;
+        region.mipLevel = mip;
+        region.width = std::max(1U, 5U >> mip);
+        region.height = std::max(1U, 3U >> mip);
+        region.data = std::span<const std::byte>{bytes}.first(region.width * region.height);
+        regions.push_back(region);
+    }
+    EXPECT_EXIT({
+        d.texture_upload(image, std::span{regions}.first(2));
+    }, ::testing::ExitedWithCode(EXIT_FAILURE), "complete mip chain");
+    for (int scenario = 0; scenario < 5; ++scenario) {
+        const char* expectedError = scenario == 3 ? "Texture upload region does not match the mip level" :
+                                                  "Invalid Texture upload region";
+        EXPECT_EXIT({
+            auto invalid = regions;
+            switch (scenario) {
+            case 0: invalid[2] = invalid[1]; break;
+            case 1: invalid[2].mipLevel = UINT32_MAX; break;
+            case 2: invalid[2].arrayLayer = 1; break;
+            case 3: invalid[2].width = 2; break;
+            case 4: invalid[2].data = {}; break;
+            }
+            d.texture_upload(image, invalid);
+        }, ::testing::ExitedWithCode(EXIT_FAILURE), expectedError);
+    }
+    // Invalid attempts did not submit anything; the fresh image is still uploadable.
+    d.texture_upload(image, regions);
+    EXPECT_EXIT({
+        d.texture_upload(image, regions);
+    }, ::testing::ExitedWithCode(EXIT_FAILURE), "Invalid Texture upload");
+    d.texture_destroy(image);
 }
 
 } // namespace

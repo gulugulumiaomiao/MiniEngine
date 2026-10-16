@@ -33,3 +33,14 @@
 
 深度加 stencil、BC 等压缩格式及对应资产导入另行实施。块属性预留其数据布局基础，
 不代表当前已经支持相关纹理的创建、上传、同步或渲染。
+
+## 第四步实现说明
+
+- `ResourceDesc.h` 提供格式字节数及二维 mip 布局计算，检查尺寸、mip 数、对齐和整数溢出。
+- CPU mip 链紧密排列；Vulkan staging 单独对齐偏移，不要求调用方填充数据。
+- 运行时上传支持当前全部 14 种非压缩格式，推导 color/depth aspect；完整 mip 链可乱序提供，拒绝缺失、重复及尺寸或长度不匹配。
+- `updateImage` 验证目标 mip、layer、sample、usage、区域边界及数据长度；已有内容的更新仍由调用方显式同步。
+- 上传范围保持单层二维、单采样、新图像首次上传，要求 Sampled 和 TransferDestination；资产校验 `validateTextureAsset` 接受当前全部非压缩格式的原始像素，源文件导入器维持原有解码范围。
+- 覆盖奇数尺寸、多 mip、溢出、非法 region，以及所有当前格式的真实 Vulkan 上传、局部更新和逐 mip 字节回读。
+- 验证：完整 Debug 构建通过；开启 Vulkan 同步验证后全量 CTest 291/291 通过，涵盖 14 种格式的资产 Binary/JSON 往返、长度校验及真实 GPU 上传回读，无跳过。Release 本步未运行。
+- 状态：第四步已实现，等待用户确认后提交；第五步尚未开始。

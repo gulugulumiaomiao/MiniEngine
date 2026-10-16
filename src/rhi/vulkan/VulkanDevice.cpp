@@ -12,6 +12,7 @@
 #include "rhi/vulkan/VulkanShaderModule.h"
 
 #include <algorithm>
+#include <numeric>
 #include <array>
 #include <cstring>
 #include <limits>
@@ -379,7 +380,8 @@ void VulkanDevice::buffer_upload(RID destination,
 RID VulkanDevice::texture_create(const TextureDesc& desc) {
     if (desc.dimension != TextureType::Texture2D || !formatInfo(desc.format).valid() ||
         desc.width == 0 || desc.height == 0 || desc.depth != 1 || desc.arrayLayers != 1 ||
-        desc.mipCount == 0 || desc.usage == TextureUsage::None) {
+        desc.mipCount == 0 || desc.mipCount > static_cast<std::uint32_t>(std::bit_width(std::max(desc.width, desc.height))) ||
+        (desc.samples != SampleCount::One && desc.mipCount != 1) || desc.usage == TextureUsage::None) {
         Log::fatal("VulkanDevice", "Invalid or unsupported Texture description");
     }
     if ((isColorFormat(desc.format) && hasFlag(desc.usage, TextureUsage::DepthStencilAttachment)) ||
@@ -409,14 +411,19 @@ void VulkanDevice::texture_upload(RID destination,
         Log::fatal("VulkanDevice", "Invalid Texture upload");
     const VulkanTexture& image = *resource;
     const auto info = formatInfo(image.format());
-    // This asset-upload path still packs four-byte RGBA/BGRA texels. Do not allow
-    // newly creatable formats to reach copies with an incorrect size or mip offset.
-    if (!isColorFormat(image.format()) || info.numericType != FormatNumericType::Unorm ||
-        info.channelCount != 4 || info.bytesPerBlock != 4)
-        Log::fatal("VulkanDevice", "Texture upload currently requires an RGBA8 or BGRA8 format");
+    if (!info.valid() || info.stencil || image.samples() != SampleCount::One ||
+        !hasFlag(image.usage(), TextureUsage::TransferDestination) ||
+        !hasFlag(image.usage(), TextureUsage::Sampled))
+        Log::fatal("VulkanDevice", "Texture upload requires a sampled single-sample transfer destination");
     if (regions.size() != image.mipCount())
         Log::fatal("VulkanDevice", "Texture upload must provide the complete mip chain");
-    std::uint64_t totalSize{};
+    // Align each copy independently; CPU blobs remain tightly packed. Depth copies
+    // require four-byte offsets, and color copies must respect their texel block size.
+    TextureMipLayout stagingLayout;
+    const auto alignment = std::lcm(std::size_t{4}, static_cast<std::size_t>(info.bytesPerBlock));
+    if (!computeTextureLayout(image.format(), image.width(), image.height(), image.mipCount(),
+                              stagingLayout, alignment))
+        Log::fatal("VulkanDevice", "Invalid or overflowing texture upload layout");
     std::vector<bool> suppliedMips(image.mipCount());
     for (const TextureUploadRegion& region : regions) {
         if (region.data.empty() || region.mipLevel >= image.mipCount() || region.arrayLayer != 0 ||
@@ -425,64 +432,69 @@ void VulkanDevice::texture_upload(RID destination,
         }
         const std::uint32_t expectedWidth = std::max(1U, image.width() >> region.mipLevel);
         const std::uint32_t expectedHeight = std::max(1U, image.height() >> region.mipLevel);
-        const std::uint64_t expectedSize =
-            static_cast<std::uint64_t>(expectedWidth) * expectedHeight * 4U;
         if (region.width != expectedWidth || region.height != expectedHeight ||
-            region.data.size_bytes() != expectedSize ||
-            totalSize > std::numeric_limits<std::uint64_t>::max() - expectedSize) {
+            region.data.size_bytes() != stagingLayout.sizes[region.mipLevel]) {
             Log::fatal("VulkanDevice", "Texture upload region does not match the mip level");
         }
         suppliedMips[region.mipLevel] = true;
-        totalSize += region.data.size_bytes();
     }
-    const BufferDesc stagingDesc{
-        totalSize, BufferUsage::TransferSource, MemoryUsage::Upload, "texture upload staging"};
-    const RID staging = buffer_create(stagingDesc);
-    std::uint64_t stagingOffset{};
     std::vector<BufferImageCopy> copies;
     copies.reserve(regions.size());
-    for (const TextureUploadRegion& region : regions) {
-        requireBuffer(staging).upload(region.data, stagingOffset);
-        copies.push_back(BufferImageCopy{staging,
-                                         destination,
-                                         stagingOffset,
-                                         0,
-                                         0,
-                                         region.mipLevel,
-                                         region.arrayLayer,
-                                         {},
-                                         Extent3D{region.width, region.height, 1}});
-        stagingOffset += region.data.size_bytes();
-    }
+    RID staging, command;
+    bool submitted = false;
+    try {
+        staging = buffer_allocate_rid({stagingLayout.totalSize, BufferUsage::TransferSource,
+                                       MemoryUsage::Upload, "texture upload staging"});
+        buffer_allocate_memory(staging);
+        command = command_buffer_create();
+        for (const TextureUploadRegion& region : regions) {
+            const auto stagingOffset = stagingLayout.offsets[region.mipLevel];
+            requireBuffer(staging).upload(region.data, stagingOffset);
+            copies.push_back(BufferImageCopy{staging,
+                                             destination,
+                                             stagingOffset,
+                                             0,
+                                             0,
+                                             region.mipLevel,
+                                             region.arrayLayer,
+                                             {},
+                                             Extent3D{region.width, region.height, 1}});
+        }
 
-    const RID command = command_buffer_create();
-    VulkanCommandBuffer& cmd = command_buffer(command);
-    cmd.begin();
-    const TextureBarrier toCopyDestination{destination,
-                                           TextureAspect::Color,
-                                           ResourceState::Undefined,
-                                           ResourceState::CopyDestination,
-                                           0,
-                                           kRemainingMipLevels,
-                                           0,
-                                           1};
-    cmd.resourceBarriers(std::span{&toCopyDestination, 1});
-    for (const BufferImageCopy& copy : copies) {
-        cmd.copyBufferToImage(copy);
+        VulkanCommandBuffer& cmd = command_buffer(command);
+        cmd.begin();
+        const auto aspect = isDepthFormat(image.format()) ? TextureAspect::Depth : TextureAspect::Color;
+        const TextureBarrier toCopyDestination{destination,
+                                               aspect,
+                                               ResourceState::Undefined,
+                                               ResourceState::CopyDestination,
+                                               0,
+                                               kRemainingMipLevels,
+                                               0,
+                                               1};
+        cmd.resourceBarriers(std::span{&toCopyDestination, 1});
+        for (const BufferImageCopy& copy : copies) {
+            cmd.copyBufferToImage(copy);
+        }
+        const TextureBarrier toShaderRead{destination,
+                                          aspect,
+                                          ResourceState::CopyDestination,
+                                          ResourceState::ShaderRead,
+                                          0,
+                                          kRemainingMipLevels,
+                                          0,
+                                          1};
+        cmd.resourceBarriers(std::span{&toShaderRead, 1});
+        cmd.end();
+        submit(command, SubmitSync{});
+        submitted = true;
+        waitIdle();
+    } catch (...) {
+        if (submitted) waitIdle();
+        if (command) command_buffer_destroy(command);
+        if (staging) buffer_destroy(staging);
+        throw;
     }
-    const TextureBarrier toShaderRead{destination,
-                                      TextureAspect::Color,
-                                      ResourceState::CopyDestination,
-                                      ResourceState::ShaderRead,
-                                      0,
-                                      kRemainingMipLevels,
-                                      0,
-                                      1};
-    cmd.resourceBarriers(std::span{&toShaderRead, 1});
-    cmd.end();
-    submit(command, SubmitSync{});
-    waitIdle();
-
     command_buffer_destroy(command);
     buffer_destroy(staging);
     resource->markUploaded();
@@ -1063,17 +1075,18 @@ VkBuffer VulkanDevice::resolveBuffer(RID handle) const {
 }
 
 VkImage VulkanDevice::resolveTexture(RID handle) const {
+    return texture(handle).handle();
+}
+
+const VulkanTexture& VulkanDevice::texture(RID handle) const {
     const VulkanTexture* resource = textures_.find(handle);
     if (!resource)
         Log::fatal("VulkanDevice", "Invalid or stale RHI texture handle");
-    return resource->handle();
+    return *resource;
 }
 
 PixelFormat VulkanDevice::textureFormat(RID handle) const {
-    const VulkanTexture* resource = textures_.find(handle);
-    if (!resource)
-        Log::fatal("VulkanDevice", "RHI texture handle has no tracked format");
-    return resource->format();
+    return texture(handle).format();
 }
 
 VkImageView VulkanDevice::resolveTextureView(RID handle) const {

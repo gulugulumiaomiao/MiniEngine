@@ -124,6 +124,7 @@ public:
     // ---- Native handle resolution (backend-specific; used by the command backend) ----
     [[nodiscard]] VkBuffer resolveBuffer(RID handle) const;
     [[nodiscard]] VkImage resolveTexture(RID handle) const;
+    [[nodiscard]] const VulkanTexture& texture(RID handle) const;
     // RHI formats are only tracked for device-owned textures; external images
     // (e.g. swapchain) have no format in the handle table.
     [[nodiscard]] PixelFormat textureFormat(RID handle) const;
