@@ -40,22 +40,67 @@ enum class ResourceType {
 // Pixel formats and vertex input.
 // ---------------------------------------------------------------------------
 
+// Preserve existing values when adding formats: append or assign explicit values.
 enum class PixelFormat {
-    Undefined,
-    Rgba8Unorm,
-    Rgba8Srgb,
-    Bgra8Unorm,
-    Bgra8Srgb,
-    Depth32Float,
+    Undefined = 0,
+    Rgba8Unorm = 1,
+    Rgba8Srgb = 2,
+    Bgra8Unorm = 3,
+    Bgra8Srgb = 4,
+    Depth32Float = 5,
 };
 
+enum class FormatNumericType { Undefined, Unorm, Snorm, Uint, Sint, Float };
+
+// Static storage properties only. Device support for filtering, blending, usages,
+// tiling and sample counts must be queried separately.
+struct PixelFormatInfo {
+    std::uint32_t blockWidth{};
+    std::uint32_t blockHeight{};
+    std::uint32_t bytesPerBlock{};
+    std::uint32_t channelCount{};
+    FormatNumericType numericType{FormatNumericType::Undefined};
+    bool srgb{};
+    bool depth{};
+    bool stencil{};
+
+    [[nodiscard]] constexpr bool valid() const {
+        return blockWidth && blockHeight && bytesPerBlock && channelCount &&
+               numericType != FormatNumericType::Undefined;
+    }
+};
+
+[[nodiscard]] constexpr PixelFormatInfo formatInfo(PixelFormat format) {
+    switch (format) {
+    case PixelFormat::Rgba8Unorm:
+    case PixelFormat::Bgra8Unorm:
+        return {1, 1, 4, 4, FormatNumericType::Unorm, false, false, false};
+    case PixelFormat::Rgba8Srgb:
+    case PixelFormat::Bgra8Srgb:
+        return {1, 1, 4, 4, FormatNumericType::Unorm, true, false, false};
+    case PixelFormat::Depth32Float:
+        return {1, 1, 4, 1, FormatNumericType::Float, false, true, false};
+    case PixelFormat::Undefined:
+        break;
+    }
+    return {}; // Undefined and unrecognized values have no usable storage layout.
+}
+
 [[nodiscard]] constexpr bool isColorFormat(PixelFormat format) {
-    return format == PixelFormat::Rgba8Unorm || format == PixelFormat::Rgba8Srgb ||
-           format == PixelFormat::Bgra8Unorm || format == PixelFormat::Bgra8Srgb;
+    const auto info = formatInfo(format);
+    return info.valid() && !info.depth && !info.stencil;
 }
 
 [[nodiscard]] constexpr bool isDepthFormat(PixelFormat format) {
-    return format == PixelFormat::Depth32Float;
+    return formatInfo(format).depth;
+}
+
+[[nodiscard]] constexpr bool isSrgbFormat(PixelFormat format) {
+    return formatInfo(format).srgb;
+}
+
+[[nodiscard]] constexpr bool hasStencil(PixelFormat format) {
+    return formatInfo(format).stencil;
 }
 
 enum class VertexFormat {

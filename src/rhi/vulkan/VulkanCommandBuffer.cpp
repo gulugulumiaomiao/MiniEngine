@@ -33,14 +33,9 @@ void toVulkanBlend(BlendMode mode, VkColorBlendEquationEXT& equation, VkBool32& 
 }
 
 std::uint32_t bytesPerPixel(PixelFormat format) {
-    switch (format) {
-    case PixelFormat::Rgba8Unorm:
-    case PixelFormat::Rgba8Srgb:
-    case PixelFormat::Bgra8Unorm:
-    case PixelFormat::Bgra8Srgb:
-    case PixelFormat::Depth32Float: return 4U;
-    case PixelFormat::Undefined: break;
-    }
+    const auto info = formatInfo(format);
+    if (info.valid() && info.blockWidth == 1 && info.blockHeight == 1)
+        return info.bytesPerBlock;
     Log::fatal("VulkanCommandBuffer", "Unsupported RHI texture format");
 }
 
