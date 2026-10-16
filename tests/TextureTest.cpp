@@ -201,7 +201,7 @@ TEST_F(TextureTest, InstantiateIsSingleInstanceAndCloneIsDetached) {
     using namespace engine;
     Ref<TextureAsset> asset = makeRef<TextureAsset>();
     asset->desc = TextureDesc{
-        TextureType::Texture2D, TextureFormat::Rgba8Srgb, TextureColorSpace::Srgb, 1, 1, 1};
+        TextureType::Texture2D, TextureFormat::Rgba8Srgb, 1, 1, 1};
     asset->pixels = {0xffU, 0xffU, 0xffU, 0xffU};
 
     const Ref<Texture> first = asset->instantiate();
@@ -284,9 +284,6 @@ TEST_F(TextureTest, RenderTextureFactoriesRejectInvalidInputsBeforeAllocating) {
     invalid.width = invalid.height = 32;
     invalid.format = static_cast<TextureFormat>(999);
     EXPECT_FALSE(Texture::create(invalid));
-    invalid.format = TextureFormat::Rgba16Float;
-    invalid.colorSpace = TextureColorSpace::Srgb;
-    EXPECT_FALSE(Texture::create(invalid));
     EXPECT_EQ(device.createdTextures, 0U);
 }
 
@@ -312,6 +309,7 @@ TEST_F(TextureTest, ExtendedFormatsUseTheirOwnFormatAndDefaultViewAspect) {
     ASSERT_TRUE(depth);
     ASSERT_TRUE(shadow);
     EXPECT_EQ(depth->format(), TextureFormat::Depth16Unorm);
+    EXPECT_EQ(depth->colorSpace(), TextureColorSpace::Linear);
     EXPECT_EQ(depth->usage(), rhi::TextureUsage::DepthStencilAttachment);
     EXPECT_EQ(shadow->usage(), rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::Sampled);
     EXPECT_EQ(device.viewDescs.back().format, rhi::PixelFormat::Depth16Unorm);
@@ -319,15 +317,30 @@ TEST_F(TextureTest, ExtendedFormatsUseTheirOwnFormatAndDefaultViewAspect) {
     EXPECT_EQ(device.textureUploads, 0U);
 }
 
+TEST_F(TextureTest, GeneralCreationDerivesColorSpaceFromFormatWithoutADescriptionField) {
+    using namespace engine;
+    for (const auto format : {TextureFormat::Rgba8Unorm, TextureFormat::Rgba8Srgb,
+                              TextureFormat::Bgra8Unorm, TextureFormat::Bgra8Srgb,
+                              TextureFormat::Rgba16Float}) {
+        TextureDesc desc{TextureType::Texture2D, format, 16, 16};
+        const auto texture = Texture::create(desc);
+        ASSERT_TRUE(texture);
+        EXPECT_EQ(texture->format(), format);
+        const auto expected = format == TextureFormat::Rgba8Srgb || format == TextureFormat::Bgra8Srgb
+            ? TextureColorSpace::Srgb : TextureColorSpace::Linear;
+        EXPECT_EQ(texture->colorSpace(), expected);
+    }
+}
+
 TEST_F(TextureTest, GeneralCreationPreservesFormatMipCountAndSamples) {
     using namespace engine;
     TextureDesc colorDesc{TextureType::Texture2D, TextureFormat::Bgra8Srgb,
-        TextureColorSpace::Srgb, 64, 32, 4};
+        64, 32, 4};
     colorDesc.debugName = "MipmappedColor";
     colorDesc.sampler.addressModeU = TextureAddressMode::ClampToEdge;
     const auto mipmapped = Texture::create(colorDesc);
     TextureDesc depthDesc{TextureType::Texture2D, TextureFormat::Depth32Float,
-        TextureColorSpace::Linear, 64, 32};
+        64, 32};
     depthDesc.usage = rhi::TextureUsage::DepthStencilAttachment;
     depthDesc.samples = rhi::SampleCount::Four;
     const auto multisampled = Texture::create(depthDesc);
@@ -354,7 +367,7 @@ TEST(TextureOwnershipTest, OldDeviceTextureNeverDestroysNewDeviceResources) {
     {
         FakeDevice first;
         old = Texture::create(TextureDesc{TextureType::Texture2D, TextureFormat::Rgba8Unorm,
-            TextureColorSpace::Linear, 16, 16});
+            16, 16});
         ASSERT_TRUE(old);
     }
     FakeDevice second;
@@ -387,7 +400,7 @@ TEST_F(TextureTest, SamplerOverrideKeepsDefaultViewButSwapsSampler) {
 TEST(TextureValidationTest, RejectsUnimplementedTextureDimensions) {
     using namespace engine;
     TextureDesc desc{
-        TextureType::Texture2DArray, TextureFormat::Rgba8Unorm, TextureColorSpace::Linear, 1, 1, 1};
+        TextureType::Texture2DArray, TextureFormat::Rgba8Unorm, 1, 1, 1};
     desc.arrayLayers = 2;
     const std::vector<std::uint8_t> pixels{0, 0, 0, 0};
     EXPECT_FALSE(validateTexture(desc, pixels));
@@ -396,7 +409,7 @@ TEST(TextureValidationTest, RejectsUnimplementedTextureDimensions) {
 TEST(TextureValidationTest, AssetPayloadRejectsRuntimeOptionsItCannotSerialize) {
     using namespace engine;
     TextureDesc desc{TextureType::Texture2D, TextureFormat::Rgba8Unorm,
-        TextureColorSpace::Linear, 1, 1};
+        1, 1};
     const std::vector<std::uint8_t> pixels(4);
     EXPECT_TRUE(validateTexture(desc, pixels));
     desc.usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled;
@@ -411,7 +424,7 @@ TEST(TextureValidationTest, ExtendedRuntimeFormatsDoNotAcceptRgba8AssetPayloads)
     const std::vector<std::uint8_t> rgbaBytes(16U * 16U * 4U);
     for (const auto format : {TextureFormat::R8Unorm, TextureFormat::Rgba16Float,
                               TextureFormat::Depth16Unorm}) {
-        TextureDesc desc{TextureType::Texture2D, format, TextureColorSpace::Linear, 16, 16};
+        TextureDesc desc{TextureType::Texture2D, format, 16, 16};
         EXPECT_FALSE(validateTexture(desc, rgbaBytes));
     }
 }

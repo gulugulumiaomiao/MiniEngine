@@ -130,7 +130,6 @@ Ref<TextureAsset> decodeImage(std::span<const std::byte> source, bool generateMi
         generateMipmaps ? appendMipChain(asset->pixels, baseWidth, baseHeight) : 1U;
     asset->desc = {TextureType::Texture2D,
                    TextureFormat::Rgba8Srgb,
-                   TextureColorSpace::Srgb,
                    baseWidth,
                    baseHeight,
                    mipCount};
@@ -176,7 +175,6 @@ Ref<TextureAsset> decodeKtx1(std::span<const std::byte> source) {
     const bool srgb = readU32(source, 28) == 0x8C43U;
     asset->desc = {TextureType::Texture2D,
                    srgb ? TextureFormat::Rgba8Srgb : TextureFormat::Rgba8Unorm,
-                   srgb ? TextureColorSpace::Srgb : TextureColorSpace::Linear,
                    width,
                    height,
                    levels};
@@ -220,7 +218,6 @@ Ref<TextureAsset> decodeKtx2(std::span<const std::byte> source) {
     const bool srgb = readU32(source, 12) == 43U;
     asset->desc = {TextureType::Texture2D,
                    srgb ? TextureFormat::Rgba8Srgb : TextureFormat::Rgba8Unorm,
-                   srgb ? TextureColorSpace::Srgb : TextureColorSpace::Linear,
                    width,
                    height,
                    levels};

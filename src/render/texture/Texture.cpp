@@ -20,7 +20,7 @@ namespace engine {
 namespace {
 
 constexpr std::uint32_t kTextureMagic = 0x52584554U;
-constexpr std::uint16_t kTextureVersion = 4;
+constexpr std::uint16_t kTextureVersion = 5;
 
 bool rgbaByteSize(std::uint32_t width, std::uint32_t height, std::size_t& result) {
     constexpr std::size_t channels = 4;
@@ -142,9 +142,6 @@ bool computeTextureLayout(const TextureDesc& desc, TextureMipLayout& layout) {
 bool validateTexture(const TextureDesc& desc, std::span<const std::uint8_t> pixels) {
     if (desc.usage != (rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferDestination) ||
         desc.samples != rhi::SampleCount::One || desc.tiling != rhi::TextureTiling::Optimal ||
-        (desc.colorSpace != TextureColorSpace::Linear &&
-         desc.colorSpace != TextureColorSpace::Srgb) ||
-        (desc.format == TextureFormat::Rgba8Srgb) != (desc.colorSpace == TextureColorSpace::Srgb) ||
         desc.sampler.maxAnisotropy < 1.0F) {
         return false;
     }
@@ -169,7 +166,7 @@ bool validateTexture(const TextureDesc& desc, std::span<const std::uint8_t> pixe
 // ---- Texture ----
 
 Texture::Texture(const TextureDesc& desc)
-    : type_(desc.type), format_(desc.format), colorSpace_(desc.colorSpace), width_(desc.width),
+    : type_(desc.type), format_(desc.format), width_(desc.width),
       height_(desc.height), depth_(desc.depth), arrayLayers_(desc.arrayLayers),
       mipCount_(desc.mipCount), usage_(desc.usage), samples_(desc.samples), tiling_(desc.tiling) {
     const rhi::TextureDesc deviceDesc{.dimension = toRhi(desc.type),
@@ -237,10 +234,7 @@ Ref<Texture> Texture::create(const TextureDesc& desc) {
     const auto pixelFormat = tryToRhiTextureFormat(desc.format);
     const bool color = rhi::isColorFormat(pixelFormat);
     const bool depth = rhi::isDepthFormat(pixelFormat);
-    const bool srgb = rhi::isSrgbFormat(pixelFormat);
     if (!rhi::IDevice::active() || desc.type != TextureType::Texture2D || (!color && !depth) ||
-        (desc.colorSpace != TextureColorSpace::Linear && desc.colorSpace != TextureColorSpace::Srgb) ||
-        srgb != (desc.colorSpace == TextureColorSpace::Srgb) ||
         desc.width == 0 || desc.height == 0 || desc.depth != 1 || desc.arrayLayers != 1 ||
         desc.mipCount == 0 || desc.usage == rhi::TextureUsage::None ||
         (desc.samples != rhi::SampleCount::One && desc.samples != rhi::SampleCount::Two &&
@@ -261,10 +255,7 @@ Ref<Texture> Texture::create(const TextureDesc& desc) {
 
 Ref<Texture> Texture::createRenderTexture(std::uint32_t width, std::uint32_t height,
                                          TextureFormat format, rhi::TextureUsage usage) {
-    TextureDesc desc{TextureType::Texture2D, format,
-        rhi::isSrgbFormat(tryToRhiTextureFormat(format))
-            ? TextureColorSpace::Srgb : TextureColorSpace::Linear,
-        width, height};
+    TextureDesc desc{TextureType::Texture2D, format, width, height};
     desc.usage = usage;
     desc.debugName = "RenderTexture";
     desc.sampler.addressModeU = TextureAddressMode::ClampToEdge;
@@ -327,7 +318,6 @@ void Texture::upload(std::span<const std::uint8_t> pixels) {
     TextureDesc desc;
     desc.type = type_;
     desc.format = format_;
-    desc.colorSpace = colorSpace_;
     desc.width = width_;
     desc.height = height_;
     desc.depth = depth_;
@@ -374,7 +364,7 @@ Ref<Texture> Texture::defaultWhite() {
     if (!instance || ownerUid != device->uid()) {
         static constexpr std::uint8_t kPixels[4] = {0xffU, 0xffU, 0xffU, 0xffU};
         const TextureDesc desc{
-            TextureType::Texture2D, TextureFormat::Rgba8Srgb, TextureColorSpace::Srgb, 1, 1, 1};
+            TextureType::Texture2D, TextureFormat::Rgba8Srgb, 1, 1, 1};
         if (instance)
             instance->detachFromDeadDevice(); // 旧设备已亡，弃置句柄避免 ~Texture 误销毁
         instance = Ref<Texture>(new Texture(desc));
@@ -394,7 +384,7 @@ Ref<Texture> Texture::defaultBlack() {
     if (!instance || ownerUid != device->uid()) {
         static constexpr std::uint8_t kPixels[4] = {0x00U, 0x00U, 0x00U, 0xffU};
         const TextureDesc desc{
-            TextureType::Texture2D, TextureFormat::Rgba8Srgb, TextureColorSpace::Srgb, 1, 1, 1};
+            TextureType::Texture2D, TextureFormat::Rgba8Srgb, 1, 1, 1};
         if (instance)
             instance->detachFromDeadDevice(); // 旧设备已亡，弃置句柄避免 ~Texture 误销毁
         instance = Ref<Texture>(new Texture(desc));
@@ -414,7 +404,7 @@ Ref<Texture> Texture::defaultNormal() {
     if (!instance || ownerUid != device->uid()) {
         static constexpr std::uint8_t kPixels[4] = {0x80U, 0x80U, 0xffU, 0xffU};
         const TextureDesc desc{
-            TextureType::Texture2D, TextureFormat::Rgba8Unorm, TextureColorSpace::Linear, 1, 1, 1};
+            TextureType::Texture2D, TextureFormat::Rgba8Unorm, 1, 1, 1};
         if (instance)
             instance->detachFromDeadDevice(); // 旧设备已亡，弃置句柄避免 ~Texture 误销毁
         instance = Ref<Texture>(new Texture(desc));
@@ -451,7 +441,7 @@ Ref<Texture> Texture::errorTexture() {
             0xffU,
         };
         const TextureDesc desc{
-            TextureType::Texture2D, TextureFormat::Rgba8Srgb, TextureColorSpace::Srgb, 2, 2, 1};
+            TextureType::Texture2D, TextureFormat::Rgba8Srgb, 2, 2, 1};
         if (instance)
             instance->detachFromDeadDevice(); // 旧设备已亡，弃置句柄避免 ~Texture 误销毁
         instance = Ref<Texture>(new Texture(desc));

@@ -71,7 +71,6 @@ struct TextureMipLayout {
 struct TextureDesc {
     TextureType type{TextureType::Texture2D};
     TextureFormat format{TextureFormat::Rgba8Srgb};
-    TextureColorSpace colorSpace{TextureColorSpace::Srgb};
     std::uint32_t width{};
     std::uint32_t height{};
     std::uint32_t depth{1};
@@ -87,21 +86,19 @@ struct TextureDesc {
     TextureDesc() = default;
     TextureDesc(TextureType type,
                 TextureFormat format,
-                TextureColorSpace colorSpace,
                 std::uint32_t width,
                 std::uint32_t height,
                 std::uint32_t mipCount = 1)
-        : type(type), format(format), colorSpace(colorSpace), width(width), height(height),
+        : type(type), format(format), width(width), height(height),
           mipCount(mipCount) {}
 
     TextureDesc(TextureType type,
                 TextureFormat format,
-                TextureColorSpace colorSpace,
                 std::uint32_t width,
                 std::uint32_t height,
                 std::uint32_t mipCount,
                 SamplerDesc sampler)
-        : type(type), format(format), colorSpace(colorSpace), width(width), height(height),
+        : type(type), format(format), width(width), height(height),
           mipCount(mipCount), sampler(std::move(sampler)) {}
 };
 
@@ -143,7 +140,9 @@ public:
 
     [[nodiscard]] TextureType type() const { return type_; }
     [[nodiscard]] TextureFormat format() const { return format_; }
-    [[nodiscard]] TextureColorSpace colorSpace() const { return colorSpace_; }
+    [[nodiscard]] TextureColorSpace colorSpace() const {
+        return rhi::isSrgbFormat(pixelFormat()) ? TextureColorSpace::Srgb : TextureColorSpace::Linear;
+    }
     [[nodiscard]] std::uint32_t width() const { return width_; }
     [[nodiscard]] std::uint32_t height() const { return height_; }
     [[nodiscard]] std::uint32_t depth() const { return depth_; }
@@ -221,7 +220,6 @@ private:
 
     TextureType type_{TextureType::Texture2D};
     TextureFormat format_{TextureFormat::Rgba8Srgb};
-    TextureColorSpace colorSpace_{TextureColorSpace::Srgb};
     std::uint32_t width_{};
     std::uint32_t height_{};
     std::uint32_t depth_{1};

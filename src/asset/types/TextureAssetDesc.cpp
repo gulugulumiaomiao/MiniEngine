@@ -12,7 +12,7 @@ bool TextureAssetDesc::transfer(Transfer& archive) {
     SamplerAssetDesc samplerData{sampler};
     const bool result =
         archive.beginObject({}) && archive.transfer("type", type) &&
-        archive.transfer("format", format) && archive.transfer("color_space", colorSpace) &&
+        archive.transfer("format", format) &&
         archive.transfer("width", width) && archive.transfer("height", height) &&
         archive.transfer("depth", depth) && archive.transfer("array_layers", arrayLayers) &&
         archive.transfer("mip_count", mipCount) && archive.transfer("sampler", samplerData) &&

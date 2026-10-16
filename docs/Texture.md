@@ -66,8 +66,8 @@ CPU/RHI 描述含 `depth`、`arrayLayers` 与五种 `TextureType`，但当前实
 
 运行时创建已增加以下非压缩格式：`R8Unorm`、`Rg8Unorm`、`R16Float`、`Rg16Float`、
 `Rgba16Float`、`R32Float`、`Rg32Float`、`Rgba32Float`、`Depth16Unorm`。
-格式属性统一查询 `rhi::formatInfo()`；这些格式都不是 sRGB，当前 `TextureDesc` 的
-`colorSpace` 应设为 `Linear`。`createColor()` 会自动填写，深度工厂也可选择格式：
+格式属性统一查询 `rhi::formatInfo()`。`TextureDesc` 不存储 colorSpace，
+`Texture::colorSpace()` 从格式推导；深度工厂也可选择格式：
 
 ```cpp
 auto hdr = Texture::createColor(1920, 1080, TextureFormat::Rgba16Float);
@@ -76,6 +76,8 @@ auto shadow = Texture::createShadowMap(2048, 2048, TextureFormat::Depth16Unorm);
 ```
 
 上述接口只分配纹理，不初始化像素。默认 view 使用纹理自身格式，深度格式使用 depth aspect。
+纹理资产使用版本 5，不再序列化 `color_space`，直接拒绝旧版本，无兼容读取或迁移代码。
+纹理导入器版本升为 3，旧缓存从源图片/KTX 重新导入后生成新版本资产。
 资产的 `validateTexture/computeTextureLayout/upload` 仍仅接受现有 RGBA8 编码；新增格式的
 通用 mip 数据布局和上传支持将在后续步骤实现。具体设备的格式/usage 支持也仍需检查。
 

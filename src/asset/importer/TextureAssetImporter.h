@@ -25,7 +25,7 @@ public:
 class TextureAssetImporter final : public AssetImporter {
 public:
     [[nodiscard]] AssetType assetType() const override { return AssetType::Texture; }
-    [[nodiscard]] std::uint32_t version() const override { return 2; }
+    [[nodiscard]] std::uint32_t version() const override { return 3; }
     [[nodiscard]] std::unique_ptr<AssetImportSettings>
     createDefaultSettings(const VirtualPath& sourcePath) const override;
     [[nodiscard]] std::vector<VirtualPath>
