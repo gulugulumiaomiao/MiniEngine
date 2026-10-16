@@ -100,6 +100,9 @@ target_compile_definitions(MeshGuidIdentityTest PRIVATE
 add_dependencies(MeshGuidIdentityTest MiniCopyBuiltin)
 mini_add_gtest(TextureTest)
 mini_add_gtest(TextureFormatTest)
+target_include_directories(TextureFormatTest SYSTEM PRIVATE
+    ${PROJECT_SOURCE_DIR}/third_party/vma/include
+)
 mini_add_test(RenderCacheTest)
 mini_add_test(SceneTest)
 mini_add_editor_test(SceneHierarchyEditorTest)

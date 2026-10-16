@@ -377,7 +377,7 @@ void VulkanDevice::buffer_upload(RID destination,
 }
 
 RID VulkanDevice::texture_create(const TextureDesc& desc) {
-    if (desc.dimension != TextureType::Texture2D || desc.format == PixelFormat::Undefined ||
+    if (desc.dimension != TextureType::Texture2D || !formatInfo(desc.format).valid() ||
         desc.width == 0 || desc.height == 0 || desc.depth != 1 || desc.arrayLayers != 1 ||
         desc.mipCount == 0 || desc.usage == TextureUsage::None) {
         Log::fatal("VulkanDevice", "Invalid or unsupported Texture description");
@@ -408,6 +408,12 @@ void VulkanDevice::texture_upload(RID destination,
     if (!resource || resource->uploaded() || regions.empty())
         Log::fatal("VulkanDevice", "Invalid Texture upload");
     const VulkanTexture& image = *resource;
+    const auto info = formatInfo(image.format());
+    // This asset-upload path still packs four-byte RGBA/BGRA texels. Do not allow
+    // newly creatable formats to reach copies with an incorrect size or mip offset.
+    if (!isColorFormat(image.format()) || info.numericType != FormatNumericType::Unorm ||
+        info.channelCount != 4 || info.bytesPerBlock != 4)
+        Log::fatal("VulkanDevice", "Texture upload currently requires an RGBA8 or BGRA8 format");
     if (regions.size() != image.mipCount())
         Log::fatal("VulkanDevice", "Texture upload must provide the complete mip chain");
     std::uint64_t totalSize{};

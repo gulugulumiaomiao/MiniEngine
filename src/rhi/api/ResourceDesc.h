@@ -48,6 +48,15 @@ enum class PixelFormat {
     Bgra8Unorm = 3,
     Bgra8Srgb = 4,
     Depth32Float = 5,
+    R8Unorm = 6,
+    Rg8Unorm = 7,
+    R16Float = 8,
+    Rg16Float = 9,
+    Rgba16Float = 10,
+    R32Float = 11,
+    Rg32Float = 12,
+    Rgba32Float = 13,
+    Depth16Unorm = 14,
 };
 
 enum class FormatNumericType { Undefined, Unorm, Snorm, Uint, Sint, Float };
@@ -80,6 +89,24 @@ struct PixelFormatInfo {
         return {1, 1, 4, 4, FormatNumericType::Unorm, true, false, false};
     case PixelFormat::Depth32Float:
         return {1, 1, 4, 1, FormatNumericType::Float, false, true, false};
+    case PixelFormat::R8Unorm:
+        return {1, 1, 1, 1, FormatNumericType::Unorm, false, false, false};
+    case PixelFormat::Rg8Unorm:
+        return {1, 1, 2, 2, FormatNumericType::Unorm, false, false, false};
+    case PixelFormat::R16Float:
+        return {1, 1, 2, 1, FormatNumericType::Float, false, false, false};
+    case PixelFormat::Rg16Float:
+        return {1, 1, 4, 2, FormatNumericType::Float, false, false, false};
+    case PixelFormat::Rgba16Float:
+        return {1, 1, 8, 4, FormatNumericType::Float, false, false, false};
+    case PixelFormat::R32Float:
+        return {1, 1, 4, 1, FormatNumericType::Float, false, false, false};
+    case PixelFormat::Rg32Float:
+        return {1, 1, 8, 2, FormatNumericType::Float, false, false, false};
+    case PixelFormat::Rgba32Float:
+        return {1, 1, 16, 4, FormatNumericType::Float, false, false, false};
+    case PixelFormat::Depth16Unorm:
+        return {1, 1, 2, 1, FormatNumericType::Unorm, false, true, false};
     case PixelFormat::Undefined:
         break;
     }

@@ -276,7 +276,47 @@ TEST_F(TextureTest, RenderTextureFactoriesRejectInvalidInputsBeforeAllocating) {
     EXPECT_FALSE(Texture::createDepth(32, 0));
     EXPECT_FALSE(Texture::createShadowMap(0, 0));
     EXPECT_FALSE(Texture::createColor(32, 32, TextureFormat::Depth32Float));
+    EXPECT_FALSE(Texture::createColor(32, 32, TextureFormat::Depth16Unorm));
+    EXPECT_FALSE(Texture::createDepth(32, 32, TextureFormat::Rgba16Float));
+    EXPECT_FALSE(Texture::createShadowMap(32, 32, TextureFormat::R8Unorm));
+    EXPECT_FALSE(Texture::createColor(32, 32, static_cast<TextureFormat>(999)));
+    TextureDesc invalid;
+    invalid.width = invalid.height = 32;
+    invalid.format = static_cast<TextureFormat>(999);
+    EXPECT_FALSE(Texture::create(invalid));
+    invalid.format = TextureFormat::Rgba16Float;
+    invalid.colorSpace = TextureColorSpace::Srgb;
+    EXPECT_FALSE(Texture::create(invalid));
     EXPECT_EQ(device.createdTextures, 0U);
+}
+
+TEST_F(TextureTest, ExtendedFormatsUseTheirOwnFormatAndDefaultViewAspect) {
+    using namespace engine;
+    for (const auto format : {TextureFormat::R8Unorm, TextureFormat::Rg8Unorm,
+                              TextureFormat::R16Float, TextureFormat::Rg16Float,
+                              TextureFormat::Rgba16Float, TextureFormat::R32Float,
+                              TextureFormat::Rg32Float, TextureFormat::Rgba32Float}) {
+        SCOPED_TRACE(static_cast<int>(format));
+        const auto texture = Texture::createColor(32, 16, format);
+        ASSERT_TRUE(texture);
+        EXPECT_EQ(texture->format(), format);
+        EXPECT_EQ(texture->pixelFormat(), toRhi(format));
+        EXPECT_EQ(texture->colorSpace(), TextureColorSpace::Linear);
+        EXPECT_EQ(device.textureDescs.back().format, toRhi(format));
+        EXPECT_EQ(device.viewDescs.back().format, toRhi(format));
+        EXPECT_EQ(device.viewDescs.back().aspect, rhi::TextureAspect::Color);
+        EXPECT_EQ(device.viewDescs.back().mipCount, 1U);
+    }
+    const auto depth = Texture::createDepth(32, 16, TextureFormat::Depth16Unorm);
+    const auto shadow = Texture::createShadowMap(32, 16, TextureFormat::Depth16Unorm);
+    ASSERT_TRUE(depth);
+    ASSERT_TRUE(shadow);
+    EXPECT_EQ(depth->format(), TextureFormat::Depth16Unorm);
+    EXPECT_EQ(depth->usage(), rhi::TextureUsage::DepthStencilAttachment);
+    EXPECT_EQ(shadow->usage(), rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::Sampled);
+    EXPECT_EQ(device.viewDescs.back().format, rhi::PixelFormat::Depth16Unorm);
+    EXPECT_EQ(device.viewDescs.back().aspect, rhi::TextureAspect::Depth);
+    EXPECT_EQ(device.textureUploads, 0U);
 }
 
 TEST_F(TextureTest, GeneralCreationPreservesFormatMipCountAndSamples) {
@@ -364,6 +404,16 @@ TEST(TextureValidationTest, AssetPayloadRejectsRuntimeOptionsItCannotSerialize) 
     desc.usage = rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferDestination;
     desc.samples = rhi::SampleCount::Four;
     EXPECT_FALSE(validateTexture(desc, pixels));
+}
+
+TEST(TextureValidationTest, ExtendedRuntimeFormatsDoNotAcceptRgba8AssetPayloads) {
+    using namespace engine;
+    const std::vector<std::uint8_t> rgbaBytes(16U * 16U * 4U);
+    for (const auto format : {TextureFormat::R8Unorm, TextureFormat::Rgba16Float,
+                              TextureFormat::Depth16Unorm}) {
+        TextureDesc desc{TextureType::Texture2D, format, TextureColorSpace::Linear, 16, 16};
+        EXPECT_FALSE(validateTexture(desc, rgbaBytes));
+    }
 }
 
 } // namespace

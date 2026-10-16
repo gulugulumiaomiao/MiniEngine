@@ -35,6 +35,26 @@ bool rgbaByteSize(std::uint32_t width, std::uint32_t height, std::size_t& result
     return true;
 }
 
+[[nodiscard]] rhi::PixelFormat tryToRhiTextureFormat(TextureFormat format) {
+    switch (format) {
+    case TextureFormat::Rgba8Unorm: return rhi::PixelFormat::Rgba8Unorm;
+    case TextureFormat::Rgba8Srgb: return rhi::PixelFormat::Rgba8Srgb;
+    case TextureFormat::Depth32Float: return rhi::PixelFormat::Depth32Float;
+    case TextureFormat::Bgra8Unorm: return rhi::PixelFormat::Bgra8Unorm;
+    case TextureFormat::Bgra8Srgb: return rhi::PixelFormat::Bgra8Srgb;
+    case TextureFormat::R8Unorm: return rhi::PixelFormat::R8Unorm;
+    case TextureFormat::Rg8Unorm: return rhi::PixelFormat::Rg8Unorm;
+    case TextureFormat::R16Float: return rhi::PixelFormat::R16Float;
+    case TextureFormat::Rg16Float: return rhi::PixelFormat::Rg16Float;
+    case TextureFormat::Rgba16Float: return rhi::PixelFormat::Rgba16Float;
+    case TextureFormat::R32Float: return rhi::PixelFormat::R32Float;
+    case TextureFormat::Rg32Float: return rhi::PixelFormat::Rg32Float;
+    case TextureFormat::Rgba32Float: return rhi::PixelFormat::Rgba32Float;
+    case TextureFormat::Depth16Unorm: return rhi::PixelFormat::Depth16Unorm;
+    }
+    return rhi::PixelFormat::Undefined;
+}
+
 [[nodiscard]] rhi::TextureType toRhi(TextureType type) {
     switch (type) {
     case TextureType::Texture2D: return rhi::TextureType::Texture2D;
@@ -73,7 +93,7 @@ bool rgbaByteSize(std::uint32_t width, std::uint32_t height, std::size_t& result
     out.mipCount = view.mipCount;
     out.baseLayer = view.baseLayer;
     out.layerCount = view.layerCount;
-    out.aspect = textureFormat == TextureFormat::Depth32Float
+    out.aspect = rhi::isDepthFormat(toRhi(textureFormat))
         ? rhi::TextureAspect::Depth : rhi::TextureAspect::Color;
     out.swizzle = {toRhiSwizzle(view.swizzle.r),
                    toRhiSwizzle(view.swizzle.g),
@@ -85,13 +105,8 @@ bool rgbaByteSize(std::uint32_t width, std::uint32_t height, std::size_t& result
 } // namespace
 
 rhi::PixelFormat toRhi(TextureFormat format) {
-    switch (format) {
-    case TextureFormat::Rgba8Unorm: return rhi::PixelFormat::Rgba8Unorm;
-    case TextureFormat::Rgba8Srgb: return rhi::PixelFormat::Rgba8Srgb;
-    case TextureFormat::Depth32Float: return rhi::PixelFormat::Depth32Float;
-    case TextureFormat::Bgra8Unorm: return rhi::PixelFormat::Bgra8Unorm;
-    case TextureFormat::Bgra8Srgb: return rhi::PixelFormat::Bgra8Srgb;
-    }
+    const auto result = tryToRhiTextureFormat(format);
+    if (result != rhi::PixelFormat::Undefined) return result;
     Log::fatal("Texture", "Unsupported Texture format");
 }
 
@@ -219,10 +234,10 @@ Ref<Texture> Texture::adoptBinding(rhi::RID view, rhi::RID sampler) {
 rhi::PixelFormat Texture::pixelFormat() const { return toRhi(format_); }
 
 Ref<Texture> Texture::create(const TextureDesc& desc) {
-    const bool color = desc.format == TextureFormat::Rgba8Unorm || desc.format == TextureFormat::Rgba8Srgb ||
-        desc.format == TextureFormat::Bgra8Unorm || desc.format == TextureFormat::Bgra8Srgb;
-    const bool depth = desc.format == TextureFormat::Depth32Float;
-    const bool srgb = desc.format == TextureFormat::Rgba8Srgb || desc.format == TextureFormat::Bgra8Srgb;
+    const auto pixelFormat = tryToRhiTextureFormat(desc.format);
+    const bool color = rhi::isColorFormat(pixelFormat);
+    const bool depth = rhi::isDepthFormat(pixelFormat);
+    const bool srgb = rhi::isSrgbFormat(pixelFormat);
     if (!rhi::IDevice::active() || desc.type != TextureType::Texture2D || (!color && !depth) ||
         (desc.colorSpace != TextureColorSpace::Linear && desc.colorSpace != TextureColorSpace::Srgb) ||
         srgb != (desc.colorSpace == TextureColorSpace::Srgb) ||
@@ -247,7 +262,7 @@ Ref<Texture> Texture::create(const TextureDesc& desc) {
 Ref<Texture> Texture::createRenderTexture(std::uint32_t width, std::uint32_t height,
                                          TextureFormat format, rhi::TextureUsage usage) {
     TextureDesc desc{TextureType::Texture2D, format,
-        format == TextureFormat::Rgba8Srgb || format == TextureFormat::Bgra8Srgb
+        rhi::isSrgbFormat(tryToRhiTextureFormat(format))
             ? TextureColorSpace::Srgb : TextureColorSpace::Linear,
         width, height};
     desc.usage = usage;
@@ -259,8 +274,7 @@ Ref<Texture> Texture::createRenderTexture(std::uint32_t width, std::uint32_t hei
 
 Ref<Texture> Texture::createColor(std::uint32_t width, std::uint32_t height,
                                  TextureFormat format) {
-    if (format != TextureFormat::Rgba8Unorm && format != TextureFormat::Rgba8Srgb &&
-        format != TextureFormat::Bgra8Unorm && format != TextureFormat::Bgra8Srgb) {
+    if (!rhi::isColorFormat(tryToRhiTextureFormat(format))) {
         Log::error("Texture", "Color texture requires a color format");
         return {};
     }
@@ -268,13 +282,13 @@ Ref<Texture> Texture::createColor(std::uint32_t width, std::uint32_t height,
         rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled);
 }
 
-Ref<Texture> Texture::createDepth(std::uint32_t width, std::uint32_t height) {
-    return createRenderTexture(width, height, TextureFormat::Depth32Float,
+Ref<Texture> Texture::createDepth(std::uint32_t width, std::uint32_t height, TextureFormat format) {
+    return createRenderTexture(width, height, format,
         rhi::TextureUsage::DepthStencilAttachment);
 }
 
-Ref<Texture> Texture::createShadowMap(std::uint32_t width, std::uint32_t height) {
-    return createRenderTexture(width, height, TextureFormat::Depth32Float,
+Ref<Texture> Texture::createShadowMap(std::uint32_t width, std::uint32_t height, TextureFormat format) {
+    return createRenderTexture(width, height, format,
         rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::Sampled);
 }
 

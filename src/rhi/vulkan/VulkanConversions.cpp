@@ -16,6 +16,15 @@ VkFormat toVulkan(PixelFormat format) {
     case PixelFormat::Bgra8Unorm: return VK_FORMAT_B8G8R8A8_UNORM;
     case PixelFormat::Bgra8Srgb: return VK_FORMAT_B8G8R8A8_SRGB;
     case PixelFormat::Depth32Float: return VK_FORMAT_D32_SFLOAT;
+    case PixelFormat::R8Unorm: return VK_FORMAT_R8_UNORM;
+    case PixelFormat::Rg8Unorm: return VK_FORMAT_R8G8_UNORM;
+    case PixelFormat::R16Float: return VK_FORMAT_R16_SFLOAT;
+    case PixelFormat::Rg16Float: return VK_FORMAT_R16G16_SFLOAT;
+    case PixelFormat::Rgba16Float: return VK_FORMAT_R16G16B16A16_SFLOAT;
+    case PixelFormat::R32Float: return VK_FORMAT_R32_SFLOAT;
+    case PixelFormat::Rg32Float: return VK_FORMAT_R32G32_SFLOAT;
+    case PixelFormat::Rgba32Float: return VK_FORMAT_R32G32B32A32_SFLOAT;
+    case PixelFormat::Depth16Unorm: return VK_FORMAT_D16_UNORM;
     case PixelFormat::Undefined: break;
     }
     Log::fatal(kLogSource, "Unsupported RHI pixel format");
@@ -27,6 +36,16 @@ PixelFormat toRhi(VkFormat format) {
     case VK_FORMAT_R8G8B8A8_SRGB: return PixelFormat::Rgba8Srgb;
     case VK_FORMAT_B8G8R8A8_UNORM: return PixelFormat::Bgra8Unorm;
     case VK_FORMAT_B8G8R8A8_SRGB: return PixelFormat::Bgra8Srgb;
+    case VK_FORMAT_D32_SFLOAT: return PixelFormat::Depth32Float;
+    case VK_FORMAT_R8_UNORM: return PixelFormat::R8Unorm;
+    case VK_FORMAT_R8G8_UNORM: return PixelFormat::Rg8Unorm;
+    case VK_FORMAT_R16_SFLOAT: return PixelFormat::R16Float;
+    case VK_FORMAT_R16G16_SFLOAT: return PixelFormat::Rg16Float;
+    case VK_FORMAT_R16G16B16A16_SFLOAT: return PixelFormat::Rgba16Float;
+    case VK_FORMAT_R32_SFLOAT: return PixelFormat::R32Float;
+    case VK_FORMAT_R32G32_SFLOAT: return PixelFormat::Rg32Float;
+    case VK_FORMAT_R32G32B32A32_SFLOAT: return PixelFormat::Rgba32Float;
+    case VK_FORMAT_D16_UNORM: return PixelFormat::Depth16Unorm;
     default: break;
     }
     Log::fatal(kLogSource, "Unsupported Vulkan format");

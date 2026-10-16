@@ -5,7 +5,9 @@
 // Vulkan 1.3 runtime (and the validation layer in debug) and skips gracefully when absent.
 #include "rhi/api/Command.h"
 #include "rhi/api/Device.h"
+#include "render/texture/Texture.h"
 #include "rhi/vulkan/VulkanDevice.h"
+#include "rhi/vulkan/VulkanConversions.h"
 #include "rhi/vulkan/VulkanSwapchain.h"
 #include "render/render_graph/RenderGraph.h"
 #include "render/pipeline/RenderContext.h"
@@ -530,6 +532,86 @@ TEST_F(RhiDeviceTest, RenderObjectCreationDoesNotCacheAtDeviceLevel) {
     d.render_pass_destroy(firstPass);
     d.render_pass_destroy(secondPass);
     d.texture_destroy(texture);
+}
+
+class ExtendedTextureFormatTest : public RhiDeviceTest,
+                                  public ::testing::WithParamInterface<TextureFormat> {};
+
+TEST_P(ExtendedTextureFormatTest, CreatesDefaultViewAndClearsNativeAttachment) {
+    auto& d = device();
+    struct ValidationCapture {
+        std::ostringstream messages;
+        std::streambuf* previous{std::cerr.rdbuf(messages.rdbuf())};
+        ~ValidationCapture() { std::cerr.rdbuf(previous); }
+    } validation;
+    const auto format = GetParam();
+    const auto nativeFormat = rhi::vulkan::toVulkan(toRhi(format));
+    const bool depth = rhi::isDepthFormat(toRhi(format));
+    const auto usage = (depth ? rhi::TextureUsage::DepthStencilAttachment :
+                               rhi::TextureUsage::ColorAttachment) | rhi::TextureUsage::Sampled;
+    VkImageFormatProperties support{};
+    if (vkGetPhysicalDeviceImageFormatProperties(d.physicalDevice(), nativeFormat, VK_IMAGE_TYPE_2D,
+            VK_IMAGE_TILING_OPTIMAL, rhi::vulkan::toVulkan(usage), 0, &support) != VK_SUCCESS)
+        GTEST_SKIP() << "Device does not support this format/usage combination";
+    auto texture = depth ? Texture::createShadowMap(16, 16, format) : Texture::createColor(16, 16, format);
+    ASSERT_TRUE(texture);
+    const auto view = d.texture_view_info(texture->defaultView());
+    EXPECT_EQ(view.texture, texture->textureHandle());
+    EXPECT_EQ(view.format, toRhi(format));
+    EXPECT_EQ(view.width, 16U);
+    EXPECT_EQ(view.height, 16U);
+    EXPECT_EQ(view.mipCount, 1U);
+    EXPECT_EQ(view.layerCount, 1U);
+    EXPECT_EQ(view.usage, usage);
+    const auto cmd = d.command_buffer_create();
+    const auto state = depth ? rhi::ResourceState::DepthAttachment : rhi::ResourceState::ColorAttachment;
+    const auto aspect = depth ? rhi::TextureAspect::Depth : rhi::TextureAspect::Color;
+    rhi::begin(cmd);
+    const rhi::TextureBarrier toAttachment{texture->textureHandle(), aspect,
+        rhi::ResourceState::Undefined, state};
+    rhi::resourceBarriers(cmd, std::span{&toAttachment, 1});
+    rhi::RenderingInfo rendering{.renderArea = {0, 0, 16, 16}};
+    if (depth) rendering.depthAttachments.push_back({texture->defaultView(), rhi::LoadOp::Clear,
+                                                   rhi::StoreOp::Store, 0.5F});
+    else rendering.colorAttachments.push_back({texture->defaultView(), rhi::LoadOp::Clear,
+                                               rhi::StoreOp::Store, math::Vec4{0.25F}});
+    rhi::beginRendering(cmd, rendering);
+    rhi::endRendering(cmd);
+    const rhi::TextureBarrier toRead{texture->textureHandle(), aspect, state, rhi::ResourceState::ShaderRead};
+    rhi::resourceBarriers(cmd, std::span{&toRead, 1});
+    rhi::end(cmd);
+    d.submit(cmd, {}); d.waitIdle();
+    d.command_buffer_destroy(cmd);
+    texture.reset();
+    EXPECT_EQ(validation.messages.str().find("Validation Error"), std::string::npos)
+        << validation.messages.str();
+    EXPECT_EQ(validation.messages.str().find("SYNC-HAZARD"), std::string::npos)
+        << validation.messages.str();
+}
+
+INSTANTIATE_TEST_SUITE_P(NonCompressedFormats, ExtendedTextureFormatTest,
+    ::testing::Values(TextureFormat::R8Unorm, TextureFormat::Rg8Unorm,
+        TextureFormat::R16Float, TextureFormat::Rg16Float, TextureFormat::Rgba16Float,
+        TextureFormat::R32Float, TextureFormat::Rg32Float, TextureFormat::Rgba32Float,
+        TextureFormat::Depth16Unorm));
+
+TEST_F(RhiDeviceTest, AssetUploadRejectsNewFormatsBeforeRecordingAnInvalidCopy) {
+    auto& d = device();
+    VkImageFormatProperties support{};
+    if (vkGetPhysicalDeviceImageFormatProperties(d.physicalDevice(), VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 0, &support) != VK_SUCCESS)
+        GTEST_SKIP() << "Device does not support this format/usage combination";
+    EXPECT_EXIT({
+        const auto image = d.texture_create({.format = rhi::PixelFormat::Rgba16Float,
+            .width = 4, .height = 4,
+            .usage = rhi::TextureUsage::TransferDestination | rhi::TextureUsage::Sampled});
+        const std::vector<std::byte> rgbaBytes(4U * 4U * 4U);
+        rhi::TextureUploadRegion upload;
+        upload.width = upload.height = 4;
+        upload.data = rgbaBytes;
+        d.texture_upload(image, std::span{&upload, 1});
+    }, ::testing::ExitedWithCode(EXIT_FAILURE), "Texture upload currently requires an RGBA8 or BGRA8 format");
 }
 
 } // namespace

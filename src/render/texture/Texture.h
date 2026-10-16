@@ -26,7 +26,13 @@ class IDevice;
 class TextureAsset;
 
 enum class TextureType { Texture2D, Texture2DArray, Texture3D, TextureCube, TextureCubeArray };
-enum class TextureFormat { Rgba8Unorm, Rgba8Srgb, Depth32Float, Bgra8Unorm, Bgra8Srgb };
+enum class TextureFormat {
+    Rgba8Unorm = 0, Rgba8Srgb = 1, Depth32Float = 2, Bgra8Unorm = 3, Bgra8Srgb = 4,
+    R8Unorm = 5, Rg8Unorm = 6,
+    R16Float = 7, Rg16Float = 8, Rgba16Float = 9,
+    R32Float = 10, Rg32Float = 11, Rgba32Float = 12,
+    Depth16Unorm = 13,
+};
 enum class TextureColorSpace { Linear, Srgb };
 
 [[nodiscard]] rhi::PixelFormat toRhi(TextureFormat format);
@@ -172,8 +178,12 @@ public:
     [[nodiscard]] static Ref<Texture> createColor(
         std::uint32_t width, std::uint32_t height,
         TextureFormat format = TextureFormat::Rgba8Unorm);
-    [[nodiscard]] static Ref<Texture> createDepth(std::uint32_t width, std::uint32_t height);
-    [[nodiscard]] static Ref<Texture> createShadowMap(std::uint32_t width, std::uint32_t height);
+    [[nodiscard]] static Ref<Texture> createDepth(
+        std::uint32_t width, std::uint32_t height,
+        TextureFormat format = TextureFormat::Depth32Float);
+    [[nodiscard]] static Ref<Texture> createShadowMap(
+        std::uint32_t width, std::uint32_t height,
+        TextureFormat format = TextureFormat::Depth32Float);
 
     /// 默认纹理（经 IDevice::active() 自建，非 asset-backed；设备切换后自动重建）。
     [[nodiscard]] static Ref<Texture> defaultWhite();
