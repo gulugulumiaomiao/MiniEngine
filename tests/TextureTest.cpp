@@ -82,6 +82,12 @@ public:
         return {};
     }
 
+    engine::rhi::TextureFormatCapabilities texture_format_capabilities(
+        engine::rhi::PixelFormat format, engine::rhi::TextureTiling = engine::rhi::TextureTiling::Optimal) const override {
+        const bool valid = engine::rhi::formatInfo(format).valid();
+        const bool color = engine::rhi::isColorFormat(format);
+        return {valid, valid && linearFilteringSupported, color, engine::rhi::isDepthFormat(format), color, valid, valid};
+    }
     engine::rhi::RID texture_create(const engine::rhi::TextureDesc& desc) override {
         textureDescs.push_back(desc);
         const engine::rhi::RID texture{++createdTextures, 1};
@@ -156,6 +162,7 @@ public:
     std::vector<std::uint32_t> uploadedMipCounts;
     std::vector<std::size_t> uploadedByteCounts;
     std::vector<std::vector<std::size_t>> uploadedMipSizes;
+    bool linearFilteringSupported{true};
     std::uint32_t createdTextures{};
     std::uint32_t destroyedTextures{};
     std::uint32_t createdViews{};
@@ -479,6 +486,25 @@ TEST_F(TextureTest, RuntimeUploadUsesFormatSizedMipSlicesAndRejectsWrongLengths)
     const auto previousUploads = device.textureUploads;
     texture->upload(std::vector<std::uint8_t>{0});
     EXPECT_EQ(device.textureUploads, previousUploads);
+}
+
+
+TEST_F(TextureTest, UnsupportedLinearFilteringFailsBeforeAllocationAndPointStillWorks) {
+    using namespace engine;
+    device.linearFilteringSupported = false;
+    TextureDesc desc{TextureType::Texture2D, TextureFormat::Rgba32Float, 4, 4};
+    EXPECT_FALSE(Texture::create(desc));
+    EXPECT_EQ(device.createdTextures, 0U);
+    desc.sampler.filterMode = TextureFilterMode::Point;
+    EXPECT_TRUE(Texture::create(desc));
+    EXPECT_EQ(device.createdTextures, 1U);
+    desc.sampler.maxAnisotropy = 2.0F;
+    EXPECT_FALSE(Texture::create(desc));
+    EXPECT_EQ(device.createdTextures, 1U);
+    // A non-sampled attachment does not impose any sampler filtering requirement.
+    desc.usage = rhi::TextureUsage::ColorAttachment;
+    EXPECT_TRUE(Texture::create(desc));
+    EXPECT_EQ(device.createdTextures, 2U);
 }
 
 } // namespace

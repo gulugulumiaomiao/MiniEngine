@@ -19,6 +19,7 @@
 
 #include <cstring>
 #include <numeric>
+#include <tuple>
 #include <memory>
 #include <filesystem>
 #include <fstream>
@@ -831,6 +832,302 @@ TEST_F(RhiDeviceTest, TextureUploadRejectsIncompleteDuplicateAndMalformedMipRegi
         d.texture_upload(image, regions);
     }, ::testing::ExitedWithCode(EXIT_FAILURE), "Invalid Texture upload");
     d.texture_destroy(image);
+}
+
+
+TEST_F(RhiDeviceTest, FormatCapabilitiesMatchNativeFeaturesForEachTiling) {
+    auto& d = device();
+    for (const auto format : {rhi::PixelFormat::Rgba8Unorm, rhi::PixelFormat::Rgba8Srgb,
+         rhi::PixelFormat::Bgra8Unorm, rhi::PixelFormat::Bgra8Srgb, rhi::PixelFormat::Depth32Float,
+         rhi::PixelFormat::R8Unorm, rhi::PixelFormat::Rg8Unorm, rhi::PixelFormat::R16Float,
+         rhi::PixelFormat::Rg16Float, rhi::PixelFormat::Rgba16Float, rhi::PixelFormat::R32Float,
+         rhi::PixelFormat::Rg32Float, rhi::PixelFormat::Rgba32Float, rhi::PixelFormat::Depth16Unorm}) {
+        VkFormatProperties properties{};
+        vkGetPhysicalDeviceFormatProperties(d.physicalDevice(), rhi::vulkan::toVulkan(format), &properties);
+        for (auto tiling : {rhi::TextureTiling::Optimal, rhi::TextureTiling::Linear}) {
+            const auto caps = d.texture_format_capabilities(format, tiling);
+            const auto bits = tiling == rhi::TextureTiling::Optimal ? properties.optimalTilingFeatures :
+                                                                    properties.linearTilingFeatures;
+            EXPECT_EQ(caps.sampled, (bits & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0);
+            EXPECT_EQ(caps.linearFilter, (bits & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0);
+            EXPECT_EQ(caps.colorAttachment, (bits & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) != 0);
+            EXPECT_EQ(caps.depthStencilAttachment, (bits & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0);
+            EXPECT_EQ(caps.colorAttachmentBlend, (bits & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0);
+            EXPECT_EQ(caps.transferSource, (bits & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0);
+            EXPECT_EQ(caps.transferDestination, (bits & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) != 0);
+            for (auto usage : {rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferDestination,
+                               rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::InputAttachment,
+                               rhi::TextureUsage::DepthStencilAttachment | rhi::TextureUsage::Sampled}) {
+                VkImageFormatProperties image{};
+                const bool nativeSupport = vkGetPhysicalDeviceImageFormatProperties(d.physicalDevice(),
+                    rhi::vulkan::toVulkan(format), VK_IMAGE_TYPE_2D,
+                    tiling == rhi::TextureTiling::Optimal ? VK_IMAGE_TILING_OPTIMAL : VK_IMAGE_TILING_LINEAR,
+                    rhi::vulkan::toVulkan(usage), 0, &image) == VK_SUCCESS;
+                for (auto samples : {rhi::SampleCount::One, rhi::SampleCount::Two,
+                                     rhi::SampleCount::Four, rhi::SampleCount::Eight}) {
+                    rhi::TextureDesc desc{.format = format, .width = 5, .height = 3,
+                        .usage = usage, .tiling = tiling, .samples = samples};
+                    EXPECT_EQ(d.texture_is_supported(desc), nativeSupport &&
+                        image.maxExtent.width >= 5 && image.maxExtent.height >= 3 &&
+                        image.maxMipLevels >= 1 && image.maxArrayLayers >= 1 &&
+                        (image.sampleCounts & rhi::vulkan::toVulkan(samples)) != 0);
+                }
+            }
+        }
+    }
+    EXPECT_FALSE(d.texture_format_capabilities(rhi::PixelFormat::Undefined).sampled);
+    EXPECT_FALSE(d.texture_format_capabilities(static_cast<rhi::PixelFormat>(999)).linearFilter);
+    EXPECT_FALSE(d.texture_format_capabilities(rhi::PixelFormat::R8Unorm,
+        static_cast<rhi::TextureTiling>(999)).colorAttachment);
+}
+
+TEST_F(RhiDeviceTest, UnsupportedTextureDescriptionsReturnFailureBeforeAllocation) {
+    auto& d = device();
+    rhi::TextureDesc valid{.format = rhi::PixelFormat::Rgba8Unorm, .width = 4, .height = 4,
+        .usage = rhi::TextureUsage::Sampled | rhi::TextureUsage::TransferDestination};
+    ASSERT_TRUE(d.texture_is_supported(valid));
+    for (int scenario = 0; scenario < 16; ++scenario) {
+        auto desc = valid;
+        switch (scenario) {
+        case 0: desc.format = rhi::PixelFormat::Undefined; break;
+        case 1: desc.format = static_cast<rhi::PixelFormat>(999); break;
+        case 2: desc.width = 0; break;
+        case 3: desc.width = UINT32_MAX; break;
+        case 4: desc.height = UINT32_MAX; break;
+        case 5: desc.depth = 2; break;
+        case 6: desc.arrayLayers = 2; break;
+        case 7: desc.dimension = rhi::TextureType::TextureCube; break;
+        case 8: desc.mipCount = 4; break;
+        case 9: desc.mipCount = 2; desc.samples = rhi::SampleCount::Four; break;
+        case 10: desc.samples = static_cast<rhi::SampleCount>(999); break;
+        case 11: desc.tiling = static_cast<rhi::TextureTiling>(999); break;
+        case 12: desc.usage = rhi::TextureUsage::None; break;
+        case 13: desc.usage = static_cast<rhi::TextureUsage>(0x80000000U); break;
+        case 14: desc.usage = rhi::TextureUsage::DepthStencilAttachment; break;
+        case 15: desc.format = rhi::PixelFormat::Depth32Float;
+                 desc.usage = rhi::TextureUsage::ColorAttachment; break;
+        }
+        EXPECT_FALSE(d.texture_is_supported(desc)) << scenario;
+        EXPECT_FALSE(d.texture_create(desc)) << scenario;
+    }
+    // A valid mip chain and explicit filtering still create through the engine API.
+    TextureDesc desc{TextureType::Texture2D, TextureFormat::Rgba8Unorm, 4, 4, 3};
+    desc.sampler.filterMode = TextureFilterMode::Point;
+    EXPECT_TRUE(Texture::create(desc));
+    desc.width = UINT32_MAX;
+    EXPECT_FALSE(Texture::create(desc));
+}
+
+
+class HdrRenderGraphTest : public RhiDeviceTest,
+                           public ::testing::WithParamInterface<std::tuple<bool, TextureFormat>> {};
+
+TEST_P(HdrRenderGraphTest, DrawsFloatAttachmentsAndReusesCompiledGraphAcrossFramesAndResize) {
+    auto& d = device();
+    const auto [traditional, depthFormat] = GetParam();
+    for (const auto format : {TextureFormat::Rgba16Float, TextureFormat::Rgba32Float, depthFormat}) {
+        const bool depth = rhi::isDepthFormat(toRhi(format));
+        rhi::TextureDesc desc{.format = toRhi(format), .width = 16, .height = 8,
+            .usage = (depth ? rhi::TextureUsage::DepthStencilAttachment : rhi::TextureUsage::ColorAttachment) |
+                     rhi::TextureUsage::TransferSource};
+        if (!d.texture_is_supported(desc) || (!depth &&
+            !d.texture_format_capabilities(desc.format).colorAttachmentBlend))
+            GTEST_SKIP() << "Device lacks required attachment/transfer/blend capabilities";
+    }
+    struct ValidationCapture {
+        std::ostringstream messages;
+        std::streambuf* previous{std::cerr.rdbuf(messages.rdbuf())};
+        ~ValidationCapture() { std::cerr.rdbuf(previous); }
+    } validation;
+    RgTexturePool pool;
+    RgRenderPassCache cache;
+    RenderScene scene;
+    RenderContext context(pool, cache, scene);
+    RenderGraph graph;
+    std::uint32_t width = 16, height = 8;
+    const auto extent = [&](const RenderContext&) { return rhi::Rect{0, 0, width, height}; };
+    const auto makeTexture = [&](TextureFormat format) {
+        TextureDesc desc{TextureType::Texture2D, format, width, height};
+        desc.sampler.filterMode = TextureFilterMode::Point;
+        desc.usage = (rhi::isDepthFormat(toRhi(format)) ? rhi::TextureUsage::DepthStencilAttachment :
+                                                       rhi::TextureUsage::ColorAttachment) |
+                     rhi::TextureUsage::TransferSource;
+        return graph.createTexture({.format = toRhi(format), .width = width, .height = height,
+            .usage = desc.usage, .extentResolver = extent});
+    };
+    const RgTextureHandle handles[]{makeTexture(TextureFormat::Rgba16Float),
+        makeTexture(TextureFormat::Rgba32Float), makeTexture(depthFormat)};
+    rhi::RID pipelines[2];
+    RgRasterPass first;
+    first.name = "HDR clear and additive draw";
+    first.renderAreaResolver = extent;
+    first.colorAttachments = {{handles[0], rhi::LoadOp::Clear, rhi::StoreOp::Store, {1.5F, 2, 3, 1}},
+                              {handles[1], rhi::LoadOp::Clear, rhi::StoreOp::Store, {1.5F, 2, 3, 1}}};
+    first.depthAttachments = {{handles[2], rhi::LoadOp::Clear, rhi::StoreOp::Store, 0.5F}};
+    const auto draw = [&](const RgExecuteContext& execution, std::uint32_t index) {
+        configureGraphDraw(execution.commandBuffer, pipelines[index]);
+        rhi::setViewport(execution.commandBuffer,
+            {0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1});
+        rhi::setScissor(execution.commandBuffer, {0, 0, width, height});
+        rhi::setBlendState(execution.commandBuffer, rhi::BlendMode::Additive);
+        rhi::draw(execution.commandBuffer, {3});
+    };
+    first.execute = [&](const RgExecuteContext& execution) { draw(execution, 0); };
+    RgRasterPass second = first;
+    second.name = "HDR load and additive draw";
+    for (auto& attachment : second.colorAttachments) attachment.loadOp = rhi::LoadOp::Load;
+    second.depthAttachments[0].loadOp = rhi::LoadOp::Load;
+    second.execute = [&](const RgExecuteContext& execution) { draw(execution, 1); };
+    if (traditional) graph.addRasterGroup("HDR subpasses", {first, second});
+    else { graph.addGraphicsPass(first); graph.addGraphicsPass(second); }
+    graph.compile(context);
+    const auto vertex = d.shader_create({rhi::ShaderStage::Vertex,
+        graphShaderBytes("render_graph_fullscreen.vert.spv"), "HDR vertex"});
+    const auto fragment = d.shader_create({rhi::ShaderStage::Fragment,
+        graphShaderBytes("render_graph_gbuffer.frag.spv"), "HDR fragment"});
+    const auto layout = d.pipeline_layout_create({{}, "HDR layout"});
+    rhi::RID firstTextures[3], firstFramebuffer, renderPass;
+    const auto cmd = d.command_buffer_create();
+    for (int iteration = 0; iteration < 4; ++iteration) {
+        width = iteration == 2 ? 9U : 16U;
+        height = iteration == 2 ? 7U : 8U;
+        pool.beginFrame(0);
+        auto frame = graph.prepareFrame(context);
+        if (iteration == 0) {
+            for (int i = 0; i < 3; ++i) firstTextures[i] = frame.texture(handles[i]);
+            firstFramebuffer = frame.groups()[0].beginInfo.framebuffer;
+            renderPass = frame.groups()[0].beginInfo.renderPass;
+            for (std::uint32_t i = 0; i < 2; ++i) {
+                rhi::GraphicsPipelineDesc desc;
+                desc.vertexShader = vertex; desc.fragmentShader = fragment; desc.pipelineLayout = layout;
+                desc.colorFormats = {rhi::PixelFormat::Rgba16Float, rhi::PixelFormat::Rgba32Float};
+                desc.depthFormat = toRhi(depthFormat);
+                desc.renderPass = renderPass; desc.subpass = traditional ? i : 0;
+                pipelines[i] = d.pipeline_create(desc);
+                ASSERT_TRUE(pipelines[i]);
+            }
+        } else if (iteration != 2) {
+            for (int i = 0; i < 3; ++i) EXPECT_EQ(frame.texture(handles[i]), firstTextures[i]);
+            EXPECT_EQ(frame.groups()[0].beginInfo.framebuffer, firstFramebuffer);
+        } else if (traditional) {
+            EXPECT_NE(frame.groups()[0].beginInfo.framebuffer, firstFramebuffer);
+        }
+        EXPECT_EQ(frame.groups()[0].beginInfo.renderPass, renderPass);
+        std::size_t offsets[3], sizes[3], total = 0;
+        const rhi::PixelFormat formats[]{rhi::PixelFormat::Rgba16Float, rhi::PixelFormat::Rgba32Float, toRhi(depthFormat)};
+        for (int i = 0; i < 3; ++i) {
+            offsets[i] = (total + 15U) / 16U * 16U;
+            sizes[i] = static_cast<std::size_t>(width) * height * rhi::formatInfo(formats[i]).bytesPerBlock;
+            total = offsets[i] + sizes[i];
+        }
+        VkBuffer readback{};
+        VmaAllocation allocation{};
+        VmaAllocationInfo allocationInfo{};
+        VkBufferCreateInfo bufferInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+        bufferInfo.size = total; bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        VmaAllocationCreateInfo memoryInfo{};
+        memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        ASSERT_EQ(vmaCreateBuffer(d.allocator(), &bufferInfo, &memoryInfo,
+            &readback, &allocation, &allocationInfo), VK_SUCCESS);
+        rhi::begin(cmd);
+        graph.execute(context, frame, cmd);
+        const auto native = d.command_buffer(cmd).nativeCommandBuffer();
+        for (int i = 0; i < 3; ++i) {
+            const auto aspect = i == 2 ? rhi::TextureAspect::Depth : rhi::TextureAspect::Color;
+            const auto state = i == 2 ? rhi::ResourceState::DepthAttachment : rhi::ResourceState::ColorAttachment;
+            rhi::TextureBarrier barrier{frame.texture(handles[i]), aspect, state, rhi::ResourceState::CopySource};
+            rhi::resourceBarriers(cmd, std::span{&barrier, 1});
+            VkBufferImageCopy copy{};
+            copy.bufferOffset = offsets[i];
+            copy.imageSubresource = {i == 2 ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            copy.imageExtent = {width, height, 1};
+            vkCmdCopyImageToBuffer(native, d.resolveTexture(frame.texture(handles[i])),
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, readback, 1, &copy);
+            // Restore the graph's final state so its persistent pool tracking stays accurate.
+            barrier.before = rhi::ResourceState::CopySource; barrier.after = state;
+            rhi::resourceBarriers(cmd, std::span{&barrier, 1});
+        }
+        VkBufferMemoryBarrier host{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+        host.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; host.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+        host.srcQueueFamilyIndex = host.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        host.buffer = readback; host.size = VK_WHOLE_SIZE;
+        vkCmdPipelineBarrier(native, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
+            0, 0, nullptr, 1, &host, 0, nullptr);
+        rhi::end(cmd);
+        d.submit(cmd, {});
+        d.waitIdle();
+        ASSERT_EQ(vmaInvalidateAllocation(d.allocator(), allocation, 0, VK_WHOLE_SIZE), VK_SUCCESS);
+        const auto* bytes = static_cast<const std::byte*>(allocationInfo.pMappedData);
+        const std::uint16_t expectedHalf[]{0x4000, 0x4200, 0x4480, 0x4200}; // 2, 3, 4.5, 3
+        const float expectedFloat[]{1.5F, 2, 5, 3};
+        for (std::size_t pixel = 0; pixel < static_cast<std::size_t>(width) * height; ++pixel) {
+            std::uint16_t half[4]; float full[4];
+            std::memcpy(half, bytes + offsets[0] + pixel * 8, 8);
+            std::memcpy(full, bytes + offsets[1] + pixel * 16, 16);
+            for (int channel = 0; channel < 4; ++channel) {
+                EXPECT_EQ(half[channel], expectedHalf[channel]);
+                EXPECT_FLOAT_EQ(full[channel], expectedFloat[channel]);
+            }
+            if (depthFormat == TextureFormat::Depth16Unorm) {
+                std::uint16_t depth; std::memcpy(&depth, bytes + offsets[2] + pixel * 2, 2);
+                EXPECT_NEAR(depth, 32768, 1);
+            } else {
+                float depth; std::memcpy(&depth, bytes + offsets[2] + pixel * 4, 4);
+                EXPECT_FLOAT_EQ(depth, 0.5F);
+            }
+        }
+        frame.reset();
+        vmaDestroyBuffer(d.allocator(), readback, allocation);
+        EXPECT_EQ(graph.compileCount(), 1U);
+    }
+    EXPECT_EQ(pool.totalEntryCount(), 6U);
+    EXPECT_EQ(cache.renderPassCount(), traditional ? 1U : 0U);
+    EXPECT_EQ(cache.framebufferCount(), traditional ? 2U : 0U);
+    graph.reset();
+    d.command_buffer_destroy(cmd);
+    for (auto pipeline : pipelines) d.pipeline_destroy(pipeline);
+    d.pipeline_layout_destroy(layout); d.shader_destroy(vertex); d.shader_destroy(fragment);
+    cache.clear();
+    EXPECT_EQ(validation.messages.str().find("Validation Error"), std::string::npos) << validation.messages.str();
+    EXPECT_EQ(validation.messages.str().find("SYNC-HAZARD"), std::string::npos) << validation.messages.str();
+}
+
+INSTANTIATE_TEST_SUITE_P(RenderingModesAndDepthFormats, HdrRenderGraphTest,
+    ::testing::Combine(::testing::Bool(), ::testing::Values(TextureFormat::Depth16Unorm, TextureFormat::Depth32Float)));
+
+
+TEST_F(RhiDeviceTest, UnsupportedAttachmentSamplesAndTransferOnlyViewsReturnFailure) {
+    auto& d = device();
+    rhi::RenderPassDesc pass;
+    pass.attachments.push_back({rhi::PixelFormat::Rgba16Float, static_cast<rhi::SampleCount>(999),
+        rhi::LoadOp::Clear, rhi::StoreOp::Store, rhi::ResourceState::ColorAttachment,
+        rhi::ResourceState::ColorAttachment});
+    rhi::SubpassDesc subpass;
+    subpass.colors.push_back({0, rhi::ResourceState::ColorAttachment});
+    pass.subpasses.push_back(subpass);
+    EXPECT_FALSE(d.render_pass_create(pass));
+    const auto vertex = d.shader_create({rhi::ShaderStage::Vertex,
+        graphShaderBytes("render_graph_fullscreen.vert.spv"), "unsupported-sample vertex"});
+    const auto fragment = d.shader_create({rhi::ShaderStage::Fragment,
+        graphShaderBytes("render_graph_gbuffer.frag.spv"), "unsupported-sample fragment"});
+    const auto layout = d.pipeline_layout_create({{}, "unsupported-sample layout"});
+    rhi::GraphicsPipelineDesc pipeline;
+    pipeline.vertexShader = vertex; pipeline.fragmentShader = fragment; pipeline.pipelineLayout = layout;
+    pipeline.colorFormats = {rhi::PixelFormat::Rgba16Float, rhi::PixelFormat::Rgba32Float};
+    pipeline.samples = static_cast<rhi::SampleCount>(999);
+    EXPECT_FALSE(d.pipeline_create(pipeline));
+    pipeline.colorFormats.clear(); pipeline.depthFormat = rhi::PixelFormat::Depth16Unorm;
+    EXPECT_FALSE(d.pipeline_create(pipeline));
+    const auto transfer = d.texture_create({.format = rhi::PixelFormat::Rgba8Unorm,
+        .width = 4, .height = 4, .usage = rhi::TextureUsage::TransferDestination});
+    ASSERT_TRUE(transfer);
+    EXPECT_FALSE(d.texture_default_view(transfer));
+    d.texture_destroy(transfer);
+    TextureDesc desc{TextureType::Texture2D, TextureFormat::Rgba8Unorm, 4, 4};
+    desc.usage = rhi::TextureUsage::TransferDestination;
+    EXPECT_FALSE(Texture::create(desc));
+    d.pipeline_layout_destroy(layout); d.shader_destroy(vertex); d.shader_destroy(fragment);
 }
 
 } // namespace

@@ -359,6 +359,18 @@ constexpr bool hasFlag(TextureUsage value, TextureUsage flag) {
 // Image tiling and multisample count (map to VkImageTiling / VkSampleCountFlagBits).
 enum class TextureTiling { Optimal, Linear };
 
+// Device-dependent format features for one tiling. These do not imply that a
+// particular usage combination, extent, mip count or sample count is supported.
+struct TextureFormatCapabilities {
+    bool sampled{};
+    bool linearFilter{};
+    bool colorAttachment{};
+    bool depthStencilAttachment{};
+    bool colorAttachmentBlend{};
+    bool transferSource{};
+    bool transferDestination{};
+};
+
 struct TextureDesc {
     TextureType dimension{TextureType::Texture2D};
     PixelFormat format{PixelFormat::Undefined};

@@ -43,4 +43,14 @@
 - 上传范围保持单层二维、单采样、新图像首次上传，要求 Sampled 和 TransferDestination；资产校验 `validateTextureAsset` 接受当前全部非压缩格式的原始像素，源文件导入器维持原有解码范围。
 - 覆盖奇数尺寸、多 mip、溢出、非法 region，以及所有当前格式的真实 Vulkan 上传、局部更新和逐 mip 字节回读。
 - 验证：完整 Debug 构建通过；开启 Vulkan 同步验证后全量 CTest 291/291 通过，涵盖 14 种格式的资产 Binary/JSON 往返、长度校验及真实 GPU 上传回读，无跳过。Release 本步未运行。
-- 状态：第四步已实现，等待用户确认后提交；第五步尚未开始。
+- 状态：第四步已提交，提交号 `2957f8a`。
+
+## 第五步实现说明
+
+- `ResourceDesc.h` 增加 `TextureFormatCapabilities`，查询指定 tiling 的采样、线性过滤、颜色/深度附件、混合和 transfer 能力。
+- `texture_is_supported` 检查完整二维纹理描述的类型、usage、尺寸、mip、tiling 和 sample 数，并查询设备 image format properties。
+- 创建前拒绝不支持的描述；原生分配失败释放占位 RID。只有 transfer usage 的图像不能创建 view。
+- 默认 sampler 的过滤能力不满足时返回创建失败；管线和传统 renderpass 检查附件格式/sample 支持。
+- HDR 验证覆盖 RGBA16Float、RGBA32Float、Depth16Unorm、Depth32Float，动态渲染与双 subpass、加法混合、逐像素回读、四帧复用和动态 resize；图只编译一次。
+- 验证：完整 Debug/Release 构建均通过，各配置全量 CTest 299/299 通过，无跳过；Debug 开启 Vulkan 同步验证，真实引擎 SceneView 集成用例也通过。
+- 状态：第五步已完成，等待用户确认后提交，第六步尚未开始。

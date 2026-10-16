@@ -58,6 +58,10 @@ public:
     [[nodiscard]] virtual RID buffer_acquire_transient(const BufferDesc& desc) = 0;
 
     // Textures and texture views. Views are deduped and owned at the device level.
+    [[nodiscard]] virtual TextureFormatCapabilities texture_format_capabilities(
+        PixelFormat, TextureTiling = TextureTiling::Optimal) const { return {}; }
+    [[nodiscard]] virtual bool texture_is_supported(const TextureDesc&) const { return false; }
+    // Returns an invalid RID for invalid or unsupported descriptions.
     [[nodiscard]] virtual RID texture_create(const TextureDesc& desc) = 0;
     virtual void texture_destroy(RID handle) = 0;
     // First upload of the complete mip chain into a single-sample 2D texture with

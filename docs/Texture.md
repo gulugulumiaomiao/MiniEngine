@@ -89,6 +89,30 @@ RHI 上传 region 可以乱序，但必须恰好覆盖所有 mip，尺寸和字�
 上传仅用于尚未初始化的单层二维、单采样纹理，要求 `Sampled | TransferDestination`，
 同步完成后处于 `ShaderRead`。需要更新已有内容时，调用方负责转换状态并使用 `updateImage`；
 该接口验证 mip、layer、区域边界和精确数据长度，copy 接口从格式推导 color/depth aspect。
-具体设备的格式/usage 支持检查安排在下一步。
+设备能力与静态格式属性分开查询：
+
+```cpp
+auto* device = rhi::IDevice::active();
+auto caps = device->texture_format_capabilities(rhi::PixelFormat::Rgba16Float,
+                                                rhi::TextureTiling::Optimal);
+// caps.sampled / linearFilter / colorAttachment / depthStencilAttachment
+// caps.colorAttachmentBlend / transferSource / transferDestination
+rhi::TextureDesc desc{.format = rhi::PixelFormat::Rgba16Float,
+    .width = 1280, .height = 720,
+    .usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::Sampled};
+if (device->texture_is_supported(desc)) {
+    auto image = device->texture_create(desc); // 仍需检查 RID；查询不预留显存。
+}
+```
+
+`texture_format_capabilities` 对应指定 tiling 的格式能力；单项支持不代表任意 usage 组合都支持。
+`texture_is_supported` 校验当前实现的二维单层范围、usage 组合、尺寸、mip 和 sample 数，
+再对照物理设备的 image format properties；未知枚举或不支持的描述返回 false。
+`texture_create` 在分配前执行该检查，描述不支持或原生分配失败时返回无效 RID。
+只有 transfer usage 的底层图像可以创建，但不能创建 view，因此 `engine::Texture::create` 会失败。
+默认 sampler 请求线性过滤或各向异性而格式不支持时，`Texture::create` 返回空，调用方可显式改为 Point。
+附件和 input attachment 不强制线性过滤；多采样图像也不以普通 sampler 的过滤能力判断。
+覆盖 sampler、直接 RHI 绑定以及动态混合模式仍由调用方依据能力选择，接口不会自动降低过滤或混合模式。
+图形管线与传统 renderpass 创建也检查附件格式和 sample 数；HDR 测试按 blend 能力选择测试范围。
 
 Google Test 覆盖：内建默认纹理（互异、上传、可采样）、`instantiate` 单实例与 `clone` 脱离、`Sampler` 覆盖绑定、Material 按 Ref 持有、GUID 身份（同路径同实例）、最后 Ref 归零释放 GPU、`reloadInPlace` 活链接与未实现维度拒绝。完整验证必须同时执行 Debug/Release 构建与 CTest，并实跑引擎（含工程切换/设备重建的 `SceneViewIntegrationTest`、`ProjectConfigEditorTest`）检查资源缺失、shader、材质与 Vulkan validation 日志。

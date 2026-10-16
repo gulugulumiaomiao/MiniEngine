@@ -22,6 +22,12 @@ public:
     void buffer_upload(engine::rhi::RID, std::span<const std::byte>, std::uint64_t) override {}
     engine::rhi::RID buffer_acquire_transient(const engine::rhi::BufferDesc&) override { return {}; }
 
+    engine::rhi::TextureFormatCapabilities texture_format_capabilities(
+        engine::rhi::PixelFormat format, engine::rhi::TextureTiling = engine::rhi::TextureTiling::Optimal) const override {
+        const bool valid = engine::rhi::formatInfo(format).valid();
+        const bool color = engine::rhi::isColorFormat(format);
+        return {valid, valid, color, engine::rhi::isDepthFormat(format), color, valid, valid};
+    }
     engine::rhi::RID texture_create(const engine::rhi::TextureDesc& desc) override {
         textures.push_back(desc);
         const engine::rhi::RID texture{static_cast<std::uint32_t>(textures.size() - 1), 1};

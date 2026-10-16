@@ -26,7 +26,9 @@ VulkanTexture::VulkanTexture(VmaAllocator allocator, const TextureDesc& desc)
     allocationInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     if (vmaCreateImage(allocator_, &imageInfo, &allocationInfo, &image_, &allocation_, nullptr) !=
         VK_SUCCESS) {
-        Log::fatal("VulkanTexture", "vmaCreateImage failed");
+        image_ = VK_NULL_HANDLE;
+        allocation_ = VK_NULL_HANDLE;
+        Log::error("VulkanTexture", "vmaCreateImage failed");
     }
 }
 

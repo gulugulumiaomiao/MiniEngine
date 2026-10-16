@@ -74,6 +74,9 @@ public:
                        std::uint64_t offset = 0) override;
     [[nodiscard]] RID buffer_acquire_transient(const BufferDesc& desc) override;
 
+    [[nodiscard]] TextureFormatCapabilities texture_format_capabilities(
+        PixelFormat format, TextureTiling tiling = TextureTiling::Optimal) const override;
+    [[nodiscard]] bool texture_is_supported(const TextureDesc& desc) const override;
     [[nodiscard]] RID texture_create(const TextureDesc& desc) override;
     void texture_destroy(RID handle) override;
     void texture_upload(RID destination, std::span<const TextureUploadRegion> regions) override;
@@ -163,6 +166,7 @@ public:
     void collectStagingBuffers();
 
 private:
+    [[nodiscard]] bool attachmentSupported(PixelFormat format, SampleCount samples) const;
     struct QueueFamilies {
         std::uint32_t graphics{};
         std::uint32_t present{};

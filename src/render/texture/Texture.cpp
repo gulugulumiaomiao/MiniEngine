@@ -157,6 +157,13 @@ void Texture::initializeGpu(const rhi::TextureDesc& deviceDesc, const SamplerDes
         Log::error("Texture", "No active device for texture creation");
         return;
     }
+    if (rhi::hasFlag(deviceDesc.usage, rhi::TextureUsage::Sampled) &&
+        deviceDesc.samples == rhi::SampleCount::One &&
+        (sampler.filterMode != TextureFilterMode::Point || sampler.maxAnisotropy > 1.0F) &&
+        !device->texture_format_capabilities(deviceDesc.format, deviceDesc.tiling).linearFilter) {
+        Log::error("Texture", "Texture format does not support the requested sampler filtering");
+        return;
+    }
     deviceUid_ = device->uid();
     texture_ = device->texture_create(deviceDesc);
     if (!texture_) {

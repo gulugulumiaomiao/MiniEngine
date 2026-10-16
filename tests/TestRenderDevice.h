@@ -44,6 +44,12 @@ public:
         return buffer_create(desc);
     }
 
+    rhi::TextureFormatCapabilities texture_format_capabilities(
+        rhi::PixelFormat format, rhi::TextureTiling = rhi::TextureTiling::Optimal) const override {
+        const bool valid = rhi::formatInfo(format).valid();
+        const bool color = rhi::isColorFormat(format);
+        return {valid, valid, color, rhi::isDepthFormat(format), color, valid, valid};
+    }
     rhi::RID texture_create(const rhi::TextureDesc& desc) override {
         textures.push_back(desc);
         const rhi::RID handle{static_cast<std::uint32_t>(textures.size()), 1};

@@ -68,6 +68,12 @@ public:
         return buffer_create(desc);
     }
 
+    engine::rhi::TextureFormatCapabilities texture_format_capabilities(
+        engine::rhi::PixelFormat format, engine::rhi::TextureTiling = engine::rhi::TextureTiling::Optimal) const override {
+        const bool valid = engine::rhi::formatInfo(format).valid();
+        const bool color = engine::rhi::isColorFormat(format);
+        return {valid, valid, color, engine::rhi::isDepthFormat(format), color, valid, valid};
+    }
     engine::rhi::RID texture_create(const engine::rhi::TextureDesc&) override { return {}; }
     void texture_destroy(engine::rhi::RID) override {}
     void texture_upload(engine::rhi::RID,

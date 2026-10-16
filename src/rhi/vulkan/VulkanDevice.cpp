@@ -377,19 +377,66 @@ void VulkanDevice::buffer_upload(RID destination,
     buffer_destroy(staging);
 }
 
-RID VulkanDevice::texture_create(const TextureDesc& desc) {
+TextureFormatCapabilities VulkanDevice::texture_format_capabilities(
+    PixelFormat format, TextureTiling tiling) const {
+    if (!formatInfo(format).valid() ||
+        (tiling != TextureTiling::Optimal && tiling != TextureTiling::Linear)) return {};
+    VkFormatProperties properties{};
+    vkGetPhysicalDeviceFormatProperties(physicalDevice_, toVulkan(format), &properties);
+    const auto features = tiling == TextureTiling::Optimal ? properties.optimalTilingFeatures :
+                                                           properties.linearTilingFeatures;
+    return {(features & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0,
+            (features & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0,
+            (features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) != 0,
+            (features & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0,
+            (features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0,
+            (features & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0,
+            (features & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) != 0};
+}
+
+bool VulkanDevice::texture_is_supported(const TextureDesc& desc) const {
+    constexpr auto knownUsage = TextureUsage::Sampled | TextureUsage::TransferSource |
+        TextureUsage::TransferDestination | TextureUsage::ColorAttachment |
+        TextureUsage::DepthStencilAttachment | TextureUsage::InputAttachment;
     if (desc.dimension != TextureType::Texture2D || !formatInfo(desc.format).valid() ||
         desc.width == 0 || desc.height == 0 || desc.depth != 1 || desc.arrayLayers != 1 ||
         desc.mipCount == 0 || desc.mipCount > static_cast<std::uint32_t>(std::bit_width(std::max(desc.width, desc.height))) ||
-        (desc.samples != SampleCount::One && desc.mipCount != 1) || desc.usage == TextureUsage::None) {
-        Log::fatal("VulkanDevice", "Invalid or unsupported Texture description");
-    }
-    if ((isColorFormat(desc.format) && hasFlag(desc.usage, TextureUsage::DepthStencilAttachment)) ||
-        (isDepthFormat(desc.format) && hasFlag(desc.usage, TextureUsage::ColorAttachment))) {
-        Log::fatal("VulkanDevice", "Texture format and attachment usage do not match");
+        (desc.samples != SampleCount::One && desc.samples != SampleCount::Two &&
+         desc.samples != SampleCount::Four && desc.samples != SampleCount::Eight) ||
+        (desc.samples != SampleCount::One && desc.mipCount != 1) || desc.usage == TextureUsage::None ||
+        (static_cast<std::uint32_t>(desc.usage) & ~static_cast<std::uint32_t>(knownUsage)) != 0 ||
+        (desc.tiling != TextureTiling::Optimal && desc.tiling != TextureTiling::Linear)) return false;
+    const auto caps = texture_format_capabilities(desc.format, desc.tiling);
+    if ((hasFlag(desc.usage, TextureUsage::Sampled) && !caps.sampled) ||
+        (hasFlag(desc.usage, TextureUsage::TransferSource) && !caps.transferSource) ||
+        (hasFlag(desc.usage, TextureUsage::TransferDestination) && !caps.transferDestination) ||
+        (hasFlag(desc.usage, TextureUsage::ColorAttachment) && !caps.colorAttachment) ||
+        (hasFlag(desc.usage, TextureUsage::DepthStencilAttachment) && !caps.depthStencilAttachment) ||
+        (hasFlag(desc.usage, TextureUsage::InputAttachment) &&
+         !caps.colorAttachment && !caps.depthStencilAttachment)) return false;
+    VkImageFormatProperties properties{};
+    const auto result = vkGetPhysicalDeviceImageFormatProperties(physicalDevice_, toVulkan(desc.format),
+        VK_IMAGE_TYPE_2D, desc.tiling == TextureTiling::Optimal ? VK_IMAGE_TILING_OPTIMAL : VK_IMAGE_TILING_LINEAR,
+        toVulkan(desc.usage), 0, &properties);
+    if (result == VK_ERROR_FORMAT_NOT_SUPPORTED) return false;
+    check(result, "vkGetPhysicalDeviceImageFormatProperties");
+    return desc.width <= properties.maxExtent.width && desc.height <= properties.maxExtent.height &&
+        desc.depth <= properties.maxExtent.depth && desc.mipCount <= properties.maxMipLevels &&
+        desc.arrayLayers <= properties.maxArrayLayers && (properties.sampleCounts & toVulkan(desc.samples)) != 0;
+}
+
+RID VulkanDevice::texture_create(const TextureDesc& desc) {
+    if (!texture_is_supported(desc)) {
+        Log::error("VulkanDevice", "Invalid or unsupported texture description: " + desc.debugName);
+        return {};
     }
     // No eager default view: texture_default_view() creates + caches it lazily at device level.
-    return textures_.emplace(allocator_, desc);
+    const auto handle = textures_.emplace(allocator_, desc);
+    if (!texture(handle).handle()) {
+        (void)textures_.release(handle);
+        return {};
+    }
+    return handle;
 }
 
 void VulkanDevice::texture_destroy(RID handle) {
@@ -504,6 +551,12 @@ RID VulkanDevice::texture_view_create(RID textureHandle, const TextureViewDesc& 
     VulkanTexture* texture = textures_.find(textureHandle);
     if (!texture)
         Log::fatal("VulkanDevice", "Invalid RHI Texture handle");
+    const auto usage = texture->usage();
+    if (!hasFlag(usage, TextureUsage::Sampled) && !hasFlag(usage, TextureUsage::ColorAttachment) &&
+        !hasFlag(usage, TextureUsage::DepthStencilAttachment) && !hasFlag(usage, TextureUsage::InputAttachment)) {
+        Log::error("VulkanDevice", "Transfer-only textures cannot have image views");
+        return {};
+    }
     if (desc.type != TextureType::Texture2D || desc.mipCount == 0 || desc.layerCount != 1 ||
         desc.baseLayer != 0) {
         Log::fatal("VulkanDevice", "Invalid or unsupported TextureView description");
@@ -598,6 +651,16 @@ RID VulkanDevice::pipeline_create(const GraphicsPipelineDesc& desc) {
         (desc.depthFormat != PixelFormat::Undefined && !isDepthFormat(desc.depthFormat))) {
         Log::fatal("VulkanDevice", "Invalid graphics pipeline description");
     }
+    for (const auto format : desc.colorFormats) {
+        if (!attachmentSupported(format, desc.samples)) {
+            Log::error("VulkanDevice", "Unsupported pipeline color format or sample count");
+            return {};
+        }
+    }
+    if (desc.depthFormat != PixelFormat::Undefined && !attachmentSupported(desc.depthFormat, desc.samples)) {
+        Log::error("VulkanDevice", "Unsupported pipeline depth format or sample count");
+        return {};
+    }
     VkRenderPass nativeRenderPass = VK_NULL_HANDLE;
     if (desc.renderPass) {
         const auto& pass = renderPass(desc.renderPass);
@@ -634,7 +697,23 @@ void VulkanDevice::pipeline_destroy(RID handle) {
     pipeline_release_rid(handle);
 }
 
+bool VulkanDevice::attachmentSupported(PixelFormat format, SampleCount samples) const {
+    if (!isColorFormat(format) && !isDepthFormat(format)) return false;
+    TextureDesc desc{.format = format, .width = 1, .height = 1,
+        .usage = isDepthFormat(format) ? TextureUsage::DepthStencilAttachment : TextureUsage::ColorAttachment,
+        .samples = samples};
+    if (texture_is_supported(desc)) return true;
+    desc.tiling = TextureTiling::Linear;
+    return texture_is_supported(desc);
+}
+
 RID VulkanDevice::render_pass_create(const RenderPassDesc& desc) {
+    for (const auto& attachment : desc.attachments) {
+        if (!attachmentSupported(attachment.format, attachment.samples)) {
+            Log::error("VulkanDevice", "Unsupported render pass attachment format or sample count");
+            return {};
+        }
+    }
     return renderPasses_.emplace(device_, desc);
 }
 
